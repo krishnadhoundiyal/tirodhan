@@ -7,11 +7,14 @@
 3. Use scale-to-zero compute where appropriate.
 4. PostgreSQL is the authoritative transactional state store.
 5. Service Bus is a work/event transport, not a data store.
-6. At-least-once delivery is expected; consumers must be idempotent.
-7. Geographic compaction is deterministic optimization logic, not runtime generative AI.
-8. Human operational fallbacks are first-class parts of fulfilment.
-9. Business history belongs in transactional/audit data, not solely in observability logs.
-10. Azure workload identity is used for Azure resource access; end-user identity is used for business authorization.
+6. At-least-once transport is expected; exactly-once intended business effect is achieved through idempotency and database invariants.
+7. Every retryable, replayable, redeliverable, timeout-prone, or concurrent mutation requires an explicit idempotency strategy.
+8. Prefer established application patterns before introducing bespoke Tirodhan-specific modelling.
+9. Mutable profile/master data must never rewrite immutable historical transactional facts.
+10. Geographic compaction is deterministic optimization logic, not runtime generative AI.
+11. Human operational fallbacks are first-class parts of fulfilment.
+12. Business history belongs in transactional/audit data, not solely in observability logs.
+13. Azure workload identity is used for Azure resource access; end-user identity is used for business authorization.
 
 ## 2. Reference cloud components
 
@@ -27,128 +30,249 @@
 - Azure Service Bus Standard.
 - Separate Azure Container App workers with `min replicas = 0` for independently scaled asynchronous workloads.
 - Scheduled finite work uses Azure Container Apps Jobs where appropriate.
+- Durable event publication uses a transactional outbox.
+- Service Bus consumers use durable inbox/message deduplication where applicable, in addition to domain/business idempotency.
 
 ### Persistence
 
 - Azure Database for PostgreSQL Flexible Server.
 - PostGIS enabled.
-- Azure Blob Storage for media and logs.
+- PostgreSQL owns authoritative transactional state, idempotency/business constraints, inbox/outbox state, and durable operational history.
+- Azure Blob Storage stores media and archived application logs.
 - Blob lifecycle policies handle tiering/retention.
 
 ### Security
 
-- Managed Identity for Azure-hosted workload identity.
+- Managed Identity for Azure-hosted workload identity wherever supported.
 - Azure Key Vault for unavoidable external-provider secrets.
-- Azure-resource calls use the workload's identity, not the end-user's identity.
+- Azure-resource calls use the workload's identity, not the end user's identity.
 
-## 3. Transactional API modules
+## 3. Domain modelling approach
+
+Tirodhan should not invent novel data models for conventional application concerns.
+
+Use established patterns for:
+
+- account identity, verified contact credential, roles and sessions;
+- multi-address customer profile;
+- order/booking header and line items;
+- logical payment, payment attempts, provider events and refunds;
+- workforce/dispatch offers and assignments;
+- per-stop/per-household fulfilment execution and attempt history;
+- facility/receiving-point master data;
+- evidence capture and object-storage attachment metadata.
+
+The geographic planning/compaction workflow is the principal materially product-specific domain.
+
+Detailed domain/schema authority is in:
+
+- `docs/DOMAIN_MODEL.md`
+- `docs/SCHEMA_DESIGN.md`
+- `docs/ER_DIAGRAM.md`
+- `docs/IDEMPOTENCY.md`
+
+## 4. Transactional API modules
 
 The single FastAPI deployment should preserve logical modules such as:
 
 - identity/session;
-- customer;
-- serviceability/address;
+- customer/address;
+- serviceability;
 - collection request;
 - payment/refund;
 - planning;
-- rider;
+- rider/fleet;
 - assignment;
 - pickup execution;
 - operations/escalation;
-- kiosk/handover;
-- media.
+- receiving point/handover;
+- evidence/media;
+- reliability/outbox/inbox.
 
 These are code/domain ownership boundaries, not separate MVP deployments.
 
-## 4. Customer identity and sessions
+## 5. Identity, roles and sessions
 
-- Login method: mobile number + OTP only.
-- OTP validation is delegated to an OTP provider; the application does not persist OTP values.
-- After successful OTP verification, Tirodhan issues its own application access/refresh session.
-- Access tokens are short lived.
-- Refresh tokens are revocable and are never stored in plaintext.
-- Authorization roles are application-owned: `CUSTOMER`, `RIDER`, `MANAGER`.
-- A valid mobile number does not automatically confer rider/manager privileges.
+- All human login uses mobile number + OTP only.
+- One human maps to one application user identity.
+- A user may hold multiple application roles: `CUSTOMER`, `RIDER`, `MANAGER`.
+- A newly verified user receives customer capability; rider/manager roles require explicit provisioning.
+- A user has one active verified login mobile number at a time; changing the number preserves the same user identity and historical phone records.
+- OTP verification is delegated to the OTP provider; Tirodhan never persists OTP values.
+- After successful verification, Tirodhan issues its own short-lived access token and revocable refresh-token session.
+- Refresh tokens are never stored in plaintext.
+- Refresh-token rotation must support token-family reuse detection/revocation.
+- Access tokens are not persisted as ordinary application data.
 
-MSG91 is the current OTP-provider candidate; commercial terms should be confirmed before production commitment.
+MSG91 remains the current OTP-provider candidate; commercial terms/DLT onboarding must be confirmed before production commitment.
 
-## 5. Serviceability and cell precomputation
+## 6. Address, serviceability and transaction snapshots
 
-Serviceability/cell calculation begins as soon as the customer confirms a service address.
+A customer may maintain multiple saved addresses.
 
-Preferred flow:
+Saved address/profile data is mutable master data. It is not authoritative for a historical booking after that booking is created.
 
-1. persist a serviceability context;
-2. publish asynchronous work;
-3. a worker resolves/validates the address as required, obtains/uses lat/long, derives `cell_id`, and stores the result;
-4. if booking reaches the payment step before asynchronous resolution completes, the API performs the same serviceability operation synchronously;
-5. the asynchronous path is an optimization and must never block booking.
+Serviceability flow:
+
+1. customer selects/confirms a saved or one-off address;
+2. persist a short-lived serviceability context containing an immutable input snapshot;
+3. asynchronous worker resolves/geocodes/validates serviceability and derives `cell_id`;
+4. if checkout reaches the decision point before asynchronous resolution completes, the API runs the same domain operation synchronously;
+5. serviceability must be confirmed before payment initiation.
 
 The asynchronous and synchronous paths must invoke the same domain operation/invariants.
 
-Serviceability must be known before payment is initiated.
+Accepted/paid collection requests preserve booking-time snapshots such as:
 
-## 6. Collection request and payment lifecycle
+- address;
+- spatial point;
+- cell;
+- slot;
+- quoted price.
+
+Later profile/address changes must not rewrite these facts.
+
+## 7. Collection request and payment lifecycle
 
 A durable `collection_request` is created before payment.
 
-Core states:
+Core request states include:
 
 - `PENDING_PAYMENT`
 - `ACCEPTED`
 - `PRE_PLANNING`
 - `PLANNED`
-- later execution/completion states as appropriate
 - `CANCELLED`
+- `COMPLETED`
 - `EXPIRED`
+
+Operational exception detail belongs to fulfilment/incident entities rather than exploding the request state machine.
 
 ### Pending payment
 
-`PENDING_PAYMENT` rows have:
+`PENDING_PAYMENT` has:
 
-- a configurable retry lifetime (`payment_expires_at`);
-- an expiry transition after the retry lifetime;
-- a separate later purge/retention boundary.
+- configurable retry lifetime;
+- transition to `EXPIRED` after that lifetime;
+- separate later purge/reconciliation retention.
 
-A UI/payment timeout is not equivalent to payment failure.
+A frontend/provider-return timeout is not payment failure.
 
-### Payment initiation
+### Logical payment and attempts
 
-- payment initiation occurs synchronously as part of the customer flow;
-- the customer may be redirected to the payment provider UI;
-- browser/app return is UX, not authoritative payment proof;
-- provider webhook and/or server-to-server provider reconciliation is authoritative.
+Each CollectionRequest has one logical Payment obligation.
 
-### Acceptance
+Gateway retries/interactions are PaymentAttempts:
 
-Successful payment moves the collection request to `ACCEPTED` and confirms the selected collection slot to the customer.
+```text
+CollectionRequest
+    └── Payment
+          ├── PaymentAttempt 1
+          ├── PaymentAttempt 2
+          └── PaymentAttempt N
+```
 
-Notification of acceptance is asynchronous.
+A failed PaymentAttempt does not make the logical Payment terminally failed while customer retry is still allowed.
+
+Provider order/payment/event identifiers are persisted for deduplication and reconciliation.
+
+Provider webhook and/or server-to-server reconciliation is authoritative; frontend return is UX only.
+
+### Payment acceptance
+
+A confirmed successful attempt, logical Payment success, request transition `PENDING_PAYMENT -> ACCEPTED`, and corresponding outbox event must be persisted atomically.
+
+### Duplicate/late external success
+
+More than one external attempt may theoretically succeed because of asynchronous provider races.
+
+The system must record external truth rather than hiding it behind a uniqueness assumption.
+
+Only one attempt satisfies the logical Tirodhan Payment. Any additional successful external charge becomes a reconciliation/refund condition and must never re-accept the request or duplicate downstream effects.
 
 ### Refunds
 
-Refunds are separate entities/processes.
+Refund is a separate financial lifecycle.
 
-- store provider transaction identifiers needed to refund the original successful debit;
-- never store card/CVV/UPI PIN/bank credentials;
-- refund against the original provider payment reference;
-- provider is responsible for crediting the original payment method;
-- refund state is independent from request state;
-- refund processing must be idempotent.
+- refund against the actual successful provider charge/reference;
+- payment instrument credentials are never stored;
+- multiple/partial refunds may be represented even if MVP commonly uses full refunds;
+- concurrent refunds must not exceed the successful payment amount;
+- refund workers are idempotent;
+- provider idempotency keys are used where supported;
+- uncertain provider outcomes are reconciled rather than blindly retried.
 
-## 7. Cancellation boundary
+## 8. Cancellation boundary
 
-A customer may cancel while the request is still `ACCEPTED`.
+A customer may cancel while the request is `ACCEPTED`.
 
 At the planning cutoff for the slot, eligible requests are frozen into an immutable planning batch and move to `PRE_PLANNING`.
 
-Once a request is `PRE_PLANNING`, customer cancellation is no longer automatically permitted.
+Once `PRE_PLANNING`, customer cancellation is no longer automatically permitted.
 
-Cancellation and planning-freeze must be implemented with an atomic/conditional state transition so only one wins a race.
+Cancellation and planning freeze are competing atomic state transitions. Only one may win.
 
-Where policy requires it, cancellation initiates a refund against the original payment.
+Where policy requires it, cancellation creates a Refund and a durable refund-requested event in the same transaction; provider execution may complete asynchronously.
 
-## 8. Geographic planning
+## 9. System-wide idempotency and reliable events
+
+Idempotency is an architectural invariant, not a worker-specific implementation detail.
+
+Every state-changing operation that can be retried, replayed, redelivered, timed out, or executed concurrently must define:
+
+- logical/business key;
+- database/domain constraint;
+- transaction boundary;
+- replay result;
+- concurrency rule;
+- external-provider side-effect rule.
+
+Use complementary layers:
+
+```text
+client/API command idempotency
+        ↓
+database/domain constraints
+        ↓
+inbox + transactional outbox
+        ↓
+provider idempotency / reconciliation
+```
+
+### API/mobile command idempotency
+
+Where a retriable command uses an idempotency key:
+
+- same scope/key + same request fingerprint returns/reconstructs the established result;
+- same scope/key + different request fingerprint is rejected.
+
+### Database/domain protection
+
+Critical business invariants must be enforced through PostgreSQL transactions, unique/partial constraints, conditional transitions, row locking or equivalent DB mechanisms.
+
+Do not rely on a Python read-then-write check to arbitrate critical races.
+
+### Inbox
+
+Transport-level message deduplication uses `(consumer, message_id)` or equivalent durable inbox semantics.
+
+An inbox protects duplicate delivery of the same message. It does not replace business-key idempotency such as `planning_batch_id` or `refund_id`.
+
+### Transactional outbox
+
+Where a committed DB state change must cause an asynchronous event, the domain change and outbox event are committed in the same PostgreSQL transaction.
+
+The outbox publisher may deliver more than once. Consumers remain idempotent.
+
+The contract is:
+
+> at-least-once transport + exactly-once intended business effect
+
+not distributed exactly-once network execution.
+
+See `docs/IDEMPOTENCY.md` and ADR-014.
+
+## 10. Geographic planning
 
 ### Time boundary
 
@@ -164,186 +288,208 @@ Physical cell sizing is intentionally not yet chosen.
 
 ### Planning work unit
 
-The distributed work unit is not an individual request.
+The work unit is an immutable planning batch for one cell and slot, not an individual request.
 
-It is an immutable planning batch for a cell and slot, conceptually:
-
-`(planning_batch_id, cell_id, slot_id)`
-
-The scheduled job discovers active cells for the upcoming slot and creates one planning batch/work item per active cell.
+The scheduler discovers active cells for the upcoming slot and creates one logical planning batch/work item per cell/slot.
 
 ### Queue semantics
 
-The geo-planning queue is logically partitioned/serialized by cell. Service Bus sessions are the preferred mechanism so one cell has a single active compaction owner while different cells may process concurrently.
+The geo-planning queue is serialized by cell. Service Bus sessions are the preferred mechanism for one active owner per cell while different cells may process concurrently.
 
-Queue messages should carry identifiers/control-plane data, not the entire request dataset.
+Messages carry identifiers/control data, not complete request populations.
+
+### Frozen population
+
+At the planning boundary, selected `ACCEPTED` requests atomically receive the batch identity and move to `PRE_PLANNING`.
+
+Late/new requests do not silently enter the existing immutable batch.
 
 ### Data access
 
-The worker owns one `(cell, slot, batch)` exclusively.
+The worker reads batch population from PostgreSQL with bounded/iterable access.
 
-It reads the batch's requests from PostgreSQL using bounded/iterable access.
+A selected algorithm may materialize a minimal spatial projection where required. The invariant is bounded memory and avoidance of unnecessary rich ORM materialization, not artificial request-by-request streaming.
 
-Do not require full ORM entities to be loaded merely for clustering.
+PostGIS may perform candidate selection or clustering operations.
 
-The clustering implementation may materialize a minimal spatial working set if the selected algorithm requires all coordinates. Bounded access is the invariant; request-by-request streaming is not a requirement if it damages the algorithm.
+### Attempts and broker deliveries
 
-PostGIS may perform part or all of spatial candidate selection/clustering.
+Logical compaction attempts are explicit business/operational attempts.
+
+Service Bus DeliveryCount/redelivery is a different concept. A broker redelivery does not automatically consume another logical compaction attempt.
 
 ### Compaction outcome
 
-The compactor's job is to identify neighbours/groups.
+Compaction produces collection groups:
 
-There is no business-level "failed request" caused by inability to find a neighbour.
+- compatible neighbours -> compacted group;
+- no compatible neighbour -> normal singleton group.
 
-- requests that cluster become grouped collection units;
-- requests that do not cluster become singleton collection units.
+No valid request fails merely because it has no neighbour.
 
-All valid requests entering `PRE_PLANNING` must eventually become `PLANNED`.
+### Technical failure and fallback
 
-### Technical failure and retry
+The same immutable batch is retried after technical compaction failure.
 
-Service Bus uses Peek-Lock / at-least-once delivery.
+After configurable maximum attempts `P`, the system deliberately produces fallback singleton groups and completes planning.
 
-The planning batch is the authoritative idempotency boundary.
+Infrastructure failure that prevents persistence is not solved by singleton fallback; the batch remains recoverable.
 
-- a technical crash leaves requests in `PRE_PLANNING`;
-- the same immutable batch is retried;
-- workers must safely handle duplicate/redelivered messages;
-- a message is settled only after the durable planning result is committed;
-- duplicate processing must never produce duplicate planning results.
+### Durable completion
 
-The maximum compaction attempt count is configurable (`P`); no fixed number is frozen yet.
+The planning result is committed atomically:
 
-After the configured compaction attempts are exhausted, the system degrades to singleton planning:
+- groups;
+- membership;
+- stable per-request PickupExecution records;
+- requests `PRE_PLANNING -> PLANNED`;
+- batch completion;
+- outbox event(s).
 
-`one request = one collection unit`
-
-The batch is then persisted as a valid `PLANNED` result.
-
-Infrastructure failure that prevents persistence is not solved by singleton fallback; it remains a recoverable operational failure.
+A redelivery after durable completion has no additional business effect.
 
 ### Runtime AI
 
-Do not use an LLM/generative-AI service in the runtime compaction path.
+No LLM/generative-AI service is used in the runtime clustering path.
 
-AI may assist engineering/testing/tuning, but production clustering is deterministic spatial/optimization logic.
+## 11. Rider, fleet and assignment
 
-## 9. Rider assignment
+### Rider state
 
-The assignment unit is a planned collection group, not an individual request unless the group is a singleton.
+Separate rider intent from platform work state.
 
-### Rider availability
-
-Rider operational state is application-owned.
-
-At minimum:
+Availability intent, controlled by the rider:
 
 - `OFFLINE`
 - `AVAILABLE`
-- assigned/busy states as implementation requires.
 
-The rider controls `AVAILABLE`/`OFFLINE`.
+Current work state, controlled by platform operations:
 
-Only `AVAILABLE` and otherwise eligible riders may receive offers.
+- `IDLE`
+- `RESERVED`
+- `BUSY`
 
-Availability and eligibility are separate concepts.
+Assignment eligibility requires an approved/active rider plus appropriate intent, idle state, service-area/vehicle/capacity/slot eligibility.
+
+Finishing an assignment returns work state toward `IDLE` without incorrectly changing the rider's chosen availability intent.
+
+### Fleet affiliation
+
+Fleet membership is historical affiliation, not rider identity.
 
 ### Assignment hierarchy
 
 For each planned collection group:
 
-1. check whether an enabled fleet has available capacity for the cell + slot;
-2. if suitable fleet capacity exists, assign from that fleet;
-3. otherwise fan out the work opportunity to eligible `AVAILABLE` independent riders;
-4. first valid acceptance wins atomically;
-5. if nobody accepts by the configured deadline, escalate to a manager;
-6. the manager manually chooses/assigns a rider; the choice itself is outside software optimization.
+1. use suitable available fleet capacity where possible;
+2. otherwise fan out an offer to eligible independent riders;
+3. first valid acceptance wins atomically;
+4. if no acceptance arrives by the configured deadline, escalate to manager;
+5. manager may manually assign/reassign.
 
-Manual assignment must not allow duplicate assignment of the same collection group.
+Fleet, independent acceptance, and manual assignment all converge on the same durable RiderAssignment model.
 
-## 10. Pickup execution and partial progress
+### Assignment history
 
-Execution state must exist per household pickup, not only at collection-group level.
+Assignment is not the household fulfilment object.
 
-If a rider has a group of `X` pickups and completes `Y` before becoming unable to continue:
+A stable PickupExecution exists per planned request. Rider assignments own PickupExecutions over time.
 
-- the `Y` completed pickups remain completed;
-- only the `X-Y` outstanding pickups are reassigned;
-- historical assignment state is retained rather than overwritten;
-- a new assignment may be created for residual work.
+If a rider cannot continue:
 
-Completed operational facts are immutable.
+- completed PickupExecutions remain completed;
+- only outstanding PickupExecutions are released/reassigned;
+- predecessor and successor assignments remain historical records.
 
-## 11. Reachability / no-show exceptions
+At most one active assignment may own a collection group/work item according to the approved schema constraints.
 
-Examples include:
+## 12. Pickup execution and incidents
 
-- house not found;
+PickupExecution represents per-household fulfilment.
+
+Attempt history and operational incidents are separate append/history entities.
+
+Examples of incidents:
+
 - customer unavailable;
+- address/house not found;
 - access blocked;
 - rider unable to reach;
 - rider unable to continue;
 - other operational exception.
 
-These are exception reasons on pickup execution, not necessarily distinct collection-request states.
+Possible human resolutions include retry, reassignment, cancellation, and cancellation+refund where applicable.
 
-Flow:
+Completed pickup facts are immutable.
 
-1. rider/customer raises an exception;
-2. human operations is notified;
-3. operations may facilitate location/contact;
-4. outcome may be retry, reassignment, cancellation, and where appropriate refund.
-
-MVP support channel:
+MVP human support:
 
 - no custom in-app chat;
-- use a dedicated WhatsApp Business support channel for active-pickup exceptions;
-- prepopulate request/assignment context in the message;
-- WhatsApp is the communication medium, not the system of record;
-- the manager records the resulting business action in Tirodhan.
+- dedicated WhatsApp Business support channel for active-pickup exceptions;
+- prepopulate request/assignment context;
+- WhatsApp is communication, not system of record;
+- Operations records the resulting business action in Tirodhan.
 
-## 12. Media evidence
+## 13. Evidence and media
 
-Collection and handover evidence is stored in object storage.
+Evidence capture and media upload are separate concerns.
 
-- media is tagged/associated with request and pickup-execution identifiers;
-- do not store image/video bytes in PostgreSQL;
-- media upload is retryable;
-- upload failure must not roll back a successfully performed pickup;
-- storage lifecycle policies, not application cron code, move old media to colder tiers/delete according to retention policy.
+> Evidence capture is a business fact; media upload is a storage operation.
 
-Direct client-to-Blob upload using short-lived authorization is preferred over proxying large media through FastAPI.
+Evidence is represented as a capture/business event linked to pickup or handover. Physical files are MediaAssets stored in Blob Storage.
 
-## 13. Kiosk / receiving-point completion
+Requirements:
 
-Government/authorized kiosks are represented internally with identifiers and known locations.
+- media bytes do not belong in PostgreSQL;
+- object names are opaque and contain no PII;
+- client-generated capture/media identifiers support safe offline/mobile retry;
+- direct client-to-Blob upload using short-lived authorization is preferred;
+- upload/finalization is idempotent;
+- media upload failure does not roll back a successfully performed pickup/handover;
+- pending media remains app-private on the device and retries later;
+- Blob lifecycle policy controls tiering/retention.
 
-MVP completion evidence:
+## 14. Receiving point and handover
 
-- evidence must be captured in-app;
-- the capture must correspond to a registered kiosk/receiving point;
-- geofence/location validation is used;
-- an official/approved kiosk QR/signage identifier may later be added as an additional factor;
-- the architecture must not depend on attaching a Tirodhan-owned QR to government property without permission.
+Government/authorized kiosks/centres are represented as mutable `ReceivingPoint` master data.
 
-A request becomes complete when the material has been deposited/handed over at the designated receiving point and required evidence has been validly captured.
+A HandoverEvent is an immutable historical operational fact.
 
-Blob upload may complete asynchronously.
+A handover preserves the validation basis used at the time, including relevant receiving-point location/geofence snapshots, so later master-data edits do not rewrite historical validity.
 
-## 14. Workload identity and secrets
+One HandoverEvent may cover several collected PickupExecutions.
+
+A rejected/invalid handover attempt may be followed by a later valid handover; history is preserved.
+
+Primary validation remains deterministic:
+
+- registered receiving point;
+- in-app capture;
+- timestamp;
+- observed device location/geofence;
+- optional official identifier/QR/signage if available.
+
+Do not depend on attaching a Tirodhan-owned QR to government property without permission.
+
+AI vision is not a required validation dependency.
+
+A CollectionRequest reaches `COMPLETED` after its collected material is associated with a valid receiving-point handover and required evidence is validly captured.
+
+Blob upload may still complete asynchronously according to the evidence policy.
+
+## 15. Workload identity and secrets
 
 For Azure-hosted workloads:
 
 - use Managed Identity for Azure-resource access wherever supported;
-- use the workload identity of the executing service, not the end user's identity;
+- use the executing workload identity, not the end user's identity;
 - preserve end-user identity separately for business authorization/audit;
 - use least privilege per workload;
-- avoid one broad shared identity for every component.
+- avoid one broad shared identity.
 
 External-provider secrets that cannot use workload identity belong in Key Vault.
 
-## 15. API ingress
+## 16. API ingress
 
 Azure API Management Consumption is the initial public edge.
 
@@ -357,11 +503,11 @@ It may provide:
 
 It must not own indispensable business logic.
 
-FastAPI must remain capable of enforcing application authorization independently.
+FastAPI remains capable of enforcing application authorization independently.
 
-APIM is explicitly replaceable. If gateway cost becomes material, clients may be moved to the Container App ingress without redesigning business logic.
+APIM is replaceable. If gateway cost becomes material, clients may move to protected Container App ingress without redesigning business logic.
 
-## 16. Network exposure
+## 17. Network exposure
 
 Initial intent:
 
@@ -373,7 +519,7 @@ Initial intent:
 
 Private networking/endpoints should be evaluated against cost rather than added reflexively.
 
-## 17. Observability
+## 18. Observability
 
 MVP intentionally avoids Application Insights, Log Analytics, and Azure Diagnostic Settings as the primary application-log pipeline.
 
@@ -381,30 +527,32 @@ MVP intentionally avoids Application Insights, Log Analytics, and Azure Diagnost
 
 - structured JSON;
 - application writes to a shared replica-local volume;
-- Fluent Bit runs as a sidecar;
-- Fluent Bit tails/batches/compresses and uploads logs directly to Azure Blob Storage;
-- Blob access uses a narrowly scoped SAS for the log container;
-- lifecycle policies control log retention/tiering;
-- no PII/secrets/tokens/payment-sensitive data in logs.
+- Fluent Bit sidecar tails/batches/compresses and uploads directly to Azure Blob;
+- Blob access uses a narrowly scoped SAS for the dedicated log container;
+- lifecycle policies control retention/tiering;
+- no PII, exact coordinates, secrets, tokens, or payment-sensitive data in logs.
 
-### Metrics
+### Metrics/alerts
 
 Use low-cost/native Azure platform metrics where useful.
 
-Keep alerts small and actionable, e.g.:
+Keep alerts small and actionable, such as:
 
 - sustained API errors;
 - Service Bus DLQ/non-processing;
+- outbox backlog;
 - repeated compaction technical failure;
-- refund-processing failure;
+- refund-processing/reconciliation failure;
 - repeated container crash;
 - database availability.
 
-Business-critical history must be stored in PostgreSQL/audit data, not only logs.
+Business-critical history belongs in PostgreSQL, not only logs.
 
-## 18. Cloud portability
+## 19. Cloud portability
 
-Azure is the reference deployment platform, but domain/application code should depend on abstractions around infrastructure concerns where practical, e.g.:
+Azure is the reference deployment platform, but application/domain code should avoid unnecessary Azure SDK semantics.
+
+Use infrastructure/provider adapters where practical for:
 
 - message bus;
 - object store;
@@ -412,132 +560,121 @@ Azure is the reference deployment platform, but domain/application code should d
 - payment provider;
 - OTP provider.
 
-Do not build artificial abstraction layers where they add no value, but do not spread Azure SDK semantics through business logic.
+Do not create abstraction layers solely for theoretical purity.
 
-## 19. Backup and recovery
+## 20. Backup and recovery
 
 ### Recovery objectives
 
 MVP targets:
 
-- **RPO:** approximately 15 minutes or better for authoritative transactional data;
-- **RTO:** approximately 2–4 hours for a major recovery event.
+- RPO: approximately 15 minutes or better for authoritative transactional data;
+- RTO: approximately 2–4 hours for a major recovery event.
 
-These targets do not justify active-active or high-availability regional architecture at MVP stage.
+These targets do not justify active-active/high-availability regional architecture at MVP stage.
 
 ### PostgreSQL
 
-Use Azure Database for PostgreSQL Flexible Server native backup / point-in-time restore capabilities.
+Use Azure Database for PostgreSQL Flexible Server native point-in-time recovery.
 
 Initial policy:
 
 - 7-day PITR retention;
 - no geo-redundant backup initially;
 - no long-term retention initially;
-- protect the database/server resource against accidental deletion with an Azure resource lock where practical;
-- periodically perform and validate a restore test.
+- resource lock against accidental deletion where practical;
+- periodic restore test.
 
-A restore test is part of the recovery policy. Backup existence without tested restoration is insufficient.
+A backup policy is incomplete unless restoration is tested.
 
-### Blob Storage
+### Blob
 
-For media/evidence storage:
+For media/evidence:
 
-- enable blob soft delete;
-- enable container soft delete;
-- protect the storage account against accidental deletion where practical;
-- retain normal lifecycle policies for tiering/deletion;
-- do not enable blob versioning initially unless an actual overwrite/recovery requirement emerges.
+- blob soft delete;
+- container soft delete;
+- storage-account deletion protection where practical;
+- lifecycle tiering/deletion;
+- no blob versioning initially unless an actual overwrite-recovery need emerges.
 
-Logs are not authoritative business state and do not receive a separate backup policy beyond their configured Blob retention/lifecycle policy.
+Logs receive no separate backup policy beyond their Blob retention/lifecycle rules.
 
 ### Service Bus
 
-Service Bus is not a backup system.
+Service Bus is not recovery storage.
 
-Authoritative business state remains in PostgreSQL. If queue state is lost or delayed, durable database state must allow operational work to be recreated/re-driven where required.
+Durable PostgreSQL state, inbox/outbox/domain state, and idempotent operations must allow required work to be recreated/re-driven where necessary.
 
-## 20. Environment topology
+## 21. Environment topology
 
-MVP uses:
+Permanent environments:
 
-- local developer environment;
-- one shared Azure `nonprod` environment;
-- one Azure `prod` environment.
+- local;
+- Azure `nonprod`;
+- Azure `prod`.
 
-Do not create permanent `dev`, `qa`, and `staging` Azure environments by default.
+Do not create permanent Azure dev/qa/staging by default.
 
-If production-like staging is required for a release or infrastructure change, create it ephemerally from Infrastructure-as-Code and destroy it afterwards.
+Production-like staging is ephemeral and created from IaC only when required, then destroyed.
 
-Production customer data must not be copied directly into non-production environments. Use generated, synthetic, or appropriately anonymized test data.
+Production customer data is not copied directly to nonprod. Use synthetic/generated/anonymized test data.
 
-## 21. Infrastructure as Code
+## 22. Infrastructure as Code
 
-Terraform is the selected Infrastructure-as-Code tool.
-
-Requirements:
+Terraform is the selected IaC tool.
 
 - Azure resources are provisioned through Terraform;
-- `nonprod` and `prod` use separate Terraform state;
-- ephemeral staging is created from the same reusable modules/configuration patterns;
-- modules should remove harmful duplication but must not become a large generic internal platform;
-- infrastructure configuration required for disaster recovery should be reproducible from source control.
+- nonprod and prod use separate state;
+- ephemeral staging reuses the same modules/patterns;
+- modules remove harmful duplication but do not become a large generic internal platform;
+- recovery-critical configuration is reproducible from source control.
 
-## 22. CI/CD
+## 23. CI/CD
 
-The CI/CD provider is intentionally not yet fixed.
-
-Approved candidates:
+Provider intentionally remains open between:
 
 - Azure DevOps Pipelines;
 - GitHub Actions.
 
-The workflow contract is provider-independent.
-
-### Application pipeline
-
-Expected flow:
+Provider-independent application flow:
 
 1. lint/static checks;
 2. unit tests;
 3. relevant security checks;
 4. build container image;
 5. publish image;
-6. deploy to `nonprod`;
-7. run smoke/integration tests;
-8. require explicit production approval;
-9. deploy to `prod`.
+6. deploy nonprod;
+7. smoke/integration tests;
+8. explicit production approval;
+9. deploy prod.
 
-### Infrastructure pipeline
+Infrastructure flow:
 
-Expected flow:
-
-1. `terraform fmt` / validation;
+1. Terraform fmt/validation;
 2. Terraform plan;
-3. human review/approval for production;
+3. human production review/approval;
 4. Terraform apply.
 
-Use workload federation / OIDC where supported rather than long-lived Azure deployment credentials.
+Use workload federation/OIDC where supported instead of long-lived Azure deployment credentials.
 
-Production deployment should not occur automatically merely because a change is merged.
+## 24. Container registry
 
-## 23. Container registry
+GitHub Container Registry (GHCR) is the default MVP registry.
 
-GitHub Container Registry (GHCR) is the default MVP container registry.
+Azure Container Registry Basic is a fallback only if a concrete Azure-specific authentication, reliability, operational, or deployment-integration problem makes GHCR materially inferior.
 
-Azure Container Registry (ACR) Basic is the fallback if a concrete Azure-specific authentication, reliability, operational, or deployment-integration problem makes GHCR materially inferior.
-
-Do not introduce ACR merely for architectural neatness when GHCR is operating satisfactorily.
-
-## 24. Still open
+## 25. Still open
 
 Do not silently decide:
 
 - geographic cell resolution;
 - clustering/compaction algorithm;
 - detailed routing algorithm;
-- exact values for `N`, `P`, acceptance deadlines, and retention periods;
+- item category taxonomy;
+- final pricing formula;
+- exact values for planning lead time `N`, compaction attempt limit `P`, rider acceptance deadlines, and retention periods;
 - final payment gateway;
-- final CI/CD provider (Azure DevOps Pipelines vs GitHub Actions);
-- frontend technology;
-- detailed mismatch workflow when presented material differs from booking.
+- final CI/CD provider;
+- frontend/mobile technology;
+- detailed material-mismatch workflow;
+- final offline-evidence validation policy.

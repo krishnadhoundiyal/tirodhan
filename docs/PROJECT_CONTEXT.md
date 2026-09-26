@@ -10,25 +10,27 @@ The platform facilitates collection and handover. It does not itself restore, re
 
 The initial model is intentionally flexible and cost-conscious:
 
-- households request pickup;
+- customers may maintain multiple saved addresses;
+- households request pickup for a selected/confirmed serviceable address;
 - pickups are booked into 30-minute time slots;
-- a household address is mapped to a geographic cell;
-- requests for an upcoming slot are planned by cell shortly before the slot;
+- a household location is mapped to a geographic cell;
+- requests for an upcoming slot are frozen/planned by cell shortly before the slot;
 - geographically compatible requests may be compacted into a shared collection group;
-- a single rider services a collection group;
 - if compaction cannot produce a shared group, a request remains serviceable as a singleton;
+- a rider services an assigned collection group or outstanding subset after reassignment;
 - riders may come from a managed fleet or from independent rickshaw pullers;
 - operational exceptions are escalated to a human manager;
-- successfully collected material is taken to a registered government/authorized kiosk/receiving point;
-- in-app disposal/handover evidence is captured there;
-- request completion is based on validated handover/disposal evidence.
+- successfully collected material is taken to a registered government/authorized receiving point;
+- in-app pickup and handover evidence is captured;
+- request completion is based on valid handover at the registered receiving point.
 
 ## Actors
 
 ### Customer
 
 - authenticates by mobile OTP;
-- confirms service address;
+- may keep multiple saved addresses;
+- confirms/selects a service address;
 - selects a pickup slot;
 - pays;
 - may cancel while the request is still cancellable;
@@ -38,12 +40,14 @@ The initial model is intentionally flexible and cost-conscious:
 ### Rider
 
 - is onboarded/approved by the platform;
-- marks themselves `AVAILABLE` or `OFFLINE`;
-- may accept eligible offered work;
-- services assigned collection groups;
+- controls availability intent: `AVAILABLE` or `OFFLINE`;
+- receives/accepts work only when operationally eligible and idle;
+- services assigned collection work;
 - records pickup execution;
-- captures collection and handover evidence;
+- captures pickup and handover evidence;
 - may escalate reachability/operational problems.
+
+The platform separately tracks whether an available rider is currently `IDLE`, `RESERVED`, or `BUSY`.
 
 ### Manager / Operations
 
@@ -60,7 +64,9 @@ The initial model is intentionally flexible and cost-conscious:
 - architecture should remain production-sensible;
 - avoid infrastructure that does not solve a demonstrated need;
 - retain human-in-the-loop fallbacks for operational exceptions;
-- preserve logical service boundaries even where MVP economics favour fewer deployables.
+- preserve logical service boundaries even where MVP economics favour fewer deployables;
+- prefer established application/domain patterns rather than bespoke schema where the workflow is conventional;
+- idempotency is required for every retryable/replayable/concurrent mutation.
 
 ## Explicitly open
 
@@ -70,7 +76,9 @@ The following are not yet fixed:
 - final compaction/clustering algorithm;
 - final route optimization algorithm, if any;
 - detailed fleet rider-selection algorithm;
+- item category taxonomy and final pricing formula;
 - detailed "material differs from booking" workflow;
+- final offline-evidence validation policy;
 - frontend/mobile technology;
 - exact production payment gateway;
 - final CI/CD provider selection between Azure DevOps Pipelines and GitHub Actions.

@@ -25,6 +25,7 @@ erDiagram
     PAYMENT ||--o{ PAYMENT_ATTEMPT : attempted_through
     PAYMENT_ATTEMPT ||--o{ PAYMENT_PROVIDER_EVENT : receives
     PAYMENT ||--o{ REFUND : may_have
+    REFUND ||--o{ PAYMENT_PROVIDER_EVENT : receives
 
     PLANNING_BATCH ||--o{ PLANNING_BATCH_ATTEMPT : executed_as
     PLANNING_BATCH ||--|{ COLLECTION_REQUEST : freezes
@@ -42,7 +43,7 @@ erDiagram
     COLLECTION_GROUP ||--o{ RIDER_ASSIGNMENT : assignment_history
     RIDER_PROFILE ||--o{ RIDER_ASSIGNMENT : performs
 
-    COLLECTION_REQUEST ||--|| PICKUP_EXECUTION : fulfilled_by
+    COLLECTION_REQUEST ||--o| PICKUP_EXECUTION : fulfilled_by
     COLLECTION_GROUP ||--|{ PICKUP_EXECUTION : groups
 
     RIDER_ASSIGNMENT ||--|{ RIDER_ASSIGNMENT_ITEM : contains
