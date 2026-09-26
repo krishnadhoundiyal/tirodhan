@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     database_echo: bool = False
     command_idempotency_ttl_seconds: int | None = None
     serviceability_context_ttl_seconds: int | None = None
+    pending_payment_lifetime_seconds: int | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
     @field_validator(
         "command_idempotency_ttl_seconds",
         "serviceability_context_ttl_seconds",
+        "pending_payment_lifetime_seconds",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
