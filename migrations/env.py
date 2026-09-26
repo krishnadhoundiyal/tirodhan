@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from tirodhan.core.config import Settings
 from tirodhan.db.base import Base
+from tirodhan.modules.customers import models as customer_models  # noqa: F401
 from tirodhan.modules.identity import models as identity_models  # noqa: F401
 from tirodhan.modules.reliability import models as reliability_models  # noqa: F401
+from tirodhan.modules.serviceability import models as serviceability_models  # noqa: F401
 
 config = context.config
 

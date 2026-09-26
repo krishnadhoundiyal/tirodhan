@@ -10,11 +10,24 @@ from tirodhan.api.router import api_router
 from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
+from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
+from tirodhan.modules.serviceability.ports import (
+    CellIdDeriver,
+    LocationResolver,
+    UnconfiguredCellIdDeriver,
+    UnconfiguredLocationResolver,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    address_protector: AddressProtector | None = None,
+    location_resolver: LocationResolver | None = None,
+    cell_id_deriver: CellIdDeriver | None = None,
+) -> FastAPI:
     application_settings = settings or get_settings()
     configure_logging(
         application_settings.log_level,
@@ -43,6 +56,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = application_settings
+    application.state.address_protector = address_protector or UnconfiguredAddressProtector()
+    application.state.location_resolver = location_resolver or UnconfiguredLocationResolver()
+    application.state.cell_id_deriver = cell_id_deriver or UnconfiguredCellIdDeriver()
     application.include_router(api_router)
     return application
 

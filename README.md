@@ -95,7 +95,8 @@ TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://tirodhan:tirodhan@localhost:5432
 ## Migrations
 
 Alembic reads `TIRODHAN_DATABASE_URL` through the same typed settings object as the application.
-The initial migration only enables PostGIS; this phase intentionally defines no business tables.
+Migrations currently provide PostGIS, the identity/reliability substrate, saved addresses, and
+serviceability contexts.
 
 ```bash
 alembic current

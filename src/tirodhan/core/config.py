@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan"
     )
     database_echo: bool = False
+    command_idempotency_ttl_seconds: int | None = None
+    serviceability_context_ttl_seconds: int | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -31,6 +33,16 @@ class Settings(BaseSettings):
     def database_must_use_postgresql_asyncpg(cls, value: SecretStr) -> SecretStr:
         if not value.get_secret_value().startswith("postgresql+asyncpg://"):
             raise ValueError("database_url must use the postgresql+asyncpg driver")
+        return value
+
+    @field_validator(
+        "command_idempotency_ttl_seconds",
+        "serviceability_context_ttl_seconds",
+    )
+    @classmethod
+    def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError("configured TTLs must be positive")
         return value
 
 
