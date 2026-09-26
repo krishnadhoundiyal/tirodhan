@@ -1,0 +1,59 @@
+services:
+  database:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: tirodhan
+      POSTGRES_USER: tirodhan
+      POSTGRES_PASSWORD: tirodhan
+    ports:
+      - "5432:5432"
+    volumes:
+      - tirodhan_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tirodhan -d tirodhan"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      TIRODHAN_ENVIRONMENT: local
+      TIRODHAN_DATABASE_URL: postgresql+asyncpg://tirodhan:tirodhan@database:5432/tirodhan
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+    environment:
+      TIRODHAN_ENVIRONMENT: local
+      TIRODHAN_DATABASE_URL: postgresql+asyncpg://tirodhan:tirodhan@database:5432/tirodhan
+      TIRODHAN_LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      database:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  tirodhan_postgres_data:
