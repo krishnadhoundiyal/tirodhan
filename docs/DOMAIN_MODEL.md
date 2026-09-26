@@ -66,7 +66,7 @@ A serviceability context is short-lived and represents a snapshot of the locatio
 - `payment_provider_event`
 - `refund`
 
-A collection request has one logical payment obligation. Retries are separate `payment_attempt` rows. Refunds are independent financial objects.
+A collection request has one logical payment obligation. Retries are separate `payment_attempt` rows. Provider events deduplicate/reconcile both payment and refund provider callbacks. Refunds are independent financial objects.
 
 ### Planning
 
@@ -95,7 +95,7 @@ Identity, fleet affiliation, rider intent, platform work state, offers and assig
 - `pickup_attempt`
 - `pickup_incident`
 
-There is one stable `pickup_execution` per collection request. Assignment may change over time, but completed pickups are immutable and only outstanding work is reassigned.
+A `pickup_execution` is created for a planned request and remains the stable per-household fulfilment object. Before planning, a collection request has no PickupExecution. Assignment may change over time, but completed pickups are immutable and only outstanding work is reassigned.
 
 ### Receiving point and handover
 
@@ -143,6 +143,7 @@ erDiagram
     PAYMENT ||--o{ PAYMENT_ATTEMPT : attempted_through
     PAYMENT_ATTEMPT ||--o{ PAYMENT_PROVIDER_EVENT : receives
     PAYMENT ||--o{ REFUND : may_have
+    REFUND ||--o{ PAYMENT_PROVIDER_EVENT : receives
 
     PLANNING_BATCH ||--o{ PLANNING_BATCH_ATTEMPT : executed_as
     PLANNING_BATCH ||--|{ COLLECTION_REQUEST : freezes
@@ -160,7 +161,7 @@ erDiagram
     COLLECTION_GROUP ||--o{ RIDER_ASSIGNMENT : assignment_history
     RIDER_PROFILE ||--o{ RIDER_ASSIGNMENT : performs
 
-    COLLECTION_REQUEST ||--|| PICKUP_EXECUTION : fulfilled_by
+    COLLECTION_REQUEST ||--o| PICKUP_EXECUTION : fulfilled_by
     COLLECTION_GROUP ||--|{ PICKUP_EXECUTION : groups
 
     RIDER_ASSIGNMENT ||--|{ RIDER_ASSIGNMENT_ITEM : contains
@@ -225,7 +226,7 @@ compaction attempts
     ├── success → compacted/singleton groups
     └── attempts exhausted → fallback singleton groups
     ↓
-PLANNED
+PLANNED + PickupExecution created
 ```
 
 ### Assignment

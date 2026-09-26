@@ -9,25 +9,47 @@ Read, in order:
 1. `docs/PROJECT_CONTEXT.md`
 2. `docs/ARCHITECTURE.md`
 3. `docs/DATA_PROTECTION.md`
-4. relevant files in `docs/adr/`
+4. `docs/DOMAIN_MODEL.md`
+5. `docs/IDEMPOTENCY.md`
+6. `docs/SCHEMA_DESIGN.md`
+7. `docs/ER_DIAGRAM.md`
+8. relevant files in `docs/adr/`
 
-The documented architecture is human-approved. Do not silently replace, reinterpret, or "improve" an architectural decision.
+The documented architecture and domain model are human-approved. Do not silently replace, reinterpret, or "improve" an architectural decision.
 
 If implementation requires an architectural choice that is not documented, stop and surface the decision instead of making it implicitly.
 
-## 2. Agent freedom
+## 2. Standard model before bespoke model
+
+Do not invent a Tirodhan-specific structure where an established application pattern already fits.
+
+Use the approved conventional patterns for:
+
+- application identity, verified phone, roles, sessions;
+- multi-address customer profile;
+- order/booking and line items;
+- logical payment, payment attempts, provider events, refunds;
+- dispatch offers and assignments;
+- fulfilment/pickup execution and attempt history;
+- facility/receiving-point master data;
+- evidence/attachment metadata.
+
+The geographic planning/compaction workflow is materially product-specific. Even there, use standard persistence, job, idempotency, and concurrency patterns.
+
+## 3. Agent freedom
 
 Agents are expected to choose good implementation details where the architecture specifies an invariant rather than a mechanism.
 
 Examples:
 
-- if a planning operation must be idempotent, choose an appropriate implementation;
-- if a request transition must be atomic, choose suitable transactional SQL/ORM mechanics;
-- if a worker must use bounded access to data, choose an appropriate cursor/page/batch implementation.
+- choose suitable SQL/ORM mechanics for an atomic transition;
+- choose suitable row-locking/conditional-update mechanics for concurrency;
+- choose suitable bounded cursor/page/batch mechanics;
+- choose a clean implementation for an approved unique/business constraint.
 
-Do not require the architecture documents to prescribe every `if` statement, SQL statement, or class.
+Do not require architecture documents to prescribe every `if` statement, SQL statement, or class.
 
-## 3. Prohibited architectural drift
+## 4. Prohibited architectural drift
 
 Do not:
 
@@ -35,7 +57,7 @@ Do not:
 - replace Azure Service Bus Standard with another broker without an ADR change;
 - replace PostgreSQL/PostGIS with MongoDB, Cosmos DB, or another database without an ADR change;
 - add Redis or another cache merely for convenience;
-- add a runtime LLM/AI dependency to geographic compaction;
+- add runtime LLM/AI dependency to geographic compaction;
 - split the transactional API into independently deployed microservices without an ADR change;
 - merge independently scaled workers into the synchronous API for convenience;
 - place business authorization rules only in APIM;
@@ -44,56 +66,113 @@ Do not:
 - introduce a paid external service without surfacing the cost/need first;
 - create permanent Azure dev/qa/staging environments without an ADR change;
 - replace Terraform as the IaC tool without an ADR change;
-- add Azure Container Registry while GHCR is working unless a concrete Azure integration/operational issue justifies it;
-- make production deployment automatic without the required production approval.
+- add Azure Container Registry while GHCR works unless a concrete Azure integration/operational issue justifies it;
+- make production deployment automatic without the required production approval;
+- replace approved relational entities with generic entity/type/value or polymorphic-reference tables merely for convenience;
+- make mutable profile/master data authoritative for already accepted historical transactions.
 
-## 4. Business invariants
+## 5. Business invariants
 
 Preserve these invariants:
 
 - a paid and accepted collection request is a fulfilment commitment;
+- mutable profile/master data must never rewrite historical transaction facts;
 - geographic compaction is an optimization, not a condition of fulfilment;
 - a request with no compactable neighbour becomes a singleton collection unit, not a failed request;
 - technical compaction failure must never silently drop a request;
-- Service Bus processing is at-least-once; workers must be idempotent;
-- completed pickup work is never rolled back because later pickups in the same rider assignment fail;
-- media upload failure does not reverse a successfully performed pickup;
-- refund processing is tracked independently from collection-request state;
+- all valid `PRE_PLANNING` requests must ultimately become `PLANNED` unless infrastructure prevents persistence;
+- completed pickup work is never rolled back because later pickups in the same assignment fail;
+- `PickupExecution` is the stable per-household fulfilment object; assignments may change around it;
+- media upload failure does not reverse a successfully performed pickup/handover;
+- evidence capture is a business fact; media upload is a storage operation;
+- one logical Payment belongs to a CollectionRequest; gateway retries are PaymentAttempts;
+- Refund is a separate financial lifecycle;
 - human identity is used for application authorization/audit; Azure-resource access uses workload identity;
 - no business rule may depend on APIM being permanently present.
 
-## 5. Testing expectations
+## 6. Idempotency is mandatory
 
-Where relevant, tests should demonstrate invariants rather than mirror implementation.
+Every state-changing operation that can be retried, replayed, duplicated, redelivered, timed out, or executed concurrently must have an explicit idempotency strategy.
+
+Use all applicable layers:
+
+1. client/API command idempotency;
+2. database/domain uniqueness and transactional constraints;
+3. message inbox + transactional outbox;
+4. external-provider idempotency or reconciliation.
+
+Transport deduplication never replaces business idempotency.
+
+No new mutating endpoint, webhook, worker, scheduled job, mobile mutation, or external side-effect integration is complete until its documented idempotency behaviour is implemented and tested.
+
+For every such operation identify:
+
+- logical/business key;
+- DB protection;
+- transaction boundary;
+- replay result;
+- concurrency rule;
+- external side-effect rule.
+
+Follow `docs/IDEMPOTENCY.md`.
+
+## 7. Testing expectations
+
+Tests should demonstrate invariants, not mirror implementation.
+
+Where applicable, every mutation must test:
+
+- normal success;
+- exact replay;
+- duplicate message delivery;
+- concurrent execution;
+- crash/retry around DB commit;
+- crash/retry around external provider side effects.
 
 Examples:
 
-- duplicate delivery of the same planning batch produces no duplicate business result;
-- a failed compaction attempt leaves its immutable batch recoverable;
-- exhausted compaction retries produce singleton planning outputs;
-- two riders accepting the same collection group cannot both win;
-- cancellation cannot race successfully after the request has entered `PRE_PLANNING`;
-- previously completed pickups remain completed after rider reassignment of outstanding work;
-- payment/refund webhook redelivery is idempotent;
-- missing precomputed serviceability falls back to synchronous resolution.
+- duplicate planning-batch delivery produces no duplicate groups or events;
+- exhausted compaction attempts produce fallback singleton planning;
+- cancellation and planning freeze racing produce one valid winner;
+- two riders concurrently accepting the same group yield one assignment;
+- completed pickups survive reassignment of outstanding work;
+- duplicate payment/refund webhook does not repeat business effects;
+- late duplicate external payment success is recorded and reconciled rather than re-accepting the request;
+- missing precomputed serviceability uses the same synchronous domain operation;
+- duplicate evidence/media/handover mobile submission maps to the same logical record.
 
-## 6. Security and sensitive data
+## 8. Security and sensitive data
 
 Follow `docs/DATA_PROTECTION.md`.
 
 Never place secrets, OTPs, payment instrument data, raw tokens, customer addresses, phone numbers, or exact coordinates in logs.
 
-Do not put sensitive personal data in Service Bus messages unless technically necessary. Prefer identifiers and load authoritative data from PostgreSQL.
+Service Bus, inbox/outbox, idempotency metadata, and provider-event metadata must not become accidental PII stores. Prefer identifiers and minimal routing data.
 
-## 7. Cost discipline
+## 9. Database rules
+
+Follow `docs/SCHEMA_DESIGN.md`.
+
+In particular:
+
+- use real FKs and approved uniqueness constraints;
+- use DB transactions/conditional state transitions to arbitrate races;
+- do not substitute Python read-then-write checks for DB-enforced critical invariants;
+- preserve append-only history where the domain requires it;
+- use PostGIS for canonical spatial data;
+- do not use floating point for money;
+- do not introduce universal soft-delete flags;
+- do not use JSONB to avoid modelling core relational concepts.
+
+## 10. Cost discipline
 
 This is a founder-funded MVP. Cost is an explicit architectural constraint.
 
-Prefer scale-to-zero and managed primitives already selected. Do not add infrastructure "just in case."
+Prefer scale-to-zero and already-selected managed primitives. Do not add infrastructure "just in case."
 
-If a proposed implementation materially increases recurring cost, surface the estimate/impact before implementation.
+If an implementation materially increases recurring cost, surface the impact before implementation.
 
-## 8. Environment, recovery and delivery rules
+## 11. Environment, recovery and delivery rules
 
 - Permanent environments are local, Azure `nonprod`, and Azure `prod`.
 - Additional staging is ephemeral and created from Terraform only when required.
