@@ -6,15 +6,13 @@ The architecture and domain model are intentionally documented before substantia
 
 ## Read first
 
+For every task:
+
 1. `AGENTS.md`
 2. `docs/PROJECT_CONTEXT.md`
 3. `docs/ARCHITECTURE.md`
-4. `docs/DATA_PROTECTION.md`
-5. `docs/DOMAIN_MODEL.md`
-6. `docs/IDEMPOTENCY.md`
-7. `docs/SCHEMA_DESIGN.md`
-8. `docs/ER_DIAGRAM.md`
-9. Relevant ADRs under `docs/adr/`
+
+Then read only the detailed domain, schema, idempotency, data-protection and ADR documents relevant to the task. `AGENTS.md` defines the routing rules. If applicability is uncertain, read the document rather than guessing.
 
 ## Current architecture status
 
@@ -34,6 +32,7 @@ The following remain intentionally open and must not be silently decided by an a
 - final offline-evidence validation policy;
 - final retention periods for transactional data, media, logs, inbox/outbox/idempotency records;
 - final configurable timing/retry values;
-- detailed workflow when actual collected material differs from the booking.
+- detailed workflow when actual collected material differs from the booking;
+- exact refresh-session retry/rotation/replay semantics, including treatment of a lost successful refresh response.
 
 Azure is the reference MVP cloud, but application/domain code should avoid unnecessary Azure coupling.

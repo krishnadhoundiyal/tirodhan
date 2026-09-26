@@ -99,10 +99,10 @@ These are code/domain ownership boundaries, not separate MVP deployments.
 - A newly verified user receives customer capability; rider/manager roles require explicit provisioning.
 - A user has one active verified login mobile number at a time; changing the number preserves the same user identity and historical phone records.
 - OTP verification is delegated to the OTP provider; Tirodhan never persists OTP values.
-- After successful verification, Tirodhan issues its own short-lived access token and revocable refresh-token session.
-- Refresh tokens are never stored in plaintext.
-- Refresh-token rotation must support token-family reuse detection/revocation.
+- After successful verification, Tirodhan issues its own short-lived access token and a revocable refresh-session mechanism.
+- Refresh credentials are never stored in plaintext.
 - Access tokens are not persisted as ordinary application data.
+- The exact refresh-session retry/rotation/replay strategy is intentionally open. It must preserve revocation, safe replay handling, and a deliberate policy for the case where a refresh succeeds but the response is lost and the client retries the prior credential. An implementation agent must not choose this strategy implicitly.
 
 MSG91 remains the current OTP-provider candidate; commercial terms/DLT onboarding must be confirmed before production commitment.
 
@@ -677,4 +677,5 @@ Do not silently decide:
 - final CI/CD provider;
 - frontend/mobile technology;
 - detailed material-mismatch workflow;
-- final offline-evidence validation policy.
+- final offline-evidence validation policy;
+- exact refresh-session retry/rotation/replay semantics, including lost-success-response behaviour.

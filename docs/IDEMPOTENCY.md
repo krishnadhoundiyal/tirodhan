@@ -8,7 +8,7 @@ Idempotency is a system-wide invariant.
 
 A feature is not complete until its duplicate, retry and concurrency behaviour is documented and tested.
 
-Idempotency does not mean every replay returns success. Security-sensitive replay, such as reuse of a rotated refresh token, may correctly be rejected. The invariant is that replay cannot create an unintended second business effect.
+Idempotency does not mean every replay returns success. Security-sensitive credential replay may correctly be rejected according to the approved authentication policy. The invariant is that replay cannot create an unintended second business effect.
 
 ## Four defensive layers
 
@@ -92,7 +92,7 @@ not distributed exactly-once execution.
 |---|---|---|---|
 | Request OTP | client command + phone | idempotency record + abuse/rate limits | same command must not unintentionally send another SMS; explicit resend is a new command |
 | Verify OTP | verification transaction/command | session creation boundary | retry cannot create multiple sessions |
-| Refresh session | refresh-token family/version | token hash + rotation state | one rotation wins; unsafe reuse is rejected/detected |
+| Refresh session | **TBD with approved refresh-session strategy** | revocable session + credential verifier/concurrency protection appropriate to that strategy | retry/replay must not create a second unintended session effect; exact lost-success-response vs credential-reuse semantics remain open |
 | Grant role | `(user_id, role_code)` | unique active role membership | repeat grant returns existing membership/no-op |
 | Revoke role | role membership | conditional transition | repeated revoke remains revoked |
 | Add address | user + client command | idempotency record | retry returns same address |
@@ -136,6 +136,20 @@ not distributed exactly-once execution.
 | Consume Service Bus message | `(consumer_name, message_id)` | inbox PK | same transport message processed once |
 | Send notification | logical notification/business event | unique notification key/record | retry does not create duplicate logical notification |
 | External notification call | delivery ID | provider idempotency/reconciliation | uncertain provider outcome is reconciled rather than blindly repeated |
+
+## Explicitly open idempotency decision
+
+### Refresh-session retry after lost successful response
+
+Authentication must not silently adopt a rotation/reuse policy before ADR-007 is resolved.
+
+The final strategy must define what happens when:
+
+1. a refresh request succeeds server-side;
+2. the response containing the client-visible continuation credential is lost;
+3. the client retries using the previously presented credential.
+
+The implementation must distinguish, or deliberately choose not to distinguish, this ambiguous network-retry case from hostile credential reuse. That security/UX trade-off is an architecture decision.
 
 ## Critical concurrency scenarios
 
