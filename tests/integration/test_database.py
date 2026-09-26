@@ -73,11 +73,34 @@ def test_phase_1b_migration_creates_expected_foundation_tables(
         "payment",
         "planning_batch",
         "refresh_session",
-        "serviceability_context",
-        "user_address",
         "user_phone",
         "user_role",
     }.isdisjoint(table_names)
+
+
+@pytest.mark.integration
+def test_phase_1c_migration_downgrade_and_reupgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+
+    command.upgrade(configuration, "head")
+    command.downgrade(configuration, "0002_domain_reliability")
+    command.upgrade(configuration, "head")
+
+    async def read_table_names() -> set[str]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: set(
+                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    assert {"user_address", "serviceability_context"}.issubset(asyncio.run(read_table_names()))
 
 
 @pytest.mark.integration
