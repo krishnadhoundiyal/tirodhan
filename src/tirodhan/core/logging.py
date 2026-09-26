@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
@@ -28,8 +29,12 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str, separators=(",", ":"))
 
 
-def configure_logging(level: str) -> None:
-    handler = logging.StreamHandler()
+def configure_logging(level: str, log_file_path: Path | None = None) -> None:
+    handler: logging.Handler
+    if log_file_path is None:
+        handler = logging.StreamHandler()
+    else:
+        handler = logging.FileHandler(log_file_path, encoding="utf-8")
     handler.setFormatter(JsonFormatter())
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]

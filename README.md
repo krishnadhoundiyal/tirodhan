@@ -69,6 +69,10 @@ The local endpoints are:
 - `GET http://localhost:8000/ready` — PostgreSQL connectivity and PostGIS readiness;
 - `GET http://localhost:8000/docs` — generated OpenAPI documentation.
 
+JSON logs go to the console by default. Hosted environments can set
+`TIRODHAN_LOG_FILE_PATH` to a file on their mounted shared replica-local volume; the
+application does not choose or create the Azure volume mount.
+
 Local credentials in `.env.example` and `compose.yaml` are intentionally local-only. Runtime
 secrets for hosted environments must come from their environment/secret provider and must not
 be committed.

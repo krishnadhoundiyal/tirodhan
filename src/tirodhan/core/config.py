@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr, field_validator
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     environment: Literal["local", "nonprod", "prod", "test"] = "local"
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    log_file_path: Path | None = None
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan"
     )

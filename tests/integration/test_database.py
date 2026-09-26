@@ -6,8 +6,12 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from tirodhan.core.config import Settings
+from tirodhan.main import create_app
 
 
 def get_test_database_url() -> str:
@@ -34,3 +38,30 @@ def test_alembic_upgrade_enables_postgis(monkeypatch: pytest.MonkeyPatch) -> Non
             await engine.dispose()
 
     assert asyncio.run(read_postgis_version()) is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_readiness_uses_lifespan_database_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    await asyncio.to_thread(command.upgrade, Config("alembic.ini"), "head")
+
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url=database_url,
+    )
+    application = create_app(settings)
+
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application),
+            base_url="http://test",
+        ) as client:
+            response = await client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}

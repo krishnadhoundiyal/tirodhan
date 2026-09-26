@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     application_settings = settings or get_settings()
-    configure_logging(application_settings.log_level)
+    configure_logging(
+        application_settings.log_level,
+        application_settings.log_file_path,
+    )
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
