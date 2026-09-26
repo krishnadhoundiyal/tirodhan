@@ -105,27 +105,23 @@ UNIQUE(user_id, role_code) WHERE revoked_at IS NULL
 
 ### `refresh_session`
 
-```text
-session_id              uuid PK
-user_id                 uuid FK -> app_user
-token_family_id         uuid NOT NULL
-refresh_token_hash      bytea NOT NULL
-status                  varchar(24) NOT NULL
-issued_at               timestamptz NOT NULL
-expires_at              timestamptz NOT NULL
-last_used_at            timestamptz NULL
-revoked_at              timestamptz NULL
-rotated_to_session_id   uuid NULL FK -> refresh_session
-created_at              timestamptz NOT NULL
-```
+**Implementation status: intentionally provisional.**
 
-Required indexes:
+The authentication architecture requires a revocable refresh-session mechanism and forbids plaintext refresh credentials, but the exact retry/rotation/replay semantics are still open. Therefore this table must not be implemented from a rotating-token draft until ADR-007 is resolved.
+
+Schema invariants that are already approved:
 
 ```text
-UNIQUE(refresh_token_hash)
-INDEX(user_id, status)
-INDEX(token_family_id)
+- durable session identity related to app_user;
+- explicit expiry and revocation state/timestamps;
+- no plaintext refresh credential storage;
+- cryptographic verifier/hash material appropriate to the chosen mechanism;
+- database protection for the chosen replay/concurrency semantics.
 ```
+
+Fields such as `token_family_id`, `ROTATED` status, rotation links, grace/retry markers, or an alternative stable-session representation are strategy-dependent and are not yet approved physical schema.
+
+Before implementing authentication migrations, resolve the lost-success-response case described in ADR-007 and update this section with the final table shape and constraints.
 
 ### `user_address`
 

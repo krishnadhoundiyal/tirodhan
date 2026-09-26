@@ -60,7 +60,7 @@ Historical handover/pickup coordinate snapshots receive the same access restrict
 
 - OTP values: never persist.
 - Access tokens: do not persist as ordinary application data.
-- Refresh tokens: never store plaintext; store only a verifier/hash suitable for rotation/revocation/reuse detection.
+- Refresh credentials: never store plaintext; store only cryptographic verifier/hash material suitable for the final approved revocation/replay strategy.
 - Provider/API secrets: Key Vault, not application tables.
 
 ### Payment data

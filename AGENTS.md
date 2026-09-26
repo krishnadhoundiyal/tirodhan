@@ -2,22 +2,29 @@
 
 These rules apply to all coding and infrastructure agents working in this repository.
 
-## 1. Architecture authority
+## 1. Architecture authority and context loading
 
-Read, in order:
+Always read:
 
 1. `docs/PROJECT_CONTEXT.md`
 2. `docs/ARCHITECTURE.md`
-3. `docs/DATA_PROTECTION.md`
-4. `docs/DOMAIN_MODEL.md`
-5. `docs/IDEMPOTENCY.md`
-6. `docs/SCHEMA_DESIGN.md`
-7. `docs/ER_DIAGRAM.md`
-8. relevant files in `docs/adr/`
+
+Then read the documents relevant to the task rather than loading the entire documentation set by default:
+
+- security, authentication, PII, media privacy -> `docs/DATA_PROTECTION.md`;
+- domain/entity/lifecycle work -> `docs/DOMAIN_MODEL.md`;
+- database/migration/constraint work -> `docs/SCHEMA_DESIGN.md` and, where relationships matter, `docs/ER_DIAGRAM.md`;
+- any mutating API, webhook, worker, scheduler, concurrency or retry work -> `docs/IDEMPOTENCY.md`;
+- infrastructure/platform/provider decisions -> the relevant ADR(s);
+- any feature spanning several domains -> all documents relevant to those domains.
+
+Read the relevant ADR(s) for every implementation task.
+
+Do not read every detailed document merely for orientation when the task does not touch it. Conversely, do not omit a document to save context when it can materially affect correctness.
+
+If uncertain whether a document is relevant, read it. If implementation requires an architectural choice that is not documented or is explicitly open, stop and surface the decision instead of making it implicitly.
 
 The documented architecture and domain model are human-approved. Do not silently replace, reinterpret, or "improve" an architectural decision.
-
-If implementation requires an architectural choice that is not documented, stop and surface the decision instead of making it implicitly.
 
 ## 2. Standard model before bespoke model
 

@@ -1,6 +1,6 @@
 # ADR-007: Human Identity and Application Sessions
 
-**Status:** Accepted at architecture level
+**Status:** Accepted at architecture level; refresh-session retry/rotation semantics open
 
 ## Decision
 
@@ -25,19 +25,30 @@ OTP provider verifies the phone number; Tirodhan never persists OTP values.
 After successful verification, Tirodhan issues its own session:
 
 - short-lived access token;
-- rotating/revocable refresh-token session.
+- revocable refresh-session mechanism.
 
-Refresh tokens are stored only as cryptographic verifier/hash material, never plaintext.
+Refresh credentials are never stored in plaintext. Access tokens are not stored as ordinary application data.
 
-Refresh-token rotation uses token-family semantics so reuse of an already rotated/revoked token can be detected and rejected/revoked according to security policy.
+The exact refresh-session mechanism is deliberately not yet frozen. In particular, the design must explicitly handle the case where a refresh succeeds, the response is lost, and the client retries the previously presented credential.
 
-Access tokens are not stored as ordinary application data.
+The final design must define:
+
+- revocation semantics;
+- replay/reuse detection semantics;
+- concurrency behaviour for simultaneous refreshes;
+- whether and how a legitimate lost-response retry can recover without creating a second unintended session effect;
+- the security/UX trade-off if an ambiguous retry is treated as credential reuse.
+
+Possible mechanisms may include rotation with a bounded retry/grace strategy, a stable revocable refresh credential, or another reviewed design. None is approved merely by being listed here.
+
+An implementation agent must not choose or encode the final mechanism until this open decision is resolved.
 
 MSG91 is the current OTP-provider candidate; commercial confirmation/DLT onboarding remains a launch task.
 
 ## Security / idempotency
 
 - repeated OTP/session commands must not create unintended duplicate sessions;
-- unsafe refresh-token replay is rejected rather than treated as a successful idempotent replay;
+- refresh replay/concurrency must not create an unintended second business effect;
+- ambiguous network retry versus credential theft/reuse semantics remain an explicit architecture decision, not an implementation default;
 - human identity is used for application authorization/audit, not Azure-resource authentication;
 - phone numbers are normalized and stored with recoverable encryption plus keyed lookup representation according to `DATA_PROTECTION.md`.
