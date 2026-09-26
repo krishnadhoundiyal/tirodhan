@@ -43,8 +43,6 @@ class ServiceabilityContextCreateRequest(BaseModel):
     def exactly_one_address_source(self) -> ServiceabilityContextCreateRequest:
         if (self.source_address_id is None) == (self.address is None):
             raise ValueError("provide exactly one of source_address_id or address")
-        if self.source_address_id is not None and self.location is not None:
-            raise ValueError("location is taken from the saved address")
         return self
 
 

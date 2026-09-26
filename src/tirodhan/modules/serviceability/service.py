@@ -126,7 +126,9 @@ async def create_serviceability_context(
         if source is None:
             raise ServiceabilityContextNotFoundError("active source address not found")
         protected_snapshot = bytes(source.address_encrypted)
-        location = source.location
+        location = (
+            geography_point(command.location) if command.location is not None else source.location
+        )
         source_version = source.version
     else:
         if command.one_off_address is None:

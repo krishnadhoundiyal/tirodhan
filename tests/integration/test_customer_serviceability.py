@@ -285,6 +285,61 @@ async def test_saved_address_context_is_immutable_and_outbox_is_minimal(
     assert persisted.source_address_version == 1
 
 
+@pytest.mark.asyncio
+async def test_saved_address_context_prefers_client_location_without_mutating_address(
+    database_session_factory: async_sessionmaker[AsyncSession],
+    address_protector: AddressProtector,
+) -> None:
+    user = await create_user(database_session_factory)
+    address = await saved_address(
+        database_session_factory,
+        address_protector,
+        user,
+        key="saved-address-client-location",
+    )
+    supplied_location = GeoPoint(latitude=28.7041, longitude=77.1025)
+
+    async with database_session_factory() as session, session.begin():
+        context = await create_serviceability_context(
+            session,
+            CreateServiceabilityContextCommand(
+                user_id=user.user_id,
+                idempotency_key="saved-context-client-location",
+                source_address_id=address.address_id,
+                location=supplied_location,
+                expires_at=future(),
+            ),
+            address_protector,
+            idempotency_expires_at=future(),
+        )
+
+    async with database_session_factory() as session:
+        context_longitude, context_latitude = (
+            await session.execute(
+                text(
+                    "SELECT ST_X(location::geometry), ST_Y(location::geometry) "
+                    "FROM serviceability_context "
+                    "WHERE serviceability_context_id = :context_id"
+                ),
+                {"context_id": context.serviceability_context_id},
+            )
+        ).one()
+        address_longitude, address_latitude = (
+            await session.execute(
+                text(
+                    "SELECT ST_X(location::geometry), ST_Y(location::geometry) "
+                    "FROM user_address WHERE address_id = :address_id"
+                ),
+                {"address_id": address.address_id},
+            )
+        ).one()
+
+    assert context_longitude == pytest.approx(supplied_location.longitude)
+    assert context_latitude == pytest.approx(supplied_location.latitude)
+    assert address_longitude == pytest.approx(77.2090)
+    assert address_latitude == pytest.approx(28.6139)
+
+
 class StaticResolver(LocationResolver):
     def __init__(self, result: LocationResolution) -> None:
         self.result = result
@@ -538,7 +593,10 @@ async def test_primary_api_flow_and_status_get_is_read_only(
             context_created = await client.post(
                 "/v1/serviceability/contexts",
                 headers={"Idempotency-Key": "api-context-create"},
-                json={"source_address_id": address_id},
+                json={
+                    "source_address_id": address_id,
+                    "location": {"latitude": 28.62, "longitude": 77.21},
+                },
             )
             assert context_created.status_code == 201
             context_id = context_created.json()["serviceability_context_id"]
