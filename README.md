@@ -1,8 +1,8 @@
 # Tirodhan
 
-This repository contains the implementation of the Tirodhan collection platform.
-
-The architecture and domain model are intentionally documented before substantial implementation begins. Coding agents must read the approved design documents before modifying application, database, worker, or infrastructure code.
+This repository contains the Tirodhan collection platform. Phase 1A provides the
+transactional backend foundation: a modular FastAPI application, PostgreSQL/PostGIS
+connectivity, Alembic migrations, containerized local development, and test tooling.
 
 ## Read first
 
@@ -36,3 +36,103 @@ The following remain intentionally open and must not be silently decided by an a
 - exact refresh-session retry/rotation/replay semantics, including treatment of a lost successful refresh response.
 
 Azure is the reference MVP cloud, but application/domain code should avoid unnecessary Azure coupling.
+
+## Backend quick start
+
+The host workflow requires Python 3.10 or newer. The container image uses Python 3.12.
+
+```bash
+python -m venv .venv
+# PowerShell: .venv\Scripts\Activate.ps1
+# bash/zsh: source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+Copy `.env.example` to `.env`, start PostGIS, apply migrations, then run the API:
+
+```bash
+docker compose up -d database
+alembic upgrade head
+uvicorn tirodhan.main:app --reload --no-access-log
+```
+
+Alternatively, start the full local stack. Compose waits for Postgres, runs the migration
+job once, and then starts the API:
+
+```bash
+docker compose up --build
+```
+
+The local endpoints are:
+
+- `GET http://localhost:8000/health` — process liveness, independent of the database;
+- `GET http://localhost:8000/ready` — PostgreSQL connectivity and PostGIS readiness;
+- `GET http://localhost:8000/docs` — generated OpenAPI documentation.
+
+JSON logs go to the console by default. Hosted environments can set
+`TIRODHAN_LOG_FILE_PATH` to a file on their mounted shared replica-local volume; the
+application does not choose or create the Azure volume mount.
+
+Local credentials in `.env.example` and `compose.yaml` are intentionally local-only. Runtime
+secrets for hosted environments must come from their environment/secret provider and must not
+be committed.
+
+## Quality checks
+
+```bash
+ruff check .
+ruff format --check .
+mypy
+pytest
+```
+
+Integration tests are skipped unless a disposable PostGIS database is explicitly supplied:
+
+```bash
+TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan pytest -m integration
+```
+
+## Migrations
+
+Alembic reads `TIRODHAN_DATABASE_URL` through the same typed settings object as the application.
+The initial migration only enables PostGIS; this phase intentionally defines no business tables.
+
+```bash
+alembic current
+alembic upgrade head
+alembic downgrade base
+```
+
+Application startup never runs migrations implicitly. The local Compose migration job is an
+explicit convenience; hosted deployment orchestration remains responsible for migrations.
+
+## Backend layout
+
+```text
+src/tirodhan/
+├── api/                 # HTTP composition and platform routes
+├── core/                # typed settings and structured logging
+├── db/                  # SQLAlchemy metadata, engine, and sessions
+├── modules/             # approved modular-monolith ownership boundaries
+│   ├── identity/
+│   ├── customers/
+│   ├── serviceability/
+│   ├── collection_requests/
+│   ├── payments/
+│   ├── planning/
+│   ├── riders/
+│   ├── assignments/
+│   ├── pickups/
+│   ├── operations/
+│   ├── receiving_points/
+│   ├── evidence/
+│   └── reliability/
+└── main.py              # application factory and ASGI entry point
+
+migrations/              # Alembic environment and revisions
+tests/unit/              # isolated application tests
+tests/integration/       # opt-in disposable-database tests
+```
+
+The module packages are boundaries only. Business entities and workflows are deliberately out
+of scope for Phase 1A.

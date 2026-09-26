@@ -1,0 +1,1 @@
+"""Collection-request module boundary."""

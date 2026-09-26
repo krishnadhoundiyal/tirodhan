@@ -1,0 +1,3 @@
+Alembic migration environment for the Tirodhan PostgreSQL/PostGIS database.
+
+The initial revision enables PostGIS only. Business tables intentionally begin in a later phase.
