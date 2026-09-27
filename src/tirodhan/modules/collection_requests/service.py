@@ -55,7 +55,6 @@ class CollectionRequestNotFoundError(LookupError):
 class CreateCollectionRequestCommand:
     customer_id: UUID
     client_request_id: UUID
-    idempotency_key: str
     serviceability_context_id: UUID
     slot_start: datetime
     slot_end: datetime
@@ -130,6 +129,7 @@ async def create_collection_request(
         }
     )
     scope = f"collection-request.create:{command.customer_id}"
+    idempotency_key = str(command.client_request_id)
 
     # A completed replay does not invoke pricing again. This read-only session is
     # closed before a new quote is requested.
@@ -137,7 +137,7 @@ async def create_collection_request(
         existing = await session.scalar(
             select(IdempotencyRecord).where(
                 IdempotencyRecord.scope == scope,
-                IdempotencyRecord.idempotency_key == command.idempotency_key,
+                IdempotencyRecord.idempotency_key == idempotency_key,
             )
         )
         if existing is not None:
@@ -162,7 +162,7 @@ async def create_collection_request(
         claim = await claim_idempotency_record(
             session,
             scope=scope,
-            idempotency_key=command.idempotency_key,
+            idempotency_key=idempotency_key,
             request_fingerprint=fingerprint,
             expires_at=idempotency_expires_at,
         )

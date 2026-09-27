@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -116,7 +116,6 @@ async def post_collection_request(
     customer_id: Annotated[UUID, Depends(get_current_user_id)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     pricing: Annotated[PricingPort, Depends(get_pricing_port)],
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
 ) -> CollectionRequestResponse:
     payment_expires_at, idempotency_expires_at = _expiries(request)
     try:
@@ -125,7 +124,6 @@ async def post_collection_request(
             CreateCollectionRequestCommand(
                 customer_id=customer_id,
                 client_request_id=body.client_request_id,
-                idempotency_key=idempotency_key,
                 serviceability_context_id=body.serviceability_context_id,
                 slot_start=body.slot_start,
                 slot_end=body.slot_end,

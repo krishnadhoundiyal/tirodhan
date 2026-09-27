@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Mapping, Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -62,6 +62,7 @@ from tirodhan.modules.payments.service import (
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch
 from tirodhan.modules.reliability.models import OutboxEvent
+from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 from tirodhan.modules.serviceability.models import ServiceabilityContext
 from tirodhan.modules.serviceability.service import (
     SERVICEABILITY_PENDING,
@@ -170,20 +171,21 @@ async def create_request(
     user_id: UUID,
     context_id: UUID,
     *,
-    key: str,
     client_request_id: UUID | None = None,
     pricing: PricingPort | None = None,
+    slot_start: datetime = SLOT_START,
+    slot_end: datetime = SLOT_END,
+    items: tuple[DeclaredRequestItem, ...] = ITEMS,
 ) -> CollectionRequestResult:
     return await create_collection_request(
         factory,
         CreateCollectionRequestCommand(
             customer_id=user_id,
             client_request_id=client_request_id or new_uuid7(),
-            idempotency_key=key,
             serviceability_context_id=context_id,
-            slot_start=SLOT_START,
-            slot_end=SLOT_END,
-            items=ITEMS,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            items=items,
             payment_expires_at=utc_now() + timedelta(minutes=30),
         ),
         pricing or FixedPricing(),
@@ -243,7 +245,6 @@ async def test_request_creation_replay_quote_and_immutable_snapshot(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="request-create",
         client_request_id=client_request_id,
         pricing=pricing,
     )
@@ -251,7 +252,6 @@ async def test_request_creation_replay_quote_and_immutable_snapshot(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="request-create",
         client_request_id=client_request_id,
         pricing=pricing,
     )
@@ -297,8 +297,60 @@ async def test_request_creation_replay_quote_and_immutable_snapshot(
             database_session_factory,
             user.user_id,
             context.serviceability_context_id,
-            key="duplicate-context-booking",
         )
+
+
+@pytest.mark.asyncio
+async def test_request_client_id_conflicts_when_booking_payload_changes(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user = await create_user(database_session_factory)
+    first_context = await create_context(database_session_factory, user.user_id)
+    second_context = await create_context(database_session_factory, user.user_id)
+    client_request_id = new_uuid7()
+    pricing = FixedPricing()
+    await create_request(
+        database_session_factory,
+        user.user_id,
+        first_context.serviceability_context_id,
+        client_request_id=client_request_id,
+        pricing=pricing,
+    )
+
+    changed_payloads = (
+        {
+            "context_id": first_context.serviceability_context_id,
+            "slot_start": SLOT_START + timedelta(hours=1),
+            "slot_end": SLOT_END + timedelta(hours=1),
+            "items": ITEMS,
+        },
+        {
+            "context_id": first_context.serviceability_context_id,
+            "slot_start": SLOT_START,
+            "slot_end": SLOT_END,
+            "items": (DeclaredRequestItem(item_category_code="CHANGED", declared_quantity=2),),
+        },
+        {
+            "context_id": second_context.serviceability_context_id,
+            "slot_start": SLOT_START,
+            "slot_end": SLOT_END,
+            "items": ITEMS,
+        },
+    )
+    for payload in changed_payloads:
+        with pytest.raises(IdempotencyKeyConflictError):
+            await create_request(
+                database_session_factory,
+                user.user_id,
+                payload["context_id"],
+                client_request_id=client_request_id,
+                pricing=pricing,
+                slot_start=payload["slot_start"],
+                slot_end=payload["slot_end"],
+                items=payload["items"],
+            )
+
+    assert pricing.calls == 1
 
 
 @pytest.mark.asyncio
@@ -334,12 +386,10 @@ async def test_collection_request_api_creates_pending_request_and_payment(
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/v1/collection-requests",
-                headers={"Idempotency-Key": "request-api-key"},
                 json=body,
             )
             replay = await client.post(
                 "/v1/collection-requests",
-                headers={"Idempotency-Key": "request-api-key"},
                 json=body,
             )
 
@@ -369,13 +419,12 @@ async def test_request_rejects_ineligible_serviceability_contexts(
         await create_context(database_session_factory, owner.user_id, has_location=False),
         await create_context(database_session_factory, owner.user_id, has_cell=False),
     ]
-    for index, context in enumerate(cases):
+    for context in cases:
         with pytest.raises(ServiceabilityContextIneligibleError):
             await create_request(
                 database_session_factory,
                 owner.user_id,
                 context.serviceability_context_id,
-                key=f"ineligible-{index}",
             )
 
 
@@ -390,7 +439,6 @@ async def test_payment_attempt_api_replay_commits_before_provider_call(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="attempt-api-request",
     )
     provider = FakePaymentProvider()
     provider.initiation_results.append(
@@ -439,7 +487,6 @@ async def test_known_failure_and_uncertain_retry_are_durable(
         database_session_factory,
         user.user_id,
         context_one.serviceability_context_id,
-        key="known-failure-request",
     )
     failed_provider = FakePaymentProvider()
     failed_provider.initiation_results.append(
@@ -466,7 +513,6 @@ async def test_known_failure_and_uncertain_retry_are_durable(
         database_session_factory,
         user.user_id,
         context_two.serviceability_context_id,
-        key="uncertain-request",
     )
     uncertain_provider = FakePaymentProvider()
     uncertain_provider.initiation_results.extend(
@@ -514,7 +560,6 @@ async def test_webhook_authentication_failure_has_no_business_effect(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="bad-webhook-request",
     )
     attempt, provider = await create_ready_attempt(
         database_session_factory,
@@ -556,7 +601,6 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="success-request",
     )
     first, _ = await create_ready_attempt(
         database_session_factory,
@@ -683,7 +727,6 @@ async def test_distinct_success_events_for_canonical_attempt_are_normally_proces
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="canonical-repeat-request",
     )
     attempt, _ = await create_ready_attempt(
         database_session_factory,
@@ -740,7 +783,6 @@ async def test_canonical_success_event_after_planning_freeze_is_normally_process
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="canonical-after-freeze-request",
     )
     attempt, _ = await create_ready_attempt(
         database_session_factory,
@@ -791,7 +833,6 @@ async def test_freeze_wins_shared_lock_and_prevents_acceptance(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="freeze-wins-request",
     )
     attempt, _ = await create_ready_attempt(
         database_session_factory,
@@ -853,7 +894,6 @@ async def test_payment_wins_shared_lock_then_freeze_includes_request_consistentl
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="payment-wins-request",
     )
     attempt, _ = await create_ready_attempt(
         database_session_factory,
@@ -921,7 +961,6 @@ async def test_acceptance_and_outbox_roll_back_atomically(
         database_session_factory,
         user.user_id,
         context.serviceability_context_id,
-        key="rollback-request",
     )
     attempt, _ = await create_ready_attempt(
         database_session_factory,
