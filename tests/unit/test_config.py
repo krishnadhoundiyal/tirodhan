@@ -22,7 +22,12 @@ def test_settings_reject_non_postgresql_database() -> None:
 
 @pytest.mark.parametrize(
     "field_name",
-    ["planning_lead_time_minutes", "planning_max_attempts"],
+    [
+        "planning_lead_time_minutes",
+        "planning_max_attempts",
+        "planning_compaction_distance_m",
+        "planning_max_group_requests",
+    ],
 )
 def test_settings_reject_nonpositive_planning_values(field_name: str) -> None:
     with pytest.raises(ValidationError):

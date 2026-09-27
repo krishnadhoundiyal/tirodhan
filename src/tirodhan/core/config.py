@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     pending_payment_lifetime_seconds: int | None = None
     planning_lead_time_minutes: int | None = None
     planning_max_attempts: int | None = None
+    planning_compaction_distance_m: int | None = None
+    planning_max_group_requests: int | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -44,6 +46,8 @@ class Settings(BaseSettings):
         "pending_payment_lifetime_seconds",
         "planning_lead_time_minutes",
         "planning_max_attempts",
+        "planning_compaction_distance_m",
+        "planning_max_group_requests",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:

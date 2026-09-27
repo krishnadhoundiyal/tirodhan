@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.collection_requests.service import REQUEST_ACCEPTED, REQUEST_PRE_PLANNING
+from tirodhan.modules.planning.compaction import BOUNDED_GREEDY_DIAMETER_V1
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import (
     CollectionGroup,
@@ -24,6 +25,8 @@ from tirodhan.modules.planning.models import (
 from tirodhan.modules.planning.policy import (
     latest_due_slot_start,
     planning_cutoff_reached,
+    require_compaction_distance_m,
+    require_max_group_requests,
     require_planning_max_attempts,
 )
 from tirodhan.modules.reliability.models import InboxMessage
@@ -194,6 +197,8 @@ async def freeze_planning_batch(
     *,
     lead_time_minutes: int | None,
     max_attempts: int | None,
+    compaction_distance_m: int | None = None,
+    max_group_requests: int | None = None,
     now: datetime | None = None,
 ) -> FreezePlanningResult:
     async with session_factory() as session, session.begin():
@@ -225,6 +230,8 @@ async def freeze_planning_batch(
         ):
             raise PlanningCutoffNotReachedError("planning cutoff has not been reached")
         max_attempts_snapshot = require_planning_max_attempts(max_attempts)
+        compaction_distance_snapshot = require_compaction_distance_m(compaction_distance_m)
+        max_group_requests_snapshot = require_max_group_requests(max_group_requests)
 
         batch = PlanningBatch(
             planning_batch_id=new_uuid7(),
@@ -234,7 +241,9 @@ async def freeze_planning_batch(
             status=PLANNING_BATCH_READY,
             completion_mode=None,
             max_attempts_snapshot=max_attempts_snapshot,
-            algorithm_version=None,
+            algorithm_version=BOUNDED_GREEDY_DIAMETER_V1,
+            compaction_distance_m_snapshot=compaction_distance_snapshot,
+            max_group_requests_snapshot=max_group_requests_snapshot,
             created_at=freeze_time,
             completed_at=None,
         )

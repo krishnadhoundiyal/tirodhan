@@ -73,7 +73,7 @@ The platform separately tracks whether an available rider is currently `IDLE`, `
 The following are not yet fixed:
 
 - geographic cell sizing/resolution;
-- final compaction/clustering algorithm;
+- production compaction-distance and maximum group-request values;
 - final route optimization algorithm, if any;
 - detailed fleet rider-selection algorithm;
 - item category taxonomy and final pricing formula;

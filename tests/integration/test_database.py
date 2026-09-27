@@ -205,6 +205,64 @@ def test_phase_1f_migration_roundtrip_only_controls_result_tables(
 
 
 @pytest.mark.integration
+def test_phase_1g_migration_roundtrip_controls_policy_columns_and_indexes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    policy_columns = {
+        "compaction_distance_m_snapshot",
+        "max_group_requests_snapshot",
+    }
+    planner_indexes = {
+        "ix_collection_request_planning_batch_id",
+        "ix_collection_request_pickup_location_gist",
+    }
+
+    async def inspect_planner_schema() -> tuple[set[str], set[str], set[str]]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: (
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "planning_batch"
+                            )
+                        },
+                        {
+                            index["name"]
+                            for index in sqlalchemy_inspect(sync_connection).get_indexes(
+                                "collection_request"
+                            )
+                        },
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    columns, indexes, tables = asyncio.run(inspect_planner_schema())
+    assert policy_columns.issubset(columns)
+    assert planner_indexes.issubset(indexes)
+    assert {"collection_group", "collection_group_member", "pickup_execution"}.issubset(tables)
+
+    command.downgrade(configuration, "0006_planning_result")
+    columns, indexes, tables = asyncio.run(inspect_planner_schema())
+    assert policy_columns.isdisjoint(columns)
+    assert planner_indexes.isdisjoint(indexes)
+    assert {"collection_group", "collection_group_member", "pickup_execution"}.issubset(tables)
+
+    command.upgrade(configuration, "head")
+    columns, indexes, _tables = asyncio.run(inspect_planner_schema())
+    assert policy_columns.issubset(columns)
+    assert planner_indexes.issubset(indexes)
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,

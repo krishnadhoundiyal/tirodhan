@@ -77,6 +77,8 @@ A collection request has one logical payment obligation. Retries are separate `p
 
 A planning batch freezes the accepted request population for one geographic cell and pickup slot. Every request in a completed batch belongs to exactly one collection group. Groups may be compacted, normal singleton, or fallback singleton.
 
+Normal Phase 1G compaction uses `BOUNDED_GREEDY_DIAMETER_V1`. A compacted group is valid only when every request pair is within the snapshotted PostGIS-geography distance in meters, and its household-stop count does not exceed `max_group_requests_snapshot`. Weight, volume, item category, rider capacity, and vehicle type are not planning inputs in this phase. Each batch snapshots its algorithm version and numeric policy so retries cannot drift with runtime configuration.
+
 The persisted Phase 1F vocabulary is:
 
 - batch status: `READY`, `COMPLETED`;
@@ -270,11 +272,10 @@ CollectionRequest COMPLETED
 Do not silently decide:
 
 - geographic cell resolution;
-- compaction/clustering algorithm;
 - detailed routing algorithm;
 - item category taxonomy;
 - final pricing formula;
-- exact planning lead time, compaction-attempt limit, rider-offer deadline and retention periods;
+- exact planning lead time, compaction-attempt limit, compaction distance, maximum group-request count, rider-offer deadline and retention periods;
 - final payment provider;
 - final CI/CD provider;
 - frontend/mobile technology;

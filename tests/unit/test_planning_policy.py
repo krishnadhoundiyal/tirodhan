@@ -6,6 +6,8 @@ from tirodhan.modules.planning.policy import (
     PlanningConfigurationError,
     planning_cutoff_reached,
     planning_cutoff_time,
+    require_compaction_distance_m,
+    require_max_group_requests,
     require_planning_max_attempts,
 )
 
@@ -24,3 +26,7 @@ def test_planning_policy_fails_when_configuration_is_missing() -> None:
         planning_cutoff_time(slot_start, None)
     with pytest.raises(PlanningConfigurationError):
         require_planning_max_attempts(None)
+    with pytest.raises(PlanningConfigurationError):
+        require_compaction_distance_m(None)
+    with pytest.raises(PlanningConfigurationError):
+        require_max_group_requests(None)
