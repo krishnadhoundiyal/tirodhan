@@ -48,6 +48,13 @@ If a rider cannot continue:
 
 Critical assignment races are arbitrated by PostgreSQL transaction/constraints, not a read-then-write check in application code.
 
+For the Phase 1H initial-assignment slice, assignment is full-group and has only `ACTIVE` status.
+Offer acceptance and manager assignment require an `ACTIVE`, `AVAILABLE`, `IDLE` rider and share
+one transaction. The group row and active-assignment partial unique index serialize group
+ownership; the rider-availability row serializes assignment of one rider; unreleased
+`rider_assignment_item` rows are authoritative for pickup ownership. Offer expiry remains
+timestamp-based. Fleet persistence and reassignment semantics are deferred.
+
 ## Possible exception resolutions
 
 - retry;

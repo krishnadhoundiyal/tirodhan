@@ -462,6 +462,10 @@ updated_at               timestamptz NOT NULL
 
 Rider intent and platform work state are intentionally separate.
 
+Phase 1H fixed vocabulary is `OFFLINE`/`AVAILABLE` for intent and
+`IDLE`/`RESERVED`/`BUSY` for work state. The availability row is the per-rider assignment
+serialization boundary, and every mutation increments `version`.
+
 ### `assignment_offer`
 
 ```text
@@ -481,6 +485,9 @@ Required:
 UNIQUE(collection_group_id, rider_id, offer_round)
 ```
 
+Phase 1H offer status is `OPEN`, `ACCEPTED`, or `CLOSED_LOST`. The timestamp, not an expiry
+status, determines whether an open offer remains live.
+
 ### `rider_assignment`
 
 ```text
@@ -497,7 +504,9 @@ started_at                  timestamptz NULL
 completed_at                timestamptz NULL
 ```
 
-Required business invariant: at most one active assignment per collection group. Implement with a partial unique index over active statuses.
+Phase 1H assignment status is only `ACTIVE`; source is `RIDER_OFFER_ACCEPTED` or
+`MANAGER_ASSIGNED`. Required business invariant: at most one active assignment per collection
+group, implemented as `UNIQUE(collection_group_id) WHERE status = 'ACTIVE'`.
 
 ### `rider_assignment_item`
 
@@ -515,6 +524,10 @@ Required:
 ```text
 UNIQUE(pickup_execution_id) WHERE released_at IS NULL
 ```
+
+Initial assignment owns the entire collection group. The unreleased assignment item is the
+authority for current pickup ownership; `pickup_execution.status = 'ASSIGNED'` is the fulfilment
+stage only. Fleet assignment and item release/reassignment are deferred.
 
 ### `pickup_attempt`
 

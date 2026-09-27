@@ -409,6 +409,13 @@ If a rider cannot continue:
 
 At most one active assignment may own a collection group/work item according to the approved schema constraints.
 
+Phase 1H initial assignment is full-group only. Both offer acceptance and manager assignment use
+the same PostgreSQL transaction and require an `ACTIVE`, `AVAILABLE`, `IDLE` rider; manager
+assignment has no eligibility bypass. The rider-availability row serializes competing work for one
+rider, while a partial unique index permits only one `ACTIVE` assignment per group.
+`rider_assignment_item` is the current pickup-ownership authority. Offer expiry is determined by
+`expires_at`. Fleet selection and reassignment are deferred.
+
 ## 12. Pickup execution and incidents
 
 PickupExecution represents per-household fulfilment.

@@ -263,6 +263,54 @@ def test_phase_1g_migration_roundtrip_controls_policy_columns_and_indexes(
 
 
 @pytest.mark.integration
+def test_phase_1h_migration_roundtrip_only_controls_dispatch_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    dispatch_tables = {
+        "rider_profile",
+        "rider_availability",
+        "assignment_offer",
+        "rider_assignment",
+        "rider_assignment_item",
+    }
+
+    async def schema_state() -> tuple[set[str], set[str]]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            index["name"]
+                            for index in sqlalchemy_inspect(sync_connection).get_indexes(
+                                "pickup_execution"
+                            )
+                        },
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" in indexes
+    command.downgrade(configuration, "0007_compaction_planner")
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.isdisjoint(tables)
+    assert {"planning_batch", "collection_group", "pickup_execution"}.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" not in indexes
+    command.upgrade(configuration, "head")
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" in indexes
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,
