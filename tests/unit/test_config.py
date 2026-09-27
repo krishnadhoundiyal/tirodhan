@@ -18,3 +18,12 @@ def test_settings_accept_postgresql_asyncpg_url() -> None:
 def test_settings_reject_non_postgresql_database() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, database_url="sqlite+aiosqlite:///:memory:")
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["planning_lead_time_minutes", "planning_max_attempts"],
+)
+def test_settings_reject_nonpositive_planning_values(field_name: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field_name: 0})

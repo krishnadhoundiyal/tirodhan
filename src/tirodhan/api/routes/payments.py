@@ -29,6 +29,7 @@ from tirodhan.modules.payments.service import (
     initiate_payment_attempt,
     process_authenticated_payment_event,
 )
+from tirodhan.modules.planning.policy import PlanningConfigurationError
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 
 router = APIRouter(prefix="/v1/payments", tags=["payments"])
@@ -118,11 +119,16 @@ async def post_provider_webhook(
     except PaymentProviderNotConfiguredError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
-    persisted = await process_authenticated_payment_event(
-        session_factory,
-        event,
-        payload_hash=hashlib.sha256(raw_body).digest(),
-    )
+    settings = cast(Settings, request.app.state.settings)
+    try:
+        persisted = await process_authenticated_payment_event(
+            session_factory,
+            event,
+            payload_hash=hashlib.sha256(raw_body).digest(),
+            planning_lead_time_minutes=settings.planning_lead_time_minutes,
+        )
+    except PlanningConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return ProviderEventResponse(
         payment_provider_event_id=persisted.payment_provider_event_id,
         processing_status=persisted.processing_status,

@@ -147,6 +147,33 @@ def test_phase_1d_migration_creates_payment_subset_without_refund(
 
 
 @pytest.mark.integration
+def test_phase_1e_migration_downgrades_and_reupgrades_planning_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+
+    async def table_names() -> set[str]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: set(
+                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    command.downgrade(configuration, "0004_request_payment")
+    assert "planning_batch_attempt" not in asyncio.run(table_names())
+    command.upgrade(configuration, "head")
+    assert "planning_batch_attempt" in asyncio.run(table_names())
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,

@@ -621,7 +621,12 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
     webhook_provider = FakePaymentProvider()
     webhook_provider.webhook_event = first_event
     app = create_app(
-        Settings(_env_file=None, environment="test", database_url=migrated_database_url),
+        Settings(
+            _env_file=None,
+            environment="test",
+            database_url=migrated_database_url,
+            planning_lead_time_minutes=30,
+        ),
         payment_provider=webhook_provider,
     )
     async with app.router.lifespan_context(app):
@@ -646,6 +651,7 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
         database_session_factory,
         success_event(second, "success-event-two"),
         payload_hash=hashlib.sha256(b"second").digest(),
+        planning_lead_time_minutes=30,
     )
 
     async with database_session_factory() as session:
@@ -740,11 +746,13 @@ async def test_distinct_success_events_for_canonical_attempt_are_normally_proces
         database_session_factory,
         success_event(attempt, "canonical-success-one"),
         payload_hash=hashlib.sha256(b"canonical-one").digest(),
+        planning_lead_time_minutes=30,
     )
     second = await process_authenticated_payment_event(
         database_session_factory,
         success_event(attempt, "canonical-success-two"),
         payload_hash=hashlib.sha256(b"canonical-two").digest(),
+        planning_lead_time_minutes=30,
     )
 
     async with database_session_factory() as session:
@@ -795,12 +803,14 @@ async def test_canonical_success_event_after_planning_freeze_is_normally_process
         database_session_factory,
         success_event(attempt, "canonical-before-freeze"),
         payload_hash=hashlib.sha256(b"before-freeze").digest(),
+        planning_lead_time_minutes=30,
     )
     await freeze_work_unit(database_session_factory, request_result.request.request_id)
     second = await process_authenticated_payment_event(
         database_session_factory,
         success_event(attempt, "canonical-after-freeze"),
         payload_hash=hashlib.sha256(b"after-freeze").digest(),
+        planning_lead_time_minutes=30,
     )
 
     async with database_session_factory() as session:
@@ -857,6 +867,7 @@ async def test_freeze_wins_shared_lock_and_prevents_acceptance(
             database_session_factory,
             success_event(attempt, "freeze-wins-event"),
             payload_hash=hashlib.sha256(b"freeze-wins").digest(),
+            planning_lead_time_minutes=30,
         )
     )
     await asyncio.sleep(0)
@@ -918,6 +929,7 @@ async def test_payment_wins_shared_lock_then_freeze_includes_request_consistentl
             database_session_factory,
             success_event(attempt, "payment-wins-event"),
             payload_hash=hashlib.sha256(b"payment-wins").digest(),
+            planning_lead_time_minutes=30,
         )
     )
     await acquired.wait()
@@ -979,6 +991,7 @@ async def test_acceptance_and_outbox_roll_back_atomically(
             database_session_factory,
             success_event(attempt, "rollback-event"),
             payload_hash=hashlib.sha256(b"rollback").digest(),
+            planning_lead_time_minutes=30,
         )
 
     async with database_session_factory() as session:

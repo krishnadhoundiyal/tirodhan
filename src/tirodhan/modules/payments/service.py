@@ -29,6 +29,7 @@ from tirodhan.modules.payments.ports import (
 )
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch
+from tirodhan.modules.planning.policy import planning_cutoff_reached
 from tirodhan.modules.reliability.primitives import (
     append_outbox_event,
     claim_idempotency_record,
@@ -212,6 +213,7 @@ async def process_authenticated_payment_event(
     event: AuthenticatedPaymentEvent,
     *,
     payload_hash: bytes,
+    planning_lead_time_minutes: int | None,
 ) -> PaymentProviderEvent:
     now = utc_now()
     async with session_factory() as session, session.begin():
@@ -324,6 +326,16 @@ async def process_authenticated_payment_event(
         if batch_exists:
             provider_event.processing_status = EVENT_RECONCILIATION
             provider_event.failure_code = "WORK_UNIT_FROZEN"
+            provider_event.processed_at = utc_now()
+            return provider_event
+
+        if planning_cutoff_reached(
+            request.slot_start,
+            planning_lead_time_minutes,
+            now=utc_now(),
+        ):
+            provider_event.processing_status = EVENT_RECONCILIATION
+            provider_event.failure_code = "PLANNING_CUTOFF_REACHED"
             provider_event.processed_at = utc_now()
             return provider_event
 
