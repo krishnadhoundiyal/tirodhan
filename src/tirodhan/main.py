@@ -10,7 +10,9 @@ from tirodhan.api.router import api_router
 from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
+from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
+from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
     LocationResolver,
@@ -27,6 +29,8 @@ def create_app(
     address_protector: AddressProtector | None = None,
     location_resolver: LocationResolver | None = None,
     cell_id_deriver: CellIdDeriver | None = None,
+    pricing_port: PricingPort | None = None,
+    payment_provider: PaymentProvider | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
     configure_logging(
@@ -59,6 +63,8 @@ def create_app(
     application.state.address_protector = address_protector or UnconfiguredAddressProtector()
     application.state.location_resolver = location_resolver or UnconfiguredLocationResolver()
     application.state.cell_id_deriver = cell_id_deriver or UnconfiguredCellIdDeriver()
+    application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
+    application.state.payment_provider = payment_provider or UnconfiguredPaymentProvider()
     application.include_router(api_router)
     return application
 

@@ -47,7 +47,8 @@ def test_phase_1b_migration_creates_expected_foundation_tables(
 ) -> None:
     database_url = get_test_database_url()
     monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
-    command.upgrade(Config("alembic.ini"), "head")
+    configuration = Config("alembic.ini")
+    command.downgrade(configuration, "0002_domain_reliability")
 
     async def read_table_names() -> set[str]:
         engine = create_async_engine(database_url)
@@ -61,21 +62,24 @@ def test_phase_1b_migration_creates_expected_foundation_tables(
         finally:
             await engine.dispose()
 
-    table_names = asyncio.run(read_table_names())
-    assert {
-        "app_user",
-        "idempotency_record",
-        "inbox_message",
-        "outbox_event",
-    }.issubset(table_names)
-    assert {
-        "collection_request",
-        "payment",
-        "planning_batch",
-        "refresh_session",
-        "user_phone",
-        "user_role",
-    }.isdisjoint(table_names)
+    try:
+        table_names = asyncio.run(read_table_names())
+        assert {
+            "app_user",
+            "idempotency_record",
+            "inbox_message",
+            "outbox_event",
+        }.issubset(table_names)
+        assert {
+            "collection_request",
+            "payment",
+            "planning_batch",
+            "refresh_session",
+            "user_phone",
+            "user_role",
+        }.isdisjoint(table_names)
+    finally:
+        command.upgrade(configuration, "head")
 
 
 @pytest.mark.integration
@@ -101,6 +105,45 @@ def test_phase_1c_migration_downgrade_and_reupgrade(monkeypatch: pytest.MonkeyPa
             await engine.dispose()
 
     assert {"user_address", "serviceability_context"}.issubset(asyncio.run(read_table_names()))
+
+
+@pytest.mark.integration
+def test_phase_1d_migration_creates_payment_subset_without_refund(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    command.upgrade(Config("alembic.ini"), "head")
+
+    async def inspect_schema() -> tuple[set[str], set[str]]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "payment_provider_event"
+                            )
+                        },
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    tables, event_columns = asyncio.run(inspect_schema())
+    assert {
+        "collection_request",
+        "collection_request_item",
+        "payment",
+        "payment_attempt",
+        "payment_provider_event",
+        "planning_batch",
+    }.issubset(tables)
+    assert "refund" not in tables
+    assert "refund_id" not in event_columns
 
 
 @pytest.mark.integration
