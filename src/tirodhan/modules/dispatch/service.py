@@ -255,7 +255,7 @@ async def _assign_group_to_rider(
         if offer.collection_group_id != collection_group_id or offer.rider_id != rider_id:
             raise AssignmentOfferConflictError("assignment offer identity changed")
         if established is not None:
-            if offer.status == OFFER_ACCEPTED:
+            if offer.status in {OFFER_ACCEPTED, OFFER_CLOSED_LOST}:
                 return established
             raise AssignmentStateInconsistentError(
                 "active assignment is not represented by accepted offer"

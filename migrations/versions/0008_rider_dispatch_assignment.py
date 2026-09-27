@@ -18,6 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    op.create_index(
+        "ix_pickup_execution_collection_group_id",
+        "pickup_execution",
+        ["collection_group_id"],
+    )
     op.create_table(
         "rider_profile",
         sa.Column("rider_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -139,3 +144,4 @@ def downgrade() -> None:
     op.drop_table("assignment_offer")
     op.drop_table("rider_availability")
     op.drop_table("rider_profile")
+    op.drop_index("ix_pickup_execution_collection_group_id", table_name="pickup_execution")

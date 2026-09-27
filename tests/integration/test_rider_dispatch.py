@@ -468,6 +468,43 @@ async def test_manual_assignment_replays_same_rider_and_conflicts_other(
         assert persisted_offer is not None and persisted_offer.status == OFFER_CLOSED_LOST
 
 
+async def test_stale_same_rider_offer_converges_after_manager_assignment(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory)
+    offer = await create_offer(database_session_factory, fixture, rider_index=0)
+    established = await assign_group_manually(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        manager_user_id=fixture.manager_id,
+    )
+
+    replay = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=offer.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+
+    assert replay.assignment_id == established.assignment_id
+    async with database_session_factory() as session:
+        persisted_offer = await session.get(AssignmentOffer, offer.offer_id)
+        availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        assert await session.scalar(select(func.count()).select_from(RiderAssignment)) == 1
+        assert await session.scalar(select(func.count()).select_from(RiderAssignmentItem)) == 2
+        assert (
+            await session.scalar(
+                select(func.count(OutboxEvent.outbox_event_id)).where(
+                    OutboxEvent.event_type == RIDER_ASSIGNMENT_CREATED
+                )
+            )
+            == 1
+        )
+    assert persisted_offer is not None and persisted_offer.status == OFFER_CLOSED_LOST
+    assert availability is not None
+    assert (availability.work_state, availability.version) == (WORK_RESERVED, 2)
+
+
 async def test_acceptance_rejects_wrong_missing_expired_and_closed_offer(
     database_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -655,6 +692,49 @@ async def test_manager_and_offer_acceptance_race(
     )
     assert sum(isinstance(result, RiderAssignment) for result in results) == 1
     assert sum(isinstance(result, GroupAlreadyAssignedError) for result in results) == 1
+
+
+async def test_manager_and_same_rider_offer_acceptance_race_converges(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory)
+    offer = await create_offer(database_session_factory, fixture, rider_index=0)
+    results = await asyncio.gather(
+        accept_assignment_offer(
+            database_session_factory,
+            offer_id=offer.offer_id,
+            rider_id=fixture.rider_ids[0],
+        ),
+        assign_group_manually(
+            database_session_factory,
+            collection_group_id=fixture.group_ids[0],
+            rider_id=fixture.rider_ids[0],
+            manager_user_id=fixture.manager_id,
+        ),
+        return_exceptions=True,
+    )
+
+    assert all(isinstance(result, RiderAssignment) for result in results)
+    assignments = [result for result in results if isinstance(result, RiderAssignment)]
+    assert len(assignments) == 2
+    assert assignments[0].assignment_id == assignments[1].assignment_id
+    async with database_session_factory() as session:
+        persisted_offer = await session.get(AssignmentOffer, offer.offer_id)
+        availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        assert await session.scalar(select(func.count()).select_from(RiderAssignment)) == 1
+        assert await session.scalar(select(func.count()).select_from(RiderAssignmentItem)) == 2
+        assert (
+            await session.scalar(
+                select(func.count(OutboxEvent.outbox_event_id)).where(
+                    OutboxEvent.event_type == RIDER_ASSIGNMENT_CREATED
+                )
+            )
+            == 1
+        )
+    assert persisted_offer is not None
+    assert persisted_offer.status in {OFFER_ACCEPTED, OFFER_CLOSED_LOST}
+    assert availability is not None
+    assert (availability.work_state, availability.version) == (WORK_RESERVED, 2)
 
 
 async def test_partial_unique_indexes_are_physical_backstops(

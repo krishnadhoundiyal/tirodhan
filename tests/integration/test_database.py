@@ -277,26 +277,37 @@ def test_phase_1h_migration_roundtrip_only_controls_dispatch_tables(
         "rider_assignment_item",
     }
 
-    async def table_names() -> set[str]:
+    async def schema_state() -> tuple[set[str], set[str]]:
         engine = create_async_engine(database_url)
         try:
             async with engine.connect() as connection:
                 return await connection.run_sync(
-                    lambda sync_connection: set(
-                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            index["name"]
+                            for index in sqlalchemy_inspect(sync_connection).get_indexes(
+                                "pickup_execution"
+                            )
+                        },
                     )
                 )
         finally:
             await engine.dispose()
 
     command.upgrade(configuration, "head")
-    assert dispatch_tables.issubset(asyncio.run(table_names()))
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" in indexes
     command.downgrade(configuration, "0007_compaction_planner")
-    downgraded = asyncio.run(table_names())
-    assert dispatch_tables.isdisjoint(downgraded)
-    assert {"planning_batch", "collection_group", "pickup_execution"}.issubset(downgraded)
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.isdisjoint(tables)
+    assert {"planning_batch", "collection_group", "pickup_execution"}.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" not in indexes
     command.upgrade(configuration, "head")
-    assert dispatch_tables.issubset(asyncio.run(table_names()))
+    tables, indexes = asyncio.run(schema_state())
+    assert dispatch_tables.issubset(tables)
+    assert "ix_pickup_execution_collection_group_id" in indexes
 
 
 @pytest.mark.integration
