@@ -52,3 +52,19 @@ def require_planning_max_attempts(value: int | None) -> int:
     if value <= 0:
         raise PlanningConfigurationError("PLANNING_MAX_ATTEMPTS must be positive")
     return value
+
+
+def require_compaction_distance_m(value: int | None) -> int:
+    if value is None:
+        raise PlanningConfigurationError("PLANNING_COMPACTION_DISTANCE_M is not configured")
+    if value <= 0:
+        raise PlanningConfigurationError("PLANNING_COMPACTION_DISTANCE_M must be positive")
+    return value
+
+
+def require_max_group_requests(value: int | None) -> int:
+    if value is None:
+        raise PlanningConfigurationError("PLANNING_MAX_GROUP_REQUESTS is not configured")
+    if value <= 0:
+        raise PlanningConfigurationError("PLANNING_MAX_GROUP_REQUESTS must be positive")
+    return value

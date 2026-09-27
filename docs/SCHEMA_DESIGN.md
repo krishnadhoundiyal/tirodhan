@@ -320,6 +320,8 @@ status                     varchar(24) NOT NULL
 completion_mode            varchar(24) NULL
 max_attempts_snapshot      integer NOT NULL
 algorithm_version          varchar(...) NULL
+compaction_distance_m_snapshot integer NULL
+max_group_requests_snapshot    integer NULL
 created_at                 timestamptz NOT NULL
 completed_at               timestamptz NULL
 ```
@@ -328,6 +330,17 @@ Initial uniqueness:
 
 ```text
 UNIQUE(cell_id, slot_start, slot_end)
+compaction_distance_m_snapshot IS NULL OR compaction_distance_m_snapshot > 0
+max_group_requests_snapshot IS NULL OR max_group_requests_snapshot > 0
+```
+
+Phase 1G batches persist `algorithm_version = BOUNDED_GREEDY_DIAMETER_V1` and both positive numeric policy snapshots at freeze time. Nullable physical columns preserve compatibility with historical pre-Phase-1G rows; such rows cannot execute the Phase 1G planner without an explicit compatible snapshot.
+
+Planner query indexes:
+
+```text
+B-tree(collection_request.planning_batch_id)
+GiST(collection_request.pickup_location)
 ```
 
 ### `planning_batch_attempt`

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,14 @@ class PlanningBatch(Base):
     __tablename__ = "planning_batch"
     __table_args__ = (
         UniqueConstraint("cell_id", "slot_start", "slot_end", name="uq_planning_batch_work_unit"),
+        CheckConstraint(
+            "compaction_distance_m_snapshot IS NULL OR compaction_distance_m_snapshot > 0",
+            name="ck_planning_batch_positive_compaction_distance",
+        ),
+        CheckConstraint(
+            "max_group_requests_snapshot IS NULL OR max_group_requests_snapshot > 0",
+            name="ck_planning_batch_positive_max_group_requests",
+        ),
     )
 
     planning_batch_id: Mapped[UUID] = mapped_column(
@@ -27,6 +35,8 @@ class PlanningBatch(Base):
     completion_mode: Mapped[str | None] = mapped_column(String(24), nullable=True)
     max_attempts_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
     algorithm_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    compaction_distance_m_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_group_requests_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

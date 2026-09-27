@@ -1,6 +1,6 @@
 # ADR-004: Geographic Planning and Compaction
 
-**Status:** Accepted, with algorithm/cell-size details open
+**Status:** Accepted, with cell-size details open
 
 ## Decision
 
@@ -18,6 +18,10 @@ Compaction produces collection groups:
 
 - neighbours => shared group;
 - no neighbours => normal singleton group.
+
+The first approved algorithm is `BOUNDED_GREEDY_DIAMETER_V1`: deterministic greedy grouping with UUID-stable seed selection, PostGIS-distance/UUID candidate ordering, all-pairs distance compatibility, and a snapshotted maximum household-stop count. Algorithm version, distance in meters, and group-count bound are immutable planning-batch snapshots reused by every logical attempt.
+
+PostGIS geography is the distance authority. Phase 1G does not use declared item weight/quantity, inferred physical capacity, routing, or cross-cell candidates. Cell technology and resolution remain open.
 
 There is no request-level compaction failure outcome.
 
@@ -42,5 +46,5 @@ Runtime generative AI is not used for clustering.
 ## Open
 
 - physical cell sizing;
-- clustering algorithm;
 - values of `N` and `P`.
+- production compaction-distance and maximum group-request values.

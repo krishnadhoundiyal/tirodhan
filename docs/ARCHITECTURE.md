@@ -312,6 +312,8 @@ A selected algorithm may materialize a minimal spatial projection where required
 
 PostGIS may perform candidate selection or clustering operations.
 
+Phase 1G uses PostGIS geography predicates and meter distances to build one batch-scoped compatible-pair projection. The pure `BOUNDED_GREEDY_DIAMETER_V1` planner groups requests deterministically without receiving exact coordinates or rich request records.
+
 ### Attempts and broker deliveries
 
 Logical compaction attempts are explicit business/operational attempts.
@@ -326,6 +328,10 @@ Compaction produces collection groups:
 - no compatible neighbour -> normal singleton group.
 
 No valid request fails merely because it has no neighbour.
+
+For `BOUNDED_GREEDY_DIAMETER_V1`, every pair in a compacted group must be within the batch's snapshotted compaction distance. Groups are bounded by the snapshotted maximum household-stop count. Weight, volume, item category, vehicle capacity, routing, and cross-cell compaction are not inputs to this algorithm. Cell technology/resolution remains open, so Phase 1G plans exactly one upstream cell batch at a time.
+
+The algorithm version, distance, and maximum group-request count are immutable batch snapshots. All logical retries read these snapshots rather than current runtime configuration.
 
 ### Technical failure and fallback
 

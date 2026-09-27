@@ -29,6 +29,7 @@ from tirodhan.modules.payments.service import (
     EVENT_RECONCILIATION,
     process_authenticated_payment_event,
 )
+from tirodhan.modules.planning.compaction import BOUNDED_GREEDY_DIAMETER_V1
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch, PlanningBatchAttempt
 from tirodhan.modules.planning.service import (
@@ -50,6 +51,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 LEAD_TIME_MINUTES = 30
 MAX_ATTEMPTS = 3
+COMPACTION_DISTANCE_M = 500
+MAX_GROUP_REQUESTS = 4
 
 
 async def create_user(factory: async_sessionmaker[AsyncSession]) -> AppUser:
@@ -169,6 +172,8 @@ async def create_ready_batch(
         ),
         lead_time_minutes=LEAD_TIME_MINUTES,
         max_attempts=MAX_ATTEMPTS,
+        compaction_distance_m=COMPACTION_DISTANCE_M,
+        max_group_requests=MAX_GROUP_REQUESTS,
         now=slot_start - timedelta(minutes=LEAD_TIME_MINUTES),
     )
     assert result.batch is not None
@@ -376,6 +381,8 @@ async def test_freeze_selects_exact_population_snapshots_config_and_is_idempoten
         work_unit,
         lead_time_minutes=LEAD_TIME_MINUTES,
         max_attempts=MAX_ATTEMPTS,
+        compaction_distance_m=COMPACTION_DISTANCE_M,
+        max_group_requests=MAX_GROUP_REQUESTS,
         now=now,
     )
     replay = await freeze_planning_batch(
@@ -383,6 +390,8 @@ async def test_freeze_selects_exact_population_snapshots_config_and_is_idempoten
         work_unit,
         lead_time_minutes=LEAD_TIME_MINUTES,
         max_attempts=9,
+        compaction_distance_m=999,
+        max_group_requests=9,
         now=now,
     )
 
@@ -414,7 +423,9 @@ async def test_freeze_selects_exact_population_snapshots_config_and_is_idempoten
     assert persisted_batch is not None
     assert persisted_batch.status == PLANNING_BATCH_READY
     assert persisted_batch.max_attempts_snapshot == MAX_ATTEMPTS
-    assert persisted_batch.algorithm_version is None
+    assert persisted_batch.algorithm_version == BOUNDED_GREEDY_DIAMETER_V1
+    assert persisted_batch.compaction_distance_m_snapshot == COMPACTION_DISTANCE_M
+    assert persisted_batch.max_group_requests_snapshot == MAX_GROUP_REQUESTS
     assert persisted_batch.completion_mode is None
     assert persisted_batch.completed_at is None
     assert len(outbox) == 1
@@ -448,6 +459,8 @@ async def test_overlapping_freeze_creates_one_batch_and_zero_work_creates_none(
             work_unit,
             lead_time_minutes=LEAD_TIME_MINUTES,
             max_attempts=MAX_ATTEMPTS,
+            compaction_distance_m=COMPACTION_DISTANCE_M,
+            max_group_requests=MAX_GROUP_REQUESTS,
             now=now,
         ),
         freeze_planning_batch(
@@ -455,6 +468,8 @@ async def test_overlapping_freeze_creates_one_batch_and_zero_work_creates_none(
             work_unit,
             lead_time_minutes=LEAD_TIME_MINUTES,
             max_attempts=MAX_ATTEMPTS,
+            compaction_distance_m=COMPACTION_DISTANCE_M,
+            max_group_requests=MAX_GROUP_REQUESTS,
             now=now,
         ),
     )
@@ -468,6 +483,8 @@ async def test_overlapping_freeze_creates_one_batch_and_zero_work_creates_none(
         empty_unit,
         lead_time_minutes=LEAD_TIME_MINUTES,
         max_attempts=MAX_ATTEMPTS,
+        compaction_distance_m=COMPACTION_DISTANCE_M,
+        max_group_requests=MAX_GROUP_REQUESTS,
         now=now,
     )
 
@@ -516,6 +533,8 @@ async def test_payment_acceptance_then_freeze_includes_request_consistently(
         PlanningWorkUnit(request.cell_id, request.slot_start, request.slot_end),
         lead_time_minutes=LEAD_TIME_MINUTES,
         max_attempts=MAX_ATTEMPTS,
+        compaction_distance_m=COMPACTION_DISTANCE_M,
+        max_group_requests=MAX_GROUP_REQUESTS,
         now=slot_start - timedelta(minutes=LEAD_TIME_MINUTES),
     )
 
@@ -572,6 +591,8 @@ async def test_freeze_lock_wins_and_payment_cannot_leak_into_frozen_population(
             PlanningWorkUnit("freeze-first-cell", slot_start, slot_end),
             lead_time_minutes=LEAD_TIME_MINUTES,
             max_attempts=MAX_ATTEMPTS,
+            compaction_distance_m=COMPACTION_DISTANCE_M,
+            max_group_requests=MAX_GROUP_REQUESTS,
             now=now,
         )
     )
