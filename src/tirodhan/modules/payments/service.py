@@ -268,9 +268,6 @@ async def process_authenticated_payment_event(
         )
         if payment is None:
             raise RuntimeError("payment attempt references a missing payment")
-        request = await session.get(CollectionRequest, payment.request_id)
-        if request is None:
-            raise RuntimeError("payment references a missing collection request")
 
         attempt.provider_order_id = event.provider_order_id or attempt.provider_order_id
         attempt.provider_payment_id = event.provider_payment_id or attempt.provider_payment_id
@@ -286,6 +283,27 @@ async def process_authenticated_payment_event(
         attempt.status = ATTEMPT_SUCCEEDED
         attempt.failure_code = None
         attempt.completed_at = utc_now()
+
+        if (
+            payment.status == PAYMENT_SUCCEEDED
+            and payment.successful_attempt_id == attempt.payment_attempt_id
+        ):
+            provider_event.processing_status = EVENT_PROCESSED
+            provider_event.processed_at = utc_now()
+            return provider_event
+
+        if (
+            payment.successful_attempt_id is not None
+            and payment.successful_attempt_id != attempt.payment_attempt_id
+        ):
+            provider_event.processing_status = EVENT_RECONCILIATION
+            provider_event.failure_code = "ADDITIONAL_SUCCESS"
+            provider_event.processed_at = utc_now()
+            return provider_event
+
+        request = await session.get(CollectionRequest, payment.request_id)
+        if request is None:
+            raise RuntimeError("payment references a missing collection request")
 
         await acquire_work_unit_advisory_lock(
             session,

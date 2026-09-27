@@ -626,6 +626,7 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
             )
         )
     assert additional.processing_status == EVENT_RECONCILIATION
+    assert additional.failure_code == "ADDITIONAL_SUCCESS"
     assert payment is not None and payment.successful_attempt_id == first.payment_attempt_id
     assert request is not None and request.status == REQUEST_ACCEPTED
     assert all(attempt.status == ATTEMPT_SUCCEEDED for attempt in attempts)
@@ -670,6 +671,114 @@ async def freeze_work_unit(
         if request.status == REQUEST_ACCEPTED:
             request.status = REQUEST_PRE_PLANNING
             request.planning_batch_id = batch.planning_batch_id
+
+
+@pytest.mark.asyncio
+async def test_distinct_success_events_for_canonical_attempt_are_normally_processed_once(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user = await create_user(database_session_factory)
+    context = await create_context(database_session_factory, user.user_id)
+    request_result = await create_request(
+        database_session_factory,
+        user.user_id,
+        context.serviceability_context_id,
+        key="canonical-repeat-request",
+    )
+    attempt, _ = await create_ready_attempt(
+        database_session_factory,
+        user.user_id,
+        request_result.request.request_id,
+        key="canonical-repeat-attempt",
+        order_id="order-canonical-repeat",
+    )
+
+    first = await process_authenticated_payment_event(
+        database_session_factory,
+        success_event(attempt, "canonical-success-one"),
+        payload_hash=hashlib.sha256(b"canonical-one").digest(),
+    )
+    second = await process_authenticated_payment_event(
+        database_session_factory,
+        success_event(attempt, "canonical-success-two"),
+        payload_hash=hashlib.sha256(b"canonical-two").digest(),
+    )
+
+    async with database_session_factory() as session:
+        request = await session.get(CollectionRequest, request_result.request.request_id)
+        payment = await session.get(Payment, request_result.payment.payment_id)
+        events = list(
+            await session.scalars(
+                select(PaymentProviderEvent).where(
+                    PaymentProviderEvent.payment_attempt_id == attempt.payment_attempt_id
+                )
+            )
+        )
+        outbox_count = await session.scalar(
+            select(func.count(OutboxEvent.outbox_event_id)).where(
+                OutboxEvent.event_type == "CollectionRequestAccepted"
+            )
+        )
+
+    assert first.processing_status == EVENT_PROCESSED
+    assert second.processing_status == EVENT_PROCESSED
+    assert second.failure_code is None
+    assert request is not None and request.status == REQUEST_ACCEPTED
+    assert payment is not None and payment.successful_attempt_id == attempt.payment_attempt_id
+    assert {event.processing_status for event in events} == {EVENT_PROCESSED}
+    assert len(events) == 2
+    assert outbox_count == 1
+
+
+@pytest.mark.asyncio
+async def test_canonical_success_event_after_planning_freeze_is_normally_processed(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user = await create_user(database_session_factory)
+    context = await create_context(database_session_factory, user.user_id)
+    request_result = await create_request(
+        database_session_factory,
+        user.user_id,
+        context.serviceability_context_id,
+        key="canonical-after-freeze-request",
+    )
+    attempt, _ = await create_ready_attempt(
+        database_session_factory,
+        user.user_id,
+        request_result.request.request_id,
+        key="canonical-after-freeze-attempt",
+        order_id="order-canonical-after-freeze",
+    )
+    first = await process_authenticated_payment_event(
+        database_session_factory,
+        success_event(attempt, "canonical-before-freeze"),
+        payload_hash=hashlib.sha256(b"before-freeze").digest(),
+    )
+    await freeze_work_unit(database_session_factory, request_result.request.request_id)
+    second = await process_authenticated_payment_event(
+        database_session_factory,
+        success_event(attempt, "canonical-after-freeze"),
+        payload_hash=hashlib.sha256(b"after-freeze").digest(),
+    )
+
+    async with database_session_factory() as session:
+        request = await session.get(CollectionRequest, request_result.request.request_id)
+        payment = await session.get(Payment, request_result.payment.payment_id)
+        batch_count = await session.scalar(select(func.count(PlanningBatch.planning_batch_id)))
+        outbox_count = await session.scalar(
+            select(func.count(OutboxEvent.outbox_event_id)).where(
+                OutboxEvent.event_type == "CollectionRequestAccepted"
+            )
+        )
+
+    assert first.processing_status == EVENT_PROCESSED
+    assert second.processing_status == EVENT_PROCESSED
+    assert second.failure_code is None
+    assert request is not None and request.status == REQUEST_PRE_PLANNING
+    assert request.planning_batch_id is not None
+    assert payment is not None and payment.successful_attempt_id == attempt.payment_attempt_id
+    assert batch_count == 1
+    assert outbox_count == 1
 
 
 @pytest.mark.asyncio
