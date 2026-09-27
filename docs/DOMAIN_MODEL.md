@@ -99,6 +99,14 @@ The persisted Phase 1F vocabulary is:
 
 Identity, fleet affiliation, rider intent, platform work state, offers and assignments are separate concepts. Fleet auto-assignment, independent acceptance and manager assignment all converge on `rider_assignment`.
 
+Phase 1H persists rider profiles as `ACTIVE` or `SUSPENDED`; availability intent as
+`OFFLINE` or `AVAILABLE`; and platform work state as `IDLE`, `RESERVED`, or `BUSY`.
+Initial assignment creates an `ACTIVE` assignment from either `RIDER_OFFER_ACCEPTED` or
+`MANAGER_ASSIGNED`, attaches the full collection group through `rider_assignment_item`, moves
+each pickup from `PENDING_ASSIGNMENT` to `ASSIGNED`, and reserves the rider. Offer state is
+`OPEN`, `ACCEPTED`, or `CLOSED_LOST`; `expires_at` remains the expiry authority. Fleet selection
+and reassignment remain deferred.
+
 ### Pickup execution
 
 - `pickup_execution`

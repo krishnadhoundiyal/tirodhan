@@ -161,6 +161,12 @@ Both attempt a conditional transition from `ACCEPTED`. Only one may win. No read
 
 The database guarantees at most one active assignment. One rider wins; the losing request receives an already-assigned result.
 
+Phase 1H serializes assignment by locking the collection group, then rider profile, rider
+availability, offer when present, and finally group pickups in identifier order. Offer creation
+replays on `(collection_group_id, rider_id, offer_round)` only when the requested expiry matches.
+Accepted-offer and same-rider manual retries return the established active assignment. The group
+partial unique index and unreleased-pickup partial unique index remain physical backstops.
+
 ### Concurrent refunds
 
 Refund creation serializes through the payment row. Total committed refunds must never exceed the original successful payment amount.

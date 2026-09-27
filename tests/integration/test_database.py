@@ -263,6 +263,43 @@ def test_phase_1g_migration_roundtrip_controls_policy_columns_and_indexes(
 
 
 @pytest.mark.integration
+def test_phase_1h_migration_roundtrip_only_controls_dispatch_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    dispatch_tables = {
+        "rider_profile",
+        "rider_availability",
+        "assignment_offer",
+        "rider_assignment",
+        "rider_assignment_item",
+    }
+
+    async def table_names() -> set[str]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: set(
+                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    assert dispatch_tables.issubset(asyncio.run(table_names()))
+    command.downgrade(configuration, "0007_compaction_planner")
+    downgraded = asyncio.run(table_names())
+    assert dispatch_tables.isdisjoint(downgraded)
+    assert {"planning_batch", "collection_group", "pickup_execution"}.issubset(downgraded)
+    command.upgrade(configuration, "head")
+    assert dispatch_tables.issubset(asyncio.run(table_names()))
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,
