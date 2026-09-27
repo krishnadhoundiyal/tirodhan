@@ -174,6 +174,37 @@ def test_phase_1e_migration_downgrades_and_reupgrades_planning_attempt(
 
 
 @pytest.mark.integration
+def test_phase_1f_migration_roundtrip_only_controls_result_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    result_tables = {"collection_group", "collection_group_member", "pickup_execution"}
+
+    async def table_names() -> set[str]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: set(
+                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    assert result_tables.issubset(asyncio.run(table_names()))
+    command.downgrade(configuration, "0005_planning_freeze")
+    downgraded = asyncio.run(table_names())
+    assert result_tables.isdisjoint(downgraded)
+    assert "planning_batch_attempt" in downgraded
+    command.upgrade(configuration, "head")
+    assert result_tables.issubset(asyncio.run(table_names()))
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,

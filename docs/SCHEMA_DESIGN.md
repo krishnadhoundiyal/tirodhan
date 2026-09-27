@@ -350,6 +350,16 @@ UNIQUE(planning_batch_id, attempt_number)
 
 Broker delivery count is not the business attempt number.
 
+Approved Phase 1F lifecycle values:
+
+```text
+planning_batch.status: READY, COMPLETED
+planning_batch.completion_mode: ALGORITHM_RESULT, FALLBACK_RESULT
+planning_batch_attempt.outcome: STARTED, SUCCEEDED, FAILED
+collection_group.planning_mode: COMPACTED, NORMAL_SINGLETON, FALLBACK_SINGLETON
+pickup_execution.status (initial): PENDING_ASSIGNMENT
+```
+
 ### `collection_group`
 
 ```text
@@ -726,6 +736,8 @@ One transaction persists:
 - requests `PRE_PLANNING -> PLANNED`;
 - batch `-> COMPLETED`;
 - outbox events.
+
+The authoritative population is every request with the target `planning_batch_id`. The completion transaction locks and validates that entire population, persists an exact group partition and one pickup execution per request, and marks the corresponding logical attempt and inbox work terminal. Normal algorithm results cannot submit `FALLBACK_SINGLETON`; fallback groups are created only by exhausted-attempt handling.
 
 ### Assignment acceptance
 

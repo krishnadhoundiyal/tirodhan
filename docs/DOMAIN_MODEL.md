@@ -77,6 +77,14 @@ A collection request has one logical payment obligation. Retries are separate `p
 
 A planning batch freezes the accepted request population for one geographic cell and pickup slot. Every request in a completed batch belongs to exactly one collection group. Groups may be compacted, normal singleton, or fallback singleton.
 
+The persisted Phase 1F vocabulary is:
+
+- batch status: `READY`, `COMPLETED`;
+- attempt outcome: `STARTED`, `SUCCEEDED`, `FAILED`;
+- group planning mode: `COMPACTED`, `NORMAL_SINGLETON`, `FALLBACK_SINGLETON`;
+- batch completion mode: `ALGORITHM_RESULT`, `FALLBACK_RESULT`;
+- initial pickup-execution status: `PENDING_ASSIGNMENT`.
+
 ### Rider and fleet
 
 - `rider_profile`
@@ -228,6 +236,8 @@ compaction attempts
     ↓
 PLANNED + PickupExecution created
 ```
+
+`PlanningBatchReady` starts explicit logical attempt 1. A technical failure may request attempt N>1 through `PlanningAttemptRequested`; broker redelivery never creates a new logical attempt. Technical failure is durably recorded as `FAILED`, while a database/infrastructure failure rolls back and leaves the same `STARTED` attempt recoverable. Exhausting the snapshotted attempt limit completes the batch using one fallback-singleton group per request.
 
 ### Assignment
 

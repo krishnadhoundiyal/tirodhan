@@ -421,6 +421,7 @@ async def test_freeze_selects_exact_population_snapshots_config_and_is_idempoten
     assert outbox[0].payload == {
         "planning_batch_id": str(frozen.batch.planning_batch_id),
         "cell_id": "target-cell",
+        "attempt_number": 1,
     }
 
 
@@ -649,10 +650,13 @@ async def test_attempt_preparation_is_concurrent_redelivery_safe_and_pii_free(
         )
 
     assert {first.created, concurrent_duplicate.created} == {False, True}
+    assert first.attempt is not None
+    assert concurrent_duplicate.attempt is not None
     assert (
         first.attempt.planning_batch_attempt_id
         == concurrent_duplicate.attempt.planning_batch_attempt_id
     )
+    assert redelivery.attempt is not None
     assert redelivery.attempt.planning_batch_attempt_id == first.attempt.planning_batch_attempt_id
     assert redelivery.created is False
     assert len(attempts) == 1
@@ -661,7 +665,7 @@ async def test_attempt_preparation_is_concurrent_redelivery_safe_and_pii_free(
     assert attempts[0].completed_at is None
     assert inbox is not None and inbox.status == INBOX_PROCESSING
     assert inbox.processed_at is None
-    assert inbox.business_key == str(batch.planning_batch_id)
+    assert inbox.business_key == f"{batch.planning_batch_id}:1"
     assert outbox is not None
     metadata = f"{outbox.payload} {inbox.business_key} {inbox.message_type}".lower()
     assert "address" not in metadata
