@@ -169,6 +169,10 @@ Refund creation serializes through the payment row. Total committed refunds must
 
 A completed `planning_batch_id` is a terminal idempotency boundary. Redelivery must not create new groups, membership, pickup executions, or downstream events.
 
+Planning control messages carry `planning_batch_id`, `attempt_number`, `message_id`, and a controlled message type. `PlanningBatchReady` is attempt 1; `PlanningAttemptRequested` is an explicit retry N>1. The planning inbox business key is `{planning_batch_id}:{attempt_number}`. A `PROCESSING` inbox row resumes the same `STARTED` attempt; `PROCESSED` has no further business effect.
+
+Successful result persistence, request transitions, attempt/batch completion, the single `PlanningBatchCompleted` outbox event, and inbox completion share one transaction. A controlled planner technical failure consumes the current logical attempt; an infrastructure failure rolls back and consumes none. When the snapshotted maximum is exhausted, the same transaction completes the batch with fallback singleton groups.
+
 ### Worker crash after external provider call
 
 If the provider supports idempotency, use a stable provider key derived from the logical local operation.
