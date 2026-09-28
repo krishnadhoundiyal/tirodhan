@@ -46,7 +46,8 @@ def migrated_database_url(monkeypatch: pytest.MonkeyPatch) -> str:
 async def database_engine(migrated_database_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(migrated_database_url)
     table_names = (
-        "pickup_attempt, rider_assignment_item, rider_assignment, assignment_offer, "
+        "pickup_incident, pickup_attempt, rider_assignment_item, rider_assignment, "
+        "assignment_offer, "
         "rider_availability, "
         "rider_profile, pickup_execution, collection_group_member, collection_group, "
         "planning_batch_attempt, payment_provider_event, payment_attempt, payment, "

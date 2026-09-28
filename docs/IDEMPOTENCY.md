@@ -118,7 +118,7 @@ not distributed exactly-once execution.
 | Rider accepts offer | group/offer command | one active assignment constraint | same rider retry gets existing result; concurrent riders yield one winner |
 | Fleet auto-assignment | group/generation | assignment constraints | retry cannot double assign |
 | Manual assignment | manager command + group | assignment constraints | double-click cannot double assign |
-| Reassignment | predecessor assignment + command | assignment history + idempotency record | one successor assignment |
+| Reassignment | `pickup-reassignment` + `client_reassignment_id` | assignment history + idempotency record + active-group/current-item partial uniqueness | exact replay returns the recorded successor in any later assignment state; a different command cannot create another successor |
 | Create pickup execution | request ID | `UNIQUE(request_id)` | exactly one logical pickup execution |
 | Record pickup attempt | `(pickup_execution_id, client_attempt_id)` | unique client attempt and per-pickup attempt number | exact replay returns history; conflicting outcome is rejected; successful attempt and collection are atomic |
 | Open incident | client incident ID | unique constraint | retry returns same incident |
@@ -177,6 +177,18 @@ assignment item. This serializes attempt-number allocation and final-pickup comp
 work owned by an assignment. Exact `(pickup_execution_id, client_attempt_id)` replay is checked
 immediately after locking the historical assignment, so it remains valid after pickup and
 assignment completion. Different attempts cannot mutate an already-collected pickup.
+
+### Pickup incident and reassignment
+
+Incident creation replays first on globally unique `client_incident_id`, validating the pickup,
+historical assignment/rider, and reason before fresh-state checks. This allows a committed incident
+to replay after ownership changes. Reassignment fingerprints predecessor, replacement, manager,
+and optional incident under scope `pickup-reassignment`, stores the successor assignment as the
+result resource, and completes that record in the same transaction as all ownership/rider changes.
+The collection group and predecessor assignment serialize group ownership; both rider resources
+are locked in stable rider-ID order; pickup executions and predecessor items are locked in pickup-ID
+order. Competing fresh commands yield one successor, while exact concurrent commands converge on
+the same result. Reassignment has no external side effect and writes no outbox event in Phase 1J.
 
 ### Concurrent refunds
 

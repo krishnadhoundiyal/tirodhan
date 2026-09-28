@@ -384,7 +384,7 @@ async def test_fresh_attempt_requires_started_busy_current_ownership(
         assert availability is not None and ownership is not None
         availability.work_state = WORK_BUSY
         ownership.released_at = utc_now()
-        ownership.release_reason_code = "TEST_RELEASE"
+        ownership.release_reason_code = "REASSIGNED"
     with pytest.raises(PickupOwnershipMismatchError):
         await record_pickup_attempt(
             database_session_factory,

@@ -52,6 +52,7 @@ erDiagram
     PICKUP_EXECUTION ||--o{ PICKUP_ATTEMPT : attempted
     RIDER_ASSIGNMENT ||--o{ PICKUP_ATTEMPT : performed_under
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
+    RIDER_ASSIGNMENT ||--o{ PICKUP_INCIDENT : attributed_to
 
     EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains
     PICKUP_EXECUTION ||--o{ PICKUP_EVIDENCE_LINK : evidenced_by

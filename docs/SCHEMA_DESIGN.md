@@ -507,12 +507,16 @@ created_at                  timestamptz NOT NULL
 assigned_at                 timestamptz NOT NULL
 started_at                  timestamptz NULL
 completed_at                timestamptz NULL
+superseded_at               timestamptz NULL
 ```
 
-Phase 1I assignment status is `ACTIVE` or `COMPLETED`; source remains
+Phase 1J assignment status is `ACTIVE`, `COMPLETED`, or `SUPERSEDED`; source remains
 `RIDER_OFFER_ACCEPTED` or `MANAGER_ASSIGNED`. `started_at` represents execution start. Required
 business invariant: at most one active assignment per collection group, implemented as
-`UNIQUE(collection_group_id) WHERE status = 'ACTIVE'`.
+`UNIQUE(collection_group_id) WHERE status = 'ACTIVE'`. `COMPLETED` means all retained work was
+physically collected; `SUPERSEDED` means residual work moved to the successor identified through
+its `supersedes_assignment_id`. Phase 1J intentionally avoids a cross-field timestamp CHECK so
+historical rows produced by the approved lossy Phase 1I downgrade remain upgradeable.
 
 ### `rider_assignment_item`
 
@@ -529,11 +533,14 @@ Required:
 
 ```text
 UNIQUE(pickup_execution_id) WHERE released_at IS NULL
+release_reason_code IS NULL OR release_reason_code = 'REASSIGNED'
+released_at IS NULL => release_reason_code IS NULL
 ```
 
 Initial assignment owns the entire collection group. The unreleased assignment item is the
 authority for current pickup ownership; `pickup_execution.status = 'ASSIGNED'` is the fulfilment
-stage only. Fleet assignment and item release/reassignment are deferred.
+stage only. Phase 1J freezes `REASSIGNED` as the only non-null release reason. Collected items are
+never released; only residual `ASSIGNED` pickup ownership transfers to a successor.
 
 ### `pickup_attempt`
 
@@ -567,7 +574,8 @@ event.
 ```text
 incident_id                uuid PK
 client_incident_id         uuid NOT NULL
-pickup_execution_id        uuid FK -> pickup_execution
+pickup_execution_id        uuid NOT NULL FK -> pickup_execution
+rider_assignment_id        uuid NOT NULL FK -> rider_assignment
 reason_code                varchar(64) NOT NULL
 status                     varchar(24) NOT NULL
 resolution_code            varchar(32) NULL
@@ -582,6 +590,11 @@ Required:
 ```text
 UNIQUE(client_incident_id)
 ```
+
+Phase 1J incident reason codes are `CUSTOMER_UNAVAILABLE`, `ADDRESS_NOT_FOUND`, `ACCESS_BLOCKED`,
+`RIDER_UNABLE_TO_REACH`, `RIDER_UNABLE_TO_CONTINUE`, and `OTHER`. Status is `OPEN` or `RESOLVED`;
+the only Phase 1J resolution code is `REASSIGNED`. Open incidents have no resolution fields, while
+resolved incidents require `resolved_at` and `resolved_by_user_id`.
 
 ## Group 4: Handover, Evidence, Reliability
 
@@ -785,7 +798,12 @@ One transaction ensures the group is still assignable, the rider is still eligib
 
 ### Reassignment
 
-One transaction closes/partially completes the predecessor assignment, releases only outstanding items, creates the successor assignment, attaches outstanding pickup executions, reserves the replacement rider, and writes the outbox notification.
+One transaction supersedes the predecessor assignment, releases only outstanding items, creates
+the successor assignment, attaches outstanding pickup executions, releases the old rider, reserves
+the replacement rider, optionally resolves one incident, and completes the command idempotency
+record. Phase 1J emits no reassignment outbox event. Downgrade to Phase 1I intentionally maps
+`SUPERSEDED -> COMPLETED` and preserves `superseded_at` through `completed_at` before dropping the
+new column; re-upgrade does not reconstruct the lost status distinction.
 
 ### Handover completion
 

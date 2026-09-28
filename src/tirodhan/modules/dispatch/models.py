@@ -111,7 +111,10 @@ class AssignmentOffer(Base):
 class RiderAssignment(Base):
     __tablename__ = "rider_assignment"
     __table_args__ = (
-        CheckConstraint("status IN ('ACTIVE', 'COMPLETED')", name="ck_rider_assignment_status"),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'COMPLETED', 'SUPERSEDED')",
+            name="ck_rider_assignment_status",
+        ),
         CheckConstraint(
             "source IN ('RIDER_OFFER_ACCEPTED', 'MANAGER_ASSIGNED')",
             name="ck_rider_assignment_source",
@@ -152,11 +155,20 @@ class RiderAssignment(Base):
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RiderAssignmentItem(Base):
     __tablename__ = "rider_assignment_item"
     __table_args__ = (
+        CheckConstraint(
+            "release_reason_code IS NULL OR release_reason_code = 'REASSIGNED'",
+            name="ck_rider_assignment_item_release_reason",
+        ),
+        CheckConstraint(
+            "released_at IS NOT NULL OR release_reason_code IS NULL",
+            name="ck_rider_assignment_item_release_consistency",
+        ),
         Index(
             "uq_rider_assignment_item_active_pickup",
             "pickup_execution_id",

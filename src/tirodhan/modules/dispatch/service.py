@@ -335,6 +335,7 @@ async def _assign_group_to_rider(
         assigned_at=assignment_time,
         started_at=None,
         completed_at=None,
+        superseded_at=None,
     )
     session.add(assignment)
     await session.flush([assignment])
