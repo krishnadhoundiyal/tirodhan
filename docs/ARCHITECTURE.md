@@ -414,7 +414,9 @@ the same PostgreSQL transaction and require an `ACTIVE`, `AVAILABLE`, `IDLE` rid
 assignment has no eligibility bypass. The rider-availability row serializes competing work for one
 rider, while a partial unique index permits only one `ACTIVE` assignment per group.
 `rider_assignment_item` is the current pickup-ownership authority. Offer expiry is determined by
-`expires_at`. Fleet selection and reassignment are deferred.
+`expires_at`. Terminal offers retain the assignment that resolved them, preserving replay after
+assignment completion. New initial-dispatch offers require the group pickup population to remain
+entirely `PENDING_ASSIGNMENT`. Fleet selection and reassignment are deferred.
 
 ## 12. Pickup execution and incidents
 

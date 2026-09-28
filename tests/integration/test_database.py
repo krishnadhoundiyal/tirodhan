@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from tirodhan.core.config import Settings
+from tirodhan.db.values import new_uuid7
 from tirodhan.main import create_app
 
 
@@ -318,7 +319,9 @@ def test_phase_1i_migration_roundtrip_restores_lifecycle_constraints(
     monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
     configuration = Config("alembic.ini")
 
-    async def schema_state() -> tuple[set[str], dict[str, str], dict[str, str]]:
+    async def schema_state() -> tuple[
+        set[str], dict[str, str], dict[str, str], set[str], dict[str, str]
+    ]:
         engine = create_async_engine(database_url)
         try:
             async with engine.connect() as connection:
@@ -357,29 +360,184 @@ def test_phase_1i_migration_roundtrip_restores_lifecycle_constraints(
                         )
                     )
                 )
-                return tables, assignment_constraints, pickup_constraints
+                offer_columns, offer_foreign_keys = await connection.run_sync(
+                    lambda sync_connection: (
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "assignment_offer"
+                            )
+                        },
+                        {
+                            foreign_key["name"]: foreign_key["referred_table"]
+                            for foreign_key in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "assignment_offer"
+                            )
+                        },
+                    )
+                )
+                return (
+                    tables,
+                    assignment_constraints,
+                    pickup_constraints,
+                    offer_columns,
+                    offer_foreign_keys,
+                )
+        finally:
+            await engine.dispose()
+
+    async def seed_phase_1h_resolved_offers() -> tuple[object, object, object]:
+        rider_id = new_uuid7()
+        losing_rider_id = new_uuid7()
+        batch_id = new_uuid7()
+        group_id = new_uuid7()
+        assignment_id = new_uuid7()
+        accepted_offer_id = new_uuid7()
+        losing_offer_id = new_uuid7()
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app_user (user_id, status, created_at, updated_at) "
+                        "VALUES (:rider_id, 'ACTIVE', now(), now()), "
+                        "(:losing_rider_id, 'ACTIVE', now(), now())"
+                    ),
+                    {"rider_id": rider_id, "losing_rider_id": losing_rider_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO planning_batch "
+                        "(planning_batch_id, cell_id, slot_start, slot_end, status, "
+                        "max_attempts_snapshot, created_at) "
+                        "VALUES (:batch_id, 'migration-cell', now(), "
+                        "now() + interval '30 minutes', "
+                        "'COMPLETED', 1, now())"
+                    ),
+                    {"batch_id": batch_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO collection_group "
+                        "(collection_group_id, planning_batch_id, planning_mode, created_at) "
+                        "VALUES (:group_id, :batch_id, 'NORMAL_SINGLETON', now())"
+                    ),
+                    {"group_id": group_id, "batch_id": batch_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO rider_profile "
+                        "(rider_id, status, created_at, updated_at) "
+                        "VALUES (:rider_id, 'ACTIVE', now(), now()), "
+                        "(:losing_rider_id, 'ACTIVE', now(), now())"
+                    ),
+                    {"rider_id": rider_id, "losing_rider_id": losing_rider_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO rider_assignment "
+                        "(assignment_id, collection_group_id, rider_id, source, status, "
+                        "created_at, assigned_at) "
+                        "VALUES (:assignment_id, :group_id, :rider_id, "
+                        "'RIDER_OFFER_ACCEPTED', 'ACTIVE', now(), now())"
+                    ),
+                    {
+                        "assignment_id": assignment_id,
+                        "group_id": group_id,
+                        "rider_id": rider_id,
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO assignment_offer "
+                        "(offer_id, collection_group_id, rider_id, offer_round, status, "
+                        "offered_at, expires_at, responded_at) VALUES "
+                        "(:accepted_offer_id, :group_id, :rider_id, 1, 'ACCEPTED', "
+                        "now(), now() + interval '5 minutes', now()), "
+                        "(:losing_offer_id, :group_id, :losing_rider_id, 1, 'CLOSED_LOST', "
+                        "now(), now() + interval '5 minutes', NULL)"
+                    ),
+                    {
+                        "accepted_offer_id": accepted_offer_id,
+                        "losing_offer_id": losing_offer_id,
+                        "group_id": group_id,
+                        "rider_id": rider_id,
+                        "losing_rider_id": losing_rider_id,
+                    },
+                )
+        finally:
+            await engine.dispose()
+        return accepted_offer_id, losing_offer_id, assignment_id
+
+    async def resolved_assignments() -> dict[object, object]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return {
+                    row.offer_id: row.resolved_assignment_id
+                    for row in await connection.execute(
+                        text(
+                            "SELECT offer_id, resolved_assignment_id FROM assignment_offer "
+                            "WHERE status IN ('ACCEPTED', 'CLOSED_LOST')"
+                        )
+                    )
+                }
         finally:
             await engine.dispose()
 
     command.upgrade(configuration, "head")
-    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    tables, assignment_constraints, pickup_constraints, offer_columns, offer_fks = asyncio.run(
+        schema_state()
+    )
     assert "pickup_attempt" in tables
     assert "COMPLETED" in assignment_constraints["ck_rider_assignment_status"]
     assert "COLLECTED" in pickup_constraints["ck_pickup_execution_status"]
+    assert "resolved_assignment_id" in offer_columns
+    assert offer_fks["fk_assignment_offer_resolved_assignment"] == "rider_assignment"
 
     command.downgrade(configuration, "0008_rider_dispatch_assignment")
-    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    tables, assignment_constraints, pickup_constraints, offer_columns, offer_fks = asyncio.run(
+        schema_state()
+    )
     assert "pickup_attempt" not in tables
     assert "COMPLETED" not in assignment_constraints["ck_rider_assignment_status"]
     assert "ACTIVE" in assignment_constraints["ck_rider_assignment_status"]
     assert "ck_pickup_execution_status" not in pickup_constraints
     assert {"rider_assignment", "rider_assignment_item", "pickup_execution"}.issubset(tables)
+    assert "resolved_assignment_id" not in offer_columns
+    assert "fk_assignment_offer_resolved_assignment" not in offer_fks
+
+    accepted_offer_id, losing_offer_id, assignment_id = asyncio.run(seed_phase_1h_resolved_offers())
 
     command.upgrade(configuration, "head")
-    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    tables, assignment_constraints, pickup_constraints, offer_columns, offer_fks = asyncio.run(
+        schema_state()
+    )
     assert "pickup_attempt" in tables
     assert "COMPLETED" in assignment_constraints["ck_rider_assignment_status"]
     assert "COLLECTED" in pickup_constraints["ck_pickup_execution_status"]
+    assert "resolved_assignment_id" in offer_columns
+    assert offer_fks["fk_assignment_offer_resolved_assignment"] == "rider_assignment"
+    links = asyncio.run(resolved_assignments())
+    assert links[accepted_offer_id] == assignment_id
+    assert links[losing_offer_id] == assignment_id
+
+    command.downgrade(configuration, "0008_rider_dispatch_assignment")
+    _tables, _assignment_constraints, _pickup_constraints, offer_columns, offer_fks = asyncio.run(
+        schema_state()
+    )
+    assert "resolved_assignment_id" not in offer_columns
+    assert "fk_assignment_offer_resolved_assignment" not in offer_fks
+
+    command.upgrade(configuration, "head")
+    _tables, _assignment_constraints, _pickup_constraints, offer_columns, offer_fks = asyncio.run(
+        schema_state()
+    )
+    assert "resolved_assignment_id" in offer_columns
+    assert offer_fks["fk_assignment_offer_resolved_assignment"] == "rider_assignment"
+    links = asyncio.run(resolved_assignments())
+    assert links[accepted_offer_id] == assignment_id
+    assert links[losing_offer_id] == assignment_id
 
 
 @pytest.mark.integration

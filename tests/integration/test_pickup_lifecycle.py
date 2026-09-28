@@ -11,6 +11,7 @@ from test_rider_dispatch import DispatchFixture, create_fixture
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.dispatch.models import (
+    AssignmentOffer,
     RiderAssignment,
     RiderAssignmentItem,
     RiderAvailability,
@@ -23,7 +24,11 @@ from tirodhan.modules.dispatch.service import (
     WORK_BUSY,
     WORK_IDLE,
     WORK_RESERVED,
+    GroupAlreadyAssignedError,
+    PickupGroupNotAssignableError,
+    accept_assignment_offer,
     assign_group_manually,
+    create_assignment_offer,
     set_rider_availability_intent,
 )
 from tirodhan.modules.pickups.models import PickupAttempt
@@ -84,6 +89,26 @@ async def started_fixture(
         rider_id=fixture.rider_ids[0],
     )
     return fixture, started
+
+
+async def collect_all_pickups(
+    factory: async_sessionmaker[AsyncSession],
+    fixture: DispatchFixture,
+    assignment: RiderAssignment,
+) -> None:
+    await start_assignment(
+        factory,
+        assignment_id=assignment.assignment_id,
+        rider_id=fixture.rider_ids[0],
+    )
+    for pickup_id in fixture.pickup_ids[0]:
+        await record_pickup_attempt(
+            factory,
+            pickup_execution_id=pickup_id,
+            rider_id=fixture.rider_ids[0],
+            client_attempt_id=new_uuid7(),
+            outcome=ATTEMPT_COLLECTED,
+        )
 
 
 async def test_start_assignment_transitions_reserved_rider_once(
@@ -488,6 +513,185 @@ async def test_multi_pickup_completion_preserves_intent_items_and_outbox(
     )
     assert all(item.released_at is None and item.release_reason_code is None for item in items)
     assert outbox_types == ["RiderAssignmentCreated"]
+
+
+async def test_accepted_offer_replays_after_assignment_completion(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory, rider_count=2, pickups_per_group=1)
+    offered_at = utc_now().replace(microsecond=0)
+    offer = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        offer_round=1,
+        expires_at=offered_at + timedelta(minutes=5),
+        now=offered_at,
+    )
+    assignment = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=offer.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+    await collect_all_pickups(database_session_factory, fixture, assignment)
+    async with database_session_factory() as session:
+        before_replay = await session.get(RiderAvailability, fixture.rider_ids[0])
+        assert before_replay is not None
+        version_before_replay = before_replay.version
+
+    replay = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=offer.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+
+    async with database_session_factory() as session:
+        persisted_offer = await session.get(AssignmentOffer, offer.offer_id)
+        availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        assert await session.scalar(select(func.count()).select_from(RiderAssignment)) == 1
+        assert await session.scalar(select(func.count()).select_from(RiderAssignmentItem)) == 1
+        assert (
+            await session.scalar(
+                select(func.count(OutboxEvent.outbox_event_id)).where(
+                    OutboxEvent.event_type == "RiderAssignmentCreated"
+                )
+            )
+            == 1
+        )
+    assert replay.assignment_id == assignment.assignment_id
+    assert replay.status == ASSIGNMENT_COMPLETED
+    assert persisted_offer is not None
+    assert persisted_offer.status == "ACCEPTED"
+    assert persisted_offer.resolved_assignment_id == assignment.assignment_id
+    assert availability is not None and availability.version == version_before_replay
+
+
+async def test_same_rider_manager_resolution_replays_after_completion(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory, rider_count=2, pickups_per_group=1)
+    offer = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        offer_round=1,
+        expires_at=utc_now() + timedelta(minutes=5),
+    )
+    assignment = await assign_group_manually(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        manager_user_id=fixture.manager_id,
+    )
+    await collect_all_pickups(database_session_factory, fixture, assignment)
+
+    replay = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=offer.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+
+    async with database_session_factory() as session:
+        persisted_offer = await session.get(AssignmentOffer, offer.offer_id)
+        availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        assert await session.scalar(select(func.count()).select_from(RiderAssignment)) == 1
+        assert await session.scalar(select(func.count()).select_from(RiderAssignmentItem)) == 1
+        assert (
+            await session.scalar(
+                select(func.count(OutboxEvent.outbox_event_id)).where(
+                    OutboxEvent.event_type == "RiderAssignmentCreated"
+                )
+            )
+            == 1
+        )
+    assert replay.assignment_id == assignment.assignment_id
+    assert replay.status == ASSIGNMENT_COMPLETED
+    assert persisted_offer is not None
+    assert persisted_offer.status == "CLOSED_LOST"
+    assert persisted_offer.resolved_assignment_id == assignment.assignment_id
+    assert availability is not None
+    assert (availability.work_state, availability.version) == (WORK_IDLE, 4)
+
+
+async def test_losing_offer_remains_conflict_after_winning_assignment_completed(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory, rider_count=2, pickups_per_group=1)
+    winner = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        offer_round=1,
+        expires_at=utc_now() + timedelta(minutes=5),
+    )
+    loser = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[1],
+        offer_round=1,
+        expires_at=utc_now() + timedelta(minutes=5),
+    )
+    assignment = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=winner.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+    await collect_all_pickups(database_session_factory, fixture, assignment)
+
+    with pytest.raises(GroupAlreadyAssignedError):
+        await accept_assignment_offer(
+            database_session_factory,
+            offer_id=loser.offer_id,
+            rider_id=fixture.rider_ids[1],
+        )
+    async with database_session_factory() as session:
+        persisted_loser = await session.get(AssignmentOffer, loser.offer_id)
+    assert persisted_loser is not None
+    assert persisted_loser.status == "CLOSED_LOST"
+    assert persisted_loser.resolved_assignment_id == assignment.assignment_id
+
+
+async def test_completed_group_blocks_new_offer_but_existing_offer_still_replays(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture = await create_fixture(database_session_factory, rider_count=2, pickups_per_group=1)
+    offered_at = utc_now().replace(microsecond=0)
+    expires_at = offered_at + timedelta(minutes=5)
+    offer = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        offer_round=1,
+        expires_at=expires_at,
+        now=offered_at,
+    )
+    assignment = await accept_assignment_offer(
+        database_session_factory,
+        offer_id=offer.offer_id,
+        rider_id=fixture.rider_ids[0],
+    )
+    await collect_all_pickups(database_session_factory, fixture, assignment)
+
+    replay = await create_assignment_offer(
+        database_session_factory,
+        collection_group_id=fixture.group_ids[0],
+        rider_id=fixture.rider_ids[0],
+        offer_round=1,
+        expires_at=expires_at,
+        now=offered_at + timedelta(hours=1),
+    )
+    assert replay.offer_id == offer.offer_id
+    with pytest.raises(PickupGroupNotAssignableError):
+        await create_assignment_offer(
+            database_session_factory,
+            collection_group_id=fixture.group_ids[0],
+            rider_id=fixture.rider_ids[1],
+            offer_round=2,
+            expires_at=offered_at + timedelta(hours=2),
+            now=offered_at + timedelta(hours=1),
+        )
+    async with database_session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(AssignmentOffer)) == 1
 
 
 async def test_concurrent_duplicate_attempt_converges_to_one_row(

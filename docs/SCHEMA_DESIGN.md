@@ -474,6 +474,7 @@ serialization boundary, and every mutation increments `version`.
 offer_id                   uuid PK
 collection_group_id        uuid FK -> collection_group
 rider_id                   uuid FK -> rider_profile
+resolved_assignment_id     uuid NULL FK -> rider_assignment
 offer_round                integer NOT NULL
 status                     varchar(24) NOT NULL
 offered_at                 timestamptz NOT NULL
@@ -488,7 +489,9 @@ UNIQUE(collection_group_id, rider_id, offer_round)
 ```
 
 Phase 1H offer status is `OPEN`, `ACCEPTED`, or `CLOSED_LOST`. The timestamp, not an expiry
-status, determines whether an open offer remains live.
+status, determines whether an open offer remains live. From Phase 1I,
+`resolved_assignment_id` records the assignment that resolved an `ACCEPTED` or `CLOSED_LOST`
+offer. It is nullable for open and historically inconsistent pre-linkage offers.
 
 ### `rider_assignment`
 

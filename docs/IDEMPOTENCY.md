@@ -165,6 +165,10 @@ availability, offer when present, and finally group pickups in identifier order.
 replays on `(collection_group_id, rider_id, offer_round)` only when the requested expiry matches.
 Accepted-offer and same-rider manual retries return the established active assignment. The group
 partial unique index and unreleased-pickup partial unique index remain physical backstops.
+From Phase 1I, terminal offers retain `resolved_assignment_id`, so accepted-offer replay and the
+same-rider manager-won convergence remain valid after that assignment becomes `COMPLETED`.
+Creation of a genuinely new initial offer additionally requires a nonempty group whose entire
+pickup population remains `PENDING_ASSIGNMENT`; existing offer-key replay is checked first.
 
 ### Concurrent pickup attempts
 

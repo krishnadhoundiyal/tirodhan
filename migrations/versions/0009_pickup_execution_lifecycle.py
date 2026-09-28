@@ -18,6 +18,27 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    op.add_column(
+        "assignment_offer",
+        sa.Column("resolved_assignment_id", postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    op.create_foreign_key(
+        "fk_assignment_offer_resolved_assignment",
+        "assignment_offer",
+        "rider_assignment",
+        ["resolved_assignment_id"],
+        ["assignment_id"],
+    )
+    op.execute(
+        sa.text(
+            "UPDATE assignment_offer AS offer "
+            "SET resolved_assignment_id = assignment.assignment_id "
+            "FROM rider_assignment AS assignment "
+            "WHERE offer.collection_group_id = assignment.collection_group_id "
+            "AND offer.status IN ('ACCEPTED', 'CLOSED_LOST') "
+            "AND assignment.status = 'ACTIVE'"
+        )
+    )
     op.drop_constraint("ck_rider_assignment_status", "rider_assignment", type_="check")
     op.create_check_constraint(
         "ck_rider_assignment_status",
@@ -69,3 +90,9 @@ def downgrade() -> None:
         "rider_assignment",
         "status = 'ACTIVE'",
     )
+    op.drop_constraint(
+        "fk_assignment_offer_resolved_assignment",
+        "assignment_offer",
+        type_="foreignkey",
+    )
+    op.drop_column("assignment_offer", "resolved_assignment_id")
