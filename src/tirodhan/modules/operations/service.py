@@ -164,6 +164,8 @@ async def open_pickup_incident(
         )
         if pickup is None:
             raise PickupIncidentNotFoundError("pickup execution not found")
+        if pickup.status != PICKUP_ASSIGNED:
+            raise PickupIncidentStateError("fresh incident requires an ASSIGNED pickup")
         ownership = await session.scalar(
             select(RiderAssignmentItem)
             .where(

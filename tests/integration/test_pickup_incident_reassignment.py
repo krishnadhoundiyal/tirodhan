@@ -332,6 +332,84 @@ async def test_prestart_reassignment_transfers_all_work_and_no_outbox(
     assert outbox_count == 1
 
 
+async def test_started_predecessor_start_replays_after_reassignment_without_mutation(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture, predecessor = await assigned_fixture(
+        database_session_factory, pickup_count=2, started=True
+    )
+    started_at = predecessor.started_at
+    async with database_session_factory() as session:
+        availability_before = await session.get(RiderAvailability, fixture.rider_ids[0])
+    assert started_at is not None
+    assert availability_before is not None and availability_before.version == 3
+
+    successor = await reassign(database_session_factory, fixture, predecessor)
+    async with database_session_factory() as session:
+        superseded = await session.get(RiderAssignment, predecessor.assignment_id)
+        availability_after_reassignment = await session.get(RiderAvailability, fixture.rider_ids[0])
+        outbox_count_before = await session.scalar(select(func.count()).select_from(OutboxEvent))
+    assert superseded is not None and superseded.superseded_at is not None
+    superseded_at = superseded.superseded_at
+    assert availability_after_reassignment is not None
+    assert (
+        availability_after_reassignment.work_state,
+        availability_after_reassignment.version,
+    ) == (WORK_IDLE, 4)
+
+    replay = await start_assignment(
+        database_session_factory,
+        assignment_id=predecessor.assignment_id,
+        rider_id=fixture.rider_ids[0],
+        now=superseded_at + timedelta(hours=1),
+    )
+
+    async with database_session_factory() as session:
+        old_availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        replacement = await session.get(RiderAvailability, fixture.rider_ids[1])
+        assignment_count = await session.scalar(select(func.count()).select_from(RiderAssignment))
+        item_count = await session.scalar(select(func.count()).select_from(RiderAssignmentItem))
+        outbox_count_after = await session.scalar(select(func.count()).select_from(OutboxEvent))
+    assert replay.assignment_id == predecessor.assignment_id
+    assert replay.status == ASSIGNMENT_SUPERSEDED
+    assert replay.started_at == started_at
+    assert replay.superseded_at == superseded_at
+    assert replay.completed_at is None
+    assert old_availability is not None
+    assert (old_availability.work_state, old_availability.version) == (WORK_IDLE, 4)
+    assert replacement is not None
+    assert (replacement.work_state, replacement.version) == (WORK_RESERVED, 2)
+    assert assignment_count == 2
+    assert item_count == 4
+    assert outbox_count_after == outbox_count_before == 1
+    assert successor.status == ASSIGNMENT_ACTIVE
+
+
+async def test_prestart_superseded_predecessor_is_not_startable(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture, predecessor = await assigned_fixture(database_session_factory, pickup_count=1)
+    await reassign(database_session_factory, fixture, predecessor)
+
+    with pytest.raises(AssignmentNotStartableError):
+        await start_assignment(
+            database_session_factory,
+            assignment_id=predecessor.assignment_id,
+            rider_id=fixture.rider_ids[0],
+        )
+
+    async with database_session_factory() as session:
+        persisted = await session.get(RiderAssignment, predecessor.assignment_id)
+        old_availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+    assert persisted is not None
+    assert persisted.status == ASSIGNMENT_SUPERSEDED
+    assert persisted.started_at is None
+    assert persisted.superseded_at is not None
+    assert persisted.completed_at is None
+    assert old_availability is not None
+    assert (old_availability.work_state, old_availability.version) == (WORK_IDLE, 3)
+
+
 async def test_midroute_reassignment_retains_collected_and_resolves_incident_once(
     database_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -451,6 +529,88 @@ async def test_midroute_reassignment_retains_collected_and_resolves_incident_onc
     assert replacement is not None
     assert (replacement.work_state, replacement.version) == (WORK_RESERVED, 2)
     assert outbox_count == 1
+
+
+async def test_fresh_incident_is_rejected_after_target_pickup_is_collected(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture, assignment = await assigned_fixture(
+        database_session_factory, pickup_count=2, started=True
+    )
+    collected_pickup = fixture.pickup_ids[0][0]
+    await record_pickup_attempt(
+        database_session_factory,
+        pickup_execution_id=collected_pickup,
+        rider_id=fixture.rider_ids[0],
+        client_attempt_id=new_uuid7(),
+        outcome=ATTEMPT_COLLECTED,
+    )
+
+    with pytest.raises(PickupIncidentStateError):
+        await open_pickup_incident(
+            database_session_factory,
+            pickup_execution_id=collected_pickup,
+            rider_id=fixture.rider_ids[0],
+            client_incident_id=new_uuid7(),
+            reason_code="CUSTOMER_UNAVAILABLE",
+        )
+
+    async with database_session_factory() as session:
+        pickup = await session.get(PickupExecution, collected_pickup)
+        persisted_assignment = await session.get(RiderAssignment, assignment.assignment_id)
+        availability = await session.get(RiderAvailability, fixture.rider_ids[0])
+        incident_count = await session.scalar(select(func.count()).select_from(PickupIncident))
+    assert pickup is not None and pickup.status == PICKUP_COLLECTED
+    assert persisted_assignment is not None and persisted_assignment.status == ASSIGNMENT_ACTIVE
+    assert availability is not None and availability.work_state == WORK_BUSY
+    assert incident_count == 0
+
+
+async def test_historical_incident_replays_after_target_pickup_is_collected(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fixture, _assignment = await assigned_fixture(
+        database_session_factory, pickup_count=2, started=True
+    )
+    pickup_id = fixture.pickup_ids[0][0]
+    client_id = new_uuid7()
+    opened_at = utc_now().replace(microsecond=0)
+    incident = await open_pickup_incident(
+        database_session_factory,
+        pickup_execution_id=pickup_id,
+        rider_id=fixture.rider_ids[0],
+        client_incident_id=client_id,
+        reason_code="ACCESS_BLOCKED",
+        now=opened_at,
+    )
+    await record_pickup_attempt(
+        database_session_factory,
+        pickup_execution_id=pickup_id,
+        rider_id=fixture.rider_ids[0],
+        client_attempt_id=new_uuid7(),
+        outcome=ATTEMPT_COLLECTED,
+    )
+
+    replay = await open_pickup_incident(
+        database_session_factory,
+        pickup_execution_id=pickup_id,
+        rider_id=fixture.rider_ids[0],
+        client_incident_id=client_id,
+        reason_code="ACCESS_BLOCKED",
+        now=opened_at + timedelta(hours=1),
+    )
+
+    async with database_session_factory() as session:
+        pickup = await session.get(PickupExecution, pickup_id)
+        incident_count = await session.scalar(select(func.count()).select_from(PickupIncident))
+    assert replay.incident_id == incident.incident_id
+    assert replay.opened_at == opened_at
+    assert replay.created_at == opened_at
+    assert replay.status == INCIDENT_OPEN
+    assert replay.resolution_code is None
+    assert replay.resolved_at is None
+    assert pickup is not None and pickup.status == PICKUP_COLLECTED
+    assert incident_count == 1
 
 
 async def test_reassignment_rejects_foreign_incident_same_rider_and_inconsistent_population(
