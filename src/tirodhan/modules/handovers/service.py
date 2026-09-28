@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from geoalchemy2 import Geography
-from sqlalchemy import func, literal, or_, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -245,10 +245,7 @@ async def _evaluate_geofence(
     row = (
         await session.execute(
             select(
-                or_(
-                    func.ST_DWithin(observed, receiving_point, allowed_radius_m),
-                    distance <= allowed_radius_m,
-                ),
+                func.ST_DWithin(observed, receiving_point, allowed_radius_m),
                 distance,
             )
         )

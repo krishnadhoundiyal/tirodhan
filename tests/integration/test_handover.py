@@ -326,41 +326,58 @@ async def test_one_handover_may_cover_pickups_from_multiple_assignments_for_same
 async def test_postgis_boundary_is_inclusive_and_database_authoritative(
     database_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    fixture, _assignment = await assign_and_collect(database_session_factory, pickup_count=1)
+    fixture, _assignment = await assign_and_collect(database_session_factory, pickup_count=2)
     point = await create_receiving_point(database_session_factory, radius_m=500)
     async with database_session_factory() as session:
         boundary = (
             await session.execute(
                 text(
                     "SELECT "
-                    "ST_Y(ST_Project(location, allowed_radius_m, radians(90))::geometry), "
-                    "ST_X(ST_Project(location, allowed_radius_m, radians(90))::geometry), "
-                    "(ST_DWithin(location, "
-                    "ST_Project(location, allowed_radius_m, radians(90)), allowed_radius_m) OR "
+                    "ST_Y(ST_Project(location, allowed_radius_m - 1, radians(90))::geometry), "
+                    "ST_X(ST_Project(location, allowed_radius_m - 1, radians(90))::geometry), "
+                    "ST_DWithin(location, "
+                    "ST_Project(location, allowed_radius_m - 1, radians(90)), allowed_radius_m), "
                     "ST_Distance(location, "
-                    "ST_Project(location, allowed_radius_m, radians(90))) <= allowed_radius_m), "
+                    "ST_Project(location, allowed_radius_m - 1, radians(90))), "
+                    "ST_Y(ST_Project(location, allowed_radius_m + 1, radians(90))::geometry), "
+                    "ST_X(ST_Project(location, allowed_radius_m + 1, radians(90))::geometry), "
+                    "ST_DWithin(location, "
+                    "ST_Project(location, allowed_radius_m + 1, radians(90)), allowed_radius_m), "
                     "ST_Distance(location, "
-                    "ST_Project(location, allowed_radius_m, radians(90))) "
+                    "ST_Project(location, allowed_radius_m + 1, radians(90))) "
                     "FROM receiving_point WHERE receiving_point_id = :point_id"
                 ),
                 {"point_id": point.receiving_point_id},
             )
         ).one()
-    observed = GeoPoint(latitude=float(boundary[0]), longitude=float(boundary[1]))
+    inside_observed = GeoPoint(latitude=float(boundary[0]), longitude=float(boundary[1]))
+    outside_observed = GeoPoint(latitude=float(boundary[4]), longitude=float(boundary[5]))
 
-    event = await record(
+    inside_event = await record(
         database_session_factory,
         fixture,
         point,
-        fixture.pickup_ids[0],
-        observed_location=observed,
+        (fixture.pickup_ids[0][0],),
+        observed_location=inside_observed,
+    )
+    outside_event = await record(
+        database_session_factory,
+        fixture,
+        point,
+        (fixture.pickup_ids[0][1],),
+        observed_location=outside_observed,
     )
 
     assert boundary[2] is True
-    assert float(boundary[3]) == pytest.approx(500.0, abs=1e-6)
-    assert event.status == HANDOVER_VALIDATED
-    assert event.validation_code == WITHIN_ALLOWED_RADIUS
-    assert event.distance_m == pytest.approx(500.0, abs=1e-5)
+    assert boundary[6] is False
+    assert float(boundary[3]) == pytest.approx(499.0, abs=1e-6)
+    assert float(boundary[7]) == pytest.approx(501.0, abs=1e-6)
+    assert inside_event.status == HANDOVER_VALIDATED
+    assert inside_event.validation_code == WITHIN_ALLOWED_RADIUS
+    assert inside_event.distance_m == pytest.approx(499.0, abs=1e-5)
+    assert outside_event.status == HANDOVER_REJECTED
+    assert outside_event.validation_code == OUTSIDE_ALLOWED_RADIUS
+    assert outside_event.distance_m == pytest.approx(501.0, abs=1e-5)
 
 
 async def test_outside_radius_is_durable_rejection_and_later_command_can_validate(
