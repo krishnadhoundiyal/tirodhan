@@ -5,7 +5,7 @@ from datetime import datetime
 from hmac import compare_digest
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -22,7 +22,14 @@ from tirodhan.modules.customers.service import (
     IdempotencyCommandInProgressError,
     command_fingerprint,
 )
+from tirodhan.modules.evidence.models import (
+    EvidenceCapture,
+    HandoverEvidenceLink,
+    PickupEvidenceLink,
+)
+from tirodhan.modules.handovers.models import HandoverEvent, HandoverEventItem
 from tirodhan.modules.payments.models import Payment
+from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.reliability.models import IdempotencyRecord
 from tirodhan.modules.reliability.primitives import (
     IdempotencyKeyConflictError,
@@ -36,6 +43,10 @@ from tirodhan.modules.serviceability.service import SERVICEABILITY_SERVICEABLE
 REQUEST_PENDING_PAYMENT = "PENDING_PAYMENT"
 REQUEST_ACCEPTED = "ACCEPTED"
 REQUEST_PRE_PLANNING = "PRE_PLANNING"
+REQUEST_PLANNED = "PLANNED"
+REQUEST_COMPLETED = "COMPLETED"
+PICKUP_COLLECTED = "COLLECTED"
+HANDOVER_VALIDATED = "VALIDATED"
 PAYMENT_PENDING = "PENDING"
 
 
@@ -48,6 +59,34 @@ class ServiceabilityContextIneligibleError(RuntimeError):
 
 
 class CollectionRequestNotFoundError(LookupError):
+    pass
+
+
+class CollectionRequestCompletionError(RuntimeError):
+    pass
+
+
+class CollectionRequestNotCompletableError(CollectionRequestCompletionError):
+    pass
+
+
+class CollectionRequestPickupMissingError(CollectionRequestCompletionError):
+    pass
+
+
+class CollectionRequestPickupNotCollectedError(CollectionRequestCompletionError):
+    pass
+
+
+class CollectionRequestValidatedHandoverMissingError(CollectionRequestCompletionError):
+    pass
+
+
+class CollectionRequestPickupEvidenceInsufficientError(CollectionRequestCompletionError):
+    pass
+
+
+class CollectionRequestHandoverEvidenceInsufficientError(CollectionRequestCompletionError):
     pass
 
 
@@ -102,6 +141,86 @@ async def _load_request_result(
     if payment is None:
         raise RuntimeError("collection request is missing its logical payment")
     return CollectionRequestResult(request=request, items=items, payment=payment)
+
+
+async def _validate_completion_prerequisites(session: AsyncSession, *, request_id: UUID) -> None:
+    pickup = await session.scalar(
+        select(PickupExecution).where(PickupExecution.request_id == request_id)
+    )
+    if pickup is None:
+        raise CollectionRequestPickupMissingError("collection request has no pickup execution")
+    if pickup.status != PICKUP_COLLECTED:
+        raise CollectionRequestPickupNotCollectedError("collection request pickup is not collected")
+
+    validated_handover_id = await session.scalar(
+        select(HandoverEventItem.handover_event_id)
+        .join(
+            HandoverEvent,
+            HandoverEvent.handover_event_id == HandoverEventItem.handover_event_id,
+        )
+        .where(
+            HandoverEventItem.pickup_execution_id == pickup.pickup_execution_id,
+            HandoverEventItem.status == HANDOVER_VALIDATED,
+            HandoverEvent.status == HANDOVER_VALIDATED,
+        )
+    )
+    if validated_handover_id is None:
+        raise CollectionRequestValidatedHandoverMissingError(
+            "collection request pickup has no validated handover"
+        )
+
+    has_pickup_evidence = await session.scalar(
+        select(
+            exists()
+            .where(PickupEvidenceLink.pickup_execution_id == pickup.pickup_execution_id)
+            .where(EvidenceCapture.evidence_capture_id == PickupEvidenceLink.evidence_capture_id)
+        )
+    )
+    if not has_pickup_evidence:
+        raise CollectionRequestPickupEvidenceInsufficientError(
+            "collection request pickup has no evidence capture"
+        )
+
+    has_handover_evidence = await session.scalar(
+        select(
+            exists()
+            .where(HandoverEvidenceLink.handover_event_id == validated_handover_id)
+            .where(EvidenceCapture.evidence_capture_id == HandoverEvidenceLink.evidence_capture_id)
+        )
+    )
+    if not has_handover_evidence:
+        raise CollectionRequestHandoverEvidenceInsufficientError(
+            "validated handover has no evidence capture"
+        )
+
+
+async def complete_collection_request(
+    session_factory: async_sessionmaker[AsyncSession],
+    request_id: UUID,
+    *,
+    now: datetime | None = None,
+) -> CollectionRequest:
+    """Complete a planned request once its persisted fulfilment evidence is sufficient."""
+    async with session_factory() as session, session.begin():
+        request = await session.scalar(
+            select(CollectionRequest)
+            .where(CollectionRequest.request_id == request_id)
+            .with_for_update()
+        )
+        if request is None:
+            raise CollectionRequestNotFoundError("collection request not found")
+        if request.status == REQUEST_COMPLETED:
+            return request
+        if request.status != REQUEST_PLANNED:
+            raise CollectionRequestNotCompletableError(
+                f"collection request in status {request.status!r} cannot be completed"
+            )
+
+        await _validate_completion_prerequisites(session, request_id=request.request_id)
+        request.status = REQUEST_COMPLETED
+        request.completed_at = now or utc_now()
+        await session.flush([request])
+        return request
 
 
 async def create_collection_request(

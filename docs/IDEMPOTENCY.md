@@ -130,7 +130,7 @@ not distributed exactly-once execution.
 | Create handover | scope `handover.record` + client handover ID | idempotency record + unique client ID + partial unique validated pickup | same fingerprint replays the event; changed rider/point/sorted pickups/observed coordinates conflicts; sorted pickup locks allow one validated winner while rejected history remains retryable under a new client ID |
 | Link pickup to handover | `(handover_id, pickup_execution_id)` | composite PK | duplicate link impossible |
 | Validate handover | handover + command | conditional state transition | one authoritative outcome |
-| Complete request | request terminal transition | conditional transition + validated-handover constraint | completes once |
+| Complete request | request ID | request-row lock + natural `PLANNED -> COMPLETED` terminal transition | completed replay returns the established timestamp without re-evaluating prerequisites |
 | Create outbox event | deterministic event key | unique event key | state retry does not duplicate logical event |
 | Consume Service Bus message | `(consumer_name, message_id)` | inbox PK | same transport message processed once |
 | Send notification | logical notification/business event | unique notification key/record | retry does not create duplicate logical notification |
@@ -207,6 +207,16 @@ per capture. Finalization uses natural row idempotency rather than `idempotency_
 inspect storage concurrently without holding PostgreSQL locks, then serialize on the media row.
 The first pending caller records the terminal metadata/timestamp; later callers return that exact
 terminal row without overwriting it or reinspecting once they observe it finalized.
+
+### Concurrent collection-request completion
+
+Completion uses the `CollectionRequest` row itself as the natural idempotency and serialization
+boundary; it creates no `idempotency_record`. The transaction begins with a request-row
+`SELECT ... FOR UPDATE`, with no unlocked request pre-read. One caller performs the
+`PLANNED -> COMPLETED` transition after Option B evidence checks; concurrent or later callers see
+`COMPLETED` and return the established row and original `completed_at` without querying pickup,
+handover, evidence, incident, assignment, or media state. Prerequisite rows are read but not locked.
+No completion outbox event is emitted in Phase 1N.
 
 ### Pickup incident and reassignment
 

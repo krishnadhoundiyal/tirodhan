@@ -504,6 +504,14 @@ content type, size, and server finalization time. MIME and maximum-size policy i
 configured rather than frozen in schema. No Azure SDK, content hash, original filename, request
 completion coupling, or media outbox event is part of this phase.
 
+Phase 1N freezes MVP evidence sufficiency at Option B: a collected pickup needs at least one
+pickup-linked `EvidenceCapture`, and its validated `HandoverEvent` needs at least one
+handover-linked `EvidenceCapture`. A request moves explicitly from `PLANNED` to `COMPLETED` when
+those durable facts exist. Open or historical pickup incidents do not block completion, and
+`MediaAsset` existence or upload state is not consulted. Completion locks only the
+`CollectionRequest` row as its serialization boundary; an already-completed request returns
+immediately without re-evaluating prerequisites. Phase 1N emits no completion outbox event.
+
 ## 14. Receiving point and handover
 
 Government/authorized kiosks/centres are represented as mutable `ReceivingPoint` master data.
@@ -528,7 +536,7 @@ Do not depend on attaching a Tirodhan-owned QR to government property without pe
 
 AI vision is not a required validation dependency.
 
-A CollectionRequest reaches `COMPLETED` after its collected material is associated with a valid receiving-point handover and required evidence is validly captured.
+A CollectionRequest reaches `COMPLETED` after its collected material is associated with a valid receiving-point handover and the Phase 1N Option B evidence requirements are satisfied.
 
 Blob upload may still complete asynchronously according to the evidence policy.
 

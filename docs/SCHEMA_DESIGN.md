@@ -871,6 +871,17 @@ in a new transaction for the conditional `PENDING_UPLOAD -> FINALIZED` transitio
 and PostgreSQL do not share a transaction; a database failure leaves the object in storage and the
 asset retryably pending. No evidence, fulfilment, request, or outbox state changes in either flow.
 
+### Collection-request completion
+
+Phase 1N locks one `collection_request` row at the start of its transaction. A `COMPLETED` row is
+returned immediately without prerequisite re-evaluation; any fresh transition must start from
+`PLANNED`. Plain relational existence queries then require its unique pickup execution to be
+`COLLECTED`, a `VALIDATED` handover item joined to a `VALIDATED` parent event, at least one capture
+linked to the pickup, and at least one capture linked to that specific validated handover. Open or
+historical incidents and all `media_asset` state are deliberately outside the predicate. The same
+transaction changes only request status and `completed_at`. It locks no prerequisite row and writes
+no idempotency or outbox record.
+
 ## PII representation
 
 Examples:

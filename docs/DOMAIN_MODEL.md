@@ -174,6 +174,14 @@ type and a size within configured policy. It does not establish semantic content
 evidence sufficiency, or fulfilment completion. Upload authorization is transient; storage failure
 never mutates the evidence capture or its business target.
 
+Phase 1N defines Option B as the MVP completion rule. The request's pickup must be `COLLECTED`,
+belong to a `VALIDATED` handover item whose parent event is also `VALIDATED`, and have at least one
+pickup-linked capture. That specific validated handover must independently have at least one
+handover-linked capture. Historical rejected handovers and open or historical pickup incidents do
+not block completion. `MediaAsset` existence, type, and upload state are irrelevant to sufficiency.
+Eligible requests transition independently from `PLANNED` to `COMPLETED`; sibling requests,
+assignment status, and media finalization are not prerequisites.
+
 ### Reliability infrastructure
 
 - `idempotency_record`
@@ -321,9 +329,11 @@ geofence + receiving-point validation
     ↓
 VALIDATED
     ↓
-accepted evidence capture facts + sufficiency policy (future phase)
+accepted evidence capture facts
     ↓
-CollectionRequest COMPLETED (future phase)
+Option B: >= 1 pickup capture and >= 1 validated-handover capture
+    ↓
+CollectionRequest COMPLETED
 ```
 
 ## Deliberately open decisions
