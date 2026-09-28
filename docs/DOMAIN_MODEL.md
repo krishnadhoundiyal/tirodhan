@@ -166,6 +166,14 @@ Handover evidence requires the event's rider and is permitted for both validated
 attempts. Media storage, content validation, sufficiency rules, completion, and outbox events are
 not part of Phase 1L.
 
+Phase 1M gives each `EvidenceCapture` zero or one original `MediaAsset`. Registration preserves a
+client media ID and an opaque server-generated `media/<media_asset_id>` object key. The asset is a
+`PHOTO` or `VIDEO` and is either `PENDING_UPLOAD` or `FINALIZED`. Finalization means only that the
+provider-neutral storage inspection found the expected key with a matching declared/stored content
+type and a size within configured policy. It does not establish semantic content validity,
+evidence sufficiency, or fulfilment completion. Upload authorization is transient; storage failure
+never mutates the evidence capture or its business target.
+
 ### Reliability infrastructure
 
 - `idempotency_record`
@@ -225,7 +233,7 @@ erDiagram
     RIDER_ASSIGNMENT ||--o{ PICKUP_INCIDENT : attributed_to
 
     APP_USER ||--o{ EVIDENCE_CAPTURE : captures
-    EVIDENCE_CAPTURE ||--o{ MEDIA_ASSET : may_later_contain
+    EVIDENCE_CAPTURE ||--o| MEDIA_ASSET : has_original
     PICKUP_EXECUTION ||--o{ PICKUP_EVIDENCE_LINK : evidenced_by
     EVIDENCE_CAPTURE ||--o| PICKUP_EVIDENCE_LINK : may_support
 

@@ -710,18 +710,33 @@ have multiple captures.
 ```text
 media_asset_id           uuid PK
 client_media_id          uuid NOT NULL UNIQUE
-evidence_capture_id      uuid FK -> evidence_capture
+evidence_capture_id      uuid NOT NULL UNIQUE FK -> evidence_capture
 media_type               varchar(16) NOT NULL
 object_key               varchar(...) NOT NULL UNIQUE
-content_type             varchar(...) NOT NULL
+expected_content_type    varchar(...) NOT NULL
+stored_content_type      varchar(...) NULL
 size_bytes               bigint NULL
-content_hash             bytea NULL
 upload_status            varchar(24) NOT NULL
 created_at               timestamptz NOT NULL
-uploaded_at              timestamptz NULL
+finalized_at             timestamptz NULL
 ```
 
-Object keys must be opaque and contain no PII.
+Required:
+
+```text
+media_type IN ('PHOTO', 'VIDEO')
+upload_status IN ('PENDING_UPLOAD', 'FINALIZED')
+size_bytes IS NULL OR size_bytes >= 0
+
+PENDING_UPLOAD => stored_content_type, size_bytes, finalized_at are all NULL
+FINALIZED => stored_content_type, size_bytes, finalized_at are all NOT NULL
+```
+
+One evidence capture has at most one original media asset. Object keys use the stable,
+server-generated `media/<media_asset_id>` form and contain no PII or client filename. Expected
+content type is the registration declaration; stored content type and size are authoritative only
+as storage-reported metadata captured during finalization. Phase 1M deliberately has no content
+hash or uploaded timestamp.
 
 ### `idempotency_record`
 
@@ -844,6 +859,17 @@ exactly one typed target link, and complete the idempotency record. It does not 
 handover, assignment, rider, or request, and it emits no outbox event. Media upload, evidence
 validation, sufficiency decisions, and request completion remain outside this transaction and this
 phase.
+
+### Media registration and finalization
+
+Registration atomically claims `(media.register, client_media_id)`, validates ownership of the
+immutable evidence capture, persists the pending asset and its stable object key, and completes the
+idempotency record. Upload authorization is external and ephemeral, so authorization failure does
+not roll back or delete the registered asset. Finalization reads ownership, closes the database
+session, inspects storage, validates configured content-type/size policy, then locks the media row
+in a new transaction for the conditional `PENDING_UPLOAD -> FINALIZED` transition. Object storage
+and PostgreSQL do not share a transaction; a database failure leaves the object in storage and the
+asset retryably pending. No evidence, fulfilment, request, or outbox state changes in either flow.
 
 ## PII representation
 
