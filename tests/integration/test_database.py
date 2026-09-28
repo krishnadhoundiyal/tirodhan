@@ -982,6 +982,160 @@ def test_phase_1k_migration_roundtrip_only_controls_handover_tables(
     assert handover_tables.issubset(asyncio.run(schema_state())[0])
 
 
+@pytest.mark.integration
+def test_phase_1l_migration_roundtrip_only_controls_evidence_capture_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    evidence_tables = {
+        "evidence_capture",
+        "pickup_evidence_link",
+        "handover_evidence_link",
+    }
+
+    async def schema_state() -> tuple[
+        set[str],
+        set[str],
+        dict[str, object],
+        dict[str, object],
+        dict[str, object],
+        set[tuple[tuple[str, ...], str]],
+        set[tuple[tuple[str, ...], str]],
+        set[tuple[tuple[str, ...], str]],
+    ]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "evidence_capture"
+                            )
+                        },
+                        sqlalchemy_inspect(sync_connection).get_pk_constraint("evidence_capture"),
+                        sqlalchemy_inspect(sync_connection).get_pk_constraint(
+                            "pickup_evidence_link"
+                        ),
+                        sqlalchemy_inspect(sync_connection).get_pk_constraint(
+                            "handover_evidence_link"
+                        ),
+                        {
+                            (tuple(constraint["column_names"]), "UNIQUE")
+                            for constraint in sqlalchemy_inspect(
+                                sync_connection
+                            ).get_unique_constraints("evidence_capture")
+                        }
+                        | {
+                            (
+                                tuple(constraint["constrained_columns"]),
+                                constraint["referred_table"],
+                            )
+                            for constraint in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "evidence_capture"
+                            )
+                        },
+                        {
+                            (
+                                tuple(constraint["constrained_columns"]),
+                                constraint["referred_table"],
+                            )
+                            for constraint in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "pickup_evidence_link"
+                            )
+                        }
+                        | {
+                            (
+                                tuple(constraint["column_names"]),
+                                "UNIQUE",
+                            )
+                            for constraint in sqlalchemy_inspect(
+                                sync_connection
+                            ).get_unique_constraints("pickup_evidence_link")
+                        },
+                        {
+                            (
+                                tuple(constraint["constrained_columns"]),
+                                constraint["referred_table"],
+                            )
+                            for constraint in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "handover_evidence_link"
+                            )
+                        }
+                        | {
+                            (
+                                tuple(constraint["column_names"]),
+                                "UNIQUE",
+                            )
+                            for constraint in sqlalchemy_inspect(
+                                sync_connection
+                            ).get_unique_constraints("handover_evidence_link")
+                        },
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    (
+        tables,
+        capture_columns,
+        capture_pk,
+        pickup_pk,
+        handover_pk,
+        capture_constraints,
+        pickup_constraints,
+        handover_constraints,
+    ) = asyncio.run(schema_state())
+    assert evidence_tables.issubset(tables)
+    assert "media_asset" not in tables
+    assert capture_columns == {
+        "evidence_capture_id",
+        "client_capture_id",
+        "captured_by_user_id",
+        "captured_at",
+        "created_at",
+    }
+    assert {"status", "validated_at", "evidence_type", "capture_location"}.isdisjoint(
+        capture_columns
+    )
+    assert capture_pk["constrained_columns"] == ["evidence_capture_id"]
+    assert pickup_pk["constrained_columns"] == [
+        "pickup_execution_id",
+        "evidence_capture_id",
+    ]
+    assert handover_pk["constrained_columns"] == [
+        "handover_event_id",
+        "evidence_capture_id",
+    ]
+    assert capture_constraints == {
+        (("client_capture_id",), "UNIQUE"),
+        (("captured_by_user_id",), "app_user"),
+    }
+    assert pickup_constraints == {
+        (("pickup_execution_id",), "pickup_execution"),
+        (("evidence_capture_id",), "evidence_capture"),
+        (("evidence_capture_id",), "UNIQUE"),
+    }
+    assert handover_constraints == {
+        (("handover_event_id",), "handover_event"),
+        (("evidence_capture_id",), "evidence_capture"),
+        (("evidence_capture_id",), "UNIQUE"),
+    }
+
+    command.downgrade(configuration, "0011_receiving_point_handover")
+    downgraded_tables = asyncio.run(_table_names_for_database(database_url))
+    assert evidence_tables.isdisjoint(downgraded_tables)
+    assert {"pickup_execution", "handover_event", "rider_assignment"}.issubset(downgraded_tables)
+
+    command.upgrade(configuration, "head")
+    assert evidence_tables.issubset(asyncio.run(schema_state())[0])
+
+
 async def _table_names_for_database(database_url: str) -> set[str]:
     engine = create_async_engine(database_url)
     try:

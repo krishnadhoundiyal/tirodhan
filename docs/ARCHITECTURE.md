@@ -484,6 +484,16 @@ Requirements:
 - pending media remains app-private on the device and retries later;
 - Blob lifecycle policy controls tiering/retention.
 
+Phase 1L implements only the accepted local-capture business fact. `EvidenceCapture` contains the
+client-generated capture ID, capturing application user, client-claimed capture time, and server
+registration time. It has exactly one real-FK link to either a collected `PickupExecution` or an
+existing `HandoverEvent`; multiple distinct captures may link to the same target. Pickup evidence
+requires historical unreleased assignment attribution to the collecting rider. Handover evidence
+requires the event's rider and is allowed for both `VALIDATED` and `REJECTED` handover attempts.
+This slice has no capture status, validation timestamp, evidence type, capture location,
+`MediaAsset`, request completion, outbox event, or HTTP endpoint. Media persistence and evidence
+sufficiency remain independent future lifecycles.
+
 ## 14. Receiving point and handover
 
 Government/authorized kiosks/centres are represented as mutable `ReceivingPoint` master data.

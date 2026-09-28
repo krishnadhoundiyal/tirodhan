@@ -156,6 +156,16 @@ availability state. Evidence validation and collection-request completion remain
 
 Evidence capture is the business event. Media asset is the stored file metadata. Blob upload state is separate from fulfilment state.
 
+In Phase 1L, existence of `EvidenceCapture` means only that a trusted client registered completion
+of the local in-app capture action. The capture is immutable and has no status, validation time,
+evidence type, or location. `captured_at` is the client-claimed capture time normalized to UTC;
+`created_at` is the authoritative server registration time. Exactly one pickup or handover link is
+created atomically, while multiple distinct captures remain allowed per target. Pickup evidence
+requires a `COLLECTED` pickup and historical unreleased assignment attribution to the actor.
+Handover evidence requires the event's rider and is permitted for both validated and rejected
+attempts. Media storage, content validation, sufficiency rules, completion, and outbox events are
+not part of Phase 1L.
+
 ### Reliability infrastructure
 
 - `idempotency_record`
@@ -214,9 +224,10 @@ erDiagram
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
     RIDER_ASSIGNMENT ||--o{ PICKUP_INCIDENT : attributed_to
 
-    EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains
+    APP_USER ||--o{ EVIDENCE_CAPTURE : captures
+    EVIDENCE_CAPTURE ||--o{ MEDIA_ASSET : may_later_contain
     PICKUP_EXECUTION ||--o{ PICKUP_EVIDENCE_LINK : evidenced_by
-    EVIDENCE_CAPTURE ||--o{ PICKUP_EVIDENCE_LINK : supports
+    EVIDENCE_CAPTURE ||--o| PICKUP_EVIDENCE_LINK : may_support
 
     RECEIVING_POINT ||--o{ HANDOVER_EVENT : receives
     RIDER_PROFILE ||--o{ HANDOVER_EVENT : performs
@@ -224,8 +235,12 @@ erDiagram
     PICKUP_EXECUTION ||--o{ HANDOVER_EVENT_ITEM : handed_over_by
 
     HANDOVER_EVENT ||--o{ HANDOVER_EVIDENCE_LINK : evidenced_by
-    EVIDENCE_CAPTURE ||--o{ HANDOVER_EVIDENCE_LINK : supports
+    EVIDENCE_CAPTURE ||--o| HANDOVER_EVIDENCE_LINK : may_support
 ```
+
+Phase 1L enforces in the transaction-owned service that each EvidenceCapture has exactly one of
+the two optional link relationships shown above. The link tables each enforce at most one row per
+capture; no polymorphic target columns or cross-table trigger are used.
 
 ## Lifecycle summaries
 
@@ -298,7 +313,7 @@ geofence + receiving-point validation
     ↓
 VALIDATED
     ↓
-evidence validation (future phase)
+accepted evidence capture facts + sufficiency policy (future phase)
     ↓
 CollectionRequest COMPLETED (future phase)
 ```
