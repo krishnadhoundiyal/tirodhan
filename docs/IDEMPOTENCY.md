@@ -123,7 +123,7 @@ not distributed exactly-once execution.
 | Record pickup attempt | `(pickup_execution_id, client_attempt_id)` | unique client attempt and per-pickup attempt number | exact replay returns history; conflicting outcome is rejected; successful attempt and collection are atomic |
 | Open incident | client incident ID | unique constraint | retry returns same incident |
 | Resolve incident | incident + command | conditional transition | one durable resolution |
-| Register evidence capture | client capture ID | unique constraint | same capture maps to one record |
+| Register evidence capture | scope `evidence.capture` + client capture ID | idempotency record + unique client capture ID + unique capture link | same actor/target kind/target ID/UTC capture time replays the capture before current target validation; a changed field conflicts |
 | Register media asset | client media ID | unique constraint | same logical file maps to one asset |
 | Upload media | media asset/stable object key | object-key uniqueness | retry targets same logical object |
 | Finalize media | media asset + expected metadata/hash | conditional transition | replay safe; conflicting metadata rejected |
@@ -187,6 +187,16 @@ master or assignment state. A fresh command locks the receiving point and then p
 in UUID order. Those pickup locks serialize both competing valid handovers and collection versus
 handover; the partial unique validated-item index is the final database backstop. Rejected events
 remain durable but do not prevent a later command from validating the pickup.
+
+### Concurrent evidence capture registration
+
+The evidence-capture command claims `(evidence.capture, client_capture_id)` before fresh target
+validation. Its fingerprint contains the actor, target kind, target ID, and capture time normalized
+to UTC. Exact completed replay returns the recorded capture and link before consulting current pickup,
+handover, assignment, rider, or receiving-point state. Concurrent exact submissions converge on the
+same capture through command idempotency and `client_capture_id` uniqueness. Fresh registration uses
+ordinary reads because it records a new immutable fact without reserving or transitioning the target;
+the typed link and its unique capture constraint are the database backstop for exactly one target.
 
 ### Pickup incident and reassignment
 

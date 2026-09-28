@@ -676,30 +676,34 @@ A rejected handover may be followed by a later valid one.
 ```text
 evidence_capture_id      uuid PK
 client_capture_id        uuid NOT NULL UNIQUE
-captured_by_user_id      uuid FK -> app_user
-evidence_type            varchar(24) NOT NULL
+captured_by_user_id      uuid NOT NULL FK -> app_user
 captured_at              timestamptz NOT NULL
-capture_location         geography(Point,4326) NULL
-status                   varchar(24) NOT NULL
 created_at               timestamptz NOT NULL
-validated_at             timestamptz NULL
 ```
+
+Phase 1L records only the immutable business fact that an actor captured evidence at a client-supplied
+time. It intentionally does not add status, validation, evidence-type, or capture-location fields.
+Media storage and later evidence validation are separate future concerns.
 
 ### Evidence link tables
 
 ```text
 pickup_evidence_link
-  pickup_execution_id
-  evidence_capture_id
+  pickup_execution_id    uuid FK -> pickup_execution
+  evidence_capture_id    uuid FK -> evidence_capture
   PK(pickup_execution_id, evidence_capture_id)
+  UNIQUE(evidence_capture_id)
 
 handover_evidence_link
-  handover_event_id
-  evidence_capture_id
+  handover_event_id      uuid FK -> handover_event
+  evidence_capture_id    uuid FK -> evidence_capture
   PK(handover_event_id, evidence_capture_id)
+  UNIQUE(evidence_capture_id)
 ```
 
-Use real FKs rather than polymorphic `entity_type/entity_id` relationships.
+Use real FKs rather than polymorphic `entity_type/entity_id` relationships. Each evidence capture is
+linked to exactly one pickup execution or one handover event by the service transaction. A target may
+have multiple captures.
 
 ### `media_asset`
 
@@ -832,6 +836,14 @@ and collected pickups, persist the immutable handover event/items (including dur
 geofence outcomes), and complete the idempotency record. It does not yet validate evidence, move
 collection requests to `COMPLETED`, or write outbox events. Those later completion effects must
 share their own approved atomic boundary when implemented.
+
+### Evidence capture
+
+Phase 1L uses one transaction to claim command idempotency, persist one `evidence_capture`, persist
+exactly one typed target link, and complete the idempotency record. It does not mutate the pickup,
+handover, assignment, rider, or request, and it emits no outbox event. Media upload, evidence
+validation, sufficiency decisions, and request completion remain outside this transaction and this
+phase.
 
 ## PII representation
 

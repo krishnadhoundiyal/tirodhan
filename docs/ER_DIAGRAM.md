@@ -54,9 +54,10 @@ erDiagram
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
     RIDER_ASSIGNMENT ||--o{ PICKUP_INCIDENT : attributed_to
 
-    EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains
+    APP_USER ||--o{ EVIDENCE_CAPTURE : captures
+    EVIDENCE_CAPTURE ||--o{ MEDIA_ASSET : may_later_contain
     PICKUP_EXECUTION ||--o{ PICKUP_EVIDENCE_LINK : evidenced_by
-    EVIDENCE_CAPTURE ||--o{ PICKUP_EVIDENCE_LINK : supports
+    EVIDENCE_CAPTURE ||--o| PICKUP_EVIDENCE_LINK : may_support
 
     RECEIVING_POINT ||--o{ HANDOVER_EVENT : receives
     RIDER_PROFILE ||--o{ HANDOVER_EVENT : performs
@@ -64,8 +65,12 @@ erDiagram
     PICKUP_EXECUTION ||--o{ HANDOVER_EVENT_ITEM : handed_over_by
 
     HANDOVER_EVENT ||--o{ HANDOVER_EVIDENCE_LINK : evidenced_by
-    EVIDENCE_CAPTURE ||--o{ HANDOVER_EVIDENCE_LINK : supports
+    EVIDENCE_CAPTURE ||--o| HANDOVER_EVIDENCE_LINK : may_support
 ```
+
+Phase 1L creates exactly one pickup or handover link per EvidenceCapture through its
+transaction-owned service. Each link table has `UNIQUE(evidence_capture_id)`; no polymorphic target
+columns or cross-table trigger are used. MediaAsset remains a later, optional storage lifecycle.
 
 ## Cross-cutting reliability tables
 
