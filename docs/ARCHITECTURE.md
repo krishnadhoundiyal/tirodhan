@@ -414,7 +414,9 @@ the same PostgreSQL transaction and require an `ACTIVE`, `AVAILABLE`, `IDLE` rid
 assignment has no eligibility bypass. The rider-availability row serializes competing work for one
 rider, while a partial unique index permits only one `ACTIVE` assignment per group.
 `rider_assignment_item` is the current pickup-ownership authority. Offer expiry is determined by
-`expires_at`. Fleet selection and reassignment are deferred.
+`expires_at`. Terminal offers retain the assignment that resolved them, preserving replay after
+assignment completion. New initial-dispatch offers require the group pickup population to remain
+entirely `PENDING_ASSIGNMENT`. Fleet selection and reassignment are deferred.
 
 ## 12. Pickup execution and incidents
 
@@ -434,6 +436,15 @@ Examples of incidents:
 Possible human resolutions include retry, reassignment, cancellation, and cancellation+refund where applicable.
 
 Completed pickup facts are immutable.
+
+Phase 1I starts an assignment by setting `started_at` and moving its rider from `RESERVED` to
+`BUSY`; an `OFFLINE` availability intent does not block already-reserved work. Each immutable
+pickup attempt records its performing `rider_assignment_id` and an outcome of `COLLECTED` or
+`NOT_COLLECTED`. A successful attempt and the `ASSIGNED -> COLLECTED` transition share one
+transaction. Collecting the final unreleased pickup owned through `rider_assignment_item` changes
+the assignment from `ACTIVE` to `COMPLETED` and the rider from `BUSY` to `IDLE`, without releasing
+assignment items or changing availability intent. Incidents and reassignment remain deferred, and
+this phase emits no pickup-lifecycle outbox events.
 
 MVP human support:
 

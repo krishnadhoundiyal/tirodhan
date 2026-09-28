@@ -155,10 +155,11 @@ async def create_assignment_offer(
                     "offer business key already has a different expiry"
                 )
             return existing
-        offered_at = now or utc_now()
-        _require_offer_window(offer_round, expires_at, offered_at)
         if await _active_assignment(session, collection_group_id) is not None:
             raise GroupAlreadyAssignedError("collection group already has an active assignment")
+        await _require_initial_dispatch_population(session, collection_group_id)
+        offered_at = now or utc_now()
+        _require_offer_window(offer_round, expires_at, offered_at)
         await _lock_eligible_rider(session, rider_id)
         offer = AssignmentOffer(
             offer_id=new_uuid7(),
@@ -239,10 +240,11 @@ async def _assign_group_to_rider(
 ) -> RiderAssignment:
     await _lock_group(session, collection_group_id)
     established = await _active_assignment(session, collection_group_id, lock=True)
-    if established is not None and established.rider_id != rider_id:
-        raise GroupAlreadyAssignedError("collection group is assigned to another rider")
-    if established is not None and offer_id is None:
-        return established
+    if offer_id is None:
+        if established is not None and established.rider_id != rider_id:
+            raise GroupAlreadyAssignedError("collection group is assigned to another rider")
+        if established is not None:
+            return established
 
     profile, availability = await _lock_rider(session, rider_id)
     offer: AssignmentOffer | None = None
@@ -254,11 +256,34 @@ async def _assign_group_to_rider(
             raise AssignmentOfferNotFoundError("assignment offer not found")
         if offer.collection_group_id != collection_group_id or offer.rider_id != rider_id:
             raise AssignmentOfferConflictError("assignment offer identity changed")
-        if established is not None:
-            if offer.status in {OFFER_ACCEPTED, OFFER_CLOSED_LOST}:
-                return established
+        if offer.status == OFFER_OPEN and offer.resolved_assignment_id is not None:
             raise AssignmentStateInconsistentError(
-                "active assignment is not represented by accepted offer"
+                "open assignment offer has a resolving assignment"
+            )
+        if offer.resolved_assignment_id is not None:
+            resolved = await _lock_assignment(session, offer.resolved_assignment_id)
+            if resolved.collection_group_id != offer.collection_group_id:
+                raise AssignmentStateInconsistentError(
+                    "offer resolving assignment belongs to another group"
+                )
+            if offer.status == OFFER_ACCEPTED:
+                if resolved.rider_id != offer.rider_id:
+                    raise AssignmentStateInconsistentError(
+                        "accepted offer resolving assignment belongs to another rider"
+                    )
+                return resolved
+            if offer.status == OFFER_CLOSED_LOST:
+                if resolved.rider_id == offer.rider_id:
+                    return resolved
+                raise GroupAlreadyAssignedError("assignment offer lost to another rider")
+            raise AssignmentStateInconsistentError(
+                "assignment offer resolution link has unsupported status"
+            )
+        if established is not None:
+            if established.rider_id != rider_id:
+                raise GroupAlreadyAssignedError("collection group is assigned to another rider")
+            raise AssignmentStateInconsistentError(
+                "open assignment offer exists beside an active same-rider assignment"
             )
 
     assignment_time = now or utc_now()
@@ -354,6 +379,7 @@ async def _assign_group_to_rider(
     if offer is not None:
         offer.status = OFFER_ACCEPTED
         offer.responded_at = assignment_time
+        offer.resolved_assignment_id = assignment.assignment_id
         await session.execute(
             update(AssignmentOffer)
             .where(
@@ -361,7 +387,10 @@ async def _assign_group_to_rider(
                 AssignmentOffer.offer_id != offer.offer_id,
                 AssignmentOffer.status == OFFER_OPEN,
             )
-            .values(status=OFFER_CLOSED_LOST)
+            .values(
+                status=OFFER_CLOSED_LOST,
+                resolved_assignment_id=assignment.assignment_id,
+            )
         )
     else:
         await session.execute(
@@ -370,7 +399,10 @@ async def _assign_group_to_rider(
                 AssignmentOffer.collection_group_id == collection_group_id,
                 AssignmentOffer.status == OFFER_OPEN,
             )
-            .values(status=OFFER_CLOSED_LOST)
+            .values(
+                status=OFFER_CLOSED_LOST,
+                resolved_assignment_id=assignment.assignment_id,
+            )
         )
 
     await append_outbox_event(
@@ -397,6 +429,33 @@ async def _lock_group(session: AsyncSession, group_id: UUID) -> CollectionGroup:
     if group is None:
         raise CollectionGroupNotFoundError("collection group not found")
     return group
+
+
+async def _lock_assignment(session: AsyncSession, assignment_id: UUID) -> RiderAssignment:
+    assignment = await session.scalar(
+        select(RiderAssignment)
+        .where(RiderAssignment.assignment_id == assignment_id)
+        .with_for_update()
+    )
+    if assignment is None:
+        raise AssignmentStateInconsistentError("offer resolving assignment is missing")
+    return assignment
+
+
+async def _require_initial_dispatch_population(
+    session: AsyncSession, collection_group_id: UUID
+) -> None:
+    statuses = tuple(
+        await session.scalars(
+            select(PickupExecution.status).where(
+                PickupExecution.collection_group_id == collection_group_id
+            )
+        )
+    )
+    if not statuses or any(status != PICKUP_PENDING_ASSIGNMENT for status in statuses):
+        raise PickupGroupNotAssignableError(
+            "new offers require an entirely PENDING_ASSIGNMENT group"
+        )
 
 
 async def _active_assignment(

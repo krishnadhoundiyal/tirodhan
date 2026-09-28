@@ -120,8 +120,7 @@ not distributed exactly-once execution.
 | Manual assignment | manager command + group | assignment constraints | double-click cannot double assign |
 | Reassignment | predecessor assignment + command | assignment history + idempotency record | one successor assignment |
 | Create pickup execution | request ID | `UNIQUE(request_id)` | exactly one logical pickup execution |
-| Create pickup attempt | client attempt ID | unique client attempt | mobile/offline retry does not duplicate history |
-| Mark collected | pickup execution + command | conditional state transition | completion happens once |
+| Record pickup attempt | `(pickup_execution_id, client_attempt_id)` | unique client attempt and per-pickup attempt number | exact replay returns history; conflicting outcome is rejected; successful attempt and collection are atomic |
 | Open incident | client incident ID | unique constraint | retry returns same incident |
 | Resolve incident | incident + command | conditional transition | one durable resolution |
 | Register evidence capture | client capture ID | unique constraint | same capture maps to one record |
@@ -166,6 +165,18 @@ availability, offer when present, and finally group pickups in identifier order.
 replays on `(collection_group_id, rider_id, offer_round)` only when the requested expiry matches.
 Accepted-offer and same-rider manual retries return the established active assignment. The group
 partial unique index and unreleased-pickup partial unique index remain physical backstops.
+From Phase 1I, terminal offers retain `resolved_assignment_id`, so accepted-offer replay and the
+same-rider manager-won convergence remain valid after that assignment becomes `COMPLETED`.
+Creation of a genuinely new initial offer additionally requires a nonempty group whose entire
+pickup population remains `PENDING_ASSIGNMENT`; existing offer-key replay is checked first.
+
+### Concurrent pickup attempts
+
+Phase 1I locks the rider assignment before rider availability, pickup execution, and current
+assignment item. This serializes attempt-number allocation and final-pickup completion for all
+work owned by an assignment. Exact `(pickup_execution_id, client_attempt_id)` replay is checked
+immediately after locking the historical assignment, so it remains valid after pickup and
+assignment completion. Different attempts cannot mutate an already-collected pickup.
 
 ### Concurrent refunds
 

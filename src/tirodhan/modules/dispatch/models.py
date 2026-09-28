@@ -98,6 +98,9 @@ class AssignmentOffer(Base):
     rider_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), ForeignKey("rider_profile.rider_id"), nullable=False
     )
+    resolved_assignment_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("rider_assignment.assignment_id"), nullable=True
+    )
     offer_round: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     offered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -108,7 +111,7 @@ class AssignmentOffer(Base):
 class RiderAssignment(Base):
     __tablename__ = "rider_assignment"
     __table_args__ = (
-        CheckConstraint("status = 'ACTIVE'", name="ck_rider_assignment_status"),
+        CheckConstraint("status IN ('ACTIVE', 'COMPLETED')", name="ck_rider_assignment_status"),
         CheckConstraint(
             "source IN ('RIDER_OFFER_ACCEPTED', 'MANAGER_ASSIGNED')",
             name="ck_rider_assignment_source",

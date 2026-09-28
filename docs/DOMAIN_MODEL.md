@@ -115,6 +115,14 @@ and reassignment remain deferred.
 
 A `pickup_execution` is created for a planned request and remains the stable per-household fulfilment object. Before planning, a collection request has no PickupExecution. Assignment may change over time, but completed pickups are immutable and only outstanding work is reassigned.
 
+Phase 1I persists pickup execution as `PENDING_ASSIGNMENT`, `ASSIGNED`, or `COLLECTED` and rider
+assignment as `ACTIVE` or `COMPLETED`. Assignment start is represented by `started_at` and moves
+the rider from `RESERVED` to `BUSY`, including when future availability intent is `OFFLINE`.
+Immutable pickup attempts are attributed to the performing rider assignment and record only
+`COLLECTED` or `NOT_COLLECTED`. The final collected pickup still owned by an assignment completes
+that assignment and returns its rider to `IDLE`; normal completion does not release assignment
+items. Incident and reassignment semantics remain deferred.
+
 ### Receiving point and handover
 
 - `receiving_point`
@@ -186,6 +194,7 @@ erDiagram
     PICKUP_EXECUTION ||--o{ RIDER_ASSIGNMENT_ITEM : assigned_through
 
     PICKUP_EXECUTION ||--o{ PICKUP_ATTEMPT : attempted
+    RIDER_ASSIGNMENT ||--o{ PICKUP_ATTEMPT : performed_under
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
 
     EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains

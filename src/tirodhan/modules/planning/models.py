@@ -114,7 +114,13 @@ class CollectionGroupMember(Base):
 
 class PickupExecution(Base):
     __tablename__ = "pickup_execution"
-    __table_args__ = (Index("ix_pickup_execution_collection_group_id", "collection_group_id"),)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING_ASSIGNMENT', 'ASSIGNED', 'COLLECTED')",
+            name="ck_pickup_execution_status",
+        ),
+        Index("ix_pickup_execution_collection_group_id", "collection_group_id"),
+    )
 
     pickup_execution_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7

@@ -412,6 +412,8 @@ completed_at              timestamptz NULL
 updated_at                timestamptz NOT NULL
 ```
 
+Phase 1I status vocabulary is `PENDING_ASSIGNMENT`, `ASSIGNED`, and `COLLECTED`.
+
 ### `rider_profile`
 
 ```text
@@ -472,6 +474,7 @@ serialization boundary, and every mutation increments `version`.
 offer_id                   uuid PK
 collection_group_id        uuid FK -> collection_group
 rider_id                   uuid FK -> rider_profile
+resolved_assignment_id     uuid NULL FK -> rider_assignment
 offer_round                integer NOT NULL
 status                     varchar(24) NOT NULL
 offered_at                 timestamptz NOT NULL
@@ -486,7 +489,9 @@ UNIQUE(collection_group_id, rider_id, offer_round)
 ```
 
 Phase 1H offer status is `OPEN`, `ACCEPTED`, or `CLOSED_LOST`. The timestamp, not an expiry
-status, determines whether an open offer remains live.
+status, determines whether an open offer remains live. From Phase 1I,
+`resolved_assignment_id` records the assignment that resolved an `ACCEPTED` or `CLOSED_LOST`
+offer. It is nullable for open and historically inconsistent pre-linkage offers.
 
 ### `rider_assignment`
 
@@ -504,9 +509,10 @@ started_at                  timestamptz NULL
 completed_at                timestamptz NULL
 ```
 
-Phase 1H assignment status is only `ACTIVE`; source is `RIDER_OFFER_ACCEPTED` or
-`MANAGER_ASSIGNED`. Required business invariant: at most one active assignment per collection
-group, implemented as `UNIQUE(collection_group_id) WHERE status = 'ACTIVE'`.
+Phase 1I assignment status is `ACTIVE` or `COMPLETED`; source remains
+`RIDER_OFFER_ACCEPTED` or `MANAGER_ASSIGNED`. `started_at` represents execution start. Required
+business invariant: at most one active assignment per collection group, implemented as
+`UNIQUE(collection_group_id) WHERE status = 'ACTIVE'`.
 
 ### `rider_assignment_item`
 
@@ -534,6 +540,7 @@ stage only. Fleet assignment and item release/reassignment are deferred.
 ```text
 pickup_attempt_id          uuid PK
 pickup_execution_id        uuid FK -> pickup_execution
+rider_assignment_id        uuid NOT NULL FK -> rider_assignment
 client_attempt_id          uuid NOT NULL
 attempt_number             integer NOT NULL
 outcome                    varchar(40) NOT NULL
@@ -546,7 +553,14 @@ Required:
 ```text
 UNIQUE(pickup_execution_id, client_attempt_id)
 UNIQUE(pickup_execution_id, attempt_number)
+attempt_number > 0
+outcome IN ('COLLECTED', 'NOT_COLLECTED')
 ```
+
+A successful `COLLECTED` attempt and its pickup transition are one transaction. Final assignment
+completion is based on unreleased `rider_assignment_item` ownership, not collection-group
+population. Normal collection leaves assignment items unreleased. Phase 1I creates no outbox
+event.
 
 ### `pickup_incident`
 

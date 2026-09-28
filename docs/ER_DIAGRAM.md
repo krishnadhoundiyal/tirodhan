@@ -50,6 +50,7 @@ erDiagram
     PICKUP_EXECUTION ||--o{ RIDER_ASSIGNMENT_ITEM : assigned_through
 
     PICKUP_EXECUTION ||--o{ PICKUP_ATTEMPT : attempted
+    RIDER_ASSIGNMENT ||--o{ PICKUP_ATTEMPT : performed_under
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
 
     EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains
