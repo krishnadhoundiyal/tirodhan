@@ -812,6 +812,188 @@ def test_phase_1j_migration_preserves_reassignment_history_on_lossy_downgrade(
 
 
 @pytest.mark.integration
+def test_phase_1k_migration_roundtrip_only_controls_handover_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    handover_tables = {"receiving_point", "handover_event", "handover_event_item"}
+
+    async def schema_state() -> tuple[
+        set[str],
+        set[str],
+        set[str],
+        set[str],
+        set[str],
+        set[str],
+        set[str],
+        str,
+        str,
+    ]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                (
+                    tables,
+                    event_columns,
+                    item_columns,
+                    event_fks,
+                    item_fks,
+                ) = await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "handover_event"
+                            )
+                        },
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "handover_event_item"
+                            )
+                        },
+                        {
+                            foreign_key["referred_table"]
+                            for foreign_key in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "handover_event"
+                            )
+                        },
+                        {
+                            foreign_key["referred_table"]
+                            for foreign_key in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "handover_event_item"
+                            )
+                        },
+                    )
+                )
+                check_names = {
+                    row.name
+                    for row in await connection.execute(
+                        text(
+                            "SELECT conname AS name FROM pg_constraint "
+                            "WHERE conrelid IN ("
+                            "'receiving_point'::regclass, 'handover_event'::regclass, "
+                            "'handover_event_item'::regclass) AND contype = 'c'"
+                        )
+                    )
+                }
+                unique_names = {
+                    row.name
+                    for row in await connection.execute(
+                        text(
+                            "SELECT conname AS name FROM pg_constraint "
+                            "WHERE conrelid = 'handover_event'::regclass AND contype = 'u'"
+                        )
+                    )
+                }
+                index_definition = str(
+                    await connection.scalar(
+                        text(
+                            "SELECT indexdef FROM pg_indexes "
+                            "WHERE indexname = 'ix_receiving_point_location_gist'"
+                        )
+                    )
+                )
+                item_index_definition = str(
+                    await connection.scalar(
+                        text(
+                            "SELECT indexdef FROM pg_indexes "
+                            "WHERE indexname = "
+                            "'uq_handover_event_item_validated_pickup'"
+                        )
+                    )
+                )
+                return (
+                    tables,
+                    event_columns,
+                    item_columns,
+                    event_fks,
+                    item_fks,
+                    check_names,
+                    unique_names,
+                    index_definition,
+                    item_index_definition,
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    (
+        tables,
+        event_columns,
+        item_columns,
+        event_fks,
+        item_fks,
+        checks,
+        unique_constraints,
+        receiving_point_index,
+        validated_pickup_index,
+    ) = asyncio.run(schema_state())
+    assert handover_tables.issubset(tables)
+    assert event_columns == {
+        "handover_event_id",
+        "client_handover_id",
+        "rider_id",
+        "receiving_point_id",
+        "occurred_at",
+        "observed_location",
+        "receiving_point_location_snapshot",
+        "allowed_radius_m_snapshot",
+        "distance_m",
+        "status",
+        "validation_code",
+        "created_at",
+        "evaluated_at",
+    }
+    assert item_columns == {
+        "handover_event_id",
+        "pickup_execution_id",
+        "status",
+        "created_at",
+        "evaluated_at",
+    }
+    assert event_fks == {"rider_profile", "receiving_point"}
+    assert item_fks == {"handover_event", "pickup_execution"}
+    assert {
+        "ck_receiving_point_status",
+        "ck_receiving_point_positive_allowed_radius",
+        "ck_receiving_point_positive_version",
+        "ck_handover_event_status",
+        "ck_handover_event_validation_code",
+        "ck_handover_event_validation_consistency",
+        "ck_handover_event_positive_radius_snapshot",
+        "ck_handover_event_nonnegative_distance",
+        "ck_handover_event_item_status",
+    }.issubset(checks)
+    assert "uq_handover_event_client_handover" in unique_constraints
+    assert "USING gist" in receiving_point_index
+    assert "UNIQUE INDEX" in validated_pickup_index
+    assert "WHERE ((status)::text = 'VALIDATED'::text)" in validated_pickup_index
+
+    command.downgrade(configuration, "0010_pickup_incident_reassign")
+    downgraded_tables = asyncio.run(_table_names_for_database(database_url))
+    assert handover_tables.isdisjoint(downgraded_tables)
+    assert {"pickup_incident", "pickup_attempt", "rider_assignment"}.issubset(downgraded_tables)
+
+    command.upgrade(configuration, "head")
+    assert handover_tables.issubset(asyncio.run(schema_state())[0])
+
+
+async def _table_names_for_database(database_url: str) -> set[str]:
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as connection:
+            return await connection.run_sync(
+                lambda sync_connection: set(sqlalchemy_inspect(sync_connection).get_table_names())
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,

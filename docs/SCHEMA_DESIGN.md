@@ -612,7 +612,14 @@ created_at              timestamptz NOT NULL
 updated_at              timestamptz NOT NULL
 ```
 
-Required spatial index: `GiST(location)`.
+Required:
+
+```text
+allowed_radius_m > 0
+version > 0
+status IN ('ACTIVE', 'INACTIVE')
+GiST(location)
+```
 
 ### `handover_event`
 
@@ -625,11 +632,23 @@ occurred_at                        timestamptz NOT NULL
 observed_location                  geography(Point,4326) NOT NULL
 receiving_point_location_snapshot  geography(Point,4326) NOT NULL
 allowed_radius_m_snapshot          integer NOT NULL
-distance_m                         numeric(...) NULL
+distance_m                         double precision NOT NULL
 status                             varchar(24) NOT NULL
-validation_code                    varchar(64) NULL
+validation_code                    varchar(64) NOT NULL
 created_at                         timestamptz NOT NULL
-validated_at                       timestamptz NULL
+evaluated_at                       timestamptz NOT NULL
+```
+
+Required:
+
+```text
+UNIQUE(client_handover_id)
+allowed_radius_m_snapshot > 0
+distance_m >= 0
+status IN ('VALIDATED', 'REJECTED')
+validation_code IN ('WITHIN_ALLOWED_RADIUS', 'OUTSIDE_ALLOWED_RADIUS')
+status = VALIDATED iff validation_code = WITHIN_ALLOWED_RADIUS
+status = REJECTED iff validation_code = OUTSIDE_ALLOWED_RADIUS
 ```
 
 ### `handover_event_item`
@@ -639,13 +658,14 @@ handover_event_id        uuid FK -> handover_event
 pickup_execution_id      uuid FK -> pickup_execution
 status                   varchar(24) NOT NULL
 created_at               timestamptz NOT NULL
-validated_at             timestamptz NULL
+evaluated_at             timestamptz NOT NULL
 PK(handover_event_id, pickup_execution_id)
 ```
 
 Required:
 
 ```text
+status IN ('VALIDATED', 'REJECTED')
 UNIQUE(pickup_execution_id) WHERE status = 'VALIDATED'
 ```
 
@@ -807,7 +827,11 @@ new column; re-upgrade does not reconstruct the lost status distinction.
 
 ### Handover completion
 
-One transaction validates the receiving point/evidence and collected pickups, marks the handover/items validated, moves associated collection requests to `COMPLETED`, and writes completion outbox events.
+Phase 1K uses one transaction to claim command idempotency, lock and validate the receiving point
+and collected pickups, persist the immutable handover event/items (including durable rejected
+geofence outcomes), and complete the idempotency record. It does not yet validate evidence, move
+collection requests to `COMPLETED`, or write outbox events. Those later completion effects must
+share their own approved atomic boundary when implemented.
 
 ## PII representation
 

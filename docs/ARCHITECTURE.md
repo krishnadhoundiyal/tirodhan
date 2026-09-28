@@ -512,6 +512,15 @@ A CollectionRequest reaches `COMPLETED` after its collected material is associat
 
 Blob upload may still complete asynchronously according to the evidence policy.
 
+Phase 1K persists the receiving-point master and immutable handover validation basis only. The
+transport-neutral `record_handover` command snapshots the locked receiving-point location and
+radius, evaluates the observed point with PostGIS geography predicates, and records either a
+`VALIDATED` or durable `REJECTED` event with item rows. It accepts collected pickups attributed to
+the supplied rider through unreleased historical assignment items, regardless of whether those
+assignments are `ACTIVE`, `COMPLETED`, or `SUPERSEDED`. Sorted pickup row locks and a partial unique
+validated-item index serialize competing handovers. This slice does not create evidence, complete
+collection requests, emit outbox events, or expose an HTTP endpoint.
+
 ## 15. Workload identity and secrets
 
 For Azure-hosted workloads:
