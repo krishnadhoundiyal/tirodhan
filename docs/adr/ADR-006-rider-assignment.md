@@ -55,6 +55,13 @@ ownership; the rider-availability row serializes assignment of one rider; unrele
 `rider_assignment_item` rows are authoritative for pickup ownership. Offer expiry remains
 timestamp-based. Fleet persistence and reassignment semantics are deferred.
 
+For Phase 1I, assignment start is recorded by `started_at` and moves rider work state
+`RESERVED -> BUSY`; `OFFLINE` intent does not cancel existing work. Pickup attempts retain the
+performing assignment identity. A successful attempt atomically marks its pickup `COLLECTED`.
+When every unreleased pickup owned by the assignment is collected, the assignment becomes
+`COMPLETED` and rider work state returns `BUSY -> IDLE` without changing intent or releasing
+assignment items. Incidents and reassignment remain deferred.
+
 ## Possible exception resolutions
 
 - retry;

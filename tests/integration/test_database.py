@@ -311,6 +311,78 @@ def test_phase_1h_migration_roundtrip_only_controls_dispatch_tables(
 
 
 @pytest.mark.integration
+def test_phase_1i_migration_roundtrip_restores_lifecycle_constraints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+
+    async def schema_state() -> tuple[set[str], dict[str, str], dict[str, str]]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                tables = await connection.run_sync(
+                    lambda sync_connection: set(
+                        sqlalchemy_inspect(sync_connection).get_table_names()
+                    )
+                )
+                assignment_constraints = dict(
+                    (
+                        row.name,
+                        row.definition,
+                    )
+                    for row in (
+                        await connection.execute(
+                            text(
+                                "SELECT conname AS name, pg_get_constraintdef(oid) AS definition "
+                                "FROM pg_constraint "
+                                "WHERE conrelid = 'rider_assignment'::regclass"
+                            )
+                        )
+                    )
+                )
+                pickup_constraints = dict(
+                    (
+                        row.name,
+                        row.definition,
+                    )
+                    for row in (
+                        await connection.execute(
+                            text(
+                                "SELECT conname AS name, pg_get_constraintdef(oid) AS definition "
+                                "FROM pg_constraint "
+                                "WHERE conrelid = 'pickup_execution'::regclass"
+                            )
+                        )
+                    )
+                )
+                return tables, assignment_constraints, pickup_constraints
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    assert "pickup_attempt" in tables
+    assert "COMPLETED" in assignment_constraints["ck_rider_assignment_status"]
+    assert "COLLECTED" in pickup_constraints["ck_pickup_execution_status"]
+
+    command.downgrade(configuration, "0008_rider_dispatch_assignment")
+    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    assert "pickup_attempt" not in tables
+    assert "COMPLETED" not in assignment_constraints["ck_rider_assignment_status"]
+    assert "ACTIVE" in assignment_constraints["ck_rider_assignment_status"]
+    assert "ck_pickup_execution_status" not in pickup_constraints
+    assert {"rider_assignment", "rider_assignment_item", "pickup_execution"}.issubset(tables)
+
+    command.upgrade(configuration, "head")
+    tables, assignment_constraints, pickup_constraints = asyncio.run(schema_state())
+    assert "pickup_attempt" in tables
+    assert "COMPLETED" in assignment_constraints["ck_rider_assignment_status"]
+    assert "COLLECTED" in pickup_constraints["ck_pickup_execution_status"]
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,

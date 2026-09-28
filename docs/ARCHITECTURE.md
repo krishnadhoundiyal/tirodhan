@@ -435,6 +435,15 @@ Possible human resolutions include retry, reassignment, cancellation, and cancel
 
 Completed pickup facts are immutable.
 
+Phase 1I starts an assignment by setting `started_at` and moving its rider from `RESERVED` to
+`BUSY`; an `OFFLINE` availability intent does not block already-reserved work. Each immutable
+pickup attempt records its performing `rider_assignment_id` and an outcome of `COLLECTED` or
+`NOT_COLLECTED`. A successful attempt and the `ASSIGNED -> COLLECTED` transition share one
+transaction. Collecting the final unreleased pickup owned through `rider_assignment_item` changes
+the assignment from `ACTIVE` to `COMPLETED` and the rider from `BUSY` to `IDLE`, without releasing
+assignment items or changing availability intent. Incidents and reassignment remain deferred, and
+this phase emits no pickup-lifecycle outbox events.
+
 MVP human support:
 
 - no custom in-app chat;

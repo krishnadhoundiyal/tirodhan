@@ -108,7 +108,7 @@ class AssignmentOffer(Base):
 class RiderAssignment(Base):
     __tablename__ = "rider_assignment"
     __table_args__ = (
-        CheckConstraint("status = 'ACTIVE'", name="ck_rider_assignment_status"),
+        CheckConstraint("status IN ('ACTIVE', 'COMPLETED')", name="ck_rider_assignment_status"),
         CheckConstraint(
             "source IN ('RIDER_OFFER_ACCEPTED', 'MANAGER_ASSIGNED')",
             name="ck_rider_assignment_source",
