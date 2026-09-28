@@ -139,6 +139,14 @@ only Phase 1J resolution.
 
 A receiving point is mutable master data. A handover event is a historical business fact and may contain several collected pickups.
 
+Phase 1K receiving points are `ACTIVE` or `INACTIVE`. A handover snapshots the locked master
+location and allowed radius, records the observed location and PostGIS distance, and has an outcome
+of `VALIDATED`/`WITHIN_ALLOWED_RADIUS` or `REJECTED`/`OUTSIDE_ALLOWED_RADIUS`. Event and item
+timestamps use the single server evaluation instant. A rejected event does not consume the pickup;
+at most one item with `VALIDATED` status may exist for a pickup. Handover attribution follows the
+unreleased historical rider-assignment item and does not require current assignment or rider
+availability state. Evidence validation and collection-request completion remain later work.
+
 ### Evidence and media
 
 - `evidence_capture`
@@ -286,11 +294,13 @@ Collected pickups
     ↓
 HandoverEvent
     ↓
-geofence + receiving-point + evidence validation
+geofence + receiving-point validation
     ↓
 VALIDATED
     ↓
-CollectionRequest COMPLETED
+evidence validation (future phase)
+    ↓
+CollectionRequest COMPLETED (future phase)
 ```
 
 ## Deliberately open decisions

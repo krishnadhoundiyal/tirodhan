@@ -1,1 +1,1 @@
-"""Receiving-point and handover module boundary."""
+"""Receiving-point master data."""

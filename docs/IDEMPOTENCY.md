@@ -127,7 +127,7 @@ not distributed exactly-once execution.
 | Register media asset | client media ID | unique constraint | same logical file maps to one asset |
 | Upload media | media asset/stable object key | object-key uniqueness | retry targets same logical object |
 | Finalize media | media asset + expected metadata/hash | conditional transition | replay safe; conflicting metadata rejected |
-| Create handover | client handover ID | unique constraint | mobile retry creates one handover |
+| Create handover | scope `handover.record` + client handover ID | idempotency record + unique client ID + partial unique validated pickup | same fingerprint replays the event; changed rider/point/sorted pickups/observed coordinates conflicts; sorted pickup locks allow one validated winner while rejected history remains retryable under a new client ID |
 | Link pickup to handover | `(handover_id, pickup_execution_id)` | composite PK | duplicate link impossible |
 | Validate handover | handover + command | conditional state transition | one authoritative outcome |
 | Complete request | request terminal transition | conditional transition + validated-handover constraint | completes once |
@@ -177,6 +177,16 @@ assignment item. This serializes attempt-number allocation and final-pickup comp
 work owned by an assignment. Exact `(pickup_execution_id, client_attempt_id)` replay is checked
 immediately after locking the historical assignment, so it remains valid after pickup and
 assignment completion. Different attempts cannot mutate an already-collected pickup.
+
+### Concurrent handover recording
+
+The handover command claims `(handover.record, client_handover_id)` before domain validation. Its
+fingerprint contains rider, receiving point, canonically sorted pickup IDs, and explicit observed
+latitude/longitude. Exact completed replay returns the recorded event before consulting current
+master or assignment state. A fresh command locks the receiving point and then pickup executions
+in UUID order. Those pickup locks serialize both competing valid handovers and collection versus
+handover; the partial unique validated-item index is the final database backstop. Rejected events
+remain durable but do not prevent a later command from validating the pickup.
 
 ### Pickup incident and reassignment
 
