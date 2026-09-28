@@ -60,7 +60,14 @@ For Phase 1I, assignment start is recorded by `started_at` and moves rider work 
 performing assignment identity. A successful attempt atomically marks its pickup `COLLECTED`.
 When every unreleased pickup owned by the assignment is collected, the assignment becomes
 `COMPLETED` and rider work state returns `BUSY -> IDLE` without changing intent or releasing
-assignment items. Incidents and reassignment remain deferred.
+assignment items.
+
+Phase 1J adds terminal assignment status `SUPERSEDED` for a predecessor whose residual uncollected
+work moved to a manager-created successor. Collected work remains attached to the predecessor;
+only `ASSIGNED` items are released with reason `REASSIGNED` and recreated under the successor.
+The predecessor rider returns to `IDLE`, the eligible replacement becomes `RESERVED`, and optional
+incident resolution is atomic with transfer. Reassignment uses `idempotency_record`, emits no
+outbox event in this phase, and preserves both assignments and immutable pickup-attempt history.
 
 ## Possible exception resolutions
 

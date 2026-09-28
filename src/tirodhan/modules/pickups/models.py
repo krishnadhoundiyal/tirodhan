@@ -49,3 +49,51 @@ class PickupAttempt(Base):
     outcome: Mapped[str] = mapped_column(String(40), nullable=False)
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PickupIncident(Base):
+    __tablename__ = "pickup_incident"
+    __table_args__ = (
+        UniqueConstraint("client_incident_id", name="uq_pickup_incident_client_incident"),
+        CheckConstraint(
+            "reason_code IN ('CUSTOMER_UNAVAILABLE', 'ADDRESS_NOT_FOUND', "
+            "'ACCESS_BLOCKED', 'RIDER_UNABLE_TO_REACH', "
+            "'RIDER_UNABLE_TO_CONTINUE', 'OTHER')",
+            name="ck_pickup_incident_reason",
+        ),
+        CheckConstraint(
+            "status IN ('OPEN', 'RESOLVED')",
+            name="ck_pickup_incident_status",
+        ),
+        CheckConstraint(
+            "(status = 'OPEN' AND resolution_code IS NULL AND resolved_at IS NULL "
+            "AND resolved_by_user_id IS NULL) OR "
+            "(status = 'RESOLVED' AND resolution_code = 'REASSIGNED' "
+            "AND resolved_at IS NOT NULL AND resolved_by_user_id IS NOT NULL)",
+            name="ck_pickup_incident_lifecycle",
+        ),
+    )
+
+    incident_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    client_incident_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    pickup_execution_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("pickup_execution.pickup_execution_id"),
+        nullable=False,
+    )
+    rider_assignment_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("rider_assignment.assignment_id"),
+        nullable=False,
+    )
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    resolution_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("app_user.user_id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

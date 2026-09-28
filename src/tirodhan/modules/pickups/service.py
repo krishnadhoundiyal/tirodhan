@@ -20,6 +20,7 @@ from tirodhan.modules.planning.models import PickupExecution
 
 ASSIGNMENT_ACTIVE = "ACTIVE"
 ASSIGNMENT_COMPLETED = "COMPLETED"
+ASSIGNMENT_SUPERSEDED = "SUPERSEDED"
 RIDER_ACTIVE = "ACTIVE"
 WORK_RESERVED = "RESERVED"
 WORK_BUSY = "BUSY"
@@ -90,6 +91,16 @@ async def start_assignment(
             if assignment.started_at is None or assignment.completed_at is None:
                 raise AssignmentStateInconsistentError(
                     "completed assignment is missing lifecycle timestamps"
+                )
+            return assignment
+        if assignment.status == ASSIGNMENT_SUPERSEDED:
+            if assignment.superseded_at is None or assignment.completed_at is not None:
+                raise AssignmentStateInconsistentError(
+                    "superseded assignment has inconsistent lifecycle timestamps"
+                )
+            if assignment.started_at is None:
+                raise AssignmentNotStartableError(
+                    "superseded assignment was never successfully started"
                 )
             return assignment
         if assignment.status != ASSIGNMENT_ACTIVE:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timedelta
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -9,11 +11,14 @@ from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from test_rider_dispatch import create_fixture
 
 from tirodhan.core.config import Settings
-from tirodhan.db.values import new_uuid7
+from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.main import create_app
+from tirodhan.modules.dispatch.service import assign_group_manually
+from tirodhan.modules.operations.service import reassign_outstanding_work
 
 
 def get_test_database_url() -> str:
@@ -676,6 +681,134 @@ def test_phase_1i_downgrade_preserves_completed_assignment_history(
 
     command.upgrade(configuration, "head")
     assert "pickup_attempt" in asyncio.run(downgraded_state())[2]
+
+
+@pytest.mark.integration
+def test_phase_1j_migration_preserves_reassignment_history_on_lossy_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+
+    async def seed_reassignment() -> tuple[UUID, UUID, UUID, datetime]:
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            fixture = await create_fixture(factory, rider_count=2, pickups_per_group=2)
+            predecessor = await assign_group_manually(
+                factory,
+                collection_group_id=fixture.group_ids[0],
+                rider_id=fixture.rider_ids[0],
+                manager_user_id=fixture.manager_id,
+            )
+            superseded_at = utc_now().replace(microsecond=0)
+            successor = await reassign_outstanding_work(
+                factory,
+                predecessor_assignment_id=predecessor.assignment_id,
+                replacement_rider_id=fixture.rider_ids[1],
+                manager_user_id=fixture.manager_id,
+                client_reassignment_id=new_uuid7(),
+                idempotency_expires_at=superseded_at + timedelta(days=1),
+                now=superseded_at,
+            )
+            return (
+                predecessor.assignment_id,
+                successor.assignment_id,
+                fixture.pickup_ids[0][0],
+                superseded_at,
+            )
+        finally:
+            await engine.dispose()
+
+    async def schema_and_history(
+        predecessor_id: UUID, successor_id: UUID, pickup_id: UUID
+    ) -> tuple[set[str], set[str], str, datetime, str, datetime, UUID]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                tables, assignment_columns = await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "rider_assignment"
+                            )
+                        },
+                    )
+                )
+                predecessor = (
+                    await connection.execute(
+                        text(
+                            "SELECT status, completed_at FROM rider_assignment "
+                            "WHERE assignment_id = :assignment_id"
+                        ),
+                        {"assignment_id": predecessor_id},
+                    )
+                ).one()
+                successor_status = await connection.scalar(
+                    text(
+                        "SELECT status FROM rider_assignment WHERE assignment_id = :assignment_id"
+                    ),
+                    {"assignment_id": successor_id},
+                )
+                released_at = await connection.scalar(
+                    text(
+                        "SELECT released_at FROM rider_assignment_item "
+                        "WHERE assignment_id = :assignment_id "
+                        "AND pickup_execution_id = :pickup_id"
+                    ),
+                    {"assignment_id": predecessor_id, "pickup_id": pickup_id},
+                )
+                successor_item = await connection.scalar(
+                    text(
+                        "SELECT pickup_execution_id FROM rider_assignment_item "
+                        "WHERE assignment_id = :assignment_id "
+                        "AND pickup_execution_id = :pickup_id"
+                    ),
+                    {"assignment_id": successor_id, "pickup_id": pickup_id},
+                )
+                return (
+                    tables,
+                    assignment_columns,
+                    predecessor.status,
+                    predecessor.completed_at,
+                    successor_status,
+                    released_at,
+                    successor_item,
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    predecessor_id, successor_id, pickup_id, superseded_at = asyncio.run(seed_reassignment())
+    command.downgrade(configuration, "0009_pickup_execution_lifecycle")
+    (
+        tables,
+        assignment_columns,
+        predecessor_status,
+        predecessor_completed_at,
+        successor_status,
+        released_at,
+        successor_item,
+    ) = asyncio.run(schema_and_history(predecessor_id, successor_id, pickup_id))
+    assert predecessor_status == "COMPLETED"
+    assert predecessor_completed_at == superseded_at
+    assert successor_status == "ACTIVE"
+    assert released_at == superseded_at
+    assert successor_item == pickup_id
+    assert "pickup_incident" not in tables
+    assert "superseded_at" not in assignment_columns
+
+    command.upgrade(configuration, "head")
+    tables, assignment_columns, predecessor_status, _, successor_status, _, _ = asyncio.run(
+        schema_and_history(predecessor_id, successor_id, pickup_id)
+    )
+    assert predecessor_status == "COMPLETED"
+    assert successor_status == "ACTIVE"
+    assert "pickup_incident" in tables
+    assert "superseded_at" in assignment_columns
 
 
 @pytest.mark.integration

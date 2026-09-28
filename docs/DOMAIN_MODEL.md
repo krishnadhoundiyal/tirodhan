@@ -105,7 +105,11 @@ Initial assignment creates an `ACTIVE` assignment from either `RIDER_OFFER_ACCEP
 `MANAGER_ASSIGNED`, attaches the full collection group through `rider_assignment_item`, moves
 each pickup from `PENDING_ASSIGNMENT` to `ASSIGNED`, and reserves the rider. Offer state is
 `OPEN`, `ACCEPTED`, or `CLOSED_LOST`; `expires_at` remains the expiry authority. Fleet selection
-and reassignment remain deferred.
+remains deferred. Phase 1J adds terminal assignment status `SUPERSEDED`: a manager-created
+successor uses `MANAGER_ASSIGNED` plus `supersedes_assignment_id`, receives only residual
+`ASSIGNED` pickups, and reserves the replacement rider while returning the predecessor rider to
+`IDLE`. Transferred predecessor items are released with reason `REASSIGNED`; collected items stay
+permanently anchored to the predecessor.
 
 ### Pickup execution
 
@@ -121,7 +125,11 @@ the rider from `RESERVED` to `BUSY`, including when future availability intent i
 Immutable pickup attempts are attributed to the performing rider assignment and record only
 `COLLECTED` or `NOT_COLLECTED`. The final collected pickup still owned by an assignment completes
 that assignment and returns its rider to `IDLE`; normal completion does not release assignment
-items. Incident and reassignment semantics remain deferred.
+items. Phase 1J incidents explicitly record an operational exception against both the stable
+pickup and its historical rider assignment. Incident reasons are `CUSTOMER_UNAVAILABLE`,
+`ADDRESS_NOT_FOUND`, `ACCESS_BLOCKED`, `RIDER_UNABLE_TO_REACH`,
+`RIDER_UNABLE_TO_CONTINUE`, or `OTHER`; state is `OPEN` or `RESOLVED`, with `REASSIGNED` as the
+only Phase 1J resolution.
 
 ### Receiving point and handover
 
@@ -196,6 +204,7 @@ erDiagram
     PICKUP_EXECUTION ||--o{ PICKUP_ATTEMPT : attempted
     RIDER_ASSIGNMENT ||--o{ PICKUP_ATTEMPT : performed_under
     PICKUP_EXECUTION ||--o{ PICKUP_INCIDENT : may_raise
+    RIDER_ASSIGNMENT ||--o{ PICKUP_INCIDENT : attributed_to
 
     EVIDENCE_CAPTURE ||--|{ MEDIA_ASSET : contains
     PICKUP_EXECUTION ||--o{ PICKUP_EVIDENCE_LINK : evidenced_by

@@ -416,7 +416,15 @@ rider, while a partial unique index permits only one `ACTIVE` assignment per gro
 `rider_assignment_item` is the current pickup-ownership authority. Offer expiry is determined by
 `expires_at`. Terminal offers retain the assignment that resolved them, preserving replay after
 assignment completion. New initial-dispatch offers require the group pickup population to remain
-entirely `PENDING_ASSIGNMENT`. Fleet selection and reassignment are deferred.
+entirely `PENDING_ASSIGNMENT`. Fleet selection remains deferred.
+
+Phase 1J manager reassignment transfers only unreleased `ASSIGNED` pickups. The predecessor becomes
+`SUPERSEDED` with `superseded_at`; collected pickups and their items/attempts remain unchanged and
+anchored to it. Transferred predecessor items are released with reason `REASSIGNED`, while an
+`ACTIVE` `MANAGER_ASSIGNED` successor linked by `supersedes_assignment_id` receives the residual
+work. The old rider returns from `RESERVED` or `BUSY` to `IDLE`, and the eligible replacement moves
+`IDLE -> RESERVED`. Reassignment uses command idempotency and PostgreSQL locks/partial unique
+indexes, and emits no outbox event because there is no current asynchronous consumer.
 
 ## 12. Pickup execution and incidents
 
@@ -443,8 +451,11 @@ pickup attempt records its performing `rider_assignment_id` and an outcome of `C
 `NOT_COLLECTED`. A successful attempt and the `ASSIGNED -> COLLECTED` transition share one
 transaction. Collecting the final unreleased pickup owned through `rider_assignment_item` changes
 the assignment from `ACTIVE` to `COMPLETED` and the rider from `BUSY` to `IDLE`, without releasing
-assignment items or changing availability intent. Incidents and reassignment remain deferred, and
-this phase emits no pickup-lifecycle outbox events.
+assignment items or changing availability intent. This phase emits no pickup-lifecycle outbox
+events. Phase 1J adds explicit pickup incidents, historically attributed to the rider assignment.
+Incidents are `OPEN` or `RESOLVED`; the only implemented resolution is `REASSIGNED`. An incident is
+optional for manager reassignment, and incident creation does not itself change pickup, assignment,
+or rider state.
 
 MVP human support:
 
