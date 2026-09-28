@@ -494,6 +494,16 @@ This slice has no capture status, validation timestamp, evidence type, capture l
 `MediaAsset`, request completion, outbox event, or HTTP endpoint. Media persistence and evidence
 sufficiency remain independent future lifecycles.
 
+Phase 1M adds the independent original-file lifecycle. One `EvidenceCapture` has at most one
+`MediaAsset`, registered idempotently with a server-generated stable object key of
+`media/<media_asset_id>`. Assets are `PHOTO` or `VIDEO` and transition only from
+`PENDING_UPLOAD` to `FINALIZED`. Upload authorization is ephemeral and never persisted. A
+provider-neutral storage port issues write authorization and inspects the object outside a held
+database lock; finalization then serializes on the media row and records only storage-reported
+content type, size, and server finalization time. MIME and maximum-size policy is explicitly
+configured rather than frozen in schema. No Azure SDK, content hash, original filename, request
+completion coupling, or media outbox event is part of this phase.
+
 ## 14. Receiving point and handover
 
 Government/authorized kiosks/centres are represented as mutable `ReceivingPoint` master data.

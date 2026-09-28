@@ -124,9 +124,9 @@ not distributed exactly-once execution.
 | Open incident | client incident ID | unique constraint | retry returns same incident |
 | Resolve incident | incident + command | conditional transition | one durable resolution |
 | Register evidence capture | scope `evidence.capture` + client capture ID | idempotency record + unique client capture ID + unique capture link | same actor/target kind/target ID/UTC capture time replays the capture before current target validation; a changed field conflicts |
-| Register media asset | client media ID | unique constraint | same logical file maps to one asset |
-| Upload media | media asset/stable object key | object-key uniqueness | retry targets same logical object |
-| Finalize media | media asset + expected metadata/hash | conditional transition | replay safe; conflicting metadata rejected |
+| Register media asset | scope `media.register` + client media ID | idempotency record + unique client ID/evidence capture/object key | same evidence/actor/media type/expected content type replays the asset before current evidence validation; a changed field conflicts |
+| Authorize media upload | media asset ID | persisted stable object key + pending-state check | retry may issue a fresh ephemeral authorization for the same key; no token is persisted |
+| Finalize media | media asset ID | row lock + conditional `PENDING_UPLOAD -> FINALIZED` | storage is inspected without a held DB lock; terminal replay returns the asset without another inspection |
 | Create handover | scope `handover.record` + client handover ID | idempotency record + unique client ID + partial unique validated pickup | same fingerprint replays the event; changed rider/point/sorted pickups/observed coordinates conflicts; sorted pickup locks allow one validated winner while rejected history remains retryable under a new client ID |
 | Link pickup to handover | `(handover_id, pickup_execution_id)` | composite PK | duplicate link impossible |
 | Validate handover | handover + command | conditional state transition | one authoritative outcome |
@@ -197,6 +197,16 @@ handover, assignment, rider, or receiving-point state. Concurrent exact submissi
 same capture through command idempotency and `client_capture_id` uniqueness. Fresh registration uses
 ordinary reads because it records a new immutable fact without reserving or transitioning the target;
 the typed link and its unique capture constraint are the database backstop for exactly one target.
+
+### Concurrent media registration and finalization
+
+Registration claims `(media.register, client_media_id)` with a fingerprint of evidence capture,
+requesting user, media type, and expected content type. Exact concurrent commands converge on one
+asset and its server-generated object key; `UNIQUE(evidence_capture_id)` enforces one original file
+per capture. Finalization uses natural row idempotency rather than `idempotency_record`: callers may
+inspect storage concurrently without holding PostgreSQL locks, then serialize on the media row.
+The first pending caller records the terminal metadata/timestamp; later callers return that exact
+terminal row without overwriting it or reinspecting once they observe it finalized.
 
 ### Pickup incident and reassignment
 

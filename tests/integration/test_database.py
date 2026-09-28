@@ -1080,7 +1080,8 @@ def test_phase_1l_migration_roundtrip_only_controls_evidence_capture_tables(
         finally:
             await engine.dispose()
 
-    command.upgrade(configuration, "head")
+    command.downgrade(configuration, "0011_receiving_point_handover")
+    command.upgrade(configuration, "0012_evidence_capture_foundation")
     (
         tables,
         capture_columns,
@@ -1132,8 +1133,182 @@ def test_phase_1l_migration_roundtrip_only_controls_evidence_capture_tables(
     assert evidence_tables.isdisjoint(downgraded_tables)
     assert {"pickup_execution", "handover_event", "rider_assignment"}.issubset(downgraded_tables)
 
-    command.upgrade(configuration, "head")
+    command.upgrade(configuration, "0012_evidence_capture_foundation")
     assert evidence_tables.issubset(asyncio.run(schema_state())[0])
+    command.upgrade(configuration, "head")
+
+
+@pytest.mark.integration
+def test_phase_1m_migration_roundtrip_only_controls_media_asset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+
+    async def schema_state() -> tuple[
+        set[str],
+        dict[str, tuple[bool, str]],
+        list[str],
+        set[str],
+        set[str],
+        dict[str, str],
+    ]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]: (
+                                bool(column["nullable"]),
+                                str(column["type"]),
+                            )
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "media_asset"
+                            )
+                        },
+                        sqlalchemy_inspect(sync_connection)
+                        .get_pk_constraint("media_asset")
+                        .get("constrained_columns", []),
+                        {
+                            constraint["name"]
+                            for constraint in sqlalchemy_inspect(
+                                sync_connection
+                            ).get_unique_constraints("media_asset")
+                        },
+                        {
+                            constraint["referred_table"]
+                            for constraint in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "media_asset"
+                            )
+                        },
+                        {
+                            constraint["name"]: constraint["sqltext"]
+                            for constraint in sqlalchemy_inspect(
+                                sync_connection
+                            ).get_check_constraints("media_asset")
+                        },
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    tables, columns, primary_key, uniques, foreign_tables, checks = asyncio.run(schema_state())
+    assert "media_asset" in tables
+    assert set(columns) == {
+        "media_asset_id",
+        "client_media_id",
+        "evidence_capture_id",
+        "media_type",
+        "object_key",
+        "expected_content_type",
+        "stored_content_type",
+        "size_bytes",
+        "upload_status",
+        "created_at",
+        "finalized_at",
+    }
+    assert {"content_hash", "uploaded_at", "original_filename", "uploader_id"}.isdisjoint(columns)
+    assert columns["stored_content_type"][0]
+    assert columns["size_bytes"][0]
+    assert columns["finalized_at"][0]
+    assert primary_key == ["media_asset_id"]
+    assert uniques == {
+        "uq_media_asset_client_media",
+        "uq_media_asset_evidence_capture",
+        "uq_media_asset_object_key",
+    }
+    assert foreign_tables == {"evidence_capture"}
+    assert set(checks) == {
+        "ck_media_asset_media_type",
+        "ck_media_asset_upload_status",
+        "ck_media_asset_nonnegative_size",
+        "ck_media_asset_lifecycle_consistency",
+    }
+    assert all(value in checks["ck_media_asset_media_type"] for value in ("PHOTO", "VIDEO"))
+    assert all(
+        value in checks["ck_media_asset_upload_status"] for value in ("PENDING_UPLOAD", "FINALIZED")
+    )
+    assert all(
+        value in checks["ck_media_asset_lifecycle_consistency"]
+        for value in ("stored_content_type", "size_bytes", "finalized_at")
+    )
+
+    user_id = new_uuid7()
+    evidence_id = new_uuid7()
+
+    async def seed_and_count_evidence() -> int:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app_user "
+                        "(user_id, status, created_at, updated_at) "
+                        "VALUES (:user_id, 'ACTIVE', now(), now())"
+                    ),
+                    {"user_id": user_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO evidence_capture "
+                        "(evidence_capture_id, client_capture_id, captured_by_user_id, "
+                        "captured_at, created_at) "
+                        "VALUES (:evidence_id, :client_id, :user_id, now(), now())"
+                    ),
+                    {
+                        "evidence_id": evidence_id,
+                        "client_id": new_uuid7(),
+                        "user_id": user_id,
+                    },
+                )
+                return int(
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT count(*) FROM evidence_capture "
+                                "WHERE evidence_capture_id = :evidence_id"
+                            ),
+                            {"evidence_id": evidence_id},
+                        )
+                    ).scalar_one()
+                )
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(seed_and_count_evidence()) == 1
+    command.downgrade(configuration, "0012_evidence_capture_foundation")
+    downgraded_tables = asyncio.run(_table_names_for_database(database_url))
+    assert "media_asset" not in downgraded_tables
+    assert {"evidence_capture", "pickup_evidence_link", "handover_evidence_link"}.issubset(
+        downgraded_tables
+    )
+
+    async def retained_evidence_count() -> int:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return int(
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT count(*) FROM evidence_capture "
+                                "WHERE evidence_capture_id = :evidence_id"
+                            ),
+                            {"evidence_id": evidence_id},
+                        )
+                    ).scalar_one()
+                )
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(retained_evidence_count()) == 1
+    command.upgrade(configuration, "head")
+    assert "media_asset" in asyncio.run(_table_names_for_database(database_url))
+    assert asyncio.run(retained_evidence_count()) == 1
 
 
 async def _table_names_for_database(database_url: str) -> set[str]:
