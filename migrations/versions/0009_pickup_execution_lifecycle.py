@@ -85,6 +85,7 @@ def downgrade() -> None:
     op.drop_table("pickup_attempt")
     op.drop_constraint("ck_pickup_execution_status", "pickup_execution", type_="check")
     op.drop_constraint("ck_rider_assignment_status", "rider_assignment", type_="check")
+    op.execute(sa.text("UPDATE rider_assignment SET status = 'ACTIVE' WHERE status = 'COMPLETED'"))
     op.create_check_constraint(
         "ck_rider_assignment_status",
         "rider_assignment",

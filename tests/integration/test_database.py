@@ -541,6 +541,144 @@ def test_phase_1i_migration_roundtrip_restores_lifecycle_constraints(
 
 
 @pytest.mark.integration
+def test_phase_1i_downgrade_preserves_completed_assignment_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = get_test_database_url()
+    monkeypatch.setenv("TIRODHAN_DATABASE_URL", database_url)
+    configuration = Config("alembic.ini")
+    rider_id = new_uuid7()
+    batch_id = new_uuid7()
+    group_id = new_uuid7()
+    assignment_id = new_uuid7()
+
+    async def seed_completed_assignment() -> object:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app_user (user_id, status, created_at, updated_at) "
+                        "VALUES (:rider_id, 'ACTIVE', now(), now())"
+                    ),
+                    {"rider_id": rider_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO planning_batch "
+                        "(planning_batch_id, cell_id, slot_start, slot_end, status, "
+                        "max_attempts_snapshot, created_at) "
+                        "VALUES (:batch_id, :cell_id, now(), "
+                        "now() + interval '30 minutes', 'COMPLETED', 1, now())"
+                    ),
+                    {"batch_id": batch_id, "cell_id": f"migration-{batch_id}"},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO collection_group "
+                        "(collection_group_id, planning_batch_id, planning_mode, created_at) "
+                        "VALUES (:group_id, :batch_id, 'NORMAL_SINGLETON', now())"
+                    ),
+                    {"group_id": group_id, "batch_id": batch_id},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO rider_profile "
+                        "(rider_id, status, created_at, updated_at) "
+                        "VALUES (:rider_id, 'ACTIVE', now(), now())"
+                    ),
+                    {"rider_id": rider_id},
+                )
+                return (
+                    await connection.execute(
+                        text(
+                            "INSERT INTO rider_assignment "
+                            "(assignment_id, collection_group_id, rider_id, source, status, "
+                            "created_at, assigned_at, completed_at) "
+                            "VALUES (:assignment_id, :group_id, :rider_id, "
+                            "'RIDER_OFFER_ACCEPTED', 'COMPLETED', now(), now(), now()) "
+                            "RETURNING completed_at"
+                        ),
+                        {
+                            "assignment_id": assignment_id,
+                            "group_id": group_id,
+                            "rider_id": rider_id,
+                        },
+                    )
+                ).scalar_one()
+        finally:
+            await engine.dispose()
+
+    async def downgraded_state() -> tuple[str, object, set[str], str, set[str], dict[str, str]]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                assignment = (
+                    await connection.execute(
+                        text(
+                            "SELECT status, completed_at FROM rider_assignment "
+                            "WHERE assignment_id = :assignment_id"
+                        ),
+                        {"assignment_id": assignment_id},
+                    )
+                ).one()
+                constraint = (
+                    await connection.execute(
+                        text(
+                            "SELECT pg_get_constraintdef(oid) "
+                            "FROM pg_constraint "
+                            "WHERE conrelid = 'rider_assignment'::regclass "
+                            "AND conname = 'ck_rider_assignment_status'"
+                        )
+                    )
+                ).scalar_one()
+                tables, offer_columns, offer_foreign_keys = await connection.run_sync(
+                    lambda sync_connection: (
+                        set(sqlalchemy_inspect(sync_connection).get_table_names()),
+                        {
+                            column["name"]
+                            for column in sqlalchemy_inspect(sync_connection).get_columns(
+                                "assignment_offer"
+                            )
+                        },
+                        {
+                            foreign_key["name"]: foreign_key["referred_table"]
+                            for foreign_key in sqlalchemy_inspect(sync_connection).get_foreign_keys(
+                                "assignment_offer"
+                            )
+                        },
+                    )
+                )
+                return (
+                    assignment.status,
+                    assignment.completed_at,
+                    tables,
+                    constraint,
+                    offer_columns,
+                    offer_foreign_keys,
+                )
+        finally:
+            await engine.dispose()
+
+    command.upgrade(configuration, "head")
+    completed_at = asyncio.run(seed_completed_assignment())
+    command.downgrade(configuration, "0008_rider_dispatch_assignment")
+    status, retained_completed_at, tables, constraint, offer_columns, offer_fks = asyncio.run(
+        downgraded_state()
+    )
+    assert status == "ACTIVE"
+    assert retained_completed_at == completed_at
+    assert "ACTIVE" in constraint
+    assert "COMPLETED" not in constraint
+    assert "pickup_attempt" not in tables
+    assert "resolved_assignment_id" not in offer_columns
+    assert "fk_assignment_offer_resolved_assignment" not in offer_fks
+
+    command.upgrade(configuration, "head")
+    assert "pickup_attempt" in asyncio.run(downgraded_state())[2]
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_readiness_uses_lifespan_database_engine(
     monkeypatch: pytest.MonkeyPatch,
