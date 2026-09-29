@@ -12,7 +12,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from tirodhan.api.dependencies import get_current_user_id
+from tirodhan.api.dependencies import get_current_customer_id
 from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
 from tirodhan.main import create_app
@@ -555,7 +555,7 @@ async def test_primary_api_flow_and_status_get_is_read_only(
         location_resolver=ExplodingResolver(),
         cell_id_deriver=StaticCellDeriver(),
     )
-    application.dependency_overrides[get_current_user_id] = lambda: user.user_id
+    application.dependency_overrides[get_current_customer_id] = lambda: user.user_id
 
     async with application.router.lifespan_context(application):
         async with AsyncClient(

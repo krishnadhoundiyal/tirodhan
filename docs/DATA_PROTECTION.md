@@ -60,7 +60,13 @@ Historical handover/pickup coordinate snapshots receive the same access restrict
 
 - OTP values: never persist.
 - Access tokens: do not persist as ordinary application data.
-- Refresh credentials: never store plaintext; store only cryptographic verifier/hash material suitable for the final approved revocation/replay strategy.
+- Refresh credentials: at least 256 bits of opaque randomness; never store plaintext; persist only
+  the SHA-256 verifier. They remain stable until fixed session expiry or explicit revocation and are
+  never copied into logs, idempotency metadata, or recoverable encrypted storage.
+- Mobile numbers: accept canonical E.164 only; persist a recoverable protected representation and a
+  keyed deterministic HMAC for lookup. Never use plaintext or an unkeyed phone hash.
+- Access JWTs use RS256 and contain no phone, roles, or other PII. Live database state remains the
+  authorization authority.
 - Provider/API secrets: Key Vault, not application tables.
 
 ### Payment data

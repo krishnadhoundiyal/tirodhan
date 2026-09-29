@@ -12,6 +12,17 @@ from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
+from tirodhan.modules.identity.ports import (
+    OtpProvider,
+    PhoneIdentityProtector,
+    UnconfiguredOtpProvider,
+    UnconfiguredPhoneIdentityProtector,
+)
+from tirodhan.modules.identity.tokens import (
+    AccessTokenCodec,
+    Rs256AccessTokenCodec,
+    UnconfiguredAccessTokenCodec,
+)
 from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
@@ -31,6 +42,9 @@ def create_app(
     cell_id_deriver: CellIdDeriver | None = None,
     pricing_port: PricingPort | None = None,
     payment_provider: PaymentProvider | None = None,
+    otp_provider: OtpProvider | None = None,
+    phone_identity_protector: PhoneIdentityProtector | None = None,
+    access_token_codec: AccessTokenCodec | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
     configure_logging(
@@ -65,8 +79,29 @@ def create_app(
     application.state.cell_id_deriver = cell_id_deriver or UnconfiguredCellIdDeriver()
     application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
     application.state.payment_provider = payment_provider or UnconfiguredPaymentProvider()
+    application.state.otp_provider = otp_provider or UnconfiguredOtpProvider()
+    application.state.phone_identity_protector = (
+        phone_identity_protector or UnconfiguredPhoneIdentityProtector()
+    )
+    application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
     application.include_router(api_router)
     return application
+
+
+def _token_codec(settings: Settings) -> AccessTokenCodec:
+    if (
+        settings.auth_jwt_private_key_pem is None
+        or settings.auth_jwt_public_key_pem is None
+        or settings.auth_token_issuer is None
+        or settings.auth_token_audience is None
+    ):
+        return UnconfiguredAccessTokenCodec()
+    return Rs256AccessTokenCodec(
+        private_key_pem=settings.auth_jwt_private_key_pem.get_secret_value(),
+        public_key_pem=settings.auth_jwt_public_key_pem.get_secret_value(),
+        issuer=settings.auth_token_issuer,
+        audience=settings.auth_token_audience,
+    )
 
 
 app = create_app()

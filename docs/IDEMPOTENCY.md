@@ -90,9 +90,10 @@ not distributed exactly-once execution.
 
 | Operation | Idempotency/business key | DB/domain protection | Replay/concurrency behaviour |
 |---|---|---|---|
-| Request OTP | client command + phone | idempotency record + abuse/rate limits | same command must not unintentionally send another SMS; explicit resend is a new command |
-| Verify OTP | verification transaction/command | session creation boundary | retry cannot create multiple sessions |
-| Refresh session | **TBD with approved refresh-session strategy** | revocable session + credential verifier/concurrency protection appropriate to that strategy | retry/replay must not create a second unintended session effect; exact lost-success-response vs credential-reuse semantics remain open |
+| Request OTP | `(client_request_id, normalized phone)` at provider boundary | provider idempotency/reconciliation; no local OTP/idempotency row | same ID/phone converges on one logical request; changed phone conflicts; new ID is explicit resend |
+| Verify OTP | scope `auth.verify` + `client_login_id` | request fingerprint + phone advisory lock + active-phone uniqueness | exact completed replay does not call provider or mint credentials and requires a new OTP login; changed fingerprint conflicts |
+| Refresh session | SHA-256 refresh-credential verifier | refresh-session row lock + fixed expiry/revocation | stable active credential may refresh repeatedly/concurrently; no rotation, successor, or expiry extension |
+| Logout session | SHA-256 refresh-credential verifier | refresh-session row lock + conditional `revoked_at` | active session is revoked; revoked or unknown credential is generic success |
 | Grant role | `(user_id, role_code)` | unique active role membership | repeat grant returns existing membership/no-op |
 | Revoke role | role membership | conditional transition | repeated revoke remains revoked |
 | Add address | user + client command | idempotency record | retry returns same address |
@@ -136,21 +137,22 @@ not distributed exactly-once execution.
 | Send notification | logical notification/business event | unique notification key/record | retry does not create duplicate logical notification |
 | External notification call | delivery ID | provider idempotency/reconciliation | uncertain provider outcome is reconciled rather than blindly repeated |
 
-## Explicitly open idempotency decision
-
-### Refresh-session retry after lost successful response
-
-Authentication must not silently adopt a rotation/reuse policy before ADR-007 is resolved.
-
-The final strategy must define what happens when:
-
-1. a refresh request succeeds server-side;
-2. the response containing the client-visible continuation credential is lost;
-3. the client retries using the previously presented credential.
-
-The implementation must distinguish, or deliberately choose not to distinguish, this ambiguous network-retry case from hostile credential reuse. That security/UX trade-off is an architecture decision.
-
 ## Critical concurrency scenarios
+
+### Identity creation and session commands
+
+OTP start has no local database idempotency claim: its provider adapter must converge the same
+client request ID and normalized phone, while a new ID is an explicit resend. OTP verification first
+checks completed `auth.verify` state before the external provider call. Provider success is followed
+by a transaction that claims the command and acquires a deterministic phone-HMAC advisory lock;
+partial unique indexes are the physical identity backstop. Distinct legitimate login commands may
+create independent sessions, while one exact command creates at most one.
+
+Refresh and logout serialize on the same refresh-session row. Two refreshes may both issue access
+JWTs because the stable credential and fixed expiry do not change. If logout wins, later refresh
+fails; if refresh wins, logout subsequently revokes the session and live authorization rejects that
+JWT on its next use. Completed initial-login replay never creates replacement credentials because
+no recoverable bearer credential is persisted.
 
 ### Cancellation vs planning freeze
 
