@@ -119,7 +119,7 @@ async def post_otp_start(
         return OtpStartResponse(challenge_reference=challenge.challenge_reference)
     except IdentityInputError as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
     except OtpRequestConflictError as error:
         raise HTTPException(
@@ -171,6 +171,10 @@ async def post_otp_verify(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Login already completed; start a new OTP verification",
+        ) from error
+    except IdentityInputError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
     except (IdempotencyKeyConflictError, LoginCommandInProgressError) as error:
         raise HTTPException(

@@ -6,6 +6,9 @@ from typing import Protocol
 from uuid import UUID
 
 import jwt
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 class AccessTokenConfigurationError(RuntimeError):
@@ -70,8 +73,23 @@ class Rs256AccessTokenCodec:
     ) -> None:
         if not all((private_key_pem, public_key_pem, issuer, audience)):
             raise AccessTokenConfigurationError("complete JWT configuration is required")
-        self._private_key_pem = private_key_pem
-        self._public_key_pem = public_key_pem
+        try:
+            private_key = serialization.load_pem_private_key(
+                private_key_pem.encode("utf-8"), password=None
+            )
+            public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+        except (TypeError, ValueError, UnsupportedAlgorithm) as error:
+            raise AccessTokenConfigurationError(
+                "JWT signing key configuration is invalid"
+            ) from error
+        if not isinstance(private_key, rsa.RSAPrivateKey) or not isinstance(
+            public_key, rsa.RSAPublicKey
+        ):
+            raise AccessTokenConfigurationError("JWT signing keys must be RSA keys")
+        if private_key.public_key().public_numbers() != public_key.public_numbers():
+            raise AccessTokenConfigurationError("JWT signing key pair does not match")
+        self._private_key = private_key
+        self._public_key = public_key
         self._issuer = issuer
         self._audience = audience
 
@@ -102,7 +120,7 @@ class Rs256AccessTokenCodec:
             "typ": "access",
         }
         try:
-            return jwt.encode(payload, self._private_key_pem, algorithm="RS256")
+            return jwt.encode(payload, self._private_key, algorithm="RS256")
         except (jwt.PyJWTError, TypeError, ValueError) as error:
             raise AccessTokenConfigurationError("JWT signing configuration is invalid") from error
 
@@ -110,7 +128,7 @@ class Rs256AccessTokenCodec:
         try:
             payload = jwt.decode(
                 token,
-                self._public_key_pem,
+                self._public_key,
                 algorithms=["RS256"],
                 issuer=self._issuer,
                 audience=self._audience,

@@ -6,7 +6,7 @@ from functools import lru_cache
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.identity.service import (
@@ -14,7 +14,11 @@ from tirodhan.modules.identity.service import (
     hash_refresh_credential,
     normalize_phone,
 )
-from tirodhan.modules.identity.tokens import AccessTokenInvalidError, Rs256AccessTokenCodec
+from tirodhan.modules.identity.tokens import (
+    AccessTokenConfigurationError,
+    AccessTokenInvalidError,
+    Rs256AccessTokenCodec,
+)
 
 ISSUER = "https://identity.test"
 AUDIENCE = "tirodhan-test"
@@ -75,6 +79,71 @@ def test_refresh_credential_hash_is_sha256_and_not_plaintext() -> None:
     assert len(digest) == 32
     assert digest == hash_refresh_credential(raw)
     assert raw.encode() not in digest
+
+
+def test_rs256_codec_rejects_malformed_private_pem() -> None:
+    _private_pem, public_pem = key_pair()
+    with pytest.raises(AccessTokenConfigurationError):
+        Rs256AccessTokenCodec(
+            private_key_pem="not-a-private-key",
+            public_key_pem=public_pem,
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
+
+
+def test_rs256_codec_rejects_malformed_public_pem() -> None:
+    private_pem, _public_pem = key_pair()
+    with pytest.raises(AccessTokenConfigurationError):
+        Rs256AccessTokenCodec(
+            private_key_pem=private_pem,
+            public_key_pem="not-a-public-key",
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
+
+
+@pytest.mark.parametrize("non_rsa_part", ["private", "public"])
+def test_rs256_codec_rejects_non_rsa_keys(non_rsa_part: str) -> None:
+    rsa_private, rsa_public = key_pair()
+    ec_private_key = ec.generate_private_key(ec.SECP256R1())
+    ec_private = ec_private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    ec_public = (
+        ec_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+
+    with pytest.raises(AccessTokenConfigurationError):
+        Rs256AccessTokenCodec(
+            private_key_pem=ec_private if non_rsa_part == "private" else rsa_private,
+            public_key_pem=ec_public if non_rsa_part == "public" else rsa_public,
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
+
+
+def test_rs256_codec_rejects_mismatched_rsa_key_pair() -> None:
+    private_pem, _public_pem = key_pair()
+    _other_private, other_public = _new_key_pair()
+    with pytest.raises(AccessTokenConfigurationError):
+        Rs256AccessTokenCodec(
+            private_key_pem=private_pem,
+            public_key_pem=other_public,
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
+
+
+def test_rs256_codec_accepts_matching_rsa_key_pair() -> None:
+    assert codec().configured is True
 
 
 def test_rs256_access_token_has_only_frozen_claims_and_round_trips() -> None:

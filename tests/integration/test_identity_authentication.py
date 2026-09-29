@@ -759,6 +759,82 @@ async def test_refresh_then_logout_race_revokes_returned_access_immediately(
             )
 
 
+async def test_logout_then_refresh_race_rejects_refresh_after_waiting_for_row_lock(
+    database_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials = await login(
+        database_session_factory,
+        DeterministicOtpProvider(),
+        DeterministicPhoneProtector(),
+    )
+    raw_refresh = credentials.refresh_token.get_secret_value()
+    logout_holds_lock = asyncio.Event()
+    release_logout = asyncio.Event()
+    original_flush = AsyncSession.flush
+
+    async def held_logout_flush(session: AsyncSession, objects: Any = None) -> None:
+        await original_flush(session, objects)
+        if objects and any(
+            isinstance(value, RefreshSession) and value.revoked_at is not None for value in objects
+        ):
+            logout_holds_lock.set()
+            await release_logout.wait()
+
+    monkeypatch.setattr(AsyncSession, "flush", held_logout_flush)
+    codec = token_codec()
+    issue_count = 0
+    original_issue = codec.issue
+
+    def tracked_issue(**kwargs: Any) -> str:
+        nonlocal issue_count
+        issue_count += 1
+        return original_issue(**kwargs)
+
+    monkeypatch.setattr(codec, "issue", tracked_issue)
+
+    async with database_session_factory() as session:
+        before = await session.get(RefreshSession, credentials.refresh_session_id)
+        assert before is not None
+        original_hash = before.credential_hash
+        original_expiry = before.expires_at
+
+    logout_task = asyncio.create_task(
+        logout_refresh_session(
+            database_session_factory,
+            raw_refresh_credential=raw_refresh,
+        )
+    )
+    await logout_holds_lock.wait()
+    refresh_task = asyncio.create_task(
+        refresh_access_token(
+            database_session_factory,
+            raw_refresh_credential=raw_refresh,
+            token_codec=codec,
+            access_token_ttl_seconds=ACCESS_TTL,
+        )
+    )
+    await asyncio.sleep(0.1)
+    assert not refresh_task.done()
+
+    release_logout.set()
+    await logout_task
+    with pytest.raises(RefreshAuthenticationError):
+        await refresh_task
+
+    async with database_session_factory() as session:
+        sessions = (
+            await session.scalars(
+                select(RefreshSession).where(RefreshSession.user_id == credentials.user_id)
+            )
+        ).all()
+    assert len(sessions) == 1
+    assert sessions[0].revoked_at is not None
+    assert sessions[0].credential_hash == original_hash
+    assert sessions[0].expires_at == original_expiry
+    assert issue_count == 0
+
+
 async def test_live_database_authorization_reflects_role_user_and_session_changes(
     database_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -957,6 +1033,41 @@ async def test_auth_api_flow_customer_route_rbac_and_sensitive_logs(
     logs = caplog.text
     for sensitive in (PHONE, OTP_CODE, refresh_token, access_token, refreshed_access):
         assert sensitive not in logs
+
+
+async def test_auth_api_rejects_malformed_phone_before_otp_verification(
+    migrated_database_url: str,
+) -> None:
+    provider = DeterministicOtpProvider()
+    application = auth_application(
+        migrated_database_url,
+        provider,
+        DeterministicPhoneProtector(),
+    )
+    malformed_phone = "9876543210"
+
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://test"
+        ) as client:
+            start = await client.post(
+                "/v1/auth/otp/start",
+                json={"client_request_id": str(new_uuid7()), "phone": malformed_phone},
+            )
+            verify = await client.post(
+                "/v1/auth/otp/verify",
+                json={
+                    "client_login_id": str(new_uuid7()),
+                    "phone": malformed_phone,
+                    "challenge_reference": "untrusted-challenge",
+                    "code": OTP_CODE,
+                },
+            )
+
+    assert start.status_code == 422
+    assert verify.status_code == 422
+    assert provider.send_count == 0
+    assert provider.verify_count == 0
 
 
 async def test_api_completed_login_replay_and_runtime_configuration_failures(
