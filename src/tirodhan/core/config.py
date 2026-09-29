@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     planning_compaction_distance_m: int | None = None
     planning_max_group_requests: int | None = None
 
+    media_blob_account_url: str | None = None
+    media_blob_container_name: str | None = None
+    media_upload_authorization_ttl_seconds: int | None = None
+
+    media_photo_allowed_content_types: list[str] | None = None
+    media_photo_max_size_bytes: int | None = None
+    media_video_allowed_content_types: list[str] | None = None
+    media_video_max_size_bytes: int | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="TIRODHAN_",
@@ -56,6 +65,9 @@ class Settings(BaseSettings):
         "planning_max_attempts",
         "planning_compaction_distance_m",
         "planning_max_group_requests",
+        "media_upload_authorization_ttl_seconds",
+        "media_photo_max_size_bytes",
+        "media_video_max_size_bytes",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
@@ -63,7 +75,12 @@ class Settings(BaseSettings):
             raise ValueError("configured durations and attempt limits must be positive")
         return value
 
-    @field_validator("auth_token_issuer", "auth_token_audience")
+    @field_validator(
+        "auth_token_issuer",
+        "auth_token_audience",
+        "media_blob_account_url",
+        "media_blob_container_name",
+    )
     @classmethod
     def optional_auth_identifier_must_not_be_blank(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():

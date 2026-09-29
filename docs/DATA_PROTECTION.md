@@ -105,6 +105,10 @@ filename or user data. Short-lived upload authorization is returned transiently 
 port and must not be persisted or logged. PostgreSQL records only the expected content type and the
 storage-reported content type, size, and finalization time; it never stores media bytes.
 
+Phase 1Q enforces direct client-to-Blob upload mechanics utilizing transient Azure User Delegation SAS tokens.
+FastAPI provides temporary write-only access to private Azure Blob containers for designated `media/<media_asset_id>` objects,
+avoiding proxying media bytes through backend logs or runtime memory. Storage account keys are absent from application configuration.
+
 ## 3. Encryption at rest
 
 Use Azure-managed encryption at rest for Azure services by default.

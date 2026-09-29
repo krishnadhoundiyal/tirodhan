@@ -42,6 +42,10 @@ class MediaStorageNotConfiguredError(RuntimeError):
     pass
 
 
+class MediaStorageUnavailableError(RuntimeError):
+    pass
+
+
 class UnconfiguredMediaStoragePort:
     async def create_upload_authorization(
         self,
