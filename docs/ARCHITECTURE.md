@@ -429,6 +429,17 @@ rider, while a partial unique index permits only one `ACTIVE` assignment per gro
 assignment completion. New initial-dispatch offers require the group pickup population to remain
 entirely `PENDING_ASSIGNMENT`. Fleet selection remains deferred.
 
+Phase 1P exposes these operations through separate authenticated `/v1/rider` and `/v1/manager`
+HTTP namespaces. Namespace authorization uses the live PostgreSQL user/session/role checks from the
+identity module; a `RiderProfile` alone does not authorize Rider access. Fresh offers, initial
+assignment and replacement assignment additionally require an `ACTIVE` application user with an
+active `RIDER` role, after historical replay paths have been resolved. The fresh-work transaction
+locks the application user and active role rows along with the existing profile/availability locks,
+so disablement or role revocation serializes with the assignment decision. Completed manual,
+offer-acceptance and reassignment replays return their established result before current eligibility
+is considered. The authenticated principal supplies the rider or manager actor identity; command
+bodies never supply the actor.
+
 Phase 1J manager reassignment transfers only unreleased `ASSIGNED` pickups. The predecessor becomes
 `SUPERSEDED` with `superseded_at`; collected pickups and their items/attempts remain unchanged and
 anchored to it. Transferred predecessor items are released with reason `REASSIGNED`, while an
@@ -587,6 +598,16 @@ It may provide:
 It must not own indispensable business logic.
 
 FastAPI remains capable of enforcing application authorization independently.
+
+Phase 1P operational APIs use read-only, bounded query helpers for the Rider's actionable offers
+and active assignment and for Manager rider, pending-group and open-incident queues. The Rider
+assignment view decrypts the immutable booking address snapshot and exposes its booking location
+only to the currently assigned Rider. Released assignment items are excluded, so reassigned
+household PII is not disclosed to the predecessor. Manager queues contain operational identifiers
+and state, not household address/location data. Manager commands call the established domain
+services for manual assignment, reassignment and explicit collection-request completion. Evidence
+and media endpoints remain provider-neutral; upload authorization is an opaque transient response,
+and absent storage, media-policy or address-protection configuration fails closed with HTTP 503.
 
 APIM is replaceable. If gateway cost becomes material, clients may move to protected Container App ingress without redesigning business logic.
 

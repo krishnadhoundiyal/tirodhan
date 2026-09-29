@@ -49,7 +49,7 @@ from tirodhan.modules.dispatch.service import (
     create_assignment_offer,
     set_rider_availability_intent,
 )
-from tirodhan.modules.identity.models import AppUser
+from tirodhan.modules.identity.models import AppUser, UserRole
 from tirodhan.modules.planning.models import CollectionGroup, PickupExecution, PlanningBatch
 from tirodhan.modules.reliability.models import OutboxEvent
 from tirodhan.modules.serviceability.models import ServiceabilityContext
@@ -118,6 +118,17 @@ async def create_fixture(
                     work_state=WORK_IDLE,
                     version=1,
                     updated_at=now,
+                )
+            )
+            session.add(
+                UserRole(
+                    user_role_id=new_uuid7(),
+                    user_id=user.user_id,
+                    role_code="RIDER",
+                    granted_at=now,
+                    granted_by_user_id=None,
+                    revoked_at=None,
+                    revoked_by_user_id=None,
                 )
             )
             rider_ids.append(user.user_id)

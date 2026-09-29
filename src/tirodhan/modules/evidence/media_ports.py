@@ -36,3 +36,24 @@ class MediaPolicy(Protocol):
     def is_content_type_allowed(self, media_type: str, content_type: str) -> bool: ...
 
     def max_size_bytes(self, media_type: str) -> int: ...
+
+
+class MediaStorageNotConfiguredError(RuntimeError):
+    pass
+
+
+class UnconfiguredMediaStoragePort:
+    async def create_upload_authorization(
+        self,
+        *,
+        object_key: str,
+        expected_content_type: str,
+    ) -> UploadAuthorization:
+        raise MediaStorageNotConfiguredError("media storage is not configured")
+
+    async def inspect_object(
+        self,
+        *,
+        object_key: str,
+    ) -> StoredObjectProperties | None:
+        raise MediaStorageNotConfiguredError("media storage is not configured")

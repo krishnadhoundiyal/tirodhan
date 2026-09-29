@@ -12,6 +12,12 @@ from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
+from tirodhan.modules.evidence.media_policy import UnconfiguredMediaPolicy
+from tirodhan.modules.evidence.media_ports import (
+    MediaPolicy,
+    MediaStoragePort,
+    UnconfiguredMediaStoragePort,
+)
 from tirodhan.modules.identity.ports import (
     OtpProvider,
     PhoneIdentityProtector,
@@ -45,6 +51,8 @@ def create_app(
     otp_provider: OtpProvider | None = None,
     phone_identity_protector: PhoneIdentityProtector | None = None,
     access_token_codec: AccessTokenCodec | None = None,
+    media_storage: MediaStoragePort | None = None,
+    media_policy: MediaPolicy | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
     configure_logging(
@@ -84,6 +92,8 @@ def create_app(
         phone_identity_protector or UnconfiguredPhoneIdentityProtector()
     )
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
+    application.state.media_storage = media_storage or UnconfiguredMediaStoragePort()
+    application.state.media_policy = media_policy or UnconfiguredMediaPolicy()
     application.include_router(api_router)
     return application
 
