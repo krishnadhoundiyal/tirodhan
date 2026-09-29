@@ -70,7 +70,7 @@ updated_at          timestamptz NOT NULL
 
 ```text
 user_phone_id       uuid PK
-user_id             uuid FK -> app_user
+user_id             uuid NOT NULL FK -> app_user
 phone_encrypted     bytea NOT NULL
 phone_lookup_hmac   bytea NOT NULL
 verified_at         timestamptz NOT NULL
@@ -89,7 +89,7 @@ UNIQUE(user_id) WHERE retired_at IS NULL
 
 ```text
 user_role_id        uuid PK
-user_id             uuid FK -> app_user
+user_id             uuid NOT NULL FK -> app_user
 role_code           varchar(24) NOT NULL
 granted_at          timestamptz NOT NULL
 granted_by_user_id  uuid NULL FK -> app_user
@@ -105,23 +105,26 @@ UNIQUE(user_id, role_code) WHERE revoked_at IS NULL
 
 ### `refresh_session`
 
-**Implementation status: intentionally provisional.**
-
-The authentication architecture requires a revocable refresh-session mechanism and forbids plaintext refresh credentials, but the exact retry/rotation/replay semantics are still open. Therefore this table must not be implemented from a rotating-token draft until ADR-007 is resolved.
-
-Schema invariants that are already approved:
-
 ```text
-- durable session identity related to app_user;
-- explicit expiry and revocation state/timestamps;
-- no plaintext refresh credential storage;
-- cryptographic verifier/hash material appropriate to the chosen mechanism;
-- database protection for the chosen replay/concurrency semantics.
+refresh_session_id   uuid PK
+user_id              uuid NOT NULL FK -> app_user
+credential_hash      bytea NOT NULL UNIQUE
+created_at           timestamptz NOT NULL
+expires_at           timestamptz NOT NULL
+revoked_at           timestamptz NULL
 ```
 
-Fields such as `token_family_id`, `ROTATED` status, rotation links, grace/retry markers, or an alternative stable-session representation are strategy-dependent and are not yet approved physical schema.
+Required:
 
-Before implementing authentication migrations, resolve the lost-success-response case described in ADR-007 and update this section with the final table shape and constraints.
+```text
+expires_at > created_at
+```
+
+`credential_hash` is SHA-256 of an at-least-256-bit opaque random credential. The raw credential is
+returned once and never persisted. Sessions have fixed absolute expiry, do not rotate, and do not
+slide on refresh. Multiple sessions per user are allowed; do not add `UNIQUE(user_id)`.
+
+Phase 1O `user_role.role_code` is constrained to `CUSTOMER`, `RIDER`, or `MANAGER`.
 
 ### `user_address`
 
@@ -795,6 +798,19 @@ publish_attempt_count    integer NOT NULL DEFAULT 0
 Outbox payloads carry identifiers/minimal routing data, not PII-rich domain objects.
 
 ## Important transactional boundaries
+
+### OTP verification and session creation
+
+OTP verification runs without a held PostgreSQL lock. After provider success, one transaction
+claims `(auth.verify, client_login_id)`, acquires the transaction-scoped advisory lock derived from
+the first eight bytes of `phone_lookup_hmac`, resolves or creates the user/active phone and initial
+customer role, creates one refresh session, and completes the idempotency record with only the
+session ID. The transaction stores no phone, OTP, refresh credential, or access token in reliability
+metadata and emits no outbox event.
+
+Refresh and logout both lock the refresh-session row. Refresh validates without mutating it; logout
+sets `revoked_at` only for an active session. Ordinary protected-request authorization uses unlocked
+live reads of session, user, and active roles.
 
 ### Payment acceptance
 

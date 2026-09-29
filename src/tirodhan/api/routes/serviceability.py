@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.api.dependencies import (
     get_address_protector,
-    get_current_user_id,
+    get_current_customer_id,
     get_database_session,
 )
 from tirodhan.api.routes.addresses import LocationInput
@@ -107,7 +107,7 @@ def _translate_error(error: Exception) -> HTTPException:
 async def post_serviceability_context(
     body: ServiceabilityContextCreateRequest,
     request: Request,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
     protector: Annotated[AddressProtector, Depends(get_address_protector)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
@@ -140,7 +140,7 @@ async def post_serviceability_context(
 @router.get("/{context_id}", response_model=ServiceabilityContextResponse)
 async def get_serviceability_context_status(
     context_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> ServiceabilityContextResponse:
     """Read persisted status only; this route never invokes resolution."""

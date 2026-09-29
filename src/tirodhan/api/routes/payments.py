@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
-    get_current_user_id,
+    get_current_customer_id,
     get_payment_provider,
     get_session_factory,
 )
@@ -68,7 +68,7 @@ def _attempt_response(attempt: PaymentAttempt) -> PaymentAttemptResponse:
 async def post_payment_attempt(
     request_id: UUID,
     request: Request,
-    customer_id: Annotated[UUID, Depends(get_current_user_id)],
+    customer_id: Annotated[UUID, Depends(get_current_customer_id)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     provider: Annotated[PaymentProvider, Depends(get_payment_provider)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],

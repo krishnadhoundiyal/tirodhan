@@ -99,10 +99,21 @@ These are code/domain ownership boundaries, not separate MVP deployments.
 - A newly verified user receives customer capability; rider/manager roles require explicit provisioning.
 - A user has one active verified login mobile number at a time; changing the number preserves the same user identity and historical phone records.
 - OTP verification is delegated to the OTP provider; Tirodhan never persists OTP values.
-- After successful verification, Tirodhan issues its own short-lived access token and a revocable refresh-session mechanism.
-- Refresh credentials are never stored in plaintext.
-- Access tokens are not persisted as ordinary application data.
-- The exact refresh-session retry/rotation/replay strategy is intentionally open. It must preserve revocation, safe replay handling, and a deliberate policy for the case where a refresh succeeds but the response is lost and the client retries the prior credential. An implementation agent must not choose this strategy implicitly.
+- After successful verification, Tirodhan issues a short-lived RS256 access JWT and a stable opaque
+  refresh credential. Only the refresh credential's SHA-256 verifier is persisted.
+- Refresh credentials do not rotate and sessions have fixed configured absolute expiry. One user may
+  own several independently revocable sessions. A successful refresh issues another access JWT but
+  does not change the credential verifier or extend session expiry.
+- Reusing an active refresh credential after a lost successful refresh response succeeds. Possession
+  therefore grants refresh capability until explicit revocation, fixed expiry, or user disable; this
+  is the accepted MVP trade-off.
+- A completed initial-login command cannot reconstruct its one-time returned refresh credential.
+  Exact replay does not reverify OTP or create a session and instead requires a new OTP login.
+- Access JWTs contain only user/session IDs, issuer, audience, issue/expiry time, and access type.
+  They contain no roles or PII and are never persisted.
+- Every protected request validates the JWT and then checks live PostgreSQL user, refresh-session,
+  and active-role state. Session revocation, user disable, and role revocation therefore take effect
+  on the next request without a token blacklist.
 
 MSG91 remains the current OTP-provider candidate; commercial terms/DLT onboarding must be confirmed before production commitment.
 
@@ -750,4 +761,3 @@ Do not silently decide:
 - frontend/mobile technology;
 - detailed material-mismatch workflow;
 - final offline-evidence validation policy;
-- exact refresh-session retry/rotation/replay semantics, including lost-success-response behaviour.

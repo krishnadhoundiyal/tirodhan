@@ -76,6 +76,12 @@ Phase 1M freezes the media relationship as zero or one original `MediaAsset` per
 `EvidenceCapture`, enforced by `UNIQUE(media_asset.evidence_capture_id)`. Derived representations
 remain future work.
 
+Phase 1O implements the identity relationships at the top of the graph. `user_phone` permits one
+active verified phone per user and one active owner per keyed phone lookup. `user_role` retains
+grant/revocation history with active uniqueness per role. `refresh_session` permits multiple fixed-
+expiry, independently revocable sessions per user and stores only a unique SHA-256 credential
+verifier.
+
 ## Cross-cutting reliability tables
 
 These are intentionally not shown in the business ER graph:

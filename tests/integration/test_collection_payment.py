@@ -14,7 +14,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from tirodhan.api.dependencies import get_current_user_id
+from tirodhan.api.dependencies import get_current_customer_id
 from tirodhan.core.config import Settings
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.main import create_app
@@ -371,7 +371,7 @@ async def test_collection_request_api_creates_pending_request_and_payment(
         ),
         pricing_port=pricing,
     )
-    app.dependency_overrides[get_current_user_id] = lambda: user.user_id
+    app.dependency_overrides[get_current_customer_id] = lambda: user.user_id
     body = {
         "client_request_id": str(new_uuid7()),
         "serviceability_context_id": str(context.serviceability_context_id),
@@ -462,7 +462,7 @@ async def test_payment_attempt_api_replay_commits_before_provider_call(
         ),
         payment_provider=provider,
     )
-    app.dependency_overrides[get_current_user_id] = lambda: user.user_id
+    app.dependency_overrides[get_current_customer_id] = lambda: user.user_id
     url = f"/v1/payments/collection-requests/{request_result.request.request_id}/attempts"
     async with app.router.lifespan_context(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

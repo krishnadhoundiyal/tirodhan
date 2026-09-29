@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     command_idempotency_ttl_seconds: int | None = None
     serviceability_context_ttl_seconds: int | None = None
     pending_payment_lifetime_seconds: int | None = None
+    auth_access_token_ttl_seconds: int | None = None
+    auth_refresh_session_ttl_seconds: int | None = None
+    auth_token_issuer: str | None = None
+    auth_token_audience: str | None = None
+    auth_jwt_private_key_pem: SecretStr | None = None
+    auth_jwt_public_key_pem: SecretStr | None = None
     planning_lead_time_minutes: int | None = None
     planning_max_attempts: int | None = None
     planning_compaction_distance_m: int | None = None
@@ -44,6 +50,8 @@ class Settings(BaseSettings):
         "command_idempotency_ttl_seconds",
         "serviceability_context_ttl_seconds",
         "pending_payment_lifetime_seconds",
+        "auth_access_token_ttl_seconds",
+        "auth_refresh_session_ttl_seconds",
         "planning_lead_time_minutes",
         "planning_max_attempts",
         "planning_compaction_distance_m",
@@ -53,6 +61,13 @@ class Settings(BaseSettings):
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
         if value is not None and value <= 0:
             raise ValueError("configured durations and attempt limits must be positive")
+        return value
+
+    @field_validator("auth_token_issuer", "auth_token_audience")
+    @classmethod
+    def optional_auth_identifier_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("authentication issuer and audience must not be blank")
         return value
 
 

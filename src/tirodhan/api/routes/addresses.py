@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.api.dependencies import (
     get_address_protector,
-    get_current_user_id,
+    get_current_customer_id,
     get_database_session,
 )
 from tirodhan.core.config import Settings
@@ -125,7 +125,7 @@ def _translate_command_error(error: Exception) -> HTTPException:
 async def post_address(
     body: AddressWriteRequest,
     request: Request,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
     protector: Annotated[AddressProtector, Depends(get_address_protector)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
@@ -151,7 +151,7 @@ async def post_address(
 
 @router.get("", response_model=list[AddressResponse])
 async def get_addresses(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
     protector: Annotated[AddressProtector, Depends(get_address_protector)],
 ) -> list[AddressResponse]:
@@ -166,7 +166,7 @@ async def put_address(
     address_id: UUID,
     body: AddressUpdateRequest,
     request: Request,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
     protector: Annotated[AddressProtector, Depends(get_address_protector)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
@@ -196,7 +196,7 @@ async def put_address(
 async def post_archive_address(
     address_id: UUID,
     request: Request,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_customer_id)],
     session: Annotated[AsyncSession, Depends(get_database_session)],
     protector: Annotated[AddressProtector, Depends(get_address_protector)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],

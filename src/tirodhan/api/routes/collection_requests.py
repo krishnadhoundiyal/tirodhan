@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
-    get_current_user_id,
+    get_current_customer_id,
     get_pricing_port,
     get_session_factory,
 )
@@ -113,7 +113,7 @@ def _expiries(request: Request) -> tuple[datetime, datetime]:
 async def post_collection_request(
     body: CollectionRequestCreate,
     request: Request,
-    customer_id: Annotated[UUID, Depends(get_current_user_id)],
+    customer_id: Annotated[UUID, Depends(get_current_customer_id)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     pricing: Annotated[PricingPort, Depends(get_pricing_port)],
 ) -> CollectionRequestResponse:

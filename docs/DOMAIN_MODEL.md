@@ -46,6 +46,19 @@ Examples:
 
 A phone-number change preserves the same `user_id`. A user may have any number of saved addresses.
 
+Phase 1O uses explicit canonical E.164 phone input and stores one active verified `user_phone` per
+user using a recoverable encrypted value plus keyed lookup HMAC. A newly created verified user is
+`ACTIVE` and receives only the `CUSTOMER` role; `RIDER` and `MANAGER` require explicit later
+provisioning. Existing users are not silently re-granted a revoked customer role, and rider profile
+existence is not authorization.
+
+Each successful new login command creates an independent `refresh_session` with a stable opaque
+credential, SHA-256 verifier, fixed expiry, and optional revocation time. Refresh does not rotate the
+credential or extend expiry. Short-lived RS256 access JWTs identify only the user and session;
+current authorization roles always come from active PostgreSQL `user_role` rows. A completed login
+command whose original credential response was lost must start a new OTP verification because no
+recoverable bearer credential is persisted.
+
 ### Serviceability
 
 - `serviceability_context`

@@ -32,3 +32,22 @@ def test_settings_reject_non_postgresql_database() -> None:
 def test_settings_reject_nonpositive_planning_values(field_name: str) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **{field_name: 0})
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["auth_access_token_ttl_seconds", "auth_refresh_session_ttl_seconds"],
+)
+def test_settings_reject_nonpositive_authentication_lifetimes(field_name: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field_name: 0})
+
+
+def test_signing_keys_are_secret_aware() -> None:
+    settings = Settings(
+        _env_file=None,
+        auth_jwt_private_key_pem="private-key-material",
+        auth_jwt_public_key_pem="public-key-material",
+    )
+    assert "private-key-material" not in repr(settings)
+    assert "public-key-material" not in repr(settings)
