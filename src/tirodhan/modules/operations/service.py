@@ -16,6 +16,8 @@ from tirodhan.modules.dispatch.models import (
     RiderAvailability,
     RiderProfile,
 )
+from tirodhan.modules.identity.authorization import lock_active_user_role
+from tirodhan.modules.identity.service import ROLE_RIDER
 from tirodhan.modules.pickups.models import PickupIncident
 from tirodhan.modules.planning.models import CollectionGroup, PickupExecution
 from tirodhan.modules.reliability.primitives import (
@@ -62,6 +64,10 @@ class PickupIncidentNotFoundError(PickupOperationsError):
 
 
 class PickupIncidentConflictError(PickupOperationsError):
+    pass
+
+
+class PickupIncidentAttributionError(PickupIncidentConflictError):
     pass
 
 
@@ -149,7 +155,7 @@ async def open_pickup_incident(
             return existing
 
         if assignment.rider_id != rider_id:
-            raise PickupIncidentConflictError("pickup assignment belongs to another rider")
+            raise PickupIncidentAttributionError("pickup assignment belongs to another rider")
         if assignment.status != ASSIGNMENT_ACTIVE or assignment.started_at is None:
             raise PickupIncidentStateError("fresh incident requires an active started assignment")
 
@@ -272,6 +278,14 @@ async def reassign_outstanding_work(
             or replacement_availability.work_state != WORK_IDLE
         ):
             raise ReassignmentRiderError("replacement rider must be ACTIVE, AVAILABLE, and IDLE")
+        if not await lock_active_user_role(
+            session,
+            user_id=replacement_rider_id,
+            role_code=ROLE_RIDER,
+        ):
+            raise ReassignmentRiderError(
+                "replacement rider must be an ACTIVE user with an active RIDER role"
+            )
         expected_predecessor_work_state = (
             WORK_RESERVED if predecessor.started_at is None else WORK_BUSY
         )
@@ -430,11 +444,9 @@ async def _validate_incident_replay(
             RiderAssignmentItem.pickup_execution_id == incident.pickup_execution_id,
         )
     )
-    if (
-        incident.pickup_execution_id != pickup_execution_id
-        or incident.reason_code != reason_code
-        or assignment_rider_id != rider_id
-    ):
+    if assignment_rider_id != rider_id:
+        raise PickupIncidentAttributionError("pickup incident belongs to another rider")
+    if incident.pickup_execution_id != pickup_execution_id or incident.reason_code != reason_code:
         raise PickupIncidentConflictError(
             "client incident ID is associated with different incident facts"
         )

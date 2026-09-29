@@ -178,6 +178,14 @@ Application code must enforce:
 - least-privilege workload access to data;
 - access to historical snapshots/evidence only where operationally required.
 
+Phase 1P derives every Rider and Manager command actor from the authenticated principal. Rider
+assignment responses may include the immutable booking address snapshot and pickup location needed
+for current work, but only for unreleased items on that Rider's active assignment. Released work is
+excluded from the predecessor view. Manager rider, pending-group and incident lists omit household
+addresses, exact household coordinates, phone/session data and payment data. Observed handover
+coordinates and opaque media upload authorization are accepted/returned only where required and
+must not be logged.
+
 ## 9. Retention
 
 Retention durations remain to be finalized.

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.modules.collection_requests.ports import PricingPort
 from tirodhan.modules.customers.ports import AddressProtector
+from tirodhan.modules.evidence.media_ports import MediaPolicy, MediaStoragePort
 from tirodhan.modules.identity.ports import OtpProvider, PhoneIdentityProtector
 from tirodhan.modules.identity.service import (
     ROLE_CUSTOMER,
@@ -116,3 +117,11 @@ def get_pricing_port(request: Request) -> PricingPort:
 
 def get_payment_provider(request: Request) -> PaymentProvider:
     return cast(PaymentProvider, request.app.state.payment_provider)
+
+
+def get_media_storage(request: Request) -> MediaStoragePort:
+    return cast(MediaStoragePort, request.app.state.media_storage)
+
+
+def get_media_policy(request: Request) -> MediaPolicy:
+    return cast(MediaPolicy, request.app.state.media_policy)

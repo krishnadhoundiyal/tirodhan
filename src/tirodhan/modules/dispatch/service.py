@@ -16,6 +16,8 @@ from tirodhan.modules.dispatch.models import (
     RiderAvailability,
     RiderProfile,
 )
+from tirodhan.modules.identity.authorization import lock_active_user_role
+from tirodhan.modules.identity.service import ROLE_RIDER
 from tirodhan.modules.planning.models import CollectionGroup, PickupExecution
 from tirodhan.modules.reliability.primitives import append_outbox_event
 
@@ -246,7 +248,6 @@ async def _assign_group_to_rider(
         if established is not None:
             return established
 
-    profile, availability = await _lock_rider(session, rider_id)
     offer: AssignmentOffer | None = None
     if offer_id is not None:
         offer = await session.scalar(
@@ -286,8 +287,10 @@ async def _assign_group_to_rider(
                 "open assignment offer exists beside an active same-rider assignment"
             )
 
+    profile, availability = await _lock_rider(session, rider_id)
     assignment_time = now or utc_now()
     _require_rider_eligible(profile, availability)
+    await _require_fresh_rider_authorization(session, rider_id)
     if offer is not None:
         if offer.status == OFFER_CLOSED_LOST:
             raise GroupAlreadyAssignedError("assignment offer lost to another assignment")
@@ -492,7 +495,13 @@ async def _lock_eligible_rider(
 ) -> tuple[RiderProfile, RiderAvailability]:
     profile, availability = await _lock_rider(session, rider_id)
     _require_rider_eligible(profile, availability)
+    await _require_fresh_rider_authorization(session, rider_id)
     return profile, availability
+
+
+async def _require_fresh_rider_authorization(session: AsyncSession, rider_id: UUID) -> None:
+    if not await lock_active_user_role(session, user_id=rider_id, role_code=ROLE_RIDER):
+        raise RiderNotEligibleError("rider must be an ACTIVE user with an active RIDER role")
 
 
 def _require_rider_eligible(profile: RiderProfile, availability: RiderAvailability) -> None:

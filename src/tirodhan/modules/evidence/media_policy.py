@@ -7,6 +7,14 @@ class MediaPolicyNotConfiguredError(RuntimeError):
     pass
 
 
+class UnconfiguredMediaPolicy:
+    def is_content_type_allowed(self, media_type: str, content_type: str) -> bool:
+        raise MediaPolicyNotConfiguredError("media content-type policy is not configured")
+
+    def max_size_bytes(self, media_type: str) -> int:
+        raise MediaPolicyNotConfiguredError("media size policy is not configured")
+
+
 class ConfiguredMediaPolicy:
     def __init__(
         self,
