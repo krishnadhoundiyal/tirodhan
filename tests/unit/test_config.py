@@ -51,3 +51,12 @@ def test_signing_keys_are_secret_aware() -> None:
     )
     assert "private-key-material" not in repr(settings)
     assert "public-key-material" not in repr(settings)
+
+
+def test_blob_account_url_must_be_https() -> None:
+    import pytest
+
+    from tirodhan.core.config import Settings
+
+    with pytest.raises(ValueError, match="must use HTTPS"):
+        Settings(media_blob_account_url="http://insecure.blob.core.windows.net")

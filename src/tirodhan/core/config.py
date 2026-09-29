@@ -87,6 +87,13 @@ class Settings(BaseSettings):
             raise ValueError("authentication issuer and audience must not be blank")
         return value
 
+    @field_validator("media_blob_account_url")
+    @classmethod
+    def optional_blob_account_url_must_be_https(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("https://"):
+            raise ValueError("Azure Blob account URL must use HTTPS")
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:

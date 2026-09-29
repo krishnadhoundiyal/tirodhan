@@ -61,6 +61,9 @@ def create_app(
         application_settings.log_file_path,
     )
 
+    owns_media_storage = media_storage is None
+    configured_media_storage = media_storage or _media_storage(application_settings)
+
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         engine = create_database_engine(application_settings)
@@ -75,9 +78,10 @@ def create_app(
         finally:
             await engine.dispose()
 
-            media_storage = getattr(application.state, "media_storage", None)
-            if isinstance(media_storage, AzureBlobMediaStorage):
-                await media_storage.close()
+            if owns_media_storage:
+                runtime = getattr(application.state, "media_storage", None)
+                if isinstance(runtime, AzureBlobMediaStorage):
+                    await runtime.close()
 
             logger.info("application_stopped")
 
@@ -98,7 +102,7 @@ def create_app(
         phone_identity_protector or UnconfiguredPhoneIdentityProtector()
     )
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
-    application.state.media_storage = media_storage or _media_storage(application_settings)
+    application.state.media_storage = configured_media_storage
     application.state.media_policy = media_policy or _media_policy(application_settings)
     application.include_router(api_router)
     return application

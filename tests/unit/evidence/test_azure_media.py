@@ -53,8 +53,30 @@ async def test_azure_media_storage_create_upload_authorization(
         expected_content_type="image/jpeg",
     )
 
-    assert "media/123" in auth.opaque_value
+    url_value = auth.opaque_value
+    assert url_value.startswith(
+        "https://testaccount.blob.core.windows.net/test-container/media/123?"
+    )
+
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(url_value)
+    qs = urllib.parse.parse_qs(parsed.query)
+
+    # Validate https protocol only
+    assert qs.get("spr") == ["https"]
+
+    # Validate permissions: create (c) + write (w) only
+    assert qs.get("sp") == ["cw"]
+
+    # Validate resource scope: blob (b)
+    assert qs.get("sr") == ["b"]
+
+    # Validate exact TTL offset from token's generation
     assert auth.expires_at is not None
+    assert "se" in qs
+
+    # Do not assert on raw signature (sig).
 
 
 @pytest.mark.asyncio

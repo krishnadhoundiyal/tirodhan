@@ -50,7 +50,7 @@ class AzureBlobMediaStorage:
                 pass  # Fallback to fetching a new key
 
         try:
-            key_start = now
+            key_start = now - timedelta(minutes=5)
             key_expiry = now + timedelta(
                 seconds=required_duration + 3600
             )  # Fetch for at least 1 hr more
@@ -86,7 +86,6 @@ class AzureBlobMediaStorage:
                 user_delegation_key=delegation_key,
                 permission=BlobSasPermissions(create=True, write=True),
                 expiry=expiry,
-                start=now,
                 protocol="https",
             )
 
