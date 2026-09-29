@@ -12,7 +12,8 @@ from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
-from tirodhan.modules.evidence.media_policy import UnconfiguredMediaPolicy
+from tirodhan.modules.evidence.azure_media import AzureBlobMediaStorage
+from tirodhan.modules.evidence.media_policy import ConfiguredMediaPolicy, UnconfiguredMediaPolicy
 from tirodhan.modules.evidence.media_ports import (
     MediaPolicy,
     MediaStoragePort,
@@ -60,6 +61,9 @@ def create_app(
         application_settings.log_file_path,
     )
 
+    owns_media_storage = media_storage is None
+    configured_media_storage = media_storage or _media_storage(application_settings)
+
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         engine = create_database_engine(application_settings)
@@ -73,6 +77,12 @@ def create_app(
             yield
         finally:
             await engine.dispose()
+
+            if owns_media_storage:
+                runtime = getattr(application.state, "media_storage", None)
+                if isinstance(runtime, AzureBlobMediaStorage):
+                    await runtime.close()
+
             logger.info("application_stopped")
 
     application = FastAPI(
@@ -92,8 +102,8 @@ def create_app(
         phone_identity_protector or UnconfiguredPhoneIdentityProtector()
     )
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
-    application.state.media_storage = media_storage or UnconfiguredMediaStoragePort()
-    application.state.media_policy = media_policy or UnconfiguredMediaPolicy()
+    application.state.media_storage = configured_media_storage
+    application.state.media_policy = media_policy or _media_policy(application_settings)
     application.include_router(api_router)
     return application
 
@@ -111,6 +121,45 @@ def _token_codec(settings: Settings) -> AccessTokenCodec:
         public_key_pem=settings.auth_jwt_public_key_pem.get_secret_value(),
         issuer=settings.auth_token_issuer,
         audience=settings.auth_token_audience,
+    )
+
+
+def _media_storage(settings: Settings) -> MediaStoragePort:
+    if (
+        not settings.media_blob_account_url
+        or not settings.media_blob_container_name
+        or not settings.media_upload_authorization_ttl_seconds
+    ):
+        return UnconfiguredMediaStoragePort()
+
+    from azure.identity.aio import DefaultAzureCredential
+
+    return AzureBlobMediaStorage(
+        account_url=settings.media_blob_account_url,
+        container_name=settings.media_blob_container_name,
+        credential=DefaultAzureCredential(),
+        authorization_ttl_seconds=settings.media_upload_authorization_ttl_seconds,
+    )
+
+
+def _media_policy(settings: Settings) -> MediaPolicy:
+    if (
+        not settings.media_photo_allowed_content_types
+        or not settings.media_photo_max_size_bytes
+        or not settings.media_video_allowed_content_types
+        or not settings.media_video_max_size_bytes
+    ):
+        return UnconfiguredMediaPolicy()
+
+    return ConfiguredMediaPolicy(
+        allowed_content_types={
+            "PHOTO": settings.media_photo_allowed_content_types,
+            "VIDEO": settings.media_video_allowed_content_types,
+        },
+        maximum_size_bytes={
+            "PHOTO": settings.media_photo_max_size_bytes,
+            "VIDEO": settings.media_video_max_size_bytes,
+        },
     )
 
 

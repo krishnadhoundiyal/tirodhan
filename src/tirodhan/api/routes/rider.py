@@ -54,6 +54,7 @@ from tirodhan.modules.evidence.media_ports import (
     MediaPolicy,
     MediaStorageNotConfiguredError,
     MediaStoragePort,
+    MediaStorageUnavailableError,
 )
 from tirodhan.modules.evidence.media_service import (
     InvalidMediaTypeError,
@@ -833,8 +834,8 @@ async def post_media_upload_authorization(
             authorization=result.opaque_value,
             expires_at=result.expires_at,
         )
-    except MediaStorageNotConfiguredError as error:
-        raise HTTPException(status_code=503, detail="Media storage is not configured") from error
+    except (MediaStorageNotConfiguredError, MediaStorageUnavailableError) as error:
+        raise HTTPException(status_code=503, detail="Media storage is unavailable") from error
     except (MediaAssetNotFoundError, MediaActorAttributionError) as error:
         raise _not_found() from error
     except MediaWriteAuthorizationUnavailableError as error:
@@ -859,8 +860,12 @@ async def post_finalize_media_asset(
                 policy=policy,
             )
         )
-    except (MediaStorageNotConfiguredError, MediaPolicyNotConfiguredError) as error:
-        raise HTTPException(status_code=503, detail="Media runtime is not configured") from error
+    except (
+        MediaStorageNotConfiguredError,
+        MediaStorageUnavailableError,
+        MediaPolicyNotConfiguredError,
+    ) as error:
+        raise HTTPException(status_code=503, detail="Media runtime is unavailable") from error
     except (MediaAssetNotFoundError, MediaActorAttributionError) as error:
         raise _not_found() from error
     except (

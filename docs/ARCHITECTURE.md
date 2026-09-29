@@ -523,8 +523,15 @@ Phase 1M adds the independent original-file lifecycle. One `EvidenceCapture` has
 provider-neutral storage port issues write authorization and inspects the object outside a held
 database lock; finalization then serializes on the media row and records only storage-reported
 content type, size, and server finalization time. MIME and maximum-size policy is explicitly
-configured rather than frozen in schema. No Azure SDK, content hash, original filename, request
+configured rather than frozen in schema. No content hash, original filename, request
 completion coupling, or media outbox event is part of this phase.
+
+Phase 1Q introduces the MVP Azure Blob media runtime. The domain remains strictly provider-neutral;
+upload uses direct client-to-Blob transmission, so the FastAPI application never proxies media bytes.
+Azure authentication uses Managed Identity/Workload Identity rather than access keys. The application
+provides short-lived write-only authorization using User Delegation SAS and inspects object properties
+upon finalization. Media content-type and maximum-size policy limits are configurable at runtime,
+failing closed if improperly specified.
 
 Phase 1N freezes MVP evidence sufficiency at Option B: a collected pickup needs at least one
 pickup-linked `EvidenceCapture`, and its validated `HandoverEvent` needs at least one
