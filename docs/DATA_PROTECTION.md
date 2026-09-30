@@ -69,6 +69,18 @@ Historical handover/pickup coordinate snapshots receive the same access restrict
   authorization authority.
 - Provider/API secrets: Key Vault, not application tables.
 
+Phase 1R phones use AES-256-GCM with a fresh 12-byte nonce, stable `tirodhan:user-phone:v1` AAD,
+and a strict versioned envelope containing key ID, nonce and authenticated ciphertext/tag.
+New encryption uses the active 32-byte AES key; retained key IDs decrypt historical envelopes.
+Unknown key IDs, malformed envelopes and tampering fail closed. Lookup uses raw 32-byte
+HMAC-SHA256 with an independent random 256-bit key, never the AES key or a derivative. HMAC-key
+rotation is explicit maintenance/data migration, not transparent online multi-key lookup.
+Missing/malformed crypto configuration has no plaintext or dummy fallback. Secret-aware settings
+receive keys and Kaleyra API secrets through Key Vault -> ACA secret/reference -> process memory;
+keys never enter Git, PostgreSQL, logs, error responses or container images.
+AuthenticationChallenge contains only protected phone and provider binding metadata. OTP plaintext
+and OTP hashes are never persisted, including reliability stores. Provider references stay server-side.
+
 ### Payment data
 
 Never persist:

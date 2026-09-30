@@ -90,8 +90,8 @@ not distributed exactly-once execution.
 
 | Operation | Idempotency/business key | DB/domain protection | Replay/concurrency behaviour |
 |---|---|---|---|
-| Request OTP | `(client_request_id, normalized phone)` at provider boundary | provider idempotency/reconciliation; no local OTP/idempotency row | same ID/phone converges on one logical request; changed phone conflicts; new ID is explicit resend |
-| Verify OTP | scope `auth.verify` + `client_login_id` | request fingerprint + phone advisory lock + active-phone uniqueness | exact completed replay does not call provider or mint credentials and requires a new OTP login; changed fingerprint conflicts |
+| Request OTP | scope `auth.start` + `client_request_id`; fingerprint of client UUID + phone HMAC | committed idempotency reservation + AuthenticationChallenge uniqueness + phone advisory lock + active-challenge partial uniqueness | only claim creator invokes Generate; IN_PROGRESS conflicts without provider call; COMPLETED replays its live ACTIVE challenge; changed phone, terminal or expired replay conflicts; new ID creates a new intent |
+| Verify OTP | scope `auth.verify` + `client_login_id` | durable challenge/HMAC fingerprint + challenge row lock + phone advisory lock + active-phone uniqueness | exact completed replay does not call provider or mint credentials; one challenge produces at most one committed login; changed fingerprint conflicts |
 | Refresh session | SHA-256 refresh-credential verifier | refresh-session row lock + fixed expiry/revocation | stable active credential may refresh repeatedly/concurrently; no rotation, successor, or expiry extension |
 | Logout session | SHA-256 refresh-credential verifier | refresh-session row lock + conditional `revoked_at` | active session is revoked; revoked or unknown credential is generic success |
 | Grant role | `(user_id, role_code)` | unique active role membership | repeat grant returns existing membership/no-op |
@@ -141,12 +141,27 @@ not distributed exactly-once execution.
 
 ### Identity creation and session commands
 
-OTP start has no local database idempotency claim: its provider adapter must converge the same
-client request ID and normalized phone, while a new ID is an explicit resend. OTP verification first
-checks completed `auth.verify` state before the external provider call. Provider success is followed
-by a transaction that claims the command and acquires a deterministic phone-HMAC advisory lock;
-partial unique indexes are the physical identity backstop. Distinct legitimate login commands may
-create independent sessions, while one exact command creates at most one.
+Phase 1R start claims `(auth.start, client_request_id)` in a short transaction with a fingerprint
+of client UUID plus phone HMAC, never plaintext/encrypted phone. That reservation commits before
+Generate. Only its creator may call the provider; simultaneous same-key requests cannot create a
+second provider transaction. IN_PROGRESS returns controlled 409; COMPLETED loads result_resource_id
+as the challenge and replays only while ACTIVE and unexpired. Existing pre-reservation challenges
+are attached to a completed claim without another provider invocation. Different client request IDs
+remain separate intents. Generate holds no DB transaction. Its success is followed by a transaction
+that locks the prior ACTIVE phone challenge, supersedes it, inserts the new challenge and completes
+auth.start with challenge ID and status 202. Provider failure leaves the old intent unchanged.
+An ambiguous Generate timeout/network failure or post-invocation DB failure retains IN_PROGRESS;
+neither elapsed expires_at metadata nor replay permits automatic takeover or provider retry. Use a
+new client request ID. Known local failures before provider invocation roll back the claim normally.
+The provider/DB side-effect gap remains; no recovery worker or distributed transaction is introduced.
+Terminal/expired challenge request IDs cannot send again.
+Verify fingerprints only challenge identity and phone HMAC. Completed login replay precedes
+provider invocation. After Validate success it locks and revalidates the challenge, claims the
+command, resolves identity under the phone advisory lock, creates the session, consumes the
+challenge and completes idempotency in one transaction. Concurrent verification or supersession
+can yield only one committed login per challenge. Separate challenges can create independent
+sessions for one user. Provider success with local rollback leaves no committed login; an
+already-verified provider response is an authentication failure requiring a new start.
 
 Refresh and logout serialize on the same refresh-session row. Two refreshes may both issue access
 JWTs because the stable credential and fixed expiry do not change. If logout wins, later refresh

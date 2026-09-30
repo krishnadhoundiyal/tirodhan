@@ -115,7 +115,29 @@ These are code/domain ownership boundaries, not separate MVP deployments.
   and active-role state. Session revocation, user disable, and role revocation therefore take effect
   on the next request without a token blacklist.
 
-MSG91 remains the current OTP-provider candidate; commercial terms/DLT onboarding must be confirmed before production commitment.
+Phase 1R uses Kaleyra Verify behind a provider-neutral, transaction-bound OTP port. Generate
+receives canonical E.164 phone and returns an opaque provider reference; Validate receives only
+that reference and the OTP. Providers requiring phone plus OTP verification are outside this contract.
+Tirodhan owns a persisted `authentication_challenge` that binds protected phone identity to the
+provider reference. Its public UUIDv7 `challenge_reference` is never the provider reference.
+Phone is supplied only to `/v1/auth/otp/start`; `/v1/auth/otp/verify` accepts challenge UUID,
+client login UUID and code, and forbids extra fields. A new start supersedes the prior locally
+active intent only after provider Generate succeeds. Challenge states are `ACTIVE`, `CONSUMED`
+and `SUPERSEDED`; expiry is derived from a configured intent lifetime, independent of provider OTP
+expiry. `CONSUMED` means a committed Tirodhan login, not merely successful provider validation.
+The provider owns generation, correctness, expiry, attempt limits and single use; Tirodhan owns
+intent, replay, phone binding, identity and session creation. No OTP plaintext or hash is stored.
+Provider calls run outside DB transactions and are never automatically retried. Start first commits
+an `(auth.start, client_request_id)` idempotency reservation fingerprinting the client UUID and phone
+HMAC only. Only the claim creator may call Generate; concurrent same-key callers receive 409 while
+IN_PROGRESS, and completed claims replay their still-live challenge without provider invocation.
+Different keys are separate intents and may each call Generate. Challenge creation/supersession and
+start-claim completion commit together. An ambiguous Generate failure or local failure after provider
+invocation leaves the key IN_PROGRESS; use a new client request ID, never automatically reclaim/retry.
+Known local failures before provider invocation roll back the claim. Provider verification success
+followed by a local crash requires a new attempt; an already-verified response cannot prove a commit.
+Resend, failover and recovery workers remain out of scope. Runtime secrets arrive through Key Vault
+and Container Apps secret/reference configuration, with no Key Vault calls in application code.
 
 ## 6. Address, serviceability and transaction snapshots
 

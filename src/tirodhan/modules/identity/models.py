@@ -44,6 +44,47 @@ class AppUser(Base):
     )
 
 
+class AuthenticationChallenge(Base):
+    __tablename__ = "authentication_challenge"
+    __table_args__ = (
+        UniqueConstraint("client_request_id", name="uq_authentication_challenge_client_request"),
+        UniqueConstraint(
+            "provider_code", "provider_reference", name="uq_authentication_challenge_provider"
+        ),
+        Index(
+            "uq_authentication_challenge_active_phone",
+            "phone_lookup_hmac",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+        CheckConstraint("expires_at > created_at", name="ck_authentication_challenge_expiry"),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'CONSUMED', 'SUPERSEDED')",
+            name="ck_authentication_challenge_status",
+        ),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND consumed_at IS NULL AND superseded_at IS NULL) OR "
+            "(status = 'CONSUMED' AND consumed_at IS NOT NULL AND superseded_at IS NULL) OR "
+            "(status = 'SUPERSEDED' AND consumed_at IS NULL AND superseded_at IS NOT NULL)",
+            name="ck_authentication_challenge_timestamps",
+        ),
+    )
+
+    challenge_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    client_request_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    phone_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    phone_lookup_hmac: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    provider_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class UserPhone(Base):
     __tablename__ = "user_phone"
     __table_args__ = (

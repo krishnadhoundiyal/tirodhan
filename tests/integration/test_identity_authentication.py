@@ -27,11 +27,17 @@ from tirodhan.core.config import Settings
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.main import create_app
 from tirodhan.modules.identity import service as identity_service
-from tirodhan.modules.identity.models import AppUser, RefreshSession, UserPhone, UserRole
+from tirodhan.modules.identity.models import (
+    AppUser,
+    AuthenticationChallenge,
+    RefreshSession,
+    UserPhone,
+    UserRole,
+)
 from tirodhan.modules.identity.ports import (
-    OtpChallenge,
     OtpRequestConflictError,
     OtpVerificationError,
+    ProviderOtpChallenge,
 )
 from tirodhan.modules.identity.service import (
     AUTH_VERIFY_SCOPE,
@@ -79,38 +85,37 @@ class DeterministicPhoneProtector:
     async def lookup_hmac(self, normalized_phone: str) -> bytes:
         return hmac.new(self._lookup_key, normalized_phone.encode(), hashlib.sha256).digest()
 
+    async def unprotect(self, protected_phone: bytes) -> str:
+        encrypted = protected_phone.removeprefix(b"test-envelope:")
+        return bytes(
+            value ^ self._encryption_key[index % len(self._encryption_key)]
+            for index, value in enumerate(encrypted)
+        ).decode()
+
 
 class DeterministicOtpProvider:
+    provider_code = "TEST"
+
     def __init__(self) -> None:
-        self._requests: dict[UUID, tuple[str, OtpChallenge]] = {}
         self._challenges: dict[str, str] = {}
         self.send_count = 0
         self.verify_count = 0
         self.before_verify_return: Callable[[], Awaitable[None]] | None = None
 
-    async def start_verification(
-        self, *, normalized_phone: str, client_request_id: UUID
-    ) -> OtpChallenge:
-        existing = self._requests.get(client_request_id)
-        if existing is not None:
-            if existing[0] != normalized_phone:
-                raise OtpRequestConflictError("OTP request identity was reused")
-            return existing[1]
-        challenge = OtpChallenge(challenge_reference=f"challenge-{new_uuid7()}")
-        self._requests[client_request_id] = (normalized_phone, challenge)
-        self._challenges[challenge.challenge_reference] = normalized_phone
+    async def start_verification(self, *, normalized_phone: str) -> ProviderOtpChallenge:
+        challenge = ProviderOtpChallenge(provider_reference=f"provider-{new_uuid7()}")
+        self._challenges[challenge.provider_reference] = normalized_phone
         self.send_count += 1
         return challenge
 
     async def verify(
         self,
         *,
-        challenge_reference: str,
-        normalized_phone: str,
+        provider_reference: str,
         code: str,
     ) -> None:
         self.verify_count += 1
-        if self._challenges.get(challenge_reference) != normalized_phone or code != OTP_CODE:
+        if provider_reference not in self._challenges or code != OTP_CODE:
             raise OtpVerificationError("OTP verification failed")
         if self.before_verify_return is not None:
             await self.before_verify_return()
@@ -144,11 +149,22 @@ def token_codec() -> Rs256AccessTokenCodec:
     )
 
 
-async def begin_challenge(provider: DeterministicOtpProvider, phone: str = PHONE) -> OtpChallenge:
+async def begin_challenge(
+    factory: async_sessionmaker[AsyncSession],
+    provider: DeterministicOtpProvider,
+    phone: str = PHONE,
+    *,
+    now: datetime | None = None,
+) -> AuthenticationChallenge:
     return await start_otp_verification(
-        provider,
+        factory,
+        provider=provider,
+        phone_protector=DeterministicPhoneProtector(),
+        challenge_ttl_seconds=300,
+        idempotency_expires_at=(now or utc_now()) + timedelta(days=1),
         phone=phone,
         client_request_id=new_uuid7(),
+        now=now,
     )
 
 
@@ -159,19 +175,17 @@ async def login(
     *,
     phone: str = PHONE,
     client_login_id: UUID | None = None,
-    challenge: OtpChallenge | None = None,
+    challenge: AuthenticationChallenge | None = None,
     now: datetime | None = None,
 ) -> LoginCredentials:
     established_at = now or utc_now().replace(microsecond=0)
-    challenge = challenge or await begin_challenge(provider, phone)
+    challenge = challenge or await begin_challenge(factory, provider, phone, now=established_at)
     return await verify_otp_and_login(
         factory,
         client_login_id=client_login_id or new_uuid7(),
-        phone=phone,
-        challenge_reference=challenge.challenge_reference,
+        challenge_reference=challenge.challenge_id,
         code=OTP_CODE,
         otp_provider=provider,
-        phone_protector=protector,
         token_codec=token_codec(),
         refresh_session_ttl_seconds=REFRESH_TTL,
         access_token_ttl_seconds=ACCESS_TTL,
@@ -193,18 +207,31 @@ async def counts(factory: async_sessionmaker[AsyncSession]) -> tuple[int, int, i
         )  # type: ignore[return-value]
 
 
-async def test_otp_start_provider_contract_converges_and_requires_explicit_resend() -> None:
+async def test_otp_start_provider_contract_converges_and_requires_explicit_resend(
+    database_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     provider = DeterministicOtpProvider()
     command_id = new_uuid7()
 
-    first = await start_otp_verification(provider, phone=PHONE, client_request_id=command_id)
-    replay = await start_otp_verification(provider, phone=PHONE, client_request_id=command_id)
-    with pytest.raises(OtpRequestConflictError):
-        await start_otp_verification(provider, phone=OTHER_PHONE, client_request_id=command_id)
-    resend = await start_otp_verification(provider, phone=PHONE, client_request_id=new_uuid7())
+    async def start(phone: str, key: UUID) -> AuthenticationChallenge:
+        return await start_otp_verification(
+            database_session_factory,
+            provider=provider,
+            phone_protector=DeterministicPhoneProtector(),
+            phone=phone,
+            client_request_id=key,
+            challenge_ttl_seconds=300,
+            idempotency_expires_at=utc_now() + timedelta(days=1),
+        )
 
-    assert replay == first
-    assert resend != first
+    first = await start(PHONE, command_id)
+    replay = await start(PHONE, command_id)
+    with pytest.raises(OtpRequestConflictError):
+        await start(OTHER_PHONE, command_id)
+    resend = await start(PHONE, new_uuid7())
+
+    assert replay.challenge_id == first.challenge_id
+    assert resend.challenge_id != first.challenge_id
     assert provider.send_count == 2
 
 
@@ -482,16 +509,20 @@ async def test_concurrent_first_logins_same_phone_create_one_identity_without_or
 ) -> None:
     provider = DeterministicOtpProvider()
     protector = DeterministicPhoneProtector()
-    challenges = await asyncio.gather(begin_challenge(provider), begin_challenge(provider))
+    challenges = await asyncio.gather(
+        begin_challenge(database_session_factory, provider),
+        begin_challenge(database_session_factory, provider),
+    )
 
     results = await asyncio.gather(
         login(database_session_factory, provider, protector, challenge=challenges[0]),
         login(database_session_factory, provider, protector, challenge=challenges[1]),
+        return_exceptions=True,
     )
 
-    assert results[0].user_id == results[1].user_id
-    assert results[0].refresh_session_id != results[1].refresh_session_id
-    assert await counts(database_session_factory) == (1, 1, 1, 2)
+    assert sum(isinstance(result, LoginCredentials) for result in results) == 1
+    assert sum(isinstance(result, OtpVerificationError) for result in results) == 1
+    assert await counts(database_session_factory) == (1, 1, 1, 1)
 
 
 async def test_concurrent_exact_login_creates_one_session_and_conflicting_fingerprint_fails(
@@ -499,7 +530,7 @@ async def test_concurrent_exact_login_creates_one_session_and_conflicting_finger
 ) -> None:
     provider = DeterministicOtpProvider()
     protector = DeterministicPhoneProtector()
-    challenge = await begin_challenge(provider)
+    challenge = await begin_challenge(database_session_factory, provider)
     client_login_id = new_uuid7()
 
     results = await asyncio.gather(
@@ -522,7 +553,7 @@ async def test_concurrent_exact_login_creates_one_session_and_conflicting_finger
     assert isinstance(failures[0], LoginCredentialsUnavailableReplayError)
     assert await counts(database_session_factory) == (1, 1, 1, 1)
 
-    changed_challenge = await begin_challenge(provider)
+    changed_challenge = await begin_challenge(database_session_factory, provider)
     verify_count = provider.verify_count
     with pytest.raises(IdempotencyKeyConflictError):
         await login(
@@ -540,7 +571,7 @@ async def test_completed_login_replay_never_reverifies_or_persists_credentials(
 ) -> None:
     provider = DeterministicOtpProvider()
     protector = DeterministicPhoneProtector()
-    challenge = await begin_challenge(provider)
+    challenge = await begin_challenge(database_session_factory, provider)
     client_login_id = new_uuid7()
     first = await login(
         database_session_factory,
@@ -928,7 +959,6 @@ async def test_auth_api_flow_customer_route_rbac_and_sensitive_logs(
                 "/v1/auth/otp/verify",
                 json={
                     "client_login_id": str(new_uuid7()),
-                    "phone": PHONE,
                     "challenge_reference": start.json()["challenge_reference"],
                     "code": "000000",
                 },
@@ -938,7 +968,6 @@ async def test_auth_api_flow_customer_route_rbac_and_sensitive_logs(
                 "/v1/auth/otp/verify",
                 json={
                     "client_login_id": str(new_uuid7()),
-                    "phone": PHONE,
                     "challenge_reference": start.json()["challenge_reference"],
                     "code": OTP_CODE,
                 },
@@ -1059,7 +1088,7 @@ async def test_auth_api_rejects_malformed_phone_before_otp_verification(
                 json={
                     "client_login_id": str(new_uuid7()),
                     "phone": malformed_phone,
-                    "challenge_reference": "untrusted-challenge",
+                    "challenge_reference": str(new_uuid7()),
                     "code": OTP_CODE,
                 },
             )
@@ -1088,7 +1117,6 @@ async def test_api_completed_login_replay_and_runtime_configuration_failures(
             )
             payload = {
                 "client_login_id": str(client_login_id),
-                "phone": PHONE,
                 "challenge_reference": start.json()["challenge_reference"],
                 "code": OTP_CODE,
             }
@@ -1130,12 +1158,7 @@ async def test_api_completed_login_replay_and_runtime_configuration_failures(
         auth_refresh_session_ttl_seconds=REFRESH_TTL,
         command_idempotency_ttl_seconds=3600,
     )
-    challenge = await begin_challenge(provider)
-    missing_protector = create_app(
-        base_settings,
-        otp_provider=provider,
-        access_token_codec=token_codec(),
-    )
+    challenge = await begin_challenge(database_session_factory, provider)
     missing_codec = create_app(
         base_settings,
         otp_provider=provider,
@@ -1143,11 +1166,10 @@ async def test_api_completed_login_replay_and_runtime_configuration_failures(
     )
     verify_payload = {
         "client_login_id": str(new_uuid7()),
-        "phone": PHONE,
-        "challenge_reference": challenge.challenge_reference,
+        "challenge_reference": str(challenge.challenge_id),
         "code": OTP_CODE,
     }
-    for misconfigured in (missing_protector, missing_codec):
+    for misconfigured in (missing_codec,):
         async with misconfigured.router.lifespan_context(misconfigured):
             async with AsyncClient(
                 transport=ASGITransport(app=misconfigured), base_url="http://test"
@@ -1171,6 +1193,7 @@ def auth_application(
             environment="test",
             database_url=database_url,
             command_idempotency_ttl_seconds=3600,
+            auth_otp_challenge_ttl_seconds=300,
             auth_access_token_ttl_seconds=ACCESS_TTL,
             auth_refresh_session_ttl_seconds=REFRESH_TTL,
         ),
@@ -1239,7 +1262,7 @@ async def test_phase_1o_migration_roundtrip_preserves_existing_schema_and_data(
     assert {"user_phone", "user_role", "refresh_session"}.isdisjoint(tables)
     assert {"app_user", "idempotency_record", "collection_request", "media_asset"}.issubset(tables)
     assert count == 1
-    await asyncio.to_thread(command.upgrade, configuration, "0014_identity_authentication")
+    await asyncio.to_thread(command.upgrade, configuration, "head")
     tables, count = await seed_and_schema()
     assert {"user_phone", "user_role", "refresh_session"}.issubset(tables)
     assert count == 1

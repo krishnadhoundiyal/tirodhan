@@ -26,7 +26,7 @@ The following remain intentionally open and must not be silently decided by an a
 - detailed rider-selection algorithm inside a fleet;
 - item category taxonomy and final pricing formula;
 - exact payment gateway vendor;
-- exact OTP commercial rate/vendor confirmation;
+- exact OTP commercial rate (Kaleyra Verify is the Phase 1R runtime provider);
 - final CI/CD provider selection: Azure DevOps Pipelines or GitHub Actions;
 - frontend/mobile technology;
 - final offline-evidence validation policy;
@@ -76,6 +76,28 @@ application does not choose or create the Azure volume mount.
 Local credentials in `.env.example` and `compose.yaml` are intentionally local-only. Runtime
 secrets for hosted environments must come from their environment/secret provider and must not
 be committed.
+
+### OTP runtime (Phase 1R)
+
+Configure the Kaleyra HTTPS origin, SID, API key, Verify flow and bounded timeout, plus the
+local challenge TTL, using the settings listed in `.env.example`. Missing provider settings
+fail closed (503); there is no fallback provider. No tests contact live Kaleyra.
+
+Phone protection requires an active encryption key ID, a JSON keyring of standard-base64
+32-byte AES keys and an independent standard-base64 32-byte HMAC key. Retain old encryption
+key IDs for decryption. Lookup-key rotation requires an explicit maintenance/data migration.
+Supply production secrets via Key Vault -> ACA secret/reference -> process configuration.
+
+`POST /v1/auth/otp/start` accepts `client_request_id` and canonical E.164 `phone`, returning a
+public UUIDv7 `challenge_reference`. `POST /v1/auth/otp/verify` accepts `client_login_id`, that
+reference and `code`; phone is forbidden. Provider references remain private. A new OTP needs
+a new start key, not a resend call. A consumed, superseded or locally expired start key conflicts.
+Start reserves `auth.start` before Generate: only one same-key caller can invoke the provider;
+IN_PROGRESS returns 409, while completed live replay returns the same challenge. Ambiguous provider
+or post-invocation local failures keep the key reserved and require a genuinely new start key.
+Successful login consumes the local challenge atomically with identity/session persistence.
+Provider success followed by local failure requires a new start; completed login replay cannot
+reconstruct credentials. Refresh, logout and downstream authorization are unchanged.
 
 ## Quality checks
 

@@ -4,6 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from tirodhan.api.router import api_router
@@ -19,6 +20,8 @@ from tirodhan.modules.evidence.media_ports import (
     MediaStoragePort,
     UnconfiguredMediaStoragePort,
 )
+from tirodhan.modules.identity.kaleyra import KaleyraVerifyOtpProvider
+from tirodhan.modules.identity.phone_protection import AesGcmPhoneIdentityProtector
 from tirodhan.modules.identity.ports import (
     OtpProvider,
     PhoneIdentityProtector,
@@ -50,6 +53,7 @@ def create_app(
     pricing_port: PricingPort | None = None,
     payment_provider: PaymentProvider | None = None,
     otp_provider: OtpProvider | None = None,
+    otp_http_client: httpx.AsyncClient | None = None,
     phone_identity_protector: PhoneIdentityProtector | None = None,
     access_token_codec: AccessTokenCodec | None = None,
     media_storage: MediaStoragePort | None = None,
@@ -61,8 +65,15 @@ def create_app(
         application_settings.log_file_path,
     )
 
+    # Eager crypto parsing fails before any authentication transaction can commit.
+    configured_phone_protector = phone_identity_protector or _phone_protector(application_settings)
     owns_media_storage = media_storage is None
     configured_media_storage = media_storage or _media_storage(application_settings)
+    owns_otp_http_client = (
+        otp_provider is None
+        and otp_http_client is None
+        and _kaleyra_configured(application_settings)
+    )
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -74,9 +85,18 @@ def create_app(
             extra={"environment": application_settings.environment},
         )
         try:
+            if otp_provider is None and _kaleyra_configured(application_settings):
+                runtime_client = otp_http_client or httpx.AsyncClient(
+                    transport=httpx.AsyncHTTPTransport(retries=0)
+                )
+                application.state.otp_http_client = runtime_client
+                application.state.otp_provider = _otp_provider(application_settings, runtime_client)
             yield
         finally:
             await engine.dispose()
+
+            if owns_otp_http_client:
+                await application.state.otp_http_client.aclose()
 
             if owns_media_storage:
                 runtime = getattr(application.state, "media_storage", None)
@@ -98,9 +118,7 @@ def create_app(
     application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
     application.state.payment_provider = payment_provider or UnconfiguredPaymentProvider()
     application.state.otp_provider = otp_provider or UnconfiguredOtpProvider()
-    application.state.phone_identity_protector = (
-        phone_identity_protector or UnconfiguredPhoneIdentityProtector()
-    )
+    application.state.phone_identity_protector = configured_phone_protector
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
     application.state.media_storage = configured_media_storage
     application.state.media_policy = media_policy or _media_policy(application_settings)
@@ -121,6 +139,49 @@ def _token_codec(settings: Settings) -> AccessTokenCodec:
         public_key_pem=settings.auth_jwt_public_key_pem.get_secret_value(),
         issuer=settings.auth_token_issuer,
         audience=settings.auth_token_audience,
+    )
+
+
+def _kaleyra_configured(settings: Settings) -> bool:
+    return all(
+        value is not None
+        for value in (
+            settings.kaleyra_api_domain,
+            settings.kaleyra_sid,
+            settings.kaleyra_api_key,
+            settings.kaleyra_verify_flow_id,
+            settings.kaleyra_http_timeout_seconds,
+        )
+    )
+
+
+def _otp_provider(settings: Settings, client: httpx.AsyncClient) -> OtpProvider:
+    assert settings.kaleyra_api_domain is not None
+    assert settings.kaleyra_sid is not None
+    assert settings.kaleyra_api_key is not None
+    assert settings.kaleyra_verify_flow_id is not None
+    assert settings.kaleyra_http_timeout_seconds is not None
+    return KaleyraVerifyOtpProvider(
+        api_domain=settings.kaleyra_api_domain,
+        sid=settings.kaleyra_sid,
+        api_key=settings.kaleyra_api_key.get_secret_value(),
+        flow_id=settings.kaleyra_verify_flow_id,
+        timeout_seconds=settings.kaleyra_http_timeout_seconds,
+        client=client,
+    )
+
+
+def _phone_protector(settings: Settings) -> PhoneIdentityProtector:
+    if (
+        settings.phone_encryption_active_key_id is None
+        or settings.phone_encryption_keys is None
+        or settings.phone_lookup_hmac_key is None
+    ):
+        return UnconfiguredPhoneIdentityProtector()
+    return AesGcmPhoneIdentityProtector.from_configuration(
+        active_key_id=settings.phone_encryption_active_key_id,
+        encryption_keys_json=settings.phone_encryption_keys.get_secret_value(),
+        lookup_hmac_key_base64=settings.phone_lookup_hmac_key.get_secret_value(),
     )
 
 

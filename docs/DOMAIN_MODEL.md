@@ -42,9 +42,15 @@ Examples:
 - `user_phone`
 - `user_role`
 - `refresh_session`
+- `authentication_challenge`
 - `user_address`
 
 A phone-number change preserves the same `user_id`. A user may have any number of saved addresses.
+
+Phase 1R AuthenticationChallenge binds encrypted phone plus keyed lookup HMAC to one provider
+verification reference, with a separate public UUIDv7 identity. It is `ACTIVE`, `CONSUMED` after
+committed login, or `SUPERSEDED` by a newer start. Expiry is derived without an EXPIRED state.
+The provider owns the OTP credential; no OTP, hash, attempt count or delivery state is stored locally.
 
 Phase 1O uses explicit canonical E.164 phone input and stores one active verified `user_phone` per
 user using a recoverable encrypted value plus keyed lookup HMAC. A newly created verified user is

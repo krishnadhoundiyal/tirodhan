@@ -84,6 +84,11 @@ verifier.
 
 ## Cross-cutting reliability tables
 
+Phase 1R `AUTHENTICATION_CHALLENGE` is a standalone authentication-intent root before user
+resolution, with no AppUser FK. It binds a protected phone identity to a transaction-bound provider
+reference; its public challenge UUID is separate. Only committed login consumes it. Its lifecycle
+and constraints are defined in `SCHEMA_DESIGN.md`.
+
 These are intentionally not shown in the business ER graph:
 
 ```text

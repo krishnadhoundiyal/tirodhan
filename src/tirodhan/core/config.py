@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -23,6 +24,15 @@ class Settings(BaseSettings):
     pending_payment_lifetime_seconds: int | None = None
     auth_access_token_ttl_seconds: int | None = None
     auth_refresh_session_ttl_seconds: int | None = None
+    auth_otp_challenge_ttl_seconds: int | None = None
+    kaleyra_api_domain: str | None = None
+    kaleyra_sid: str | None = None
+    kaleyra_api_key: SecretStr | None = None
+    kaleyra_verify_flow_id: str | None = None
+    kaleyra_http_timeout_seconds: float | None = None
+    phone_encryption_active_key_id: str | None = None
+    phone_encryption_keys: SecretStr | None = None
+    phone_lookup_hmac_key: SecretStr | None = None
     auth_token_issuer: str | None = None
     auth_token_audience: str | None = None
     auth_jwt_private_key_pem: SecretStr | None = None
@@ -61,6 +71,7 @@ class Settings(BaseSettings):
         "pending_payment_lifetime_seconds",
         "auth_access_token_ttl_seconds",
         "auth_refresh_session_ttl_seconds",
+        "auth_otp_challenge_ttl_seconds",
         "planning_lead_time_minutes",
         "planning_max_attempts",
         "planning_compaction_distance_m",
@@ -92,6 +103,22 @@ class Settings(BaseSettings):
     def optional_blob_account_url_must_be_https(cls, value: str | None) -> str | None:
         if value is not None and not value.startswith("https://"):
             raise ValueError("Azure Blob account URL must use HTTPS")
+        return value
+
+    @field_validator("kaleyra_api_domain")
+    @classmethod
+    def kaleyra_domain_must_be_https(cls, value: str | None) -> str | None:
+        if value is not None:
+            from tirodhan.modules.identity.kaleyra import validate_api_domain
+
+            value = validate_api_domain(value)
+        return value
+
+    @field_validator("kaleyra_http_timeout_seconds")
+    @classmethod
+    def provider_timeout_must_be_bounded(cls, value: float | None) -> float | None:
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise ValueError("provider timeout must be finite and positive")
         return value
 
 
