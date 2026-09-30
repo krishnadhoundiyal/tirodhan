@@ -12,7 +12,7 @@ from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient, MockTransport, Response
 from pydantic import SecretStr
-from sqlalchemy import func, inspect, select, text, update
+from sqlalchemy import delete, func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from test_identity_authentication import (
@@ -38,9 +38,15 @@ from tirodhan.modules.identity.ports import (
     OtpAlreadyVerifiedError,
     OtpProviderUnavailableError,
     OtpRequestConflictError,
+    OtpStartInProgressError,
     OtpVerificationError,
 )
-from tirodhan.modules.identity.service import LoginCredentials, start_otp_verification
+from tirodhan.modules.identity.service import (
+    AUTH_START_SCOPE,
+    AUTH_VERIFY_SCOPE,
+    LoginCredentials,
+    start_otp_verification,
+)
 from tirodhan.modules.reliability.models import IdempotencyRecord
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -54,6 +60,7 @@ async def start(factory, provider, *, key=None, now=None, protector=None):
         phone=PHONE,
         client_request_id=key or new_uuid7(),
         challenge_ttl_seconds=300,
+        idempotency_expires_at=(now or utc_now()) + timedelta(days=1),
         now=now,
     )
 
@@ -109,6 +116,7 @@ async def test_provider_start_success_local_failure_rolls_back_supersession(
     factory = database_session_factory
     provider = DeterministicOtpProvider()
     original = await start(factory, provider)
+    failed_key = new_uuid7()
     real_flush = AsyncSession.flush
 
     async def fail_new_challenge(session, objects=None):
@@ -121,17 +129,26 @@ async def test_provider_start_success_local_failure_rolls_back_supersession(
     with monkeypatch.context() as patch:
         patch.setattr(AsyncSession, "flush", fail_new_challenge)
         with pytest.raises(RuntimeError, match="simulated"):
-            await start(factory, provider)
+            await start(factory, provider, key=failed_key)
     assert provider.send_count == 2  # Remote send cannot be rolled back with PostgreSQL.
+    with pytest.raises(OtpStartInProgressError):
+        await start(factory, provider, key=failed_key)
+    assert provider.send_count == 2
     async with factory() as session:
         stored = await session.get(AuthenticationChallenge, original.challenge_id)
         assert stored.status == "ACTIVE" and stored.superseded_at is None
         assert await session.scalar(select(func.count()).select_from(AuthenticationChallenge)) == 1
+        failed = await session.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.scope == AUTH_START_SCOPE,
+                IdempotencyRecord.idempotency_key == str(failed_key),
+            )
+        )
+        assert failed.status == "IN_PROGRESS" and failed.result_resource_id is None
 
 
-@pytest.mark.parametrize("same_key", [True, False])
-async def test_concurrent_starts_resolve_one_active_local_challenge(
-    database_session_factory, same_key
+async def test_concurrent_different_start_keys_resolve_one_active_local_challenge(
+    database_session_factory,
 ):
     factory = database_session_factory
     both_remote_calls = asyncio.Event()
@@ -148,17 +165,198 @@ async def test_concurrent_starts_resolve_one_active_local_challenge(
     key = new_uuid7()
     results = await asyncio.gather(
         start(factory, provider, key=key),
-        start(factory, provider, key=key if same_key else new_uuid7()),
+        start(factory, provider, key=new_uuid7()),
     )
     async with factory() as session:
         rows = list((await session.scalars(select(AuthenticationChallenge))).all())
     assert sum(row.status == "ACTIVE" for row in rows) == 1
-    assert len(rows) == (1 if same_key else 2)
-    assert (results[0].challenge_id == results[1].challenge_id) == same_key
-    assert provider.send_count == 2  # Accepted remote race, not an exactly-once SMS claim.
-    if not same_key:
-        old = next(row for row in rows if row.status == "SUPERSEDED")
-        assert old.superseded_at is not None
+    assert len(rows) == 2
+    assert results[0].challenge_id != results[1].challenge_id
+    assert provider.send_count == 2  # Different keys are separate authentication intents.
+    old = next(row for row in rows if row.status == "SUPERSEDED")
+    assert old.superseded_at is not None
+
+
+async def test_concurrent_same_start_key_calls_generate_once_and_api_replays(
+    database_session_factory,
+    migrated_database_url,
+):
+    entered, release = asyncio.Event(), asyncio.Event()
+    factory = database_session_factory
+
+    class PausedProvider(DeterministicOtpProvider):
+        async def start_verification(self, *, normalized_phone):
+            assert factory.kw["bind"].pool.checkedout() == 0
+            remote = await super().start_verification(normalized_phone=normalized_phone)
+            entered.set()
+            await asyncio.wait_for(release.wait(), 10)
+            return remote
+
+    provider = PausedProvider()
+    app = auth_application(migrated_database_url, provider, DeterministicPhoneProtector())
+    key = new_uuid7()
+    payload = {"client_request_id": str(key), "phone": PHONE}
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            winner_task = asyncio.create_task(client.post("/v1/auth/otp/start", json=payload))
+            try:
+                await asyncio.wait_for(entered.wait(), 10)
+                loser = await asyncio.wait_for(
+                    client.post("/v1/auth/otp/start", json=payload),
+                    5,
+                )
+                assert loser.status_code == 409
+                assert loser.json() == {"detail": "OTP start is in progress"}
+                changed = await client.post(
+                    "/v1/auth/otp/start",
+                    json=dict(
+                        payload,
+                        phone="+14155552671",
+                    ),
+                )
+                assert changed.status_code == 409
+                async with factory() as session:
+                    record = await session.scalar(
+                        select(IdempotencyRecord).where(
+                            IdempotencyRecord.scope == AUTH_START_SCOPE,
+                        )
+                    )
+                    assert record.status == "IN_PROGRESS"
+                    assert record.result_resource_id is None
+                    assert (
+                        await session.scalar(
+                            select(func.count()).select_from(AuthenticationChallenge),
+                        )
+                        == 0
+                    )
+            finally:
+                release.set()
+                winner = await winner_task
+            assert winner.status_code == 202
+            replay = await client.post("/v1/auth/otp/start", json=payload)
+            assert replay.status_code == 202 and replay.json() == winner.json()
+    assert provider.send_count == 1
+    async with factory() as session:
+        challenge = await session.scalar(select(AuthenticationChallenge))
+        record = await session.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.scope == AUTH_START_SCOPE,
+            )
+        )
+        assert record.status == "COMPLETED" and record.result_status_code == 202
+        assert record.result_resource_id == challenge.challenge_id
+        assert challenge.provider_reference in provider._challenges
+        assert await session.scalar(select(func.count()).select_from(AuthenticationChallenge)) == 1
+        assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 1
+        assert len(record.request_fingerprint) == 32
+        assert PHONE.encode() not in record.request_fingerprint
+        assert challenge.phone_encrypted not in record.request_fingerprint
+
+
+async def test_concurrent_unseen_same_start_key_has_one_provider_owner(database_session_factory):
+    factory = database_session_factory
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class PausedProvider(DeterministicOtpProvider):
+        async def start_verification(self, *, normalized_phone):
+            remote = await super().start_verification(normalized_phone=normalized_phone)
+            entered.set()
+            await asyncio.wait_for(release.wait(), 10)
+            return remote
+
+    provider, key = PausedProvider(), new_uuid7()
+    tasks = [asyncio.create_task(start(factory, provider, key=key)) for _ in range(2)]
+    try:
+        await asyncio.wait_for(entered.wait(), 10)
+        completed, pending = await asyncio.wait(
+            tasks, timeout=5, return_when=asyncio.FIRST_COMPLETED
+        )
+        assert len(completed) == len(pending) == 1
+        assert isinstance(next(iter(completed)).exception(), OtpStartInProgressError)
+    finally:
+        release.set()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    assert sum(isinstance(result, AuthenticationChallenge) for result in results) == 1
+    assert sum(isinstance(result, OtpStartInProgressError) for result in results) == 1
+    assert provider.send_count == 1
+    replay = await start(factory, provider, key=key)
+    winner = next(result for result in results if isinstance(result, AuthenticationChallenge))
+    assert replay.challenge_id == winner.challenge_id and provider.send_count == 1
+
+
+async def test_pre_reservation_challenge_replays_without_another_generate(database_session_factory):
+    factory, provider = database_session_factory, DeterministicOtpProvider()
+    existing = await start(factory, provider)
+    # Simulate a challenge persisted by the preceding Phase 1R commit.
+    async with factory() as session, session.begin():
+        await session.execute(
+            delete(IdempotencyRecord).where(
+                IdempotencyRecord.scope == AUTH_START_SCOPE,
+                IdempotencyRecord.idempotency_key == str(existing.client_request_id),
+            )
+        )
+    replay = await start(factory, provider, key=existing.client_request_id)
+    assert replay.challenge_id == existing.challenge_id and provider.send_count == 1
+    async with factory() as session:
+        record = await session.scalar(select(IdempotencyRecord))
+        assert record.status == "COMPLETED" and record.result_resource_id == existing.challenge_id
+
+
+async def test_ambiguous_generate_failure_keeps_start_key_reserved(database_session_factory):
+    factory = database_session_factory
+    original = await start(factory, DeterministicOtpProvider())
+    key = new_uuid7()
+
+    class TimeoutProvider(DeterministicOtpProvider):
+        async def start_verification(self, *, normalized_phone):
+            await super().start_verification(normalized_phone=normalized_phone)
+            raise OtpProviderUnavailableError("lost Generate response")
+
+    provider = TimeoutProvider()
+    with pytest.raises(OtpProviderUnavailableError):
+        await start(factory, provider, key=key)
+    # Even elapsed reliability retention metadata does not permit automatic takeover.
+    async with factory() as session, session.begin():
+        await session.execute(
+            update(IdempotencyRecord)
+            .where(
+                IdempotencyRecord.scope == AUTH_START_SCOPE,
+                IdempotencyRecord.idempotency_key == str(key),
+            )
+            .values(expires_at=utc_now() - timedelta(seconds=1))
+        )
+    with pytest.raises(OtpStartInProgressError):
+        await start(factory, provider, key=key)
+    assert provider.send_count == 1
+    async with factory() as session:
+        record = await session.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.scope == AUTH_START_SCOPE,
+                IdempotencyRecord.idempotency_key == str(key),
+            )
+        )
+        assert record.status == "IN_PROGRESS" and record.result_resource_id is None
+        old = await session.get(AuthenticationChallenge, original.challenge_id)
+        assert old.status == "ACTIVE" and old.superseded_at is None
+    replacement = await start(factory, DeterministicOtpProvider(), key=new_uuid7())
+    assert replacement.challenge_id != original.challenge_id
+
+
+async def test_known_pre_invocation_failure_rolls_back_start_claim(database_session_factory):
+    factory = database_session_factory
+    key, provider = new_uuid7(), DeterministicOtpProvider()
+
+    class BrokenProtector(DeterministicPhoneProtector):
+        async def protect(self, normalized_phone):
+            raise RuntimeError("local phone protection failure")
+
+    with pytest.raises(RuntimeError, match="local phone protection"):
+        await start(factory, provider, key=key, protector=BrokenProtector())
+    assert provider.send_count == 0
+    async with factory() as session:
+        assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 0
+    challenge = await start(factory, provider, key=key)
+    assert challenge.client_request_id == key and provider.send_count == 1
 
 
 @pytest.mark.parametrize("unusable", ["MISSING", "CONSUMED", "SUPERSEDED", "EXPIRED"])
@@ -216,7 +414,16 @@ async def test_supersession_during_provider_verify_cannot_commit_login(database_
         new_row = await session.get(AuthenticationChallenge, replacement.challenge_id)
         assert old_row.status == "SUPERSEDED" and old_row.consumed_at is None
         assert new_row.status == "ACTIVE"
-        assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 0
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(IdempotencyRecord)
+                .where(
+                    IdempotencyRecord.scope == AUTH_VERIFY_SCOPE,
+                )
+            )
+            == 0
+        )
     assert await counts(factory) == (0, 0, 0, 0)
 
 
@@ -308,7 +515,16 @@ async def test_provider_success_local_rollback_is_not_committed_login(
     async with factory() as session:
         stored = await session.get(AuthenticationChallenge, challenge.challenge_id)
         assert stored.status == "ACTIVE" and stored.consumed_at is None
-        assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 0
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(IdempotencyRecord)
+                .where(
+                    IdempotencyRecord.scope == AUTH_VERIFY_SCOPE,
+                )
+            )
+            == 0
+        )
     assert await counts(factory) == (0, 0, 0, 0)
     with pytest.raises(OtpAlreadyVerifiedError):
         await login(factory, provider, DeterministicPhoneProtector(), challenge=challenge)
@@ -403,7 +619,11 @@ async def test_api_contract_and_protected_persistence(
     async with factory() as session:
         challenge = await session.get(AuthenticationChallenge, public_id)
         phone = await session.scalar(select(UserPhone))
-        record = await session.scalar(select(IdempotencyRecord))
+        record = await session.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.scope == AUTH_VERIFY_SCOPE,
+            )
+        )
         assert phone.phone_encrypted == challenge.phone_encrypted
         assert await protector.unprotect(phone.phone_encrypted) == PHONE
         assert challenge.provider_reference != str(public_id)

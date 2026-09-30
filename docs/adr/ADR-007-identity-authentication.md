@@ -77,10 +77,16 @@ are authentication failures, never evidence of a committed application login.
 
 ## Security / idempotency
 
-- OTP start replays a live ACTIVE challenge on unique client request ID plus phone HMAC. Terminal,
-  expired or changed-phone replay conflicts. New starts call the provider before the local transaction;
-  phone advisory locking, row locking and partial uniqueness serialize local supersession. Concurrent
-  new keys (or simultaneous unseen copies of one key) cannot claim exactly-once SMS delivery;
+- OTP start first commits an `auth.start` reservation keyed by client request ID and fingerprinted
+  with that UUID plus phone HMAC only. A different fingerprint conflicts; IN_PROGRESS returns 409
+  without provider invocation; COMPLETED loads its result challenge and replays only while ACTIVE
+  and unexpired. Only the claim creator calls Generate outside a PostgreSQL transaction, then local
+  supersession/challenge creation and start completion commit together. Phone advisory locking,
+  row locking and partial uniqueness serialize supersession; challenge client-ID uniqueness remains
+  a domain backstop. Different keys may each send, but simultaneous same-key calls cannot both send.
+  Ambiguous provider failures and post-invocation local failures retain IN_PROGRESS; no automatic
+  reclamation/retry is permitted, even when expiry metadata has elapsed. Known local failures before
+  provider invocation roll back the reservation. Recovery requires a new client request ID;
 - verify checks completed login replay before provider invocation, then locks and revalidates the
   challenge after provider success. Supersession or consumption during the call prevents session
   creation. Challenge consumption, identity, session and login idempotency complete atomically;

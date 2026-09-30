@@ -44,6 +44,10 @@ class OtpRequestConflictError(RuntimeError):
     pass
 
 
+class OtpStartInProgressError(OtpRequestConflictError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderOtpChallenge:
     provider_reference: str

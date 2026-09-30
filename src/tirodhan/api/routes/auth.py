@@ -22,6 +22,7 @@ from tirodhan.modules.identity.ports import (
     OtpProviderRateLimitedError,
     OtpProviderUnavailableError,
     OtpRequestConflictError,
+    OtpStartInProgressError,
     OtpVerificationError,
     PhoneIdentityProtector,
 )
@@ -116,10 +117,12 @@ async def post_otp_start(
     provider: Annotated[OtpProvider, Depends(get_otp_provider)],
     protector: Annotated[PhoneIdentityProtector, Depends(get_phone_identity_protector)],
 ) -> OtpStartResponse:
-    ttl = cast(Settings, request.app.state.settings).auth_otp_challenge_ttl_seconds
-    if ttl is None:
+    settings = cast(Settings, request.app.state.settings)
+    ttl = settings.auth_otp_challenge_ttl_seconds
+    idempotency_ttl = settings.command_idempotency_ttl_seconds
+    if ttl is None or idempotency_ttl is None:
         raise HTTPException(
-            status_code=503, detail="Authentication challenge lifetime is not configured"
+            status_code=503, detail="Authentication start lifetimes are not configured"
         )
     try:
         challenge = await start_otp_verification(
@@ -129,12 +132,15 @@ async def post_otp_start(
             phone=body.phone.get_secret_value(),
             client_request_id=body.client_request_id,
             challenge_ttl_seconds=ttl,
+            idempotency_expires_at=utc_now() + timedelta(seconds=idempotency_ttl),
         )
         return OtpStartResponse(challenge_reference=challenge.challenge_id)
     except IdentityInputError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
+    except OtpStartInProgressError as error:
+        raise HTTPException(status_code=409, detail="OTP start is in progress") from error
     except OtpRequestConflictError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="OTP request conflicts"

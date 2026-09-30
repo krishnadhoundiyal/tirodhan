@@ -92,6 +92,9 @@ Supply production secrets via Key Vault -> ACA secret/reference -> process confi
 public UUIDv7 `challenge_reference`. `POST /v1/auth/otp/verify` accepts `client_login_id`, that
 reference and `code`; phone is forbidden. Provider references remain private. A new OTP needs
 a new start key, not a resend call. A consumed, superseded or locally expired start key conflicts.
+Start reserves `auth.start` before Generate: only one same-key caller can invoke the provider;
+IN_PROGRESS returns 409, while completed live replay returns the same challenge. Ambiguous provider
+or post-invocation local failures keep the key reserved and require a genuinely new start key.
 Successful login consumes the local challenge atomically with identity/session persistence.
 Provider success followed by local failure requires a new start; completed login replay cannot
 reconstruct credentials. Refresh, logout and downstream authorization are unchanged.

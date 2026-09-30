@@ -127,9 +127,15 @@ and `SUPERSEDED`; expiry is derived from a configured intent lifetime, independe
 expiry. `CONSUMED` means a committed Tirodhan login, not merely successful provider validation.
 The provider owns generation, correctness, expiry, attempt limits and single use; Tirodhan owns
 intent, replay, phone binding, identity and session creation. No OTP plaintext or hash is stored.
-Provider calls run outside DB transactions and are never automatically retried. Concurrent new
-starts can send more than one SMS before local uniqueness resolves. Provider success followed by
-a local crash requires a new attempt; an already-verified response cannot prove a local commit.
+Provider calls run outside DB transactions and are never automatically retried. Start first commits
+an `(auth.start, client_request_id)` idempotency reservation fingerprinting the client UUID and phone
+HMAC only. Only the claim creator may call Generate; concurrent same-key callers receive 409 while
+IN_PROGRESS, and completed claims replay their still-live challenge without provider invocation.
+Different keys are separate intents and may each call Generate. Challenge creation/supersession and
+start-claim completion commit together. An ambiguous Generate failure or local failure after provider
+invocation leaves the key IN_PROGRESS; use a new client request ID, never automatically reclaim/retry.
+Known local failures before provider invocation roll back the claim. Provider verification success
+followed by a local crash requires a new attempt; an already-verified response cannot prove a commit.
 Resend, failover and recovery workers remain out of scope. Runtime secrets arrive through Key Vault
 and Container Apps secret/reference configuration, with no Key Vault calls in application code.
 

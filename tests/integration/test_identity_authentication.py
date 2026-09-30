@@ -161,6 +161,7 @@ async def begin_challenge(
         provider=provider,
         phone_protector=DeterministicPhoneProtector(),
         challenge_ttl_seconds=300,
+        idempotency_expires_at=(now or utc_now()) + timedelta(days=1),
         phone=phone,
         client_request_id=new_uuid7(),
         now=now,
@@ -220,6 +221,7 @@ async def test_otp_start_provider_contract_converges_and_requires_explicit_resen
             phone=phone,
             client_request_id=key,
             challenge_ttl_seconds=300,
+            idempotency_expires_at=utc_now() + timedelta(days=1),
         )
 
     first = await start(PHONE, command_id)

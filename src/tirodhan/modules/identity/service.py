@@ -27,6 +27,7 @@ from tirodhan.modules.identity.ports import (
     OtpProvider,
     OtpProviderConfigurationError,
     OtpRequestConflictError,
+    OtpStartInProgressError,
     OtpVerificationError,
     PhoneIdentityProtector,
 )
@@ -48,6 +49,7 @@ ROLE_CUSTOMER = "CUSTOMER"
 ROLE_RIDER = "RIDER"
 ROLE_MANAGER = "MANAGER"
 AUTH_VERIFY_SCOPE = "auth.verify"
+AUTH_START_SCOPE = "auth.start"
 _E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
 
@@ -117,39 +119,79 @@ async def start_otp_verification(
     phone: str,
     client_request_id: UUID,
     challenge_ttl_seconds: int,
+    idempotency_expires_at: datetime,
     now: datetime | None = None,
 ) -> AuthenticationChallenge:
     if challenge_ttl_seconds <= 0:
         raise IdentityInputError("authentication challenge lifetime must be positive")
     normalized_phone = normalize_phone(phone)
     phone_lookup_hmac = await phone_protector.lookup_hmac(normalized_phone)
-    phone_encrypted = await phone_protector.protect(normalized_phone)
-    if len(phone_lookup_hmac) != 32 or not phone_encrypted:
+    if len(phone_lookup_hmac) != 32:
         raise IdentityProviderNotConfiguredError("phone identity protection is invalid")
-    async with session_factory() as session:
-        existing = await session.scalar(
-            select(AuthenticationChallenge).where(
-                AuthenticationChallenge.client_request_id == client_request_id
+    fingerprint = command_fingerprint(
+        {"client_request_id": client_request_id, "phone_lookup_hmac": phone_lookup_hmac.hex()}
+    )
+    try:
+        async with session_factory() as session, session.begin():
+            claim = await claim_idempotency_record(
+                session,
+                scope=AUTH_START_SCOPE,
+                idempotency_key=str(client_request_id),
+                request_fingerprint=fingerprint,
+                expires_at=idempotency_expires_at,
+                now=now,
             )
-        )
-        if existing is not None:
-            return _start_replay(existing, phone_lookup_hmac, now or utc_now())
+            if not claim.created:
+                result = get_completed_idempotency_result(claim.record)
+                if result is None:
+                    raise OtpStartInProgressError("OTP start is in progress; use a new start key")
+                existing = (
+                    await session.get(AuthenticationChallenge, result.resource_id)
+                    if result.resource_id is not None
+                    else None
+                )
+                if existing is None or existing.client_request_id != client_request_id:
+                    raise RuntimeError("completed OTP start references an invalid challenge")
+                return _start_replay(existing, phone_lookup_hmac, now or utc_now())
 
-    provider_code = provider.provider_code
+            # Preserve replay of challenges established before auth.start reservations.
+            existing = await session.scalar(
+                select(AuthenticationChallenge).where(
+                    AuthenticationChallenge.client_request_id == client_request_id
+                )
+            )
+            if existing is not None:
+                existing = _start_replay(existing, phone_lookup_hmac, now or utc_now())
+                await complete_idempotency_record(
+                    session,
+                    claim.record,
+                    result_resource_id=existing.challenge_id,
+                    result_status_code=202,
+                    completed_at=now,
+                )
+                return existing
+
+            # Known local failures roll back the claim before any provider invocation.
+            provider_code = provider.provider_code
+            phone_encrypted = await phone_protector.protect(normalized_phone)
+            if not phone_encrypted:
+                raise IdentityProviderNotConfiguredError("phone identity protection is invalid")
+    except IdempotencyKeyConflictError as error:
+        raise OtpRequestConflictError("OTP request identity was reused") from error
+
+    # Only the committed claim owner invokes Generate. Any failure from here keeps
+    # that key reserved: a lost response must never cause another remote transaction.
     remote = await provider.start_verification(normalized_phone=normalized_phone)
     if not remote.provider_reference or len(remote.provider_reference) > 200:
         raise OtpProviderConfigurationError("OTP provider returned an invalid reference")
     async with session_factory() as session, session.begin():
         # Independent namespaces: start never holds the identity advisory lock while
         # waiting for a challenge row that a verification transaction may own.
-        await _lock_start_key(session, b"client", client_request_id.bytes)
-        existing = await session.scalar(
-            select(AuthenticationChallenge)
-            .where(AuthenticationChallenge.client_request_id == client_request_id)
-            .with_for_update()
+        record = await session.get(
+            IdempotencyRecord, claim.record.idempotency_record_id, with_for_update=True
         )
-        if existing is not None:
-            return _start_replay(existing, phone_lookup_hmac, now or utc_now())
+        if record is None:
+            raise RuntimeError("OTP start reservation is missing")
         await _lock_start_key(session, b"phone", phone_lookup_hmac)
         prior = await session.scalar(
             select(AuthenticationChallenge)
@@ -179,6 +221,13 @@ async def start_otp_verification(
         )
         session.add(challenge)
         await session.flush([challenge])
+        await complete_idempotency_record(
+            session,
+            record,
+            result_resource_id=challenge.challenge_id,
+            result_status_code=202,
+            completed_at=created_at,
+        )
         return challenge
 
 

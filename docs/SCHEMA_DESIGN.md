@@ -824,6 +824,13 @@ Outbox payloads carry identifiers/minimal routing data, not PII-rich domain obje
 
 ### OTP verification and session creation
 
+OTP start first commits `(auth.start, client_request_id)` with a cryptographic fingerprint of
+client UUID and phone HMAC only. Only the new claim owner invokes Generate outside PostgreSQL.
+IN_PROGRESS conflicts; COMPLETED resolves its challenge ID and validates live exact replay.
+After Generate, challenge supersession/creation and idempotency completion (challenge ID, 202)
+share one transaction. Pre-invocation local failure rolls back the claim; ambiguous provider
+failure or post-invocation DB failure leaves IN_PROGRESS, with no automatic retry/reclamation.
+
 OTP verification runs without a held PostgreSQL lock. After provider success, one transaction
 locks and revalidates the AuthenticationChallenge as ACTIVE and unexpired, then
 claims `(auth.verify, client_login_id)`, acquires the transaction-scoped advisory lock derived from
