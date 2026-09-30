@@ -9,20 +9,32 @@ from hmac import compare_digest
 from uuid import UUID
 
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.customers.service import command_fingerprint
 from tirodhan.modules.identity.locking import acquire_phone_identity_advisory_lock
-from tirodhan.modules.identity.models import AppUser, RefreshSession, UserPhone, UserRole
+from tirodhan.modules.identity.models import (
+    AppUser,
+    AuthenticationChallenge,
+    RefreshSession,
+    UserPhone,
+    UserRole,
+)
 from tirodhan.modules.identity.ports import (
     IdentityProviderNotConfiguredError,
-    OtpChallenge,
     OtpProvider,
+    OtpProviderConfigurationError,
+    OtpRequestConflictError,
+    OtpVerificationError,
     PhoneIdentityProtector,
 )
-from tirodhan.modules.identity.tokens import AccessTokenCodec, AccessTokenInvalidError
+from tirodhan.modules.identity.tokens import (
+    AccessTokenCodec,
+    AccessTokenConfigurationError,
+    AccessTokenInvalidError,
+)
 from tirodhan.modules.reliability.models import IdempotencyRecord
 from tirodhan.modules.reliability.primitives import (
     IdempotencyKeyConflictError,
@@ -98,30 +110,109 @@ def hash_refresh_credential(raw_credential: str) -> bytes:
 
 
 async def start_otp_verification(
-    provider: OtpProvider,
+    session_factory: async_sessionmaker[AsyncSession],
     *,
+    provider: OtpProvider,
+    phone_protector: PhoneIdentityProtector,
     phone: str,
     client_request_id: UUID,
-) -> OtpChallenge:
+    challenge_ttl_seconds: int,
+    now: datetime | None = None,
+) -> AuthenticationChallenge:
+    if challenge_ttl_seconds <= 0:
+        raise IdentityInputError("authentication challenge lifetime must be positive")
     normalized_phone = normalize_phone(phone)
-    challenge = await provider.start_verification(
-        normalized_phone=normalized_phone,
-        client_request_id=client_request_id,
+    phone_lookup_hmac = await phone_protector.lookup_hmac(normalized_phone)
+    phone_encrypted = await phone_protector.protect(normalized_phone)
+    if len(phone_lookup_hmac) != 32 or not phone_encrypted:
+        raise IdentityProviderNotConfiguredError("phone identity protection is invalid")
+    async with session_factory() as session:
+        existing = await session.scalar(
+            select(AuthenticationChallenge).where(
+                AuthenticationChallenge.client_request_id == client_request_id
+            )
+        )
+        if existing is not None:
+            return _start_replay(existing, phone_lookup_hmac, now or utc_now())
+
+    provider_code = provider.provider_code
+    remote = await provider.start_verification(normalized_phone=normalized_phone)
+    if not remote.provider_reference or len(remote.provider_reference) > 200:
+        raise OtpProviderConfigurationError("OTP provider returned an invalid reference")
+    async with session_factory() as session, session.begin():
+        # Independent namespaces: start never holds the identity advisory lock while
+        # waiting for a challenge row that a verification transaction may own.
+        await _lock_start_key(session, b"client", client_request_id.bytes)
+        existing = await session.scalar(
+            select(AuthenticationChallenge)
+            .where(AuthenticationChallenge.client_request_id == client_request_id)
+            .with_for_update()
+        )
+        if existing is not None:
+            return _start_replay(existing, phone_lookup_hmac, now or utc_now())
+        await _lock_start_key(session, b"phone", phone_lookup_hmac)
+        prior = await session.scalar(
+            select(AuthenticationChallenge)
+            .where(
+                AuthenticationChallenge.phone_lookup_hmac == phone_lookup_hmac,
+                AuthenticationChallenge.status == "ACTIVE",
+            )
+            .with_for_update()
+        )
+        created_at = now or utc_now()
+        if prior is not None:
+            prior.status = "SUPERSEDED"
+            prior.superseded_at = created_at
+            await session.flush([prior])
+        challenge = AuthenticationChallenge(
+            challenge_id=new_uuid7(),
+            client_request_id=client_request_id,
+            phone_encrypted=phone_encrypted,
+            phone_lookup_hmac=phone_lookup_hmac,
+            provider_code=provider_code,
+            provider_reference=remote.provider_reference,
+            status="ACTIVE",
+            created_at=created_at,
+            expires_at=created_at + timedelta(seconds=challenge_ttl_seconds),
+            consumed_at=None,
+            superseded_at=None,
+        )
+        session.add(challenge)
+        await session.flush([challenge])
+        return challenge
+
+
+async def _lock_start_key(session: AsyncSession, namespace: bytes, value: bytes) -> None:
+    lock_id = int.from_bytes(
+        hashlib.sha256(b"tirodhan:otp-start:" + namespace + b":" + value).digest()[:8],
+        "big",
+        signed=True,
     )
-    if not challenge.challenge_reference:
-        raise RuntimeError("OTP provider returned an empty challenge reference")
+    await session.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
+
+
+def _start_replay(
+    challenge: AuthenticationChallenge, phone_lookup_hmac: bytes, now: datetime
+) -> AuthenticationChallenge:
+    if not compare_digest(challenge.phone_lookup_hmac, phone_lookup_hmac):
+        raise OtpRequestConflictError("OTP request identity was reused")
+    if challenge.status != "ACTIVE" or challenge.expires_at <= now:
+        raise OtpRequestConflictError("start a new OTP authentication attempt")
     return challenge
+
+
+def _require_usable_challenge(challenge: AuthenticationChallenge | None, now: datetime) -> None:
+    if challenge is None or challenge.status != "ACTIVE" or challenge.expires_at <= now:
+        raise OtpVerificationError("authentication failed; start a new OTP attempt")
 
 
 async def verify_otp_and_login(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     client_login_id: UUID,
-    phone: str,
-    challenge_reference: str,
+    challenge_reference: UUID,
     code: str,
     otp_provider: OtpProvider,
-    phone_protector: PhoneIdentityProtector,
     token_codec: AccessTokenCodec,
     refresh_session_ttl_seconds: int,
     access_token_ttl_seconds: int,
@@ -130,30 +221,37 @@ async def verify_otp_and_login(
 ) -> LoginCredentials:
     if refresh_session_ttl_seconds <= 0 or access_token_ttl_seconds <= 0:
         raise IdentityInputError("authentication lifetimes must be positive")
-    normalized_phone = normalize_phone(phone)
-    phone_lookup_hmac = await phone_protector.lookup_hmac(normalized_phone)
-    if len(phone_lookup_hmac) < 8:
-        raise IdentityProviderNotConfiguredError(
-            "phone identity protector returned an invalid lookup representation"
-        )
-    fingerprint = _login_fingerprint(phone_lookup_hmac, challenge_reference)
+    if not token_codec.configured:
+        raise AccessTokenConfigurationError("authentication is not configured")
+    async with session_factory() as session:
+        challenge = await session.get(AuthenticationChallenge, challenge_reference)
+        if challenge is None:
+            raise OtpVerificationError("authentication failed")
+        phone_lookup_hmac = bytes(challenge.phone_lookup_hmac)
+        fingerprint = _login_fingerprint(phone_lookup_hmac, challenge.challenge_id)
     await _reject_completed_login_replay(
         session_factory,
         client_login_id=client_login_id,
         fingerprint=fingerprint,
     )
-
+    _require_usable_challenge(challenge, now or utc_now())
+    if challenge.provider_code != otp_provider.provider_code:
+        raise OtpProviderConfigurationError("authentication provider is not configured")
     await otp_provider.verify(
-        challenge_reference=challenge_reference,
-        normalized_phone=normalized_phone,
+        provider_reference=challenge.provider_reference,
         code=code,
     )
-    protected_phone = await phone_protector.protect(normalized_phone)
-    raw_refresh_credential = secrets.token_urlsafe(32)
-    credential_hash = hash_refresh_credential(raw_refresh_credential)
-    established_at = now or utc_now()
-
     async with session_factory() as session, session.begin():
+        challenge = await session.scalar(
+            select(AuthenticationChallenge)
+            .where(AuthenticationChallenge.challenge_id == challenge_reference)
+            .with_for_update()
+        )
+        established_at = now or utc_now()
+        # Concurrent completed copies retain the controlled lost-response policy.
+        await _reject_completed_login_replay_in_session(session, client_login_id, fingerprint)
+        _require_usable_challenge(challenge, established_at)
+        assert challenge is not None
         claim = await claim_idempotency_record(
             session,
             scope=AUTH_VERIFY_SCOPE,
@@ -190,7 +288,7 @@ async def verify_otp_and_login(
                     UserPhone(
                         user_phone_id=new_uuid7(),
                         user_id=user.user_id,
-                        phone_encrypted=protected_phone,
+                        phone_encrypted=bytes(challenge.phone_encrypted),
                         phone_lookup_hmac=phone_lookup_hmac,
                         verified_at=established_at,
                         retired_at=None,
@@ -215,6 +313,8 @@ async def verify_otp_and_login(
                 raise UserAuthenticationDeniedError("authentication failed")
             user = existing_user
 
+        raw_refresh_credential = secrets.token_urlsafe(32)
+        credential_hash = hash_refresh_credential(raw_refresh_credential)
         refresh_session = RefreshSession(
             refresh_session_id=new_uuid7(),
             user_id=user.user_id,
@@ -225,6 +325,8 @@ async def verify_otp_and_login(
         )
         session.add(refresh_session)
         await session.flush([refresh_session])
+        challenge.status = "CONSUMED"
+        challenge.consumed_at = established_at
         await complete_idempotency_record(
             session,
             claim.record,
@@ -350,25 +452,28 @@ async def _reject_completed_login_replay(
     fingerprint: bytes,
 ) -> None:
     async with session_factory() as session:
-        record = await session.scalar(
-            select(IdempotencyRecord).where(
-                IdempotencyRecord.scope == AUTH_VERIFY_SCOPE,
-                IdempotencyRecord.idempotency_key == str(client_login_id),
-            )
+        await _reject_completed_login_replay_in_session(session, client_login_id, fingerprint)
+
+
+async def _reject_completed_login_replay_in_session(
+    session: AsyncSession, client_login_id: UUID, fingerprint: bytes
+) -> None:
+    record = await session.scalar(
+        select(IdempotencyRecord).where(
+            IdempotencyRecord.scope == AUTH_VERIFY_SCOPE,
+            IdempotencyRecord.idempotency_key == str(client_login_id),
         )
-        if record is None:
-            return
+    )
+    if record is not None:
         if not compare_digest(record.request_fingerprint, fingerprint):
-            raise IdempotencyKeyConflictError(
-                "idempotency key is already associated with a different request"
-            )
+            raise IdempotencyKeyConflictError("login command identity was reused")
         if get_completed_idempotency_result(record) is not None:
             raise LoginCredentialsUnavailableReplayError(
                 "login already completed; start a new OTP verification"
             )
 
 
-def _login_fingerprint(phone_lookup_hmac: bytes, challenge_reference: str) -> bytes:
+def _login_fingerprint(phone_lookup_hmac: bytes, challenge_reference: UUID) -> bytes:
     return command_fingerprint(
         {
             "phone_lookup_hmac": phone_lookup_hmac.hex(),

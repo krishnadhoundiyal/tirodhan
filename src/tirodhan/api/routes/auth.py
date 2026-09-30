@@ -5,7 +5,7 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
@@ -19,6 +19,8 @@ from tirodhan.db.values import utc_now
 from tirodhan.modules.identity.ports import (
     IdentityProviderNotConfiguredError,
     OtpProvider,
+    OtpProviderRateLimitedError,
+    OtpProviderUnavailableError,
     OtpRequestConflictError,
     OtpVerificationError,
     PhoneIdentityProtector,
@@ -44,18 +46,19 @@ router = APIRouter(prefix="/v1/auth", tags=["authentication"])
 
 
 class OtpStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     client_request_id: UUID
     phone: SecretStr
 
 
 class OtpStartResponse(BaseModel):
-    challenge_reference: str
+    challenge_reference: UUID
 
 
 class OtpVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     client_login_id: UUID
-    phone: SecretStr
-    challenge_reference: str
+    challenge_reference: UUID
     code: SecretStr
 
 
@@ -108,15 +111,26 @@ def _access_token_ttl(request: Request) -> int:
 )
 async def post_otp_start(
     body: OtpStartRequest,
+    request: Request,
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     provider: Annotated[OtpProvider, Depends(get_otp_provider)],
+    protector: Annotated[PhoneIdentityProtector, Depends(get_phone_identity_protector)],
 ) -> OtpStartResponse:
+    ttl = cast(Settings, request.app.state.settings).auth_otp_challenge_ttl_seconds
+    if ttl is None:
+        raise HTTPException(
+            status_code=503, detail="Authentication challenge lifetime is not configured"
+        )
     try:
         challenge = await start_otp_verification(
-            provider,
+            session_factory,
+            provider=provider,
+            phone_protector=protector,
             phone=body.phone.get_secret_value(),
             client_request_id=body.client_request_id,
+            challenge_ttl_seconds=ttl,
         )
-        return OtpStartResponse(challenge_reference=challenge.challenge_reference)
+        return OtpStartResponse(challenge_reference=challenge.challenge_id)
     except IdentityInputError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
@@ -130,6 +144,14 @@ async def post_otp_start(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OTP provider is not configured",
         ) from error
+    except OtpProviderRateLimitedError as error:
+        raise HTTPException(
+            status_code=429, detail="Authentication temporarily rate limited"
+        ) from error
+    except OtpProviderUnavailableError as error:
+        raise HTTPException(
+            status_code=503, detail="Authentication provider is unavailable"
+        ) from error
 
 
 @router.post("/otp/verify", response_model=LoginTokenResponse)
@@ -138,7 +160,6 @@ async def post_otp_verify(
     request: Request,
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     provider: Annotated[OtpProvider, Depends(get_otp_provider)],
-    protector: Annotated[PhoneIdentityProtector, Depends(get_phone_identity_protector)],
     token_codec: Annotated[AccessTokenCodec, Depends(get_access_token_codec)],
 ) -> LoginTokenResponse:
     access_ttl, refresh_ttl, idempotency_ttl = _login_settings(request)
@@ -151,11 +172,9 @@ async def post_otp_verify(
         result = await verify_otp_and_login(
             session_factory,
             client_login_id=body.client_login_id,
-            phone=body.phone.get_secret_value(),
             challenge_reference=body.challenge_reference,
             code=body.code.get_secret_value(),
             otp_provider=provider,
-            phone_protector=protector,
             token_codec=token_codec,
             refresh_session_ttl_seconds=refresh_ttl,
             access_token_ttl_seconds=access_ttl,
@@ -188,6 +207,14 @@ async def post_otp_verify(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication is not configured",
+        ) from error
+    except OtpProviderRateLimitedError as error:
+        raise HTTPException(
+            status_code=429, detail="Authentication temporarily rate limited"
+        ) from error
+    except OtpProviderUnavailableError as error:
+        raise HTTPException(
+            status_code=503, detail="Authentication provider is unavailable"
         ) from error
 
 
