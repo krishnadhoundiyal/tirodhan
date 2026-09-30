@@ -52,12 +52,40 @@ Concurrent refresh and logout serialize on the refresh-session row. Two refreshe
 logout first makes refresh fail, while refresh first may return a JWT that becomes unusable as soon
 as the following logout commits.
 
-MSG91 is the current OTP-provider candidate; commercial confirmation/DLT onboarding remains a launch task.
+Phase 1R selects Kaleyra Verify as the runtime implementation. Only transaction-bound providers
+are supported: `start_verification(normalized_phone)` returns `provider_reference`, and
+`verify(provider_reference, code)` verifies that transaction without a phone argument.
+Tirodhan persists its own UUIDv7 AuthenticationChallenge; its public reference differs from the
+provider reference, which is never exposed to clients. Phone is fixed at start; verify does not
+accept phone. Provider credential state is separate from local `ACTIVE`, `CONSUMED`, `SUPERSEDED`
+intent state. `CONSUMED` records a committed login. No OTP or OTP hash is persisted.
+Kaleyra owns OTP generation, correctness, expiry, limits and single use. Local expiry is configured
+and must be intentionally aligned with the provider flow. New starts use a new client request ID;
+resend is not implemented. Missing runtime configuration fails closed without fallback.
+
+The reusable asynchronous HTTP runtime has bounded timeouts and no automatic Generate/Validate
+retry. Application-created clients close on shutdown; injected clients remain caller-owned.
+Phone protection uses versioned AES-256-GCM envelopes and an independent HMAC-SHA256 lookup key.
+Keys and provider secrets arrive through Key Vault -> Container Apps secret/reference -> process
+configuration. Encryption key IDs support retained-key decryption; lookup-key rotation requires
+an explicit maintenance/data migration.
+
+Provider API references: [Generate OTPs](https://developers.kaleyra.io/docs/generating-otp) and
+[Validate OTPs](https://developers.kaleyra.io/docs/validating-otp). Both use POST with `api-key`;
+Generate returns `data.verify_id`, while Validate submits `verify_id` and `otp`. E910/E911/E912/E913
+are authentication failures, never evidence of a committed application login.
 
 ## Security / idempotency
 
-- OTP start retry convergence is the provider adapter's responsibility; no local database record can
-  claim exactly-once SMS delivery;
+- OTP start replays a live ACTIVE challenge on unique client request ID plus phone HMAC. Terminal,
+  expired or changed-phone replay conflicts. New starts call the provider before the local transaction;
+  phone advisory locking, row locking and partial uniqueness serialize local supersession. Concurrent
+  new keys (or simultaneous unseen copies of one key) cannot claim exactly-once SMS delivery;
+- verify checks completed login replay before provider invocation, then locks and revalidates the
+  challenge after provider success. Supersession or consumption during the call prevents session
+  creation. Challenge consumption, identity, session and login idempotency complete atomically;
+- provider success followed by local crash may leave a locally ACTIVE intent with an externally
+  consumed OTP. Start a new attempt; no recovery state or distributed transaction is introduced;
 - successful verification uses `auth.verify` command idempotency plus a phone-HMAC advisory lock and
   active-phone uniqueness so exact replay cannot create duplicate sessions or human identities;
 - stable refresh retry/concurrency does not create or mutate sessions;

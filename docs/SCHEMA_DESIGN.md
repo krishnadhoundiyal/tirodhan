@@ -66,6 +66,29 @@ created_at          timestamptz NOT NULL
 updated_at          timestamptz NOT NULL
 ```
 
+### `authentication_challenge`
+
+```text
+challenge_id        uuid PK (application UUIDv7)
+client_request_id   uuid NOT NULL UNIQUE
+phone_encrypted     bytea NOT NULL
+phone_lookup_hmac   bytea NOT NULL
+provider_code      varchar(32) NOT NULL
+provider_reference varchar(200) NOT NULL
+status             varchar(24) NOT NULL
+expires_at         timestamptz NOT NULL
+created_at         timestamptz NOT NULL
+consumed_at        timestamptz NULL
+superseded_at      timestamptz NULL
+```
+
+Required: `UNIQUE(provider_code, provider_reference)`, partial `UNIQUE(phone_lookup_hmac)`
+where status is ACTIVE, and `expires_at > created_at`. Status uses VARCHAR + CHECK:
+ACTIVE has no terminal timestamp; CONSUMED has only consumed_at; SUPERSEDED has only superseded_at.
+An expired ACTIVE row remains stored and unusable; terminal rows never reactivate. The challenge is
+an authentication intent before user resolution, so it has no AppUser FK. No OTP/hash, provider
+attempt/delivery state, or local resend counter is stored. Migration 0015 follows 0014.
+
 ### `user_phone`
 
 ```text
@@ -802,10 +825,11 @@ Outbox payloads carry identifiers/minimal routing data, not PII-rich domain obje
 ### OTP verification and session creation
 
 OTP verification runs without a held PostgreSQL lock. After provider success, one transaction
+locks and revalidates the AuthenticationChallenge as ACTIVE and unexpired, then
 claims `(auth.verify, client_login_id)`, acquires the transaction-scoped advisory lock derived from
 the first eight bytes of `phone_lookup_hmac`, resolves or creates the user/active phone and initial
 customer role, creates one refresh session, and completes the idempotency record with only the
-session ID. The transaction stores no phone, OTP, refresh credential, or access token in reliability
+session ID and marks the challenge CONSUMED. The transaction stores no phone, OTP, refresh credential, or access token in reliability
 metadata and emits no outbox event.
 
 Refresh and logout both lock the refresh-session row. Refresh validates without mutating it; logout

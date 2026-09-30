@@ -90,8 +90,8 @@ not distributed exactly-once execution.
 
 | Operation | Idempotency/business key | DB/domain protection | Replay/concurrency behaviour |
 |---|---|---|---|
-| Request OTP | `(client_request_id, normalized phone)` at provider boundary | provider idempotency/reconciliation; no local OTP/idempotency row | same ID/phone converges on one logical request; changed phone conflicts; new ID is explicit resend |
-| Verify OTP | scope `auth.verify` + `client_login_id` | request fingerprint + phone advisory lock + active-phone uniqueness | exact completed replay does not call provider or mint credentials and requires a new OTP login; changed fingerprint conflicts |
+| Request OTP | unique `client_request_id` + phone HMAC | AuthenticationChallenge uniqueness + phone advisory lock + active-challenge partial uniqueness | live ACTIVE exact replay returns public UUID without provider call; changed phone, terminal or expired replay conflicts; new ID creates a new intent after provider success |
+| Verify OTP | scope `auth.verify` + `client_login_id` | durable challenge/HMAC fingerprint + challenge row lock + phone advisory lock + active-phone uniqueness | exact completed replay does not call provider or mint credentials; one challenge produces at most one committed login; changed fingerprint conflicts |
 | Refresh session | SHA-256 refresh-credential verifier | refresh-session row lock + fixed expiry/revocation | stable active credential may refresh repeatedly/concurrently; no rotation, successor, or expiry extension |
 | Logout session | SHA-256 refresh-credential verifier | refresh-session row lock + conditional `revoked_at` | active session is revoked; revoked or unknown credential is generic success |
 | Grant role | `(user_id, role_code)` | unique active role membership | repeat grant returns existing membership/no-op |
@@ -141,12 +141,19 @@ not distributed exactly-once execution.
 
 ### Identity creation and session commands
 
-OTP start has no local database idempotency claim: its provider adapter must converge the same
-client request ID and normalized phone, while a new ID is an explicit resend. OTP verification first
-checks completed `auth.verify` state before the external provider call. Provider success is followed
-by a transaction that claims the command and acquires a deterministic phone-HMAC advisory lock;
-partial unique indexes are the physical identity backstop. Distinct legitimate login commands may
-create independent sessions, while one exact command creates at most one.
+Phase 1R start replays its persisted live challenge before calling the provider. A new request calls
+Generate outside a DB transaction, then serializes by client request ID and phone identity, locks
+the prior ACTIVE challenge, supersedes it and inserts the new one. Provider failure leaves the
+old intent unchanged. Concurrent unseen copies may send multiple SMS before local uniqueness
+resolves; provider success followed by DB failure is an accepted side-effect gap, not exactly-once
+delivery. Terminal/expired request IDs cannot send again.
+Verify fingerprints only challenge identity and phone HMAC. Completed login replay precedes
+provider invocation. After Validate success it locks and revalidates the challenge, claims the
+command, resolves identity under the phone advisory lock, creates the session, consumes the
+challenge and completes idempotency in one transaction. Concurrent verification or supersession
+can yield only one committed login per challenge. Separate challenges can create independent
+sessions for one user. Provider success with local rollback leaves no committed login; an
+already-verified provider response is an authentication failure requiring a new start.
 
 Refresh and logout serialize on the same refresh-session row. Two refreshes may both issue access
 JWTs because the stable credential and fixed expiry do not change. If logout wins, later refresh
