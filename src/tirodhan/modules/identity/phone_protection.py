@@ -5,12 +5,9 @@ import binascii
 import hashlib
 import hmac
 import json
-import secrets
 from collections.abc import Mapping
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+from tirodhan.core.crypto.envelope import EnvelopeDecryptionError, VersionedAesGcmEnvelope
 from tirodhan.modules.identity.ports import IdentityProviderNotConfiguredError
 
 
@@ -40,16 +37,22 @@ class AesGcmPhoneIdentityProtector:
         self, *, active_key_id: str, encryption_keys: Mapping[str, bytes], lookup_hmac_key: bytes
     ) -> None:
         if (
-            active_key_id not in encryption_keys
-            or len(lookup_hmac_key) != 32
+            len(lookup_hmac_key) != 32
             or not encryption_keys
-            or any(len(key) != 32 for key in encryption_keys.values())
-            or any(not key_id or len(key_id.encode("utf-8")) > 255 for key_id in encryption_keys)
             or any(hmac.compare_digest(key, lookup_hmac_key) for key in encryption_keys.values())
         ):
             raise PhoneProtectionConfigurationError("phone key configuration is invalid")
-        self._active_key_id = active_key_id
-        self._keys = {key_id: AESGCM(key) for key_id, key in encryption_keys.items()}
+
+        try:
+            self._envelope = VersionedAesGcmEnvelope(
+                active_key_id=active_key_id,
+                encryption_keys=encryption_keys,
+                aad=self._aad,
+                magic=self._magic,
+            )
+        except ValueError as error:
+            raise PhoneProtectionConfigurationError("phone key configuration is invalid") from error
+
         self._lookup_key = lookup_hmac_key
 
     @classmethod
@@ -71,32 +74,13 @@ class AesGcmPhoneIdentityProtector:
             raise PhoneProtectionConfigurationError("phone key configuration is invalid") from error
 
     async def protect(self, normalized_phone: str) -> bytes:
-        key_id = self._active_key_id.encode("utf-8")
-        header = self._magic + bytes([len(key_id)]) + key_id
-        nonce = secrets.token_bytes(12)
-        ciphertext = self._keys[self._active_key_id].encrypt(
-            nonce, normalized_phone.encode("utf-8"), self._aad + header
-        )
-        return header + nonce + ciphertext
+        return self._envelope.encrypt(normalized_phone.encode("utf-8"))
 
     async def unprotect(self, protected_phone: bytes) -> str:
         try:
-            if not protected_phone.startswith(self._magic) or len(protected_phone) < 5:
-                raise ValueError
-            header_end = 5 + protected_phone[4]
-            if protected_phone[4] == 0 or len(protected_phone) < header_end + 12 + 16:
-                raise ValueError
-            key_id = protected_phone[5:header_end].decode("utf-8")
-            key = self._keys.get(key_id)
-            if key is None:
-                raise ValueError
-            plaintext = key.decrypt(
-                protected_phone[header_end : header_end + 12],
-                protected_phone[header_end + 12 :],
-                self._aad + protected_phone[:header_end],
-            )
+            plaintext = self._envelope.decrypt(protected_phone)
             return plaintext.decode("utf-8")
-        except (ValueError, UnicodeError, InvalidTag) as error:
+        except (EnvelopeDecryptionError, UnicodeError) as error:
             raise PhoneDecryptionError("phone decryption failed") from error
 
     async def lookup_hmac(self, normalized_phone: str) -> bytes:

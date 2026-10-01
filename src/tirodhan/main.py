@@ -12,6 +12,7 @@ from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
+from tirodhan.modules.customers.address_protection import AesGcmAddressProtector
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
 from tirodhan.modules.evidence.azure_media import AzureBlobMediaStorage
 from tirodhan.modules.evidence.media_policy import ConfiguredMediaPolicy, UnconfiguredMediaPolicy
@@ -67,6 +68,7 @@ def create_app(
 
     # Eager crypto parsing fails before any authentication transaction can commit.
     configured_phone_protector = phone_identity_protector or _phone_protector(application_settings)
+    configured_address_protector = address_protector or _address_protector(application_settings)
     owns_media_storage = media_storage is None
     configured_media_storage = media_storage or _media_storage(application_settings)
     owns_otp_http_client = (
@@ -112,7 +114,7 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = application_settings
-    application.state.address_protector = address_protector or UnconfiguredAddressProtector()
+    application.state.address_protector = configured_address_protector
     application.state.location_resolver = location_resolver or UnconfiguredLocationResolver()
     application.state.cell_id_deriver = cell_id_deriver or UnconfiguredCellIdDeriver()
     application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
@@ -182,6 +184,18 @@ def _phone_protector(settings: Settings) -> PhoneIdentityProtector:
         active_key_id=settings.phone_encryption_active_key_id,
         encryption_keys_json=settings.phone_encryption_keys.get_secret_value(),
         lookup_hmac_key_base64=settings.phone_lookup_hmac_key.get_secret_value(),
+    )
+
+
+def _address_protector(settings: Settings) -> AddressProtector:
+    if (
+        settings.address_encryption_active_key_id is None
+        or settings.address_encryption_keys is None
+    ):
+        return UnconfiguredAddressProtector()
+    return AesGcmAddressProtector.from_configuration(
+        active_key_id=settings.address_encryption_active_key_id,
+        encryption_keys_json=settings.address_encryption_keys.get_secret_value(),
     )
 
 

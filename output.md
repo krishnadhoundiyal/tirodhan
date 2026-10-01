@@ -1,0 +1,26 @@
+## Completion Report
+
+- **Branch name:** `phase1/address-protection-runtime`
+- **Base commit:** `66b7f1bd83869670e50f00b30c31fad4dcc11ce8` (latest `main`)
+- **Commit SHA:** `7644b16d593bbe19a66082cd2af3180ad9e6808a`
+- **Files changed:**
+  - `src/tirodhan/core/crypto/__init__.py`
+  - `src/tirodhan/core/crypto/envelope.py`
+  - `src/tirodhan/core/config.py`
+  - `src/tirodhan/main.py`
+  - `src/tirodhan/modules/customers/address_protection.py`
+  - `src/tirodhan/modules/identity/phone_protection.py`
+  - `tests/unit/test_address_protection.py`
+  - `.env.example`
+  - `docs/DATA_PROTECTION.md`
+- **Shared-envelope location/API:** `src/tirodhan/core/crypto/envelope.py` containing `VersionedAesGcmEnvelope`. Provides `encrypt(self, plaintext: bytes) -> bytes` and `decrypt(self, envelope: bytes) -> bytes`.
+- **Address protector class:** `AesGcmAddressProtector` located in `src/tirodhan/modules/customers/address_protection.py`.
+- **Runtime configuration names:** `TIRODHAN_ADDRESS_ENCRYPTION_ACTIVE_KEY_ID`, `TIRODHAN_ADDRESS_ENCRYPTION_KEYS`.
+- **Phone persisted-envelope compatibility:** Preserved. `AesGcmPhoneIdentityProtector` was successfully refactored to use `VersionedAesGcmEnvelope` maintaining `b"TPH\x01"` magic, `b"tirodhan:user-phone:v1"` AAD, and exact layout. All regression tests passed.
+- **Test counts/results:** 13 new unit tests for `AesGcmAddressProtector`, 35 existing unit tests for `AesGcmPhoneIdentityProtector`, passing alongside all other tests that could run without a local PostgreSQL instance. (126 passed, 262 skipped).
+- **Ruff result:** Clean (no issues found).
+- **Formatting result:** Clean (all files formatted).
+- **Mypy result:** Clean (Success: no issues found in 85 source files).
+- **Alembic head:** Confirmed 0015_authentication_challenge manually (could not connect to PostgreSQL instance).
+- **Working-tree status:** Clean (nothing to commit).
+- **Unresolved issues:** None.

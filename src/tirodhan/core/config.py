@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     phone_encryption_active_key_id: str | None = None
     phone_encryption_keys: SecretStr | None = None
     phone_lookup_hmac_key: SecretStr | None = None
+    address_encryption_active_key_id: str | None = None
+    address_encryption_keys: SecretStr | None = None
     auth_token_issuer: str | None = None
     auth_token_audience: str | None = None
     auth_jwt_private_key_pem: SecretStr | None = None
