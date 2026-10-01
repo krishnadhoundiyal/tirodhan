@@ -41,9 +41,27 @@ Azure is the reference MVP cloud, but application/domain code should avoid unnec
 Phase 1T freezes Google Geocoding v3 and H3 resolution 7 (raw canonical cell IDs),
 with asynchronous Service Bus Standard serviceability as primary and synchronous
 checkout fallback using the same resolution operation. See ADR-015. The worker is
-a separate scale-to-zero ACA process; publication is a finite scheduled ACA Job.
+a separate scale-to-zero ACA process; the scheduled finite ACA publisher Job is a
+provisional deployment mechanism, not a further topology decision.
 Google and broker I/O hold no PostgreSQL transaction. Introduced Azure resources
 are reproduced through focused Terraform using existing shared-estate inputs.
+
+Runtime entry points (same backend image, separate processes):
+
+```bash
+python -m tirodhan.workers.serviceability
+python -m tirodhan.workers.outbox_publisher
+```
+
+Configure the Google API key, bounded HTTP timeout and Delhi aliases listed in
+`.env.example` for both API fallback and worker. The worker also requires address
+encryption configuration. Broker settings are the fully qualified namespace, dedicated
+queue name, managed-identity client ID, bounded operation timeout and worker lock-renewal
+duration. The finite publisher additionally requires an explicit batch size. Neither
+process accepts a Service Bus connection string. Missing Google configuration leaves
+API fallback unavailable (503); it never substitutes a location. No test calls live
+Google or Azure Service Bus. See [Terraform setup](infra/terraform/README.md) for hosted
+inputs, secret references and the deployment-validation boundary.
 
 The host workflow requires Python 3.10 or newer. The container image uses Python 3.12.
 

@@ -23,8 +23,13 @@ from tirodhan.modules.identity.tokens import (
     AccessTokenConfigurationError,
 )
 from tirodhan.modules.payments.ports import PaymentProvider
+from tirodhan.modules.serviceability.ports import CellIdDeriver, LocationResolver
 
 _bearer = HTTPBearer(auto_error=False)
+
+
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    return cast(async_sessionmaker[AsyncSession], request.app.state.database_session_factory)
 
 
 async def get_database_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -47,17 +52,21 @@ def get_phone_identity_protector(request: Request) -> PhoneIdentityProtector:
 
 async def get_authenticated_principal(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-    session: Annotated[AsyncSession, Depends(get_database_session)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     token_codec: Annotated[AccessTokenCodec, Depends(get_access_token_codec)],
 ) -> AuthenticatedPrincipal:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _unauthorized()
     try:
-        return await authenticate_access_token(
-            session,
-            raw_access_token=credentials.credentials,
-            token_codec=token_codec,
-        )
+        # Live authorization is an unlocked, point-in-time read (ADR-007).
+        # Return scalar principal facts, not ORM rows; release the read transaction
+        # before handlers can invoke external providers. Every request reads anew.
+        async with session_factory() as session:
+            return await authenticate_access_token(
+                session,
+                raw_access_token=credentials.credentials,
+                token_codec=token_codec,
+            )
     except AccessTokenConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -107,8 +116,12 @@ def get_address_protector(request: Request) -> AddressProtector:
     return cast(AddressProtector, request.app.state.address_protector)
 
 
-def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
-    return cast(async_sessionmaker[AsyncSession], request.app.state.database_session_factory)
+def get_location_resolver(request: Request) -> LocationResolver:
+    return cast(LocationResolver, request.app.state.location_resolver)
+
+
+def get_cell_id_deriver(request: Request) -> CellIdDeriver:
+    return cast(CellIdDeriver, request.app.state.cell_id_deriver)
 
 
 def get_pricing_port(request: Request) -> PricingPort:

@@ -62,6 +62,12 @@ configuration, not new product constants. Deployment requires review of Google k
 restrictions/billing, Azure permissions and environment inputs; no live provisioning
 is implicit in implementation.
 
+Resume clarification: the finite scheduled ACA publisher Job is a **provisional
+deployment mechanism**, pending deployment review. It does not change the frozen
+functional outbox/inbox, asynchronous-primary, synchronous-fallback or transaction
+contracts. Existing Terraform is retained; expanding deployment work is not required
+to complete functional Phase 1T.
+
 ## References
 
 - [Google v3 geocoding](https://developers.google.com/maps/documentation/geocoding/guides-v3/requests-geocoding)

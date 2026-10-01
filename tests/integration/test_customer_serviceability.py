@@ -402,21 +402,20 @@ async def test_one_off_client_location_and_distinct_resolution_outcomes(
                 idempotency_expires_at=future(),
             )
         resolver = StaticResolver(resolution)
-        async with database_session_factory() as session, session.begin():
-            resolved = await resolve_serviceability(
-                session,
-                context_id=context.serviceability_context_id,
-                protector=address_protector,
-                location_resolver=resolver,
-                cell_id_deriver=StaticCellDeriver(),
-            )
-            replay = await resolve_serviceability(
-                session,
-                context_id=context.serviceability_context_id,
-                protector=address_protector,
-                location_resolver=resolver,
-                cell_id_deriver=StaticCellDeriver(),
-            )
+        resolved = await resolve_serviceability(
+            database_session_factory,
+            context_id=context.serviceability_context_id,
+            protector=address_protector,
+            location_resolver=resolver,
+            cell_id_deriver=StaticCellDeriver(),
+        )
+        replay = await resolve_serviceability(
+            database_session_factory,
+            context_id=context.serviceability_context_id,
+            protector=address_protector,
+            location_resolver=resolver,
+            cell_id_deriver=StaticCellDeriver(),
+        )
         assert resolved.status == expected_status
         assert replay.status == expected_status
         assert len(resolver.supplied_locations) == 1
@@ -471,15 +470,14 @@ async def test_concurrent_resolution_has_one_authoritative_terminal_result(
     resolver = BarrierResolver()
 
     async def resolve_once() -> str:
-        async with database_session_factory() as session, session.begin():
-            result = await resolve_serviceability(
-                session,
-                context_id=context.serviceability_context_id,
-                protector=address_protector,
-                location_resolver=resolver,
-                cell_id_deriver=StaticCellDeriver(),
-            )
-            return result.status
+        result = await resolve_serviceability(
+            database_session_factory,
+            context_id=context.serviceability_context_id,
+            protector=address_protector,
+            location_resolver=resolver,
+            cell_id_deriver=StaticCellDeriver(),
+        )
+        return result.status
 
     statuses = await asyncio.gather(resolve_once(), resolve_once())
     assert statuses[0] == statuses[1]

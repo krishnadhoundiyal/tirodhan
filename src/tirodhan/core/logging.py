@@ -40,6 +40,11 @@ def configure_logging(level: str, log_file_path: Path | None = None) -> None:
     root_logger.handlers = [handler]
     root_logger.setLevel(level)
 
+    # HTTP wire/request logging may include geocoding key/address/pin query parameters.
+    # Keep third-party HTTP diagnostics off even when application logging is DEBUG.
+    for logger_name in ("httpx", "httpcore"):
+        logging.getLogger(logger_name).setLevel(logging.CRITICAL)
+
     for logger_name in ("uvicorn", "uvicorn.error"):
         framework_logger = logging.getLogger(logger_name)
         framework_logger.handlers = [handler]

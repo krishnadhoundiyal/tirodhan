@@ -10,7 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
+    get_address_protector,
+    get_cell_id_deriver,
     get_current_customer_id,
+    get_location_resolver,
     get_pricing_port,
     get_session_factory,
 )
@@ -28,8 +31,14 @@ from tirodhan.modules.collection_requests.service import (
     ServiceabilityContextIneligibleError,
     create_collection_request,
 )
+from tirodhan.modules.customers.ports import AddressProtectionNotConfiguredError, AddressProtector
 from tirodhan.modules.customers.service import IdempotencyCommandInProgressError
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
+from tirodhan.modules.serviceability.ports import (
+    CellIdDeriver,
+    LocationResolver,
+    ServiceabilityResolverNotConfiguredError,
+)
 
 router = APIRouter(prefix="/v1/collection-requests", tags=["collection requests"])
 
@@ -116,6 +125,9 @@ async def post_collection_request(
     customer_id: Annotated[UUID, Depends(get_current_customer_id)],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     pricing: Annotated[PricingPort, Depends(get_pricing_port)],
+    protector: Annotated[AddressProtector, Depends(get_address_protector)],
+    location_resolver: Annotated[LocationResolver, Depends(get_location_resolver)],
+    cells: Annotated[CellIdDeriver, Depends(get_cell_id_deriver)],
 ) -> CollectionRequestResponse:
     payment_expires_at, idempotency_expires_at = _expiries(request)
     try:
@@ -139,10 +151,17 @@ async def post_collection_request(
             ),
             pricing,
             idempotency_expires_at=idempotency_expires_at,
+            protector=protector,
+            location_resolver=location_resolver,
+            cell_id_deriver=cells,
         )
         return collection_request_response(result)
-    except PricingNotConfiguredError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (
+        PricingNotConfiguredError,
+        AddressProtectionNotConfiguredError,
+        ServiceabilityResolverNotConfiguredError,
+    ) as error:
+        raise HTTPException(status_code=503, detail="Required runtime is not configured") from error
     except ServiceabilityContextIneligibleError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except (
