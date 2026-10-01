@@ -281,3 +281,38 @@ async def test_runtime_ownership_and_incomplete_configuration() -> None:
     async with incomplete.router.lifespan_context(incomplete):
         assert isinstance(incomplete.state.otp_provider, UnconfiguredOtpProvider)
         assert not hasattr(incomplete.state, "otp_http_client")
+
+
+@pytest.mark.asyncio
+async def test_pre_refactor_phase1r_phone_envelope_compatibility() -> None:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    # Simulate known good state matching the original AesGcmPhoneIdentityProtector format
+    phone = "+919876543210"
+    aes_key = b"c" * 32
+    key_id = "v1-legacy"
+    nonce = b"n" * 12
+    magic = b"TPH\x01"
+    aad_prefix = b"tirodhan:user-phone:v1"
+
+    # 1. Manually construct legacy envelope layout independently of current code
+    key_id_bytes = key_id.encode("utf-8")
+    header = magic + bytes([len(key_id_bytes)]) + key_id_bytes
+    aad = aad_prefix + header
+
+    legacy_aes = AESGCM(aes_key)
+    ciphertext = legacy_aes.encrypt(nonce, phone.encode("utf-8"), aad)
+    persisted_legacy_bytes = header + nonce + ciphertext
+
+    # 2. Use refactored protector to unprotect
+    implementation = AesGcmPhoneIdentityProtector(
+        active_key_id="new-active",
+        encryption_keys={
+            "new-active": b"d" * 32,
+            key_id: aes_key,
+        },
+        lookup_hmac_key=b"h" * 32,
+    )
+
+    recovered = await implementation.unprotect(persisted_legacy_bytes)
+    assert recovered == phone
