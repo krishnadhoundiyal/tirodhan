@@ -133,3 +133,16 @@ async def test_injected_address_protector_remains() -> None:
     custom = protector()
     app = create_app(Settings(_env_file=None, environment="test"), address_protector=custom)
     assert app.state.address_protector is custom
+
+
+def test_successful_runtime_wiring() -> None:
+    valid_keyring = json.dumps({"v1": base64.b64encode(b"a" * 32).decode()})
+    app = create_app(
+        Settings(
+            _env_file=None,
+            environment="test",
+            address_encryption_active_key_id="v1",
+            address_encryption_keys=SecretStr(valid_keyring),
+        )
+    )
+    assert isinstance(app.state.address_protector, AesGcmAddressProtector)
