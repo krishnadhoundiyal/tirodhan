@@ -5,6 +5,10 @@ Branch: `phase1/serviceability-runtime`. Exact base:
 Architecture freeze: `bc39ab79d63ff9e395077ce754f4f30674b3bf57`.
 Implementation is committed separately; see the accompanying delivery message for its SHA.
 No merge or Azure deployment was performed.
+Functional implementation is complete. Exact publisher/consumer hosting, scheduling
+and scaling topology is deferred to deployment architecture review. The current process
+entry points do not freeze ACA Job/worker choices. The unvalidated Phase 1T Terraform
+artifacts and their Phase-1T-specific ignore additions were removed in a separate cleanup.
 
 ## Verification
 
@@ -13,15 +17,13 @@ No merge or Azure deployment was performed.
 - Focused PostgreSQL serviceability, checkout/payment and identity regressions: 64 passed.
 - Final combined focused run: 109 passed (45 unit + 64 integration/regression).
 - Full `pytest -q`, with disposable PostgreSQL/PostGIS integration enabled: 460 passed,
-  0 skipped (202.03 seconds).
+  0 skipped (147.12 seconds on the deployment-cleanup rerun).
 - Ruff check and format check: passed.
 - mypy: passed, 94 source files.
 - `git diff --check`: passed.
 - Alembic current and heads: `0015_authentication_challenge`; no migration introduced.
-- Terraform formatting: passed. Provider validation was not completed: the interrupted
-  run encountered registry/network failure and subsequently stalled during provider
-  validation. No successful validate, plan or apply is claimed. Temporary provider/cache
-  files remain ignored; the generated validation-only module lock file was removed.
+- Terraform artifacts were removed rather than retained unvalidated. No Terraform
+  validation, plan or apply is claimed by the completed functional phase.
 
 ## Functional architecture check
 
@@ -60,14 +62,14 @@ to prove no auth transaction survives into the call.
 
 ## Messaging, transactions and crashes
 
-Topology: one dedicated configurable serviceability queue in Service Bus Standard; no
-sessions required for this responsibility. The separate ACA consumer has no ingress,
-min replicas 0, managed-identity scaling, Peek-Lock and bounded lock renewal. Workload
-identities receive queue-scoped Data Sender/Data Receiver permissions, not manage rights.
+Functional transport: one dedicated configurable serviceability queue in Service Bus Standard;
+no sessions required for this responsibility. The consumer uses Peek-Lock and bounded lock
+renewal. Azure access expects workload identity and queue-scoped Data Sender/Data Receiver
+permissions, not manage rights. Hosting/scheduling/scaling topology is deferred.
 The API does not publish directly and requires no broker permission.
 
 The finite bounded publisher entry point is `python -m tirodhan.workers.outbox_publisher`.
-The scheduled ACA Job deployment mechanism is provisional pending deployment review.
+It does not itself select or freeze an ACA Job deployment or scheduling mechanism.
 It explicitly routes only ServiceabilityRequested; unrelated outbox types remain pending.
 Publish-attempt metadata commits before send; PUBLISHED commits only after successful send.
 Send failure leaves the row recoverable. A crash between send and mark resends the same
@@ -109,7 +111,7 @@ Non-Azure secrets arrive through Key Vault/ACA references, without application K
 
 ## Changed files grouped by concern
 
-Paths below are repository-relative and cover both Phase 1T commits.
+Paths below are repository-relative and cover the Phase 1T commits and deployment cleanup.
 
 - Architecture/docs: `.env.example`, `README.md`, `docs/PROJECT_CONTEXT.md`,
   `docs/ARCHITECTURE.md`, `docs/DOMAIN_MODEL.md`, `docs/SCHEMA_DESIGN.md`,
@@ -129,11 +131,10 @@ Paths below are repository-relative and cover both Phase 1T commits.
 - Runtime/dependencies: `src/tirodhan/modules/serviceability/runtime.py`,
   `src/tirodhan/main.py`, `src/tirodhan/core/config.py`,
   `src/tirodhan/core/logging.py`, `pyproject.toml`.
-- Terraform: `.gitignore`, `infra/terraform/README.md`,
-  `infra/terraform/serviceability/{versions,variables,main,outputs}.tf`.
-  The focused module creates/reuses Standard namespace, dedicated queue, worker/scaler,
-  provisional publisher Job, separate identities, entity-scoped broker RBAC and
-  individual-secret-scoped Key Vault grants/references. Shared estate is supplied as inputs.
+- Removed deployment artifacts: `infra/terraform/README.md`,
+  `infra/terraform/serviceability/{main,outputs,variables,versions}.tf`.
+  Their Phase-1T-specific `.gitignore` additions were also removed. No Phase 1T
+  Terraform module is delivered by this branch.
 - Tests: `tests/unit/test_serviceability_adapters.py`,
   `tests/integration/test_serviceability_runtime.py`,
   `tests/integration/test_customer_serviceability.py`,
@@ -142,7 +143,7 @@ Paths below are repository-relative and cover both Phase 1T commits.
 ## Remaining operational review
 
 No unresolved functional architecture decision was silently chosen. Hosted rollout still
-requires provider validation/plan review, existing-estate inputs and network/image access,
+requires deployment topology review, IaC implementation/validation, network/image access,
 reviewed schedule/timeouts/capacity, Google key restrictions/billing and secret provisioning.
 The existing ADR-009 shared-volume/Fluent Bit logging integration remains host-estate work;
 this phase does not choose a volume path or expand the logging infrastructure. There were

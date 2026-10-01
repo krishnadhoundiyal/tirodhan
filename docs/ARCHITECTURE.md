@@ -160,13 +160,15 @@ provider-independent H3 resolution 7 (canonical raw H3 string), with structured 
 area validation. A supplied pin is reverse-validated but never replaced by Google geometry.
 Precise, unambiguous household results are required for address-only geocoding (ADR-015).
 
-The transactional identifier-only ServiceabilityRequested outbox is published by a finite
-scheduled ACA Job to a dedicated Service Bus Standard queue. A separate Peek-Lock ACA
-worker scales from zero and uses resumable PROCESSING/PROCESSED inbox records. Both worker
+The transactional identifier-only ServiceabilityRequested outbox is published by the
+outbox publisher runtime to a dedicated Service Bus Standard queue. The serviceability
+consumer runtime uses Peek-Lock and resumable PROCESSING/PROCESSED inbox records. Both consumer
 and checkout close short DB reads before Google calls and conditionally persist terminal
 results in a new transaction; the losing resolver returns the authoritative winner.
 GET remains read-only. Google secrets arrive through Key Vault/ACA secret references.
-Introduced Azure resources are Terraform-managed using existing shared-estate inputs.
+Exact publisher/consumer hosting, scheduling and scaling topology is deferred to deployment
+review. Current process entry points do not freeze ACA Job/worker choices (ADR-015);
+the unvalidated Phase 1T Terraform artifacts have been removed.
 
 Accepted/paid collection requests preserve booking-time snapshots such as:
 

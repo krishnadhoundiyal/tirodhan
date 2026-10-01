@@ -79,10 +79,12 @@ If the process crashes after DB commit but before settlement, redelivery is harm
 ### Phase 1T serviceability runtime
 
 Only explicitly registered outbox types are published (initially ServiceabilityRequested).
-Each finite publisher Job selects a bounded due batch, increments publish-attempt metadata
+Each finite publisher execution selects a bounded due batch, increments publish-attempt metadata
 in a short transaction, sends outside PostgreSQL, then marks PUBLISHED on success. A crash
 after send may resend the same outbox UUID as transport message ID. Unrelated events remain
-pending. Concurrent Jobs may duplicate transport, never intended business effects.
+pending. Concurrent executions may duplicate transport, never intended business effects.
+Exact hosting/scheduling/scaling topology is deferred; process entry points do not freeze
+ACA Job/worker deployment choices (ADR-015).
 
 Consumer identity is `serviceability-resolver`; transport key is `(consumer_name, message_id)`
 and business key is the serviceability-context UUID. It commits PROCESSING first, invokes

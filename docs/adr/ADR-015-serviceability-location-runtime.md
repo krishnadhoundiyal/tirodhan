@@ -25,9 +25,9 @@ Changing resolution requires an explicit architecture/data transition. Planning
 continues to operate on one upstream cell without cross-cell compaction.
 
 The primary path is PENDING context + transactional ServiceabilityRequested outbox
--> finite scheduled ACA publisher Job -> dedicated Azure Service Bus **Standard**
-queue -> separate ACA serviceability worker with **min replicas 0**. Worker uses
-Peek-Lock and durable inbox, with identifier-only messages. Checkout resolves an
+-> outbox publisher runtime -> Azure Service Bus **Standard**
+-> serviceability consumer runtime. The consumer uses Peek-Lock and durable inbox,
+with identifier-only messages. This asynchronous path is primary. Checkout resolves an
 owned, unexpired still-PENDING context synchronously using exactly the same domain
 operation, only as fallback. Persisted status GET never invokes the provider.
 
@@ -44,10 +44,12 @@ message ID. At-least-once transport plus inbox/domain idempotency produces exact
 intended business effect, not distributed exactly-once execution.
 
 Service Bus uses workload identity and entity-scoped Data Sender/Data Receiver RBAC,
-not connection strings. Terraform reproduces introduced Standard namespace/queue,
-worker/scaler, publisher Job, identities/RBAC and Key Vault secret-reference plumbing.
-Existing ACA environment, PostgreSQL configuration, Key Vault and image are inputs;
-no duplicate platform estate or new default Log Analytics/Application Insights.
+not connection strings. Azure resource access continues to use workload identity;
+no duplicate platform estate or new default Log Analytics/Application Insights is introduced.
+
+Exact hosting/scheduling/scaling topology for the publisher and consumer is deployment
+architecture and is deferred. The current finite publisher and consumer process entry
+points do not themselves freeze ACA Job/worker deployment choices.
 
 ## Protection and operational consequences
 
@@ -62,11 +64,11 @@ configuration, not new product constants. Deployment requires review of Google k
 restrictions/billing, Azure permissions and environment inputs; no live provisioning
 is implicit in implementation.
 
-Resume clarification: the finite scheduled ACA publisher Job is a **provisional
-deployment mechanism**, pending deployment review. It does not change the frozen
-functional outbox/inbox, asynchronous-primary, synchronous-fallback or transaction
-contracts. Existing Terraform is retained; expanding deployment work is not required
-to complete functional Phase 1T.
+Functional Phase 1T is complete independently of deployment topology. The unvalidated
+Phase 1T Terraform artifacts have been removed; this ADR does not accept resource
+provisioning or hosting choices for these runtimes. Later deployment review remains
+subject to the existing platform and IaC ADRs, without changing the frozen functional
+outbox/inbox, asynchronous-primary, synchronous-fallback or transaction contracts.
 
 ## References
 
