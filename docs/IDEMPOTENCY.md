@@ -76,6 +76,31 @@ If the process crashes after DB commit but before settlement, redelivery is harm
 
 ## Outbox pattern
 
+### Phase 1T serviceability runtime
+
+Only explicitly registered outbox types are published (initially ServiceabilityRequested).
+Each finite publisher execution selects a bounded due batch, increments publish-attempt metadata
+in a short transaction, sends outside PostgreSQL, then marks PUBLISHED on success. A crash
+after send may resend the same outbox UUID as transport message ID. Unrelated events remain
+pending. Concurrent executions may duplicate transport, never intended business effects.
+Exact hosting/scheduling/scaling topology is deferred; process entry points do not freeze
+ACA Job/worker deployment choices (ADR-015).
+
+Consumer identity is `serviceability-resolver`; transport key is `(consumer_name, message_id)`
+and business key is the serviceability-context UUID. It commits PROCESSING first, invokes
+the shared resolver outside that transaction, then commits PROCESSED before Peek-Lock
+settlement. PROCESSING redelivery resumes; PROCESSED skips work. Crash after terminal commit
+but before inbox completion/settlement replays the terminal result without Google. Broker
+delivery count is never a business attempt number. Invalid envelopes are rejected without
+copying raw message content into inbox/logs. Infrastructure/configuration failures remain
+unsettled/recoverable; terminal technical domain outcomes can be durably acknowledged.
+
+Both worker and checkout read immutable input in a short session, call Google outside DB,
+then conditionally update PENDING -> terminal. The loser returns the winner's persisted
+result. Checkout completed replay precedes all provider/pricing work; fresh checkout validates
+ownership/expiry before resolving PENDING, prices only after serviceability, and revalidates
+the context in its final request transaction. No distributed coordination is needed.
+
 Where a database change must produce an asynchronous event, write the domain change and `outbox_event` in the same transaction.
 
 The publisher may still deliver more than once. Consumers must remain idempotent.

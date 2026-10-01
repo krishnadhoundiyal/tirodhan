@@ -155,6 +155,21 @@ Serviceability flow:
 
 The asynchronous and synchronous paths must invoke the same domain operation/invariants.
 
+Phase 1T freezes Google stable Geocoding API v3 through server-side httpx and
+provider-independent H3 resolution 7 (canonical raw H3 string), with structured Delhi/NCT
+area validation. A supplied pin is reverse-validated but never replaced by Google geometry.
+Precise, unambiguous household results are required for address-only geocoding (ADR-015).
+
+The transactional identifier-only ServiceabilityRequested outbox is published by the
+outbox publisher runtime to a dedicated Service Bus Standard queue. The serviceability
+consumer runtime uses Peek-Lock and resumable PROCESSING/PROCESSED inbox records. Both consumer
+and checkout close short DB reads before Google calls and conditionally persist terminal
+results in a new transaction; the losing resolver returns the authoritative winner.
+GET remains read-only. Google secrets arrive through Key Vault/ACA secret references.
+Exact publisher/consumer hosting, scheduling and scaling topology is deferred to deployment
+review. Current process entry points do not freeze ACA Job/worker choices (ADR-015);
+the unvalidated Phase 1T Terraform artifacts have been removed.
+
 Accepted/paid collection requests preserve booking-time snapshots such as:
 
 - address;
@@ -317,7 +332,7 @@ A scheduled planning job runs a configurable `N` minutes before each slot. `N` i
 
 Requests are partitioned by a geographic `cell_id`.
 
-Physical cell sizing is intentionally not yet chosen.
+Cells are canonical H3 indexes at fixed MVP resolution 7 (ADR-015).
 
 ### Planning work unit
 
@@ -362,7 +377,7 @@ Compaction produces collection groups:
 
 No valid request fails merely because it has no neighbour.
 
-For `BOUNDED_GREEDY_DIAMETER_V1`, every pair in a compacted group must be within the batch's snapshotted compaction distance. Groups are bounded by the snapshotted maximum household-stop count. Weight, volume, item category, vehicle capacity, routing, and cross-cell compaction are not inputs to this algorithm. Cell technology/resolution remains open, so Phase 1G plans exactly one upstream cell batch at a time.
+For `BOUNDED_GREEDY_DIAMETER_V1`, every pair in a compacted group must be within the batch's snapshotted compaction distance. Groups are bounded by the snapshotted maximum household-stop count. Weight, volume, item category, vehicle capacity, routing, and cross-cell compaction are not inputs to this algorithm. Phase 1G plans exactly one upstream H3 resolution-7 cell batch at a time.
 
 The algorithm version, distance, and maximum group-request count are immutable batch snapshots. All logical retries read these snapshots rather than current runtime configuration.
 
@@ -800,7 +815,6 @@ Azure Container Registry Basic is a fallback only if a concrete Azure-specific a
 
 Do not silently decide:
 
-- geographic cell resolution;
 - clustering/compaction algorithm;
 - detailed routing algorithm;
 - item category taxonomy;

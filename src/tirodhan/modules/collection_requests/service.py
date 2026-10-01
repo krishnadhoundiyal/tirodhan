@@ -18,6 +18,7 @@ from tirodhan.modules.collection_requests.ports import (
     PricingPort,
     PricingQuote,
 )
+from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
 from tirodhan.modules.customers.service import (
     IdempotencyCommandInProgressError,
     command_fingerprint,
@@ -37,8 +38,18 @@ from tirodhan.modules.reliability.primitives import (
     complete_idempotency_record,
     get_completed_idempotency_result,
 )
+from tirodhan.modules.serviceability.h3_cells import H3CellIdDeriver
 from tirodhan.modules.serviceability.models import ServiceabilityContext
-from tirodhan.modules.serviceability.service import SERVICEABILITY_SERVICEABLE
+from tirodhan.modules.serviceability.ports import (
+    CellIdDeriver,
+    LocationResolver,
+    UnconfiguredLocationResolver,
+)
+from tirodhan.modules.serviceability.service import (
+    SERVICEABILITY_PENDING,
+    SERVICEABILITY_SERVICEABLE,
+    resolve_serviceability,
+)
 
 REQUEST_PENDING_PAYMENT = "PENDING_PAYMENT"
 REQUEST_ACCEPTED = "ACCEPTED"
@@ -229,6 +240,9 @@ async def create_collection_request(
     pricing: PricingPort,
     *,
     idempotency_expires_at: datetime,
+    protector: AddressProtector | None = None,
+    location_resolver: LocationResolver | None = None,
+    cell_id_deriver: CellIdDeriver | None = None,
 ) -> CollectionRequestResult:
     if not command.items:
         raise CollectionRequestInputError("at least one declared item is required")
@@ -272,6 +286,35 @@ async def create_collection_request(
             return await _load_request_result(
                 session, request_id=replay.resource_id, customer_id=command.customer_id
             )
+
+    async with session_factory() as session:
+        context = await session.scalar(
+            select(ServiceabilityContext).where(
+                ServiceabilityContext.serviceability_context_id
+                == command.serviceability_context_id,
+                ServiceabilityContext.user_id == command.customer_id,
+            )
+        )
+        if context is None:
+            raise ServiceabilityContextIneligibleError("owned serviceability context not found")
+        if context.expires_at <= utc_now():
+            raise ServiceabilityContextIneligibleError("serviceability context has expired")
+        context_status = context.status
+
+    if context_status == SERVICEABILITY_PENDING:
+        context = await resolve_serviceability(
+            session_factory,
+            context_id=command.serviceability_context_id,
+            protector=protector or UnconfiguredAddressProtector(),
+            location_resolver=location_resolver or UnconfiguredLocationResolver(),
+            cell_id_deriver=cell_id_deriver or H3CellIdDeriver(),
+        )
+    if context.status != SERVICEABILITY_SERVICEABLE:
+        raise ServiceabilityContextIneligibleError("serviceability context is not serviceable")
+    if context.location is None or context.cell_id is None:
+        raise ServiceabilityContextIneligibleError(
+            "serviceability context is missing its resolved location or cell"
+        )
 
     # Pricing may eventually be external. It deliberately runs without a DB session.
     quote = await pricing.quote(command.items)

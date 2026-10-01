@@ -20,7 +20,6 @@ The backend/cloud architecture, core domain boundaries, idempotency model, and i
 
 The following remain intentionally open and must not be silently decided by an agent:
 
-- physical geographic cell sizing/resolution;
 - final clustering/compaction algorithm;
 - detailed route-optimization algorithm, if any;
 - detailed rider-selection algorithm inside a fleet;
@@ -38,6 +37,30 @@ The following remain intentionally open and must not be silently decided by an a
 Azure is the reference MVP cloud, but application/domain code should avoid unnecessary Azure coupling.
 
 ## Backend quick start
+
+Phase 1T freezes Google Geocoding v3 and H3 resolution 7 (raw canonical cell IDs),
+with asynchronous Service Bus Standard serviceability as primary and synchronous
+checkout fallback using the same resolution operation. See ADR-015. Google and broker
+I/O hold no PostgreSQL transaction. Exact publisher/consumer hosting, scheduling and
+scaling topology is deferred; the process entry points do not freeze ACA Job/worker choices.
+Unvalidated Phase 1T Terraform artifacts have been removed.
+
+Runtime entry points (same backend image, separate processes):
+
+```bash
+python -m tirodhan.workers.serviceability
+python -m tirodhan.workers.outbox_publisher
+```
+
+Configure the Google API key, bounded HTTP timeout and Delhi aliases listed in
+`.env.example` for both API fallback and worker. The worker also requires address
+encryption configuration. Broker settings are the fully qualified namespace, dedicated
+queue name, managed-identity client ID, bounded operation timeout and worker lock-renewal
+duration. The finite publisher additionally requires an explicit batch size. Neither
+process accepts a Service Bus connection string. Missing Google configuration leaves
+API fallback unavailable (503); it never substitutes a location. No test calls live
+Google or Azure Service Bus. Hosted topology and IaC require later deployment review;
+see [ADR-015](docs/adr/ADR-015-serviceability-location-runtime.md).
 
 The host workflow requires Python 3.10 or newer. The container image uses Python 3.12.
 

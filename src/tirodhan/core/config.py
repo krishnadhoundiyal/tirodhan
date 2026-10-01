@@ -19,6 +19,20 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan"
     )
     database_echo: bool = False
+    google_maps_api_key: SecretStr | None = None
+    google_maps_http_timeout_seconds: float | None = None
+    google_maps_delhi_admin_aliases: list[str] = [
+        "Delhi",
+        "DL",
+        "National Capital Territory of Delhi",
+        "NCT of Delhi",
+    ]
+    service_bus_namespace: str | None = None
+    serviceability_queue_name: str | None = None
+    service_bus_managed_identity_client_id: str | None = None
+    service_bus_operation_timeout_seconds: float | None = None
+    serviceability_lock_renewal_seconds: int | None = None
+    outbox_publish_batch_size: int | None = None
     command_idempotency_ttl_seconds: int | None = None
     serviceability_context_ttl_seconds: int | None = None
     pending_payment_lifetime_seconds: int | None = None
@@ -81,6 +95,8 @@ class Settings(BaseSettings):
         "media_upload_authorization_ttl_seconds",
         "media_photo_max_size_bytes",
         "media_video_max_size_bytes",
+        "serviceability_lock_renewal_seconds",
+        "outbox_publish_batch_size",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
@@ -121,6 +137,20 @@ class Settings(BaseSettings):
     def provider_timeout_must_be_bounded(cls, value: float | None) -> float | None:
         if value is not None and (not math.isfinite(value) or value <= 0):
             raise ValueError("provider timeout must be finite and positive")
+        return value
+
+    @field_validator("google_maps_http_timeout_seconds", "service_bus_operation_timeout_seconds")
+    @classmethod
+    def runtime_timeout_must_be_bounded(cls, value: float | None) -> float | None:
+        if value is not None and (not math.isfinite(value) or not 0 < value <= 60):
+            raise ValueError("runtime timeout must be finite and within (0, 60] seconds")
+        return value
+
+    @field_validator("google_maps_delhi_admin_aliases")
+    @classmethod
+    def aliases_must_be_nonempty(cls, value: list[str]) -> list[str]:
+        if not value or any(not alias.strip() for alias in value):
+            raise ValueError("Delhi administrative aliases must not be empty")
         return value
 
 

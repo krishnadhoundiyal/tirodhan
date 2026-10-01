@@ -7,7 +7,7 @@ from uuid import UUID
 
 from geoalchemy2.shape import to_shape
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.customers.models import UserAddress
@@ -181,7 +181,7 @@ def _stored_location(context: ServiceabilityContext) -> GeoPoint | None:
 
 
 async def resolve_serviceability(
-    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
     *,
     context_id: UUID,
     protector: AddressProtector,
@@ -189,16 +189,19 @@ async def resolve_serviceability(
     cell_id_deriver: CellIdDeriver,
 ) -> ServiceabilityContext:
     """Resolve once; PostgreSQL conditionally selects the authoritative result."""
-    context = await session.get(ServiceabilityContext, context_id)
-    if context is None:
-        raise ServiceabilityContextNotFoundError("serviceability context not found")
-    if context.status in TERMINAL_SERVICEABILITY_STATUSES:
-        return context
+    async with session_factory() as session, session.begin():
+        context = await session.get(ServiceabilityContext, context_id)
+        if context is None:
+            raise ServiceabilityContextNotFoundError("serviceability context not found")
+        if context.status in TERMINAL_SERVICEABILITY_STATUSES:
+            return context
+        snapshot = bytes(context.address_snapshot_encrypted)
+        supplied_location = _stored_location(context)
 
-    address = await protector.unprotect(context.address_snapshot_encrypted)
+    address = await protector.unprotect(snapshot)
     outcome = await location_resolver.resolve(
         address=address,
-        supplied_location=_stored_location(context),
+        supplied_location=supplied_location,
     )
 
     cell_id: str | None = None
@@ -230,19 +233,20 @@ async def resolve_serviceability(
     if outcome.location is not None:
         values["location"] = geography_point(outcome.location)
 
-    authoritative = await session.scalar(
-        update(ServiceabilityContext)
-        .where(
-            ServiceabilityContext.serviceability_context_id == context_id,
-            ServiceabilityContext.status == SERVICEABILITY_PENDING,
+    async with session_factory() as session, session.begin():
+        authoritative = await session.scalar(
+            update(ServiceabilityContext)
+            .where(
+                ServiceabilityContext.serviceability_context_id == context_id,
+                ServiceabilityContext.status == SERVICEABILITY_PENDING,
+            )
+            .values(**values)
+            .returning(ServiceabilityContext)
         )
-        .values(**values)
-        .returning(ServiceabilityContext)
-    )
-    if authoritative is not None:
-        return authoritative
+        if authoritative is not None:
+            return authoritative
 
-    await session.refresh(context)
-    if context.status not in TERMINAL_SERVICEABILITY_STATUSES:
-        raise RuntimeError("serviceability resolution lost without a terminal result")
-    return context
+        established = await session.get(ServiceabilityContext, context_id)
+        if established is None or established.status not in TERMINAL_SERVICEABILITY_STATUSES:
+            raise RuntimeError("serviceability resolution lost without a terminal result")
+        return established

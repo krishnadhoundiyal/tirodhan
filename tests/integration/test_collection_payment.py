@@ -65,7 +65,6 @@ from tirodhan.modules.reliability.models import OutboxEvent
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 from tirodhan.modules.serviceability.models import ServiceabilityContext
 from tirodhan.modules.serviceability.service import (
-    SERVICEABILITY_PENDING,
     SERVICEABILITY_SERVICEABLE,
     SERVICEABILITY_UNSERVICEABLE,
 )
@@ -408,9 +407,6 @@ async def test_request_rejects_ineligible_serviceability_contexts(
     owner = await create_user(database_session_factory)
     other = await create_user(database_session_factory)
     cases = [
-        await create_context(
-            database_session_factory, owner.user_id, status=SERVICEABILITY_PENDING
-        ),
         await create_context(
             database_session_factory, owner.user_id, status=SERVICEABILITY_UNSERVICEABLE
         ),

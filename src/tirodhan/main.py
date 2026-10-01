@@ -12,8 +12,7 @@ from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
-from tirodhan.modules.customers.address_protection import AesGcmAddressProtector
-from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
+from tirodhan.modules.customers.ports import AddressProtector
 from tirodhan.modules.evidence.azure_media import AzureBlobMediaStorage
 from tirodhan.modules.evidence.media_policy import ConfiguredMediaPolicy, UnconfiguredMediaPolicy
 from tirodhan.modules.evidence.media_ports import (
@@ -35,11 +34,15 @@ from tirodhan.modules.identity.tokens import (
     UnconfiguredAccessTokenCodec,
 )
 from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
+from tirodhan.modules.serviceability.h3_cells import H3CellIdDeriver
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
     LocationResolver,
-    UnconfiguredCellIdDeriver,
     UnconfiguredLocationResolver,
+)
+from tirodhan.modules.serviceability.runtime import (
+    address_protector_from_settings,
+    serviceability_runtime,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,7 @@ def create_app(
     address_protector: AddressProtector | None = None,
     location_resolver: LocationResolver | None = None,
     cell_id_deriver: CellIdDeriver | None = None,
+    google_http_client: httpx.AsyncClient | None = None,
     pricing_port: PricingPort | None = None,
     payment_provider: PaymentProvider | None = None,
     otp_provider: OtpProvider | None = None,
@@ -68,7 +72,9 @@ def create_app(
 
     # Eager crypto parsing fails before any authentication transaction can commit.
     configured_phone_protector = phone_identity_protector or _phone_protector(application_settings)
-    configured_address_protector = address_protector or _address_protector(application_settings)
+    configured_address_protector = address_protector or address_protector_from_settings(
+        application_settings
+    )
     owns_media_storage = media_storage is None
     configured_media_storage = media_storage or _media_storage(application_settings)
     owns_otp_http_client = (
@@ -93,7 +99,14 @@ def create_app(
                 )
                 application.state.otp_http_client = runtime_client
                 application.state.otp_provider = _otp_provider(application_settings, runtime_client)
-            yield
+            async with serviceability_runtime(
+                application_settings,
+                client=google_http_client,
+                resolver=location_resolver,
+                protector=configured_address_protector,
+            ) as runtime:
+                application.state.location_resolver = runtime.resolver
+                yield
         finally:
             await engine.dispose()
 
@@ -101,9 +114,9 @@ def create_app(
                 await application.state.otp_http_client.aclose()
 
             if owns_media_storage:
-                runtime = getattr(application.state, "media_storage", None)
-                if isinstance(runtime, AzureBlobMediaStorage):
-                    await runtime.close()
+                media_runtime = getattr(application.state, "media_storage", None)
+                if isinstance(media_runtime, AzureBlobMediaStorage):
+                    await media_runtime.close()
 
             logger.info("application_stopped")
 
@@ -116,7 +129,7 @@ def create_app(
     application.state.settings = application_settings
     application.state.address_protector = configured_address_protector
     application.state.location_resolver = location_resolver or UnconfiguredLocationResolver()
-    application.state.cell_id_deriver = cell_id_deriver or UnconfiguredCellIdDeriver()
+    application.state.cell_id_deriver = cell_id_deriver or H3CellIdDeriver()
     application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
     application.state.payment_provider = payment_provider or UnconfiguredPaymentProvider()
     application.state.otp_provider = otp_provider or UnconfiguredOtpProvider()
@@ -184,18 +197,6 @@ def _phone_protector(settings: Settings) -> PhoneIdentityProtector:
         active_key_id=settings.phone_encryption_active_key_id,
         encryption_keys_json=settings.phone_encryption_keys.get_secret_value(),
         lookup_hmac_key_base64=settings.phone_lookup_hmac_key.get_secret_value(),
-    )
-
-
-def _address_protector(settings: Settings) -> AddressProtector:
-    if (
-        settings.address_encryption_active_key_id is None
-        or settings.address_encryption_keys is None
-    ):
-        return UnconfiguredAddressProtector()
-    return AesGcmAddressProtector.from_configuration(
-        active_key_id=settings.address_encryption_active_key_id,
-        encryption_keys_json=settings.address_encryption_keys.get_secret_value(),
     )
 
 
