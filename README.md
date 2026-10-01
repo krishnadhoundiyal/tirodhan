@@ -20,7 +20,6 @@ The backend/cloud architecture, core domain boundaries, idempotency model, and i
 
 The following remain intentionally open and must not be silently decided by an agent:
 
-- physical geographic cell sizing/resolution;
 - final clustering/compaction algorithm;
 - detailed route-optimization algorithm, if any;
 - detailed rider-selection algorithm inside a fleet;
@@ -38,6 +37,13 @@ The following remain intentionally open and must not be silently decided by an a
 Azure is the reference MVP cloud, but application/domain code should avoid unnecessary Azure coupling.
 
 ## Backend quick start
+
+Phase 1T freezes Google Geocoding v3 and H3 resolution 7 (raw canonical cell IDs),
+with asynchronous Service Bus Standard serviceability as primary and synchronous
+checkout fallback using the same resolution operation. See ADR-015. The worker is
+a separate scale-to-zero ACA process; publication is a finite scheduled ACA Job.
+Google and broker I/O hold no PostgreSQL transaction. Introduced Azure resources
+are reproduced through focused Terraform using existing shared-estate inputs.
 
 The host workflow requires Python 3.10 or newer. The container image uses Python 3.12.
 

@@ -949,7 +949,6 @@ Still open:
 - exact check-constraint values;
 - final status naming;
 - final item/category/pricing schema;
-- final cell-id representation;
 - final encryption envelope format;
 - exact index tuning after real query patterns are known;
 - exact retention/partitioning policy for inbox/outbox/idempotency/history tables.

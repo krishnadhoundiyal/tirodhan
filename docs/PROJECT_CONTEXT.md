@@ -72,7 +72,6 @@ The platform separately tracks whether an available rider is currently `IDLE`, `
 
 The following are not yet fixed:
 
-- geographic cell sizing/resolution;
 - production compaction-distance and maximum group-request values;
 - final route optimization algorithm, if any;
 - detailed fleet rider-selection algorithm;

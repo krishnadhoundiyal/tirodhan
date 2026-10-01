@@ -71,6 +71,10 @@ recoverable bearer credential is persisted.
 
 A serviceability context is short-lived and represents a snapshot of the location being checked. It may originate from a saved address or a new one-off address entered during booking.
 
+Phase 1T uses Google Geocoding v3 for Delhi-first resolution and provider-independent
+H3 resolution 7, storing the canonical raw H3 cell string. Async Service Bus resolution
+is primary; checkout uses the same operation as a PENDING-only fallback (ADR-015).
+
 ### Booking
 
 - `collection_request`
@@ -359,7 +363,6 @@ CollectionRequest COMPLETED
 
 Do not silently decide:
 
-- geographic cell resolution;
 - detailed routing algorithm;
 - item category taxonomy;
 - final pricing formula;

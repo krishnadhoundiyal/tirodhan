@@ -54,6 +54,11 @@ Protect them through:
 
 `cell_id` remains queryable.
 
+Phase 1T Google Geocoding v3 receives only the address or confirmed pin required for
+serviceability. Never log full Geocoding URLs, API keys, responses or Address Descriptors.
+Persist only existing context facts; Service Bus/outbox/inbox carry internal IDs only.
+The key is injected through Key Vault -> ACA secret/reference -> process configuration.
+
 Historical handover/pickup coordinate snapshots receive the same access restrictions.
 
 ### Authentication data
