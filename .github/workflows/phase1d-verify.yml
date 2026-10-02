@@ -1,0 +1,53 @@
+name: Phase 1D Verify
+
+on:
+  push:
+    branches:
+      - phase1/payment-cancellation-refund-completion-7002087272499924976
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: tirodhan
+          POSTGRES_USER: tirodhan
+          POSTGRES_PASSWORD: tirodhan
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tirodhan -d tirodhan"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TIRODHAN_ENVIRONMENT: test
+      TIRODHAN_DATABASE_URL: postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan
+      TIRODHAN_TEST_DATABASE_URL: postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Alembic upgrade
+        run: alembic upgrade head
+      - name: Focused Phase 1D tests
+        run: pytest -q tests/integration/test_cancellation_refunds.py
+      - name: Full test suite
+        run: pytest -q
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: MyPy
+        run: mypy
+      - name: Diff check
+        run: git diff --check
+      - name: Alembic state
+        run: |
+          alembic current
+          alembic heads
