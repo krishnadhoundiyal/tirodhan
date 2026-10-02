@@ -32,6 +32,8 @@ class AuthenticatedPaymentEvent:
     event_type: str
     outcome: PaymentEventOutcome
     payment_attempt_id: UUID | None
+    refund_id: UUID | None = None
+    provider_refund_id: str | None = None
     provider_order_id: str | None = None
     provider_payment_id: str | None = None
     failure_code: str | None = None
@@ -88,3 +90,49 @@ class UnconfiguredPaymentProvider:
         self, *, raw_body: bytes, headers: Mapping[str, str]
     ) -> AuthenticatedPaymentEvent:
         raise PaymentProviderNotConfiguredError("production payment provider is not configured")
+
+
+class RefundInitiationOutcome(str, Enum):
+    SUCCEEDED = "SUCCEEDED"
+    SUBMITTED = "SUBMITTED"
+    FAILED = "FAILED"
+    INITIATION_UNCERTAIN = "INITIATION_UNCERTAIN"
+
+
+@dataclass(frozen=True, slots=True)
+class RefundInitiationResult:
+    outcome: RefundInitiationOutcome
+    provider_refund_id: str | None = None
+    failure_code: str | None = None
+
+
+class RefundProvider(Protocol):
+    @property
+    def provider_code(self) -> str: ...
+
+    async def initiate_refund(
+        self,
+        *,
+        refund_id: UUID,
+        provider_payment_id: str,
+        amount_minor: int,
+        currency: str,
+        provider_idempotency_key: str,
+    ) -> RefundInitiationResult: ...
+
+
+class UnconfiguredRefundProvider:
+    @property
+    def provider_code(self) -> str:
+        raise PaymentProviderNotConfiguredError("production refund provider is not configured")
+
+    async def initiate_refund(
+        self,
+        *,
+        refund_id: UUID,
+        provider_payment_id: str,
+        amount_minor: int,
+        currency: str,
+        provider_idempotency_key: str,
+    ) -> RefundInitiationResult:
+        raise PaymentProviderNotConfiguredError("production refund provider is not configured")

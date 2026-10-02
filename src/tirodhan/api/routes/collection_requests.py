@@ -19,6 +19,7 @@ from tirodhan.api.dependencies import (
 )
 from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
+from tirodhan.modules.collection_requests.cancellation import cancel_collection_request_by_customer
 from tirodhan.modules.collection_requests.ports import (
     DeclaredRequestItem,
     PricingNotConfiguredError,
@@ -171,3 +172,43 @@ async def post_collection_request(
         IntegrityError,
     ) as error:
         raise HTTPException(status_code=409, detail="Collection request conflicts") from error
+
+
+@router.post("/{request_id}/cancel", response_model=CollectionRequestResponse)
+async def cancel_collection_request(
+    request_id: UUID,
+    request: Request,
+    customer_id: Annotated[UUID, Depends(get_current_customer_id)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> CollectionRequestResponse:
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+
+    async with session_factory() as session:
+        # NOTE: This endpoint ONLY cancels the request.
+        # It does NOT automatically create a refund, as the business policy
+        # regarding cancellation refunds (e.g., full, partial, fee, or none)
+        # is currently unresolved and not yet frozen in the architecture.
+        try:
+            async with session.begin():
+                await cancel_collection_request_by_customer(
+                    session,
+                    request_id=request_id,
+                    customer_id=customer_id,
+                    idempotency_key=idempotency_key,
+                )
+        except IdempotencyKeyConflictError as error:
+            raise HTTPException(status_code=409, detail="Idempotency conflict") from error
+
+        # Refetch full result to build response properly
+        from tirodhan.modules.collection_requests.service import _load_request_result
+
+        try:
+            result = await _load_request_result(
+                session, request_id=request_id, customer_id=customer_id
+            )
+        except Exception as err:
+            raise HTTPException(status_code=404, detail="Collection request not found") from err
+
+        return collection_request_response(result)
