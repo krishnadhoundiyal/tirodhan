@@ -19,6 +19,12 @@ from tirodhan.api.dependencies import (
 )
 from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
+from tirodhan.modules.collection_requests.cancellation import (
+    CancellationConflictError,
+    CancellationNotAuthorizedError,
+    CancellationNotFoundError,
+    cancel_collection_request_by_customer,
+)
 from tirodhan.modules.collection_requests.ports import (
     DeclaredRequestItem,
     PricingNotConfiguredError,
@@ -171,3 +177,46 @@ async def post_collection_request(
         IntegrityError,
     ) as error:
         raise HTTPException(status_code=409, detail="Collection request conflicts") from error
+
+
+@router.post("/{request_id}/cancel", response_model=CollectionRequestResponse)
+async def cancel_collection_request(
+    request_id: UUID,
+    request: Request,
+    customer_id: Annotated[UUID, Depends(get_current_customer_id)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> CollectionRequestResponse:
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+
+    _, idempotency_expires_at = _expiries(request)
+    settings = cast(Settings, request.app.state.settings)
+
+    async with session_factory() as session:
+        try:
+            async with session.begin():
+                await cancel_collection_request_by_customer(
+                    session,
+                    request_id=request_id,
+                    customer_id=customer_id,
+                    idempotency_key=idempotency_key,
+                    planning_lead_time_minutes=settings.planning_lead_time_minutes,
+                    idempotency_expires_at=idempotency_expires_at,
+                )
+        except CancellationNotFoundError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except CancellationNotAuthorizedError as error:
+            raise HTTPException(status_code=403, detail=str(error)) from error
+        except CancellationConflictError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except IdempotencyKeyConflictError as error:
+            raise HTTPException(status_code=409, detail="Idempotency conflict") from error
+
+        from tirodhan.modules.collection_requests.service import _load_request_result
+
+        result = await _load_request_result(session, request_id=request_id, customer_id=customer_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Collection request not found")
+
+        return collection_request_response(result)

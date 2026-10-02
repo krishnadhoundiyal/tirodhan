@@ -332,3 +332,7 @@ No new mutating API endpoint, webhook, worker, scheduled job, external side-effe
 - duplicate/concurrency tests
 
 are explicitly defined.
+
+### Refund & Cancellation Idempotency (Phase 1D)
+- **Refunds:** Uses explicit command payload fingerprinting via `command_fingerprint`. Provider idempotency key strictly conforms to deterministic deterministic mappings per generated `refund_id`.
+- **Cancellations:** Replays of exact requests return successfully without generating further operations/domain side-effects. Concurrent requests racing across the freeze boundary yield exact resolution locking over `work_unit_advisory_lock`.

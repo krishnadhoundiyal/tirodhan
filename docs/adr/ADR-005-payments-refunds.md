@@ -50,3 +50,10 @@ Any additional successful charge becomes a reconciliation/refund condition. It m
 
 - production payment gateway vendor;
 - exact retry/retention timings.
+
+### Refund Concurrency and Lifecycle Decisions
+- Expiration concurrency aligns through `Payment` locking first to correctly serialize financial ownership rules against webhook success markers.
+- The target production Payment and Refund provider are explicitly deferred.
+- Customer-cancellation refund policies (i.e. partial / exact commercial outcomes on cancellation) remain functionally open.
+- Over-refunding concurrency operates through checking explicitly unfailed refunds to prevent race-condition payouts.
+- Processing anomalies in external integrations fallback to `INITIATION_UNCERTAIN` for reconciliation instead of silent retries to guarantee provider replay-safety.

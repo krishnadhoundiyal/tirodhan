@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import (
     CHAR,
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -104,6 +105,11 @@ class PaymentProviderEvent(Base):
         ForeignKey("payment_attempt.payment_attempt_id"),
         nullable=True,
     )
+    refund_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("refund.refund_id"),
+        nullable=True,
+    )
     payload_hash: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     processing_status: Mapped[str] = mapped_column(String(24), nullable=False)
     received_at: Mapped[datetime] = mapped_column(
@@ -111,3 +117,47 @@ class PaymentProviderEvent(Base):
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class Refund(Base):
+    __tablename__ = "refund"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_idempotency_key", name="uq_refund_provider_key"),
+        Index(
+            "uq_refund_provider_refund",
+            "provider",
+            "provider_refund_id",
+            unique=True,
+            postgresql_where=text("provider_refund_id IS NOT NULL"),
+        ),
+        CheckConstraint("amount_minor > 0", name="ck_refund_amount_positive"),
+    )
+
+    refund_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    payment_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("payment.payment_id"), nullable=False
+    )
+    payment_attempt_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("payment_attempt.payment_attempt_id"),
+        nullable=False,
+    )
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_refund_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    provider_idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("app_user.user_id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

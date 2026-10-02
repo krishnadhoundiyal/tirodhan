@@ -372,3 +372,12 @@ Do not silently decide:
 - frontend/mobile technology;
 - exact mismatch workflow when collected material differs from booking;
 - final offline-evidence validation policy.
+
+### Refund Lifecycle (Phase 1D additions)
+A `Refund` operates across the following independent status boundaries:
+- `PENDING`: Durable refund intent exists.
+- `PROCESSING`: Provider execution claimed.
+- `SUBMITTED`: Provider accepted asynchronous processing.
+- `SUCCEEDED`: Provider confirmed.
+- `FAILED`: Provider definitively rejected/failed.
+- `INITIATION_UNCERTAIN`: Ambiguous invocation outcome, awaits reconciliation.

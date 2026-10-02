@@ -952,3 +952,7 @@ Still open:
 - final encryption envelope format;
 - exact index tuning after real query patterns are known;
 - exact retention/partitioning policy for inbox/outbox/idempotency/history tables.
+
+### Refund (Phase 1D Addition)
+The `refund` table captures standalone financial adjustments related to `PaymentAttempts`.
+Constraints ensure that `amount_minor > 0` and total committed refunds (`PENDING`, `PROCESSING`, `SUBMITTED`, `SUCCEEDED`, `INITIATION_UNCERTAIN`) never exceed the canonically successful logical `Payment`. `provider_refund_id` maintains partial uniqueness across providers, ensuring correct correlation.
