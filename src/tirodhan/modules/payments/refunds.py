@@ -1,11 +1,11 @@
-from datetime import timedelta
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
+from tirodhan.modules.customers.service import command_fingerprint
 from tirodhan.modules.payments.models import Payment, PaymentAttempt, Refund
 from tirodhan.modules.payments.ports import (
     PaymentProviderUncertainError,
@@ -21,6 +21,18 @@ from tirodhan.modules.reliability.primitives import (
 )
 
 
+class RefundInputError(RuntimeError):
+    pass
+
+
+class RefundNotFoundError(RuntimeError):
+    pass
+
+
+class RefundConflictError(RuntimeError):
+    pass
+
+
 async def create_refund(
     session: AsyncSession,
     *,
@@ -28,11 +40,22 @@ async def create_refund(
     payment_attempt_id: UUID,
     amount_minor: int,
     reason_code: str,
+    # Must be one of the explicitly controlled reason codes
     idempotency_key: str,
+    idempotency_expires_at: datetime,
     requested_by_user_id: UUID | None = None,
 ) -> Refund:
+    valid_reasons = {
+        "CUSTOMER_CANCELLATION",
+        "ADDITIONAL_SUCCESS",
+        "LATE_SUCCESS",
+        "OPERATIONS_ADJUSTMENT",
+    }
+    if reason_code not in valid_reasons:
+        raise RefundInputError(f"Invalid reason code: {reason_code}")
+
     if amount_minor <= 0:
-        raise HTTPException(status_code=400, detail="Refund amount must be positive")
+        raise RefundInputError("Refund amount must be positive")
 
     scope = f"refund.create:{payment_id}"
     try:
@@ -40,22 +63,30 @@ async def create_refund(
             session,
             scope=scope,
             idempotency_key=idempotency_key,
-            request_fingerprint=(str(payment_attempt_id) + str(amount_minor)).encode(),
-            expires_at=utc_now() + timedelta(days=1),  # placeholder
+            request_fingerprint=command_fingerprint(
+                {
+                    "payment_id": str(payment_id),
+                    "payment_attempt_id": str(payment_attempt_id),
+                    "amount_minor": amount_minor,
+                    "reason_code": reason_code,
+                    "requested_by_user_id": str(requested_by_user_id)
+                    if requested_by_user_id
+                    else None,
+                }
+            ),
+            expires_at=idempotency_expires_at,
         )
     except IdempotencyKeyConflictError as e:
-        raise HTTPException(status_code=409, detail="Idempotency conflict") from e
+        raise IdempotencyKeyConflictError("Idempotency conflict for refund creation") from e
 
     if not claim.created:
         result = get_completed_idempotency_result(claim.record)
         if result is not None:
-            # Replay: find the established Refund
-            stmt = select(Refund).where(
-                Refund.payment_id == payment_id, Refund.provider_idempotency_key == idempotency_key
-            )
+            # Replay: load Refund by result_resource_id from completed idempotency result
+            stmt = select(Refund).where(Refund.refund_id == result.resource_id)
             refund = await session.scalar(stmt)
             if not refund:
-                raise HTTPException(status_code=404, detail="Refund not found")
+                raise RefundNotFoundError("Refund not found")
             return refund
 
     # Serialize through Payment
@@ -63,15 +94,13 @@ async def create_refund(
     payment = await session.scalar(payment_stmt)
 
     if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
+        raise RefundNotFoundError("Payment not found")
 
     if payment.status != "SUCCEEDED":
-        raise HTTPException(status_code=409, detail="Payment has not succeeded")
+        raise RefundConflictError("Payment has not succeeded")
 
     if payment.successful_attempt_id != payment_attempt_id:
-        raise HTTPException(
-            status_code=409, detail="Refund target must be the canonical successful attempt"
-        )
+        raise RefundConflictError("Refund target must be the canonical successful attempt")
 
     # Validate payment attempt
     attempt_stmt = select(PaymentAttempt).where(
@@ -79,7 +108,7 @@ async def create_refund(
     )
     attempt = await session.scalar(attempt_stmt)
     if not attempt or attempt.payment_id != payment.payment_id or attempt.status != "SUCCEEDED":
-        raise HTTPException(status_code=409, detail="Invalid successful payment attempt")
+        raise RefundConflictError("Invalid successful payment attempt")
 
     # Calculate reserved balance
     # Do not count definitively FAILED
@@ -92,12 +121,11 @@ async def create_refund(
     reserved_amount = await session.scalar(reserved_stmt) or 0
 
     if amount_minor > payment.amount_minor - reserved_amount:
-        raise HTTPException(
-            status_code=409, detail="Requested refund exceeds remaining refundable balance"
-        )
+        raise RefundConflictError("Requested refund exceeds remaining refundable balance")
 
+    refund_id_var = new_uuid7()
     refund = Refund(
-        refund_id=new_uuid7(),
+        refund_id=refund_id_var,
         payment_id=payment_id,
         payment_attempt_id=payment_attempt_id,
         amount_minor=amount_minor,
@@ -106,7 +134,7 @@ async def create_refund(
         status="PENDING",
         provider=attempt.provider,
         provider_refund_id=None,
-        provider_idempotency_key=idempotency_key,
+        provider_idempotency_key=f"refund:{refund_id_var}",
         requested_by_user_id=requested_by_user_id,
         created_at=utc_now(),
     )
@@ -145,13 +173,22 @@ async def execute_refund_provider_call(
                 return  # Already processed or processing
 
             # Need the successful attempt's provider_payment_id
+            if provider.provider_code != refund.provider:
+                # Not the correct provider for this refund
+                return
+
             attempt_stmt = select(PaymentAttempt).where(
                 PaymentAttempt.payment_attempt_id == refund.payment_attempt_id
             )
             attempt = await session.scalar(attempt_stmt)
-            if not attempt or not attempt.provider_payment_id:
+            if (
+                not attempt
+                or attempt.payment_id != refund.payment_id
+                or not attempt.provider_payment_id
+            ):
                 # Missing provider payment reference fails closed
-                refund.status = "INITIATION_UNCERTAIN"
+                # DO NOT CALL PROVIDER, DO NOT SET UNCERTAIN.
+                # Leave status as PENDING (it won't be processed)
                 return
 
             provider_payment_id = attempt.provider_payment_id
@@ -173,8 +210,6 @@ async def execute_refund_provider_call(
         )
     except PaymentProviderUncertainError:
         result = None
-    except Exception:
-        result = None
 
     # 3. New DB transaction to persist result
     async with session_factory() as session:
@@ -184,16 +219,27 @@ async def execute_refund_provider_call(
             if not refund or refund.status != "PROCESSING":
                 return
 
+            # Prevent contradiction
+            if refund.provider != provider.provider_code:
+                return
+
+            # Update provider_refund_id ONLY if it doesn't overwrite an existing different one
+            if result is not None and result.provider_refund_id:
+                if not refund.provider_refund_id:
+                    refund.provider_refund_id = result.provider_refund_id
+                elif refund.provider_refund_id != result.provider_refund_id:
+                    # Mismatch! Do not proceed with state updates.
+                    # We might mark it uncertain or reconciliation required, but for now we
+                    # just avoid overwriting.
+                    return
+
             if result is None or result.outcome == RefundInitiationOutcome.INITIATION_UNCERTAIN:
                 refund.status = "INITIATION_UNCERTAIN"
             elif result.outcome == RefundInitiationOutcome.SUCCEEDED:
                 refund.status = "SUCCEEDED"
-                refund.provider_refund_id = result.provider_refund_id
                 refund.completed_at = utc_now()
             elif result.outcome == RefundInitiationOutcome.SUBMITTED:
                 refund.status = "SUBMITTED"
-                if result.provider_refund_id:
-                    refund.provider_refund_id = result.provider_refund_id
             elif result.outcome == RefundInitiationOutcome.FAILED:
                 refund.status = "FAILED"
                 refund.completed_at = utc_now()

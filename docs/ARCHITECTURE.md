@@ -825,3 +825,9 @@ Do not silently decide:
 - frontend/mobile technology;
 - detailed material-mismatch workflow;
 - final offline-evidence validation policy;
+
+## Phase 1D Completion: Refunds and Expirations
+- **Cancellation:** Customers can cancel an `ACCEPTED` request. Cancellation serialization uses the `(cell_id, slot_start, slot_end)` planning boundary. Plannning cutoff time dictates if a cancellation is permissible. The commercial policy for cancellation refunds (full vs partial vs none) is currently open/unresolved.
+- **Expiry:** Pending collection requests that reach `payment_expires_at` are moved to `EXPIRED`. Time-boundary expiry serializes across `Payment` and `CollectionRequest` row locks. Late successes post-expiry transition to a reconciliation truth.
+- **Refunds:** Refunds are handled independent of the CollectionRequest lifecycle via `refund` table. Concurrency is limited to the successful `Payment` to prevent over-refunding. Missing references or interruptions during provider calls will enter `INITIATION_UNCERTAIN` for controlled operations reconciliation.
+- **Provider Events:** Internal `refund_id` acts as the primary correlation, with fallback correlation over `provider_refund_id`. Terminal events mapping to local contradiction enforces operations-controlled reconciliation.

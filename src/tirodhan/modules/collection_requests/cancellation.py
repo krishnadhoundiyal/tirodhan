@@ -1,11 +1,9 @@
-from datetime import timedelta
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tirodhan.core.config import get_settings
 from tirodhan.db.values import utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
@@ -18,22 +16,36 @@ from tirodhan.modules.reliability.primitives import (
 )
 
 
+class CancellationNotAuthorizedError(RuntimeError):
+    pass
+
+
+class CancellationNotFoundError(RuntimeError):
+    pass
+
+
+class CancellationConflictError(RuntimeError):
+    pass
+
+
 async def cancel_collection_request_by_customer(
     session: AsyncSession,
     *,
     request_id: UUID,
     customer_id: UUID,
     idempotency_key: str,
+    planning_lead_time_minutes: int | None,
+    idempotency_expires_at: datetime,
 ) -> CollectionRequest:
     # 1. Short read to get request identity
     stmt = select(CollectionRequest).where(CollectionRequest.request_id == request_id)
     request_identity = await session.scalar(stmt)
 
     if not request_identity:
-        raise HTTPException(status_code=404, detail="Collection request not found")
+        raise CancellationNotFoundError("Collection request not found")
 
     if request_identity.customer_id != customer_id:
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this request")
+        raise CancellationNotAuthorizedError("Not authorized to cancel this request")
 
     # 2. Claim idempotency record
     scope = f"collection-request.cancel:{request_id}"
@@ -45,10 +57,10 @@ async def cancel_collection_request_by_customer(
             scope=scope,
             idempotency_key=idempotency_key,
             request_fingerprint=fingerprint.encode(),
-            expires_at=utc_now() + timedelta(days=1),  # placeholder
+            expires_at=idempotency_expires_at,
         )
     except IdempotencyKeyConflictError as e:
-        raise HTTPException(status_code=409, detail="Idempotency conflict") from e
+        raise IdempotencyKeyConflictError("Idempotency conflict") from e
 
     if not claim.created:
         result = get_completed_idempotency_result(claim.record)
@@ -58,7 +70,7 @@ async def cancel_collection_request_by_customer(
                 select(CollectionRequest).where(CollectionRequest.request_id == request_id)
             )
             if not request:
-                raise HTTPException(status_code=404, detail="Collection request not found")
+                raise CancellationNotFoundError("Collection request not found")
             return request
 
     # 3. Acquire work-unit advisory lock
@@ -78,13 +90,14 @@ async def cancel_collection_request_by_customer(
     request = await session.scalar(reload_stmt)
     # cast to help mypy since request is not None
     from typing import cast
+
     request = cast(CollectionRequest, request)
 
     if not request:
-        raise HTTPException(status_code=404, detail="Collection request not found")
+        raise CancellationNotFoundError("Collection request not found")
 
     if request.customer_id != customer_id:
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this request")
+        raise CancellationNotAuthorizedError("Not authorized to cancel this request")
 
     # Idempotency: a different fresh cancellation command against an already-CANCELLED request
     # must produce no second business effect. We still mark idempotency complete.
@@ -96,22 +109,18 @@ async def cancel_collection_request_by_customer(
 
     # 5. Verify cutoff not reached using planning_cutoff_reached
     time_now = utc_now()
-    settings = get_settings()
-
     if planning_cutoff_reached(
         slot_start=request.slot_start,
         now=time_now,
-        lead_time_minutes=settings.planning_lead_time_minutes,
+        lead_time_minutes=planning_lead_time_minutes,
     ):
-        raise HTTPException(
-            status_code=409, detail="Planning cutoff has been reached; request cannot be cancelled"
+        raise CancellationConflictError(
+            "Planning cutoff has been reached; request cannot be cancelled"
         )
 
     # 6. Verify status is ACCEPTED, no planning_batch_id
     if request.status != "ACCEPTED" or request.planning_batch_id is not None:
-        raise HTTPException(
-            status_code=409, detail="Request cannot be cancelled in its current state"
-        )
+        raise CancellationConflictError("Request cannot be cancelled in its current state")
 
     # 7. Conditional transition
     request.status = "CANCELLED"

@@ -395,6 +395,11 @@ async def _process_refund_event(
     if event.refund_id is not None:
         stmt = select(Refund).where(Refund.refund_id == event.refund_id).with_for_update()
         refund = await session.scalar(stmt)
+        if refund and refund.provider != event.provider:
+            # Provider mismatch for the given internal refund_id
+            record.processing_status = EVENT_RECONCILIATION_REQUIRED
+            record.processed_at = now
+            return record
     elif event.provider_refund_id is not None:
         stmt = (
             select(Refund)
