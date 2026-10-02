@@ -80,9 +80,6 @@ async def create_dummy_request(session, status="ACCEPTED", expires_in_mins=60):
     await session.execute(
         insert(AppUser).values(
             user_id=customer_id,
-            phone_number="+910000000000",
-            phone_lookup_hmac=b"dummy",
-            roles=[],
             status="ACTIVE",
             created_at=now,
         )
@@ -114,7 +111,7 @@ async def create_dummy_request(session, status="ACCEPTED", expires_in_mins=60):
         quoted_amount_minor=1000,
         currency="INR",
         status=status,
-        payment_expires_at=now + timedelta(minutes=expires_in_mins),
+        payment_expires_at=now + timedelta(minutes=expires_in_mins) if expires_in_mins > 0 else now + timedelta(microseconds=1),
         created_at=now,
     )
     session.add(req)
@@ -256,7 +253,7 @@ async def test_refund_creation_and_execution(database_session_factory):
 async def test_cancellation_concurrent_race(database_session_factory):
     import asyncio
 
-    from tirodhan.modules.planning.service import CreatePlanningBatchCommand, create_planning_batch
+    from tirodhan.modules.planning.service import freeze_planning_batch
 
     async with database_session_factory() as session:
         async with session.begin():
@@ -271,29 +268,34 @@ async def test_cancellation_concurrent_race(database_session_factory):
     async def run_freeze():
         async with database_session_factory() as s:
             try:
-                await create_planning_batch(
-                    s,
-                    CreatePlanningBatchCommand(
-                        cell_id=cell_id,
-                        slot_start=slot_start,
-                        slot_end=slot_end,
-                    ),
-                )
-            except Exception:
-                pass
+                from tirodhan.modules.planning.service import PlanningWorkUnit
+                # Mock time so freeze thinks cutoff is reached
+                from unittest import mock
+                with mock.patch("tirodhan.modules.planning.service.planning_cutoff_reached", return_value=True):
+                    await freeze_planning_batch(
+                        database_session_factory,
+                        PlanningWorkUnit(cell_id=cell_id, slot_start=slot_start, slot_end=slot_end),
+                        lead_time_minutes=120,
+                        max_attempts=3,
+                    )
+            except Exception as e:
+                print("Freeze error:", e)
+
 
     async def run_cancel():
         async with database_session_factory() as s:
             async with s.begin():
                 try:
-                    await cancel_collection_request_by_customer(
-                        s,
-                        request_id=req_id,
-                        customer_id=customer_id,
-                        idempotency_key="ik_race_cancel",
-                        planning_lead_time_minutes=0,  # Allow cancel
-                        idempotency_expires_at=utc_now() + timedelta(days=1),
-                    )
+                    from unittest import mock
+                    with mock.patch("tirodhan.modules.collection_requests.cancellation.planning_cutoff_reached", return_value=False):
+                        await cancel_collection_request_by_customer(
+                            s,
+                            request_id=req_id,
+                            customer_id=customer_id,
+                            idempotency_key="ik_race_cancel",
+                            planning_lead_time_minutes=120,
+                            idempotency_expires_at=utc_now() + timedelta(days=1),
+                        )
                 except Exception:
                     pass
 
@@ -450,13 +452,70 @@ async def test_expiry_vs_provider_success_concurrency(database_session_factory):
 
 
 async def test_refund_exact_command_replay(database_session_factory):
-    # Setup successful payment
-    # Call create_refund twice with exact same idempotency_key
-    # Verify same Refund object is returned, only one Refund row created.
-    assert True
+    async with database_session_factory() as session:
+        async with session.begin():
+            req = await create_dummy_request(session, status="ACCEPTED")
+            pay_id = new_uuid7()
+            attempt_id = new_uuid7()
+            payment = Payment(
+                payment_id=pay_id, request_id=req.request_id, amount_minor=1000,
+                currency="INR", status="SUCCEEDED", successful_attempt_id=attempt_id,
+                created_at=utc_now(), succeeded_at=utc_now(),
+            )
+            attempt = PaymentAttempt(
+                payment_attempt_id=attempt_id, payment_id=pay_id, provider="fake",
+                provider_idempotency_key="pk_1", status="SUCCEEDED", created_at=utc_now(),
+            )
+            session.add(payment)
+            session.add(attempt)
+    async with database_session_factory() as session:
+        async with session.begin():
+            ref1 = await create_refund(
+                session, payment_id=pay_id, payment_attempt_id=attempt_id,
+                amount_minor=100, reason_code="CUSTOMER_CANCELLATION",
+                idempotency_key="ik_replay", idempotency_expires_at=utc_now() + timedelta(days=1),
+            )
+    async with database_session_factory() as session:
+        async with session.begin():
+            ref2 = await create_refund(
+                session, payment_id=pay_id, payment_attempt_id=attempt_id,
+                amount_minor=100, reason_code="CUSTOMER_CANCELLATION",
+                idempotency_key="ik_replay", idempotency_expires_at=utc_now() + timedelta(days=1),
+            )
+    assert ref1.refund_id == ref2.refund_id
 
 
 async def test_refund_fingerprint_conflict(database_session_factory):
-    # Call create_refund, then again with different amount but same key
-    # Assert IdempotencyKeyConflictError
-    assert True
+    async with database_session_factory() as session:
+        async with session.begin():
+            req = await create_dummy_request(session, status="ACCEPTED")
+            pay_id = new_uuid7()
+            attempt_id = new_uuid7()
+            payment = Payment(
+                payment_id=pay_id, request_id=req.request_id, amount_minor=1000,
+                currency="INR", status="SUCCEEDED", successful_attempt_id=attempt_id,
+                created_at=utc_now(), succeeded_at=utc_now(),
+            )
+            attempt = PaymentAttempt(
+                payment_attempt_id=attempt_id, payment_id=pay_id, provider="fake",
+                provider_idempotency_key="pk_1", status="SUCCEEDED", created_at=utc_now(),
+            )
+            session.add(payment)
+            session.add(attempt)
+    async with database_session_factory() as session:
+        async with session.begin():
+            await create_refund(
+                session, payment_id=pay_id, payment_attempt_id=attempt_id,
+                amount_minor=100, reason_code="CUSTOMER_CANCELLATION",
+                idempotency_key="ik_conflict", idempotency_expires_at=utc_now() + timedelta(days=1),
+            )
+    async with database_session_factory() as session:
+        async with session.begin():
+            import pytest
+            from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
+            with pytest.raises(IdempotencyKeyConflictError):
+                await create_refund(
+                    session, payment_id=pay_id, payment_attempt_id=attempt_id,
+                    amount_minor=200, reason_code="CUSTOMER_CANCELLATION",
+                    idempotency_key="ik_conflict", idempotency_expires_at=utc_now() + timedelta(days=1),
+                )
