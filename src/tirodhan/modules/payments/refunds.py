@@ -228,9 +228,8 @@ async def execute_refund_provider_call(
                 if not refund.provider_refund_id:
                     refund.provider_refund_id = result.provider_refund_id
                 elif refund.provider_refund_id != result.provider_refund_id:
-                    # Mismatch! Do not proceed with state updates.
-                    # We might mark it uncertain or reconciliation required, but for now we
-                    # just avoid overwriting.
+                    # Mismatch! External call has occurred and local/provider truth conflicts.
+                    refund.status = "INITIATION_UNCERTAIN"
                     return
 
             if result is None or result.outcome == RefundInitiationOutcome.INITIATION_UNCERTAIN:
