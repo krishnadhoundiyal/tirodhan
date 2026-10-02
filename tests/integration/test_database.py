@@ -114,7 +114,7 @@ def test_phase_1c_migration_downgrade_and_reupgrade(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.integration
-def test_phase_1d_migration_creates_payment_subset_without_refund(
+def test_phase_1d_completion_migration_creates_refund_lifecycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     database_url = get_test_database_url()
@@ -148,8 +148,8 @@ def test_phase_1d_migration_creates_payment_subset_without_refund(
         "payment_provider_event",
         "planning_batch",
     }.issubset(tables)
-    assert "refund" not in tables
-    assert "refund_id" not in event_columns
+    assert "refund" in tables
+    assert "refund_id" in event_columns
 
 
 @pytest.mark.integration
