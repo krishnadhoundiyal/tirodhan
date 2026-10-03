@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     ]
     service_bus_namespace: str | None = None
     serviceability_queue_name: str | None = None
+    rider_notification_queue_name: str | None = None
+    rider_offer_lifetime_seconds: int | None = None
+    fcm_project_id: str | None = None
+    fcm_credentials_json: SecretStr | None = None
     service_bus_managed_identity_client_id: str | None = None
     service_bus_operation_timeout_seconds: float | None = None
     serviceability_lock_renewal_seconds: int | None = None
@@ -97,6 +101,7 @@ class Settings(BaseSettings):
         "media_video_max_size_bytes",
         "serviceability_lock_renewal_seconds",
         "outbox_publish_batch_size",
+        "rider_offer_lifetime_seconds",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:

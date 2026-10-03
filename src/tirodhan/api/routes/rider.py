@@ -26,6 +26,7 @@ from tirodhan.modules.customers.ports import (
     AddressProtector,
 )
 from tirodhan.modules.customers.service import GeoPoint
+from tirodhan.modules.dispatch.devices import register_push_device, revoke_push_device
 from tirodhan.modules.dispatch.models import AssignmentOffer, RiderAssignment, RiderAvailability
 from tirodhan.modules.dispatch.queries import (
     ActiveAssignmentRead,
@@ -874,4 +875,59 @@ async def post_finalize_media_asset(
         MediaObjectNotReadyError,
         MediaLifecycleStateError,
     ) as error:
+        raise _conflict(error) from error
+
+
+class PushDeviceRequest(RiderCommandModel):
+    client_device_id: str = Field(min_length=1, max_length=200)
+    platform: Literal["ANDROID", "IOS"]
+    registration_token: str = Field(min_length=1, max_length=4096, repr=False)
+
+
+class PushDeviceResponse(BaseModel):
+    push_registration_id: UUID
+    client_device_id: str
+    provider: str
+    platform: str
+
+
+@router.post("/me/push-devices", response_model=PushDeviceResponse)
+async def post_push_device(
+    body: PushDeviceRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_RIDER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> PushDeviceResponse:
+    try:
+        registration = await register_push_device(
+            session_factory,
+            rider_id=principal.user_id,
+            client_device_id=body.client_device_id,
+            platform=body.platform,
+            registration_token=body.registration_token,
+        )
+    except RiderNotFoundError as error:
+        raise _not_found() from error
+    except RiderNotEligibleError as error:
+        raise _conflict(error) from error
+    return PushDeviceResponse(
+        push_registration_id=registration.push_registration_id,
+        client_device_id=registration.client_device_id,
+        provider=registration.provider,
+        platform=registration.platform,
+    )
+
+
+@router.delete("/me/push-devices/{client_device_id}", status_code=204)
+async def delete_push_device(
+    client_device_id: str,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_RIDER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> None:
+    try:
+        await revoke_push_device(
+            session_factory, rider_id=principal.user_id, client_device_id=client_device_id
+        )
+    except RiderNotFoundError as error:
+        raise _not_found() from error
+    except RiderNotEligibleError as error:
         raise _conflict(error) from error

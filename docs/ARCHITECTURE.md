@@ -435,11 +435,11 @@ Fleet membership is historical affiliation, not rider identity.
 
 For each planned collection group:
 
-1. use suitable available fleet capacity where possible;
-2. otherwise fan out an offer to eligible independent riders;
-3. first valid acceptance wins atomically;
-4. if no acceptance arrives by the configured deadline, escalate to manager;
-5. manager may manually assign/reassign.
+1. offer the complete eligible cohort of active-fleet riders covering the group's H3 resolution-7 cell;
+2. if no eligible fleet riders exist, immediately offer independent riders (round 1);
+3. first valid synchronous acceptance wins atomically;
+4. if fleet offers expire without an assignment, offer one independent cohort (next round);
+5. if independent offers expire, leave manager/manual assignment as fallback;
 
 Fleet, independent acceptance, and manual assignment all converge on the same durable RiderAssignment model.
 
@@ -464,7 +464,33 @@ rider, while a partial unique index permits only one `ACTIVE` assignment per gro
 `rider_assignment_item` is the current pickup-ownership authority. Offer expiry is determined by
 `expires_at`. Terminal offers retain the assignment that resolved them, preserving replay after
 assignment completion. New initial-dispatch offers require the group pickup population to remain
-entirely `PENDING_ASSIGNMENT`. Fleet selection remains deferred.
+entirely `PENDING_ASSIGNMENT`.
+
+Phase 1U adds persistent fleet membership and fleet/independent-rider service-cell coverage.
+Fleet-first is opportunity ordering, not automatic fleet assignment or rider scoring. An inactive
+fleet is excluded. An independent rider has no current fleet membership, including membership in
+an inactive fleet. Fresh cohorts reuse the existing profile/availability and live user/role locks.
+Fleet state/coverage transactions lock fleet before rider; cohort fleet and rider locks are sorted.
+One transaction-owned cohort operation fixes a common offered_at, expires_at and offer_round.
+Offer provenance is immutable `audience_kind` plus optional `fleet_id`; it is not rider identity
+or assignment state. The offer lifetime is configured, never a production default.
+
+Normal and fallback planning completion append one `CollectionGroupDispatchRequested` outbox
+event per new group. One identifier/control-only Service Bus Standard message per group/stage
+reaches a separate notification consumer. The explicit publisher preserves ServiceabilityRequested
+routing and adds only the dispatch route. There are no per-rider broker messages.
+The consumer commits the complete offers/device delivery set before calling real Firebase Admin
+multicast via asyncio.to_thread outside DB transactions; >500-device chunks launch concurrently. Generic push
+contains group ID/round only. Device tokens belong in PushRegistration, never reliability metadata.
+PROCESSING inbox messages resume their durable PENDING deliveries; PROCESSED skips further work.
+Permanent invalid tokens revoke the matching registration; transient failures remain pending for
+broker retry. Push is at-least-once/best-effort, not proof of assignment or guaranteed phone receipt.
+
+PostgreSQL owns assignment truth. Service Bus transports notification work. Acceptance remains
+the existing synchronous HTTP transaction (success means durable ownership), with no saga,
+orchestrator, acceptance worker or rollback chain. A finite fleet-timeout scanner uses the same
+group lock as acceptance and appends at most one independent-stage event. Hosting/scheduling
+topology and Firebase credential provisioning remain deployment responsibilities, not new IaC.
 
 Phase 1P exposes these operations through separate authenticated `/v1/rider` and `/v1/manager`
 HTTP namespaces. Namespace authorization uses the live PostgreSQL user/session/role checks from the

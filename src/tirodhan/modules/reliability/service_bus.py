@@ -56,3 +56,30 @@ class AzureServiceabilityDelivery:
             reason="INVALID_SERVICEABILITY_MESSAGE",
             error_description="Message could not be processed",
         )
+
+
+class AzureDispatchDelivery(AzureServiceabilityDelivery):
+    def __init__(self, receiver: ServiceBusReceiver, message: ServiceBusReceivedMessage) -> None:
+        self._receiver = receiver
+        self._message = message
+        self.message_id = str(message.message_id or "")
+        self.message_type = str(message.subject or "")
+        chunks = bytearray()
+        try:
+            for chunk in message.body:
+                if not isinstance(chunk, bytes):
+                    chunks = bytearray(b"invalid")
+                    break
+                chunks.extend(chunk[: 2049 - len(chunks)])
+                if len(chunks) > 2048:
+                    break
+        except (TypeError, ValueError):
+            chunks = bytearray(b"invalid")
+        self.body = bytes(chunks)
+
+    async def dead_letter(self) -> None:
+        await self._receiver.dead_letter_message(
+            self._message,
+            reason="INVALID_DISPATCH_MESSAGE",
+            error_description="Message could not be processed",
+        )

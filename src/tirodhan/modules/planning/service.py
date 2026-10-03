@@ -581,6 +581,11 @@ async def _persist_groups(
     *,
     now: datetime,
 ) -> None:
+    from tirodhan.modules.dispatch.events import FLEET_FIRST, append_dispatch_event
+
+    batch = await session.get(PlanningBatch, batch_id)
+    if batch is None:
+        raise PlanningBatchNotFoundError("planning batch not found")
     for result_group in groups:
         group_id = new_uuid7()
         session.add(
@@ -611,7 +616,8 @@ async def _persist_groups(
                     updated_at=now,
                 )
             )
-    await session.flush()
+        await session.flush()
+        await append_dispatch_event(session, group_id=group_id, batch=batch, stage=FLEET_FIRST)
 
 
 async def _transition_population(session: AsyncSession, batch_id: UUID, expected: int) -> None:

@@ -115,20 +115,38 @@ The persisted Phase 1F vocabulary is:
 - `rider_profile`
 - `fleet`
 - `fleet_membership`
+- `fleet_service_cell`
+- `rider_service_cell`
+- `push_registration`
+- `offer_notification_delivery`
 - `rider_availability`
 - `assignment_offer`
 - `rider_assignment`
 - `rider_assignment_item`
 
-Identity, fleet affiliation, rider intent, platform work state, offers and assignments are separate concepts. Fleet auto-assignment, independent acceptance and manager assignment all converge on `rider_assignment`.
+Identity, historical fleet affiliation, cell coverage, rider intent, platform work state,
+offers and assignments are separate concepts. Fleet and independent offers both converge on
+`rider_assignment` through synchronous rider acceptance; manager assignment remains fallback.
+Fleet-first means offering every eligible member of active fleets serving the group cell before
+independent riders, not choosing or automatically assigning a fleet rider. No current membership
+is permitted for independent selection, including membership in inactive fleets.
+
+Phase 1U stores audience/fleet provenance only on AssignmentOffer. Common cohort timestamps and
+one initial fleet (or immediate independent) round precede at most one independent fallback.
+PushRegistration supports multiple devices and token replacement per current device.
+OfferNotificationDelivery retains per-offer/device PENDING, SENT or PERMANENTLY_FAILED transport
+results, not business assignment state. No device means the durable offer still exists.
+Planning emits one transactional dispatch event per new group; Service Bus transports one
+group/stage item, concurrent generic FCM push is best-effort/at-least-once, and PostgreSQL remains
+the assignment authority. There is no saga or queued acceptance.
 
 Phase 1H persists rider profiles as `ACTIVE` or `SUSPENDED`; availability intent as
 `OFFLINE` or `AVAILABLE`; and platform work state as `IDLE`, `RESERVED`, or `BUSY`.
 Initial assignment creates an `ACTIVE` assignment from either `RIDER_OFFER_ACCEPTED` or
 `MANAGER_ASSIGNED`, attaches the full collection group through `rider_assignment_item`, moves
 each pickup from `PENDING_ASSIGNMENT` to `ASSIGNED`, and reserves the rider. Offer state is
-`OPEN`, `ACCEPTED`, or `CLOSED_LOST`; `expires_at` remains the expiry authority. Fleet selection
-remains deferred. Phase 1J adds terminal assignment status `SUPERSEDED`: a manager-created
+`OPEN`, `ACCEPTED`, or `CLOSED_LOST`; `expires_at` remains the expiry authority.
+Phase 1J adds terminal assignment status `SUPERSEDED`: a manager-created
 successor uses `MANAGER_ASSIGNED` plus `supersedes_assignment_id`, receives only residual
 `ASSIGNED` pickups, and reserves the replacement rider while returning the predecessor rider to
 `IDLE`. Transferred predecessor items are released with reason `REASSIGNED`; collected items stay
@@ -334,7 +352,7 @@ PLANNED + PickupExecution created
 ```text
 Offer(s)
    ↓
-one valid acceptance / fleet assignment / manual assignment
+one valid synchronous fleet/independent offer acceptance / manual assignment
    ↓
 RiderAssignment
    ↓
