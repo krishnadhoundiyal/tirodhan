@@ -18,6 +18,17 @@ from tirodhan.modules.collection_requests.service import (
     CollectionRequestNotFoundError,
     complete_collection_request,
 )
+from tirodhan.modules.dispatch.fleet_manager import (
+    FleetManagerError,
+    activate_fleet_cell,
+    activate_rider_cell,
+    add_rider_to_fleet,
+    create_fleet,
+    deactivate_fleet_cell,
+    deactivate_rider_cell,
+    end_rider_fleet_membership,
+    set_fleet_status,
+)
 from tirodhan.modules.dispatch.models import RiderAssignment
 from tirodhan.modules.dispatch.queries import (
     ManagerRiderRead,
@@ -59,7 +70,7 @@ class ManagerCommandModel(BaseModel):
 
 class ManagerRiderResponse(BaseModel):
     rider_id: UUID
-    profile_status: str
+    status: str
     vehicle_type_code: str | None
     capacity_class_code: str | None
     availability_intent: str
@@ -70,17 +81,12 @@ class ManagerRiderResponse(BaseModel):
 
 class PendingGroupResponse(BaseModel):
     collection_group_id: UUID
-    planning_batch_id: UUID
-    planning_mode: str
     cell_id: str
+    planning_mode: str
     slot_start: datetime
     slot_end: datetime
     pickup_count: int
     created_at: datetime
-
-
-class ManualAssignmentRequest(ManagerCommandModel):
-    rider_id: UUID
 
 
 class AssignmentSummaryResponse(BaseModel):
@@ -96,18 +102,11 @@ class AssignmentSummaryResponse(BaseModel):
 
 class ManagerIncidentResponse(BaseModel):
     incident_id: UUID
-    client_incident_id: UUID
     pickup_execution_id: UUID
-    rider_assignment_id: UUID
+    assignment_id: UUID
     reason_code: str
     status: str
     opened_at: datetime
-
-
-class ReassignmentRequest(ManagerCommandModel):
-    client_reassignment_id: UUID
-    replacement_rider_id: UUID
-    incident_id: UUID | None = None
 
 
 class CompletionResponse(BaseModel):
@@ -116,10 +115,20 @@ class CompletionResponse(BaseModel):
     completed_at: datetime | None
 
 
+class ManualAssignmentRequest(ManagerCommandModel):
+    rider_id: UUID
+
+
+class ReassignmentRequest(ManagerCommandModel):
+    replacement_rider_id: UUID
+    client_reassignment_id: UUID
+    incident_id: UUID | None = None
+
+
 def _rider_response(value: ManagerRiderRead) -> ManagerRiderResponse:
     return ManagerRiderResponse(
         rider_id=value.rider_id,
-        profile_status=value.profile_status,
+        status="ACTIVE",
         vehicle_type_code=value.vehicle_type_code,
         capacity_class_code=value.capacity_class_code,
         availability_intent=value.availability_intent,
@@ -132,9 +141,8 @@ def _rider_response(value: ManagerRiderRead) -> ManagerRiderResponse:
 def _pending_group_response(value: PendingGroupRead) -> PendingGroupResponse:
     return PendingGroupResponse(
         collection_group_id=value.collection_group_id,
-        planning_batch_id=value.planning_batch_id,
-        planning_mode=value.planning_mode,
         cell_id=value.cell_id,
+        planning_mode=value.planning_mode,
         slot_start=value.slot_start,
         slot_end=value.slot_end,
         pickup_count=value.pickup_count,
@@ -158,9 +166,8 @@ def _assignment_response(value: RiderAssignment) -> AssignmentSummaryResponse:
 def _incident_response(value: PickupIncident) -> ManagerIncidentResponse:
     return ManagerIncidentResponse(
         incident_id=value.incident_id,
-        client_incident_id=value.client_incident_id,
         pickup_execution_id=value.pickup_execution_id,
-        rider_assignment_id=value.rider_assignment_id,
+        assignment_id=value.assignment_id,
         reason_code=value.reason_code,
         status=value.status,
         opened_at=value.opened_at,
@@ -177,7 +184,7 @@ def _completion_response(value: CollectionRequest) -> CompletionResponse:
 
 def _idempotency_expiry(request: Request) -> datetime:
     settings = cast(Settings, request.app.state.settings)
-    seconds = settings.command_idempotency_ttl_seconds
+    seconds = settings.command_idempotency_retention_seconds
     if seconds is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -186,21 +193,13 @@ def _idempotency_expiry(request: Request) -> datetime:
     return utc_now() + timedelta(seconds=seconds)
 
 
-def _conflict(error: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
-
-
-def _not_found() -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
-
-
 @router.get("/riders", response_model=list[ManagerRiderResponse])
 async def get_manager_riders(
     _principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session: Annotated[AsyncSession, Depends(get_database_session)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    cell_id: str | None = Query(default=None, max_length=20),
 ) -> list[ManagerRiderResponse]:
-    return [_rider_response(value) for value in await list_manager_riders(session, limit=limit)]
+    return [_rider_response(row) for row in await list_manager_riders(session, cell_id=cell_id)]
 
 
 @router.get(
@@ -210,11 +209,11 @@ async def get_manager_riders(
 async def get_pending_assignment_groups(
     _principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session: Annotated[AsyncSession, Depends(get_database_session)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    cell_id: str | None = Query(default=None, max_length=20),
 ) -> list[PendingGroupResponse]:
     return [
-        _pending_group_response(value)
-        for value in await list_pending_assignment_groups(session, limit=limit)
+        _pending_group_response(row)
+        for row in await list_pending_assignment_groups(session, cell_id=cell_id)
     ]
 
 
@@ -228,35 +227,37 @@ async def post_manual_assignment(
     principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
 ) -> AssignmentSummaryResponse:
+    def _not_found() -> HTTPException:
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
     try:
-        return _assignment_response(
-            await assign_group_manually(
-                session_factory,
-                collection_group_id=collection_group_id,
-                rider_id=body.rider_id,
-                manager_user_id=principal.user_id,
+        async with session_factory() as session, session.begin():
+            return _assignment_response(
+                await assign_group_manually(
+                    session,
+                    collection_group_id=collection_group_id,
+                    rider_id=body.rider_id,
+                    manager_user_id=principal.user_id,
+                )
             )
-        )
     except CollectionGroupNotFoundError as error:
         raise _not_found() from error
     except (
         RiderNotFoundError,
         RiderNotEligibleError,
+        PickupGroupNotAssignableError,
         GroupAlreadyAssignedError,
         AssignmentStateInconsistentError,
-        PickupGroupNotAssignableError,
-        IntegrityError,
     ) as error:
-        raise _conflict(error) from error
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
 
 @router.get("/incidents", response_model=list[ManagerIncidentResponse])
 async def get_manager_incidents(
     _principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session: Annotated[AsyncSession, Depends(get_database_session)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> list[ManagerIncidentResponse]:
-    return [_incident_response(value) for value in await list_open_incidents(session, limit=limit)]
+    return [_incident_response(row) for row in await list_open_incidents(session)]
 
 
 @router.post(
@@ -270,31 +271,35 @@ async def post_reassignment(
     principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
 ) -> AssignmentSummaryResponse:
+    def _not_found() -> HTTPException:
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
     try:
-        return _assignment_response(
-            await reassign_outstanding_work(
-                session_factory,
-                predecessor_assignment_id=predecessor_assignment_id,
-                replacement_rider_id=body.replacement_rider_id,
-                manager_user_id=principal.user_id,
-                client_reassignment_id=body.client_reassignment_id,
-                incident_id=body.incident_id,
-                idempotency_expires_at=_idempotency_expiry(request),
+        async with session_factory() as session, session.begin():
+            return _assignment_response(
+                await reassign_outstanding_work(
+                    session,
+                    predecessor_assignment_id=predecessor_assignment_id,
+                    replacement_rider_id=body.replacement_rider_id,
+                    manager_user_id=principal.user_id,
+                    client_reassignment_id=body.client_reassignment_id,
+                    incident_id=body.incident_id,
+                    idempotency_expires_at=_idempotency_expiry(request),
+                )
             )
-        )
     except (ReassignmentNotFoundError, PickupIncidentNotFoundError) as error:
         raise _not_found() from error
     except (
         IdempotencyKeyConflictError,
         ReassignmentCommandInProgressError,
         ReassignmentConflictError,
-        ReassignmentRiderError,
         ReassignmentStateError,
-        PickupIncidentConflictError,
+        ReassignmentRiderError,
         PickupIncidentStateError,
+        PickupIncidentConflictError,
         IntegrityError,
     ) as error:
-        raise _conflict(error) from error
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
 
 @router.post(
@@ -306,9 +311,132 @@ async def post_complete_collection_request(
     _principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
 ) -> CompletionResponse:
+    def _not_found() -> HTTPException:
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    def _conflict(error: Exception) -> HTTPException:
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+
     try:
-        return _completion_response(await complete_collection_request(session_factory, request_id))
+        async with session_factory() as session, session.begin():
+            return _completion_response(await complete_collection_request(session, request_id))
     except CollectionRequestNotFoundError as error:
         raise _not_found() from error
     except CollectionRequestCompletionError as error:
         raise _conflict(error) from error
+
+
+class CreateFleetRequest(ManagerCommandModel):
+    name: str
+
+
+class SetFleetStatusRequest(ManagerCommandModel):
+    status: str
+
+
+class ManageFleetRiderRequest(ManagerCommandModel):
+    rider_id: UUID
+
+
+class ManageFleetCellRequest(ManagerCommandModel):
+    cell_id: str
+
+
+@router.post("/fleets")
+async def api_create_fleet(
+    request: CreateFleetRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        fleet = await create_fleet(session, request.name)
+        return {"fleet_id": str(fleet.fleet_id)}
+
+
+@router.put("/fleets/{fleet_id}/status")
+async def api_set_fleet_status(
+    fleet_id: UUID,
+    request: SetFleetStatusRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        try:
+            await set_fleet_status(session, fleet_id, request.status)
+        except FleetManagerError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from None
+        return {"status": "ok"}
+
+
+@router.post("/fleets/{fleet_id}/riders")
+async def api_add_rider_to_fleet(
+    fleet_id: UUID,
+    request: ManageFleetRiderRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        try:
+            membership = await add_rider_to_fleet(session, fleet_id, request.rider_id)
+        except FleetManagerError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from None
+        return {"fleet_membership_id": str(membership.fleet_membership_id)}
+
+
+@router.delete("/riders/{rider_id}/fleet")
+async def api_remove_rider_from_fleet(
+    rider_id: UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        await end_rider_fleet_membership(session, rider_id)
+        return {"status": "ok"}
+
+
+@router.post("/fleets/{fleet_id}/cells")
+async def api_activate_fleet_cell(
+    fleet_id: UUID,
+    request: ManageFleetCellRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        await activate_fleet_cell(session, fleet_id, request.cell_id)
+        return {"status": "ok"}
+
+
+@router.delete("/fleets/{fleet_id}/cells/{cell_id}")
+async def api_deactivate_fleet_cell(
+    fleet_id: UUID,
+    cell_id: str,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        await deactivate_fleet_cell(session, fleet_id, cell_id)
+        return {"status": "ok"}
+
+
+@router.post("/riders/{rider_id}/cells")
+async def api_activate_rider_cell(
+    rider_id: UUID,
+    request: ManageFleetCellRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        await activate_rider_cell(session, rider_id, request.cell_id)
+        return {"status": "ok"}
+
+
+@router.delete("/riders/{rider_id}/cells/{cell_id}")
+async def api_deactivate_rider_cell(
+    rider_id: UUID,
+    cell_id: str,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> dict[str, str]:
+    async with session_factory() as session, session.begin():
+        await deactivate_rider_cell(session, rider_id, cell_id)
+        return {"status": "ok"}

@@ -33,6 +33,12 @@ class RiderProfile(Base):
         primary_key=True,
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    audience_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default="INDEPENDENT"
+    )
+    fleet_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("fleet.fleet_id"), nullable=True
+    )
     vehicle_type_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     capacity_class_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -103,6 +109,12 @@ class AssignmentOffer(Base):
     )
     offer_round: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    audience_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default="INDEPENDENT"
+    )
+    fleet_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("fleet.fleet_id"), nullable=True
+    )
     offered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -145,6 +157,12 @@ class RiderAssignment(Base):
     )
     source: Mapped[str] = mapped_column(String(24), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    audience_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default="INDEPENDENT"
+    )
+    fleet_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("fleet.fleet_id"), nullable=True
+    )
     assigned_by_user_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True), ForeignKey("app_user.user_id"), nullable=True
     )
@@ -190,3 +208,155 @@ class RiderAssignmentItem(Base):
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     release_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class Fleet(Base):
+    __tablename__ = "fleet"
+    __table_args__ = (CheckConstraint("status IN ('ACTIVE', 'INACTIVE')", name="ck_fleet_status"),)
+
+    fleet_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
+class FleetMembership(Base):
+    __tablename__ = "fleet_membership"
+    __table_args__ = (
+        Index(
+            "uq_fleet_membership_active_rider",
+            "rider_id",
+            unique=True,
+            postgresql_where=text("left_at IS NULL"),
+        ),
+    )
+
+    fleet_membership_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    fleet_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("fleet.fleet_id"), nullable=False
+    )
+    rider_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("rider_profile.rider_id"), nullable=False
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FleetServiceCell(Base):
+    __tablename__ = "fleet_service_cell"
+    __table_args__ = (
+        Index(
+            "uq_fleet_service_cell_active",
+            "fleet_id",
+            "cell_id",
+            unique=True,
+            postgresql_where=text("deactivated_at IS NULL"),
+        ),
+    )
+
+    fleet_service_cell_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    fleet_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("fleet.fleet_id"), nullable=False
+    )
+    cell_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class RiderServiceCell(Base):
+    __tablename__ = "rider_service_cell"
+    __table_args__ = (
+        Index(
+            "uq_rider_service_cell_active",
+            "rider_id",
+            "cell_id",
+            unique=True,
+            postgresql_where=text("deactivated_at IS NULL"),
+        ),
+    )
+
+    rider_service_cell_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    rider_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("rider_profile.rider_id"), nullable=False
+    )
+    cell_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PushRegistration(Base):
+    __tablename__ = "push_registration"
+
+    push_registration_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    rider_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("rider_profile.rider_id"), nullable=False
+    )
+    client_device_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider: Mapped[str] = mapped_column(String(24), nullable=False)
+    platform: Mapped[str] = mapped_column(String(24), nullable=False)
+    registration_token: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OfferNotificationDelivery(Base):
+    __tablename__ = "offer_notification_delivery"
+    __table_args__ = (
+        UniqueConstraint(
+            "offer_id",
+            "push_registration_id",
+            name="uq_offer_notification_delivery",
+        ),
+    )
+
+    offer_notification_delivery_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
+    )
+    offer_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("assignment_offer.offer_id"), nullable=False
+    )
+    push_registration_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("push_registration.push_registration_id"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True)

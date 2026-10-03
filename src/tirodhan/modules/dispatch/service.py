@@ -11,10 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.dispatch.models import (
     AssignmentOffer,
+    FleetMembership,
+    FleetServiceCell,
     RiderAssignment,
     RiderAssignmentItem,
     RiderAvailability,
     RiderProfile,
+    RiderServiceCell,
 )
 from tirodhan.modules.identity.authorization import lock_active_user_role
 from tirodhan.modules.identity.service import ROLE_RIDER
@@ -127,6 +130,100 @@ async def set_rider_availability_intent(
         if exists is None:
             raise RiderNotFoundError("rider availability not found")
         raise RiderAvailabilityVersionConflictError("rider availability version is stale")
+
+
+async def create_offer_cohort(
+    session: AsyncSession,
+    collection_group_id: UUID,
+    cell_id: str,
+    dispatch_stage: str,
+    lifetime_seconds: int,
+    now: datetime | None = None,
+) -> tuple[list[AssignmentOffer], str]:
+    evaluation_time = now or utc_now()
+    await _lock_group(session, collection_group_id)
+
+    if await _active_assignment(session, collection_group_id):
+        return [], dispatch_stage
+
+    await _require_initial_dispatch_population(session, collection_group_id)
+
+    max_round = await session.scalar(
+        select(AssignmentOffer.offer_round)
+        .where(AssignmentOffer.collection_group_id == collection_group_id)
+        .order_by(AssignmentOffer.offer_round.desc())
+        .limit(1)
+    )
+    current_round = (max_round or 0) + 1
+
+    effective_stage = dispatch_stage
+    expires_at = evaluation_time + __import__("datetime").timedelta(seconds=lifetime_seconds)
+
+    candidates: list[Any] = []
+    if effective_stage == "FLEET_FIRST":
+        stmt_fleet = (
+            select(RiderProfile.rider_id, FleetMembership.fleet_id)
+            .join(RiderAvailability, RiderProfile.rider_id == RiderAvailability.rider_id)
+            .join(FleetMembership, RiderProfile.rider_id == FleetMembership.rider_id)
+            .join(FleetServiceCell, FleetMembership.fleet_id == FleetServiceCell.fleet_id)
+            .where(
+                FleetServiceCell.cell_id == cell_id,
+                FleetServiceCell.deactivated_at.is_(None),
+                FleetMembership.left_at.is_(None),
+                RiderProfile.status == RIDER_ACTIVE,
+                RiderAvailability.availability_intent == INTENT_AVAILABLE,
+                RiderAvailability.work_state == WORK_IDLE,
+            )
+        )
+        fleet_candidates = list(await session.execute(stmt_fleet))
+        if not fleet_candidates:
+            effective_stage = "INDEPENDENT"
+        else:
+            candidates = fleet_candidates
+
+    if effective_stage == "INDEPENDENT":
+        subq = select(FleetMembership.rider_id).where(FleetMembership.left_at.is_(None))
+        stmt_ind = (
+            select(RiderProfile.rider_id)
+            .join(RiderAvailability, RiderProfile.rider_id == RiderAvailability.rider_id)
+            .join(RiderServiceCell, RiderProfile.rider_id == RiderServiceCell.rider_id)
+            .where(
+                RiderServiceCell.cell_id == cell_id,
+                RiderServiceCell.deactivated_at.is_(None),
+                RiderProfile.rider_id.notin_(subq),
+                RiderProfile.status == RIDER_ACTIVE,
+                RiderAvailability.availability_intent == INTENT_AVAILABLE,
+                RiderAvailability.work_state == WORK_IDLE,
+            )
+        )
+        ind_candidates = list(await session.execute(stmt_ind))
+        candidates = [(cast(Any, row).rider_id, cast(Any, None)) for row in ind_candidates]
+
+    offers = []
+    for rider_id, fleet_id in candidates:
+        try:
+            await _lock_eligible_rider(session, rider_id)
+        except RiderNotEligibleError:
+            continue
+
+        offer = AssignmentOffer(
+            offer_id=new_uuid7(),
+            collection_group_id=collection_group_id,
+            rider_id=rider_id,
+            resolved_assignment_id=None,
+            offer_round=current_round,
+            status=OFFER_OPEN,
+            audience_kind="FLEET" if fleet_id else "INDEPENDENT",
+            fleet_id=fleet_id,
+            offered_at=evaluation_time,
+            expires_at=expires_at,
+            responded_at=None,
+        )
+        session.add(offer)
+        offers.append(offer)
+
+    await session.flush()
+    return offers, effective_stage
 
 
 async def create_assignment_offer(
