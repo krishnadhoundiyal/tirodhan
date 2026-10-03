@@ -21,6 +21,7 @@ from tirodhan.modules.payments.models import PaymentAttempt
 from tirodhan.modules.payments.ports import (
     PaymentProvider,
     PaymentProviderAuthenticationError,
+    PaymentProviderEventInputError,
     PaymentProviderNotConfiguredError,
 )
 from tirodhan.modules.payments.service import (
@@ -116,6 +117,8 @@ async def post_provider_webhook(
             raise PaymentProviderAuthenticationError("provider identity mismatch")
     except PaymentProviderAuthenticationError as error:
         raise HTTPException(status_code=401, detail="Invalid provider webhook") from error
+    except PaymentProviderEventInputError as error:
+        raise HTTPException(status_code=422, detail="Malformed provider event") from error
     except PaymentProviderNotConfiguredError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 

@@ -91,6 +91,14 @@ is primary; checkout uses the same operation as a PENDING-only fallback (ADR-015
 
 A collection request has one logical payment obligation. Retries are separate `payment_attempt` rows. Provider events deduplicate/reconcile both payment and refund provider callbacks. Refunds are independent financial objects.
 
+Phase 1V uses Razorpay (`RAZORPAY`). A Tirodhan attempt maps to one recoverable Razorpay Order
+by stable receipt. Captured provider payment is the successful charge; authorized is not success.
+Persisted provider references, exact amount and currency govern webhook correlation/acceptance,
+not internal payment IDs in notes or client callbacks. Failed provider attempts within one Order
+may precede capture; their reference must never replace an established captured payment ID.
+Explicitly authorized refunds use the canonical charge and normal native-idempotent execution.
+Provider execution recovery does not change cancellation, expiry or additional-success policy.
+
 ### Planning
 
 - `planning_batch`
@@ -385,7 +393,6 @@ Do not silently decide:
 - item category taxonomy;
 - final pricing formula;
 - exact planning lead time, compaction-attempt limit, compaction distance, maximum group-request count, rider-offer deadline and retention periods;
-- final payment provider;
 - final CI/CD provider;
 - frontend/mobile technology;
 - exact mismatch workflow when collected material differs from booking;

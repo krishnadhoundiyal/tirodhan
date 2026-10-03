@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     service_bus_namespace: str | None = None
     serviceability_queue_name: str | None = None
     rider_notification_queue_name: str | None = None
+    refund_queue_name: str | None = None
+    refund_lock_renewal_seconds: int | None = None
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: SecretStr | None = None
+    razorpay_webhook_secret: SecretStr | None = None
+    razorpay_http_timeout_seconds: float | None = None
     rider_offer_lifetime_seconds: int | None = None
     fcm_project_id: str | None = None
     fcm_credentials_json: SecretStr | None = None
@@ -102,6 +108,7 @@ class Settings(BaseSettings):
         "media_video_max_size_bytes",
         "serviceability_lock_renewal_seconds",
         "rider_notification_lock_renewal_seconds",
+        "refund_lock_renewal_seconds",
         "outbox_publish_batch_size",
         "rider_offer_lifetime_seconds",
     )
@@ -146,7 +153,11 @@ class Settings(BaseSettings):
             raise ValueError("provider timeout must be finite and positive")
         return value
 
-    @field_validator("google_maps_http_timeout_seconds", "service_bus_operation_timeout_seconds")
+    @field_validator(
+        "google_maps_http_timeout_seconds",
+        "service_bus_operation_timeout_seconds",
+        "razorpay_http_timeout_seconds",
+    )
     @classmethod
     def runtime_timeout_must_be_bounded(cls, value: float | None) -> float | None:
         if value is not None and (not math.isfinite(value) or not 0 < value <= 60):

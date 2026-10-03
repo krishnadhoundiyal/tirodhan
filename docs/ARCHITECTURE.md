@@ -226,6 +226,16 @@ Provider order/payment/event identifiers are persisted for deduplication and rec
 
 Provider webhook and/or server-to-server reconciliation is authoritative; frontend return is UX only.
 
+Phase 1V selects Razorpay (`RAZORPAY`) through the existing provider-neutral async ports.
+Each durable attempt maps to a Razorpay Order with receipt `pa_<payment_attempt_id.hex>`.
+Receipt lookup precedes creation; duplicate/ambiguous creation recovers the same receipt.
+HTTP uses bounded timeouts, Basic Auth, and no automatic transport retries, outside DB sessions.
+Dashboard auto-capture is required. Only authenticated payment.captured is authoritative success;
+payment.authorized and unrelated signed events cannot accept a request. Webhooks verify HMAC over
+exact raw bytes and require x-razorpay-event-id, then correlate persisted order/payment references
+and compare exact integer amount/currency to the locked logical Payment. Stale failure cannot
+overwrite captured truth; a distinct second captured charge reconciles without canonical replacement.
+
 ### Payment acceptance
 
 A confirmed successful attempt, logical Payment success, request transition `PENDING_PAYMENT -> ACCEPTED`, and corresponding outbox event must be persisted atomically.
@@ -249,6 +259,16 @@ Refund is a separate financial lifecycle.
 - refund workers are idempotent;
 - provider idempotency keys are used where supported;
 - uncertain provider outcomes are reconciled rather than blindly retried.
+
+Razorpay normal refunds use stable `rf_<refund_id.hex>` receipt/native X-Refund-Idempotency plus
+identical request body, preserving the stored provider-neutral `refund:<uuid>` key. PROCESSING and
+INITIATION_UNCERTAIN execution safely resume this same operation after crashes. Provider responses
+and webhooks validate refund identity, canonical charge, exact amount and currency; terminal webhook
+truth wins stale worker responses. The explicit publisher adds only RefundRequested to a dedicated
+configured queue, preserving serviceability/dispatch routes and send-before-PUBLISHED. Its separate
+Peek-Lock consumer uses workload identity, zero prefetch, AutoLockRenewer and a resumable inbox;
+only SUBMITTED/SUCCEEDED/FAILED permits completion/settlement, while uncertainty abandons for retry.
+No Checkout callback endpoint, automatic refund policy, new schema or deployment IaC is introduced.
 
 ## 8. Cancellation boundary
 
@@ -846,7 +866,6 @@ Do not silently decide:
 - item category taxonomy;
 - final pricing formula;
 - exact values for planning lead time `N`, compaction attempt limit `P`, rider acceptance deadlines, and retention periods;
-- final payment gateway;
 - final CI/CD provider;
 - frontend/mobile technology;
 - detailed material-mismatch workflow;
