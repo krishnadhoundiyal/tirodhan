@@ -8,6 +8,7 @@ from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.customers.service import command_fingerprint
 from tirodhan.modules.payments.models import Payment, PaymentAttempt, Refund
 from tirodhan.modules.payments.ports import (
+    PaymentProviderNotConfiguredError,
     PaymentProviderUncertainError,
     RefundInitiationOutcome,
     RefundProvider,
@@ -169,13 +170,17 @@ async def execute_refund_provider_call(
             refund = await session.scalar(stmt)
             if not refund:
                 return  # Not found
+            if refund.status == "PROCESSING":
+                # Interrupted or overlapping execution: never blindly reissue money movement.
+                refund.status = "INITIATION_UNCERTAIN"
+                return
             if refund.status != "PENDING":
                 return  # Already processed or processing
 
             # Need the successful attempt's provider_payment_id
             if provider.provider_code != refund.provider:
                 # Not the correct provider for this refund
-                return
+                raise PaymentProviderNotConfiguredError("Refund provider identity mismatch")
 
             attempt_stmt = select(PaymentAttempt).where(
                 PaymentAttempt.payment_attempt_id == refund.payment_attempt_id
@@ -189,7 +194,7 @@ async def execute_refund_provider_call(
                 # Missing provider payment reference fails closed
                 # DO NOT CALL PROVIDER, DO NOT SET UNCERTAIN.
                 # Leave status as PENDING (it won't be processed)
-                return
+                raise RefundConflictError("Refund successful payment reference is unavailable")
 
             provider_payment_id = attempt.provider_payment_id
             amount_minor = refund.amount_minor
@@ -210,13 +215,23 @@ async def execute_refund_provider_call(
         )
     except PaymentProviderUncertainError:
         result = None
+    except Exception:
+        # Includes configuration failures and unexpected adapter exceptions after claim commit.
+        # Persist uncertainty before propagating a controlled/retryable runtime failure.
+        async with session_factory() as session, session.begin():
+            refund = await session.scalar(
+                select(Refund).where(Refund.refund_id == refund_id).with_for_update()
+            )
+            if refund is not None and refund.status == "PROCESSING":
+                refund.status = "INITIATION_UNCERTAIN"
+        raise
 
     # 3. New DB transaction to persist result
     async with session_factory() as session:
         async with session.begin():
             stmt = select(Refund).where(Refund.refund_id == refund_id).with_for_update()
             refund = await session.scalar(stmt)
-            if not refund or refund.status != "PROCESSING":
+            if not refund or refund.status not in {"PROCESSING", "INITIATION_UNCERTAIN"}:
                 return
 
             # Prevent contradiction

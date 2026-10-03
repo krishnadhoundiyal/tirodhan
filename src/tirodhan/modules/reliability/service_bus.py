@@ -83,3 +83,12 @@ class AzureDispatchDelivery(AzureServiceabilityDelivery):
             reason="INVALID_DISPATCH_MESSAGE",
             error_description="Message could not be processed",
         )
+
+
+class AzureRefundDelivery(AzureServiceabilityDelivery):
+    async def dead_letter(self) -> None:
+        await self._receiver.dead_letter_message(
+            self._message,
+            reason="INVALID_REFUND_MESSAGE",
+            error_description="Message could not be processed",
+        )

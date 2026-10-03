@@ -34,6 +34,8 @@ from tirodhan.modules.identity.tokens import (
     UnconfiguredAccessTokenCodec,
 )
 from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
+from tirodhan.modules.payments.razorpay import razorpay_configured
+from tirodhan.modules.payments.runtime import razorpay_runtime
 from tirodhan.modules.serviceability.h3_cells import H3CellIdDeriver
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
@@ -57,6 +59,7 @@ def create_app(
     google_http_client: httpx.AsyncClient | None = None,
     pricing_port: PricingPort | None = None,
     payment_provider: PaymentProvider | None = None,
+    payment_http_client: httpx.AsyncClient | None = None,
     otp_provider: OtpProvider | None = None,
     otp_http_client: httpx.AsyncClient | None = None,
     phone_identity_protector: PhoneIdentityProtector | None = None,
@@ -65,6 +68,8 @@ def create_app(
     media_policy: MediaPolicy | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
+    if payment_provider is None:
+        razorpay_configured(application_settings)
     configure_logging(
         application_settings.log_level,
         application_settings.log_file_path,
@@ -99,12 +104,21 @@ def create_app(
                 )
                 application.state.otp_http_client = runtime_client
                 application.state.otp_provider = _otp_provider(application_settings, runtime_client)
-            async with serviceability_runtime(
-                application_settings,
-                client=google_http_client,
-                resolver=location_resolver,
-                protector=configured_address_protector,
-            ) as runtime:
+            async with (
+                razorpay_runtime(
+                    application_settings,
+                    client=payment_http_client,
+                    enabled=payment_provider is None,
+                ) as payment_runtime,
+                serviceability_runtime(
+                    application_settings,
+                    client=google_http_client,
+                    resolver=location_resolver,
+                    protector=configured_address_protector,
+                ) as runtime,
+            ):
+                if payment_runtime is not None:
+                    application.state.payment_provider = payment_runtime
                 application.state.location_resolver = runtime.resolver
                 yield
         finally:

@@ -79,5 +79,4 @@ The following are not yet fixed:
 - detailed "material differs from booking" workflow;
 - final offline-evidence validation policy;
 - frontend/mobile technology;
-- exact production payment gateway;
 - final CI/CD provider selection between Azure DevOps Pipelines and GitHub Actions.

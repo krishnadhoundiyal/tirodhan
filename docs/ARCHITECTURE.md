@@ -250,6 +250,17 @@ Refund is a separate financial lifecycle.
 - provider idempotency keys are used where supported;
 - uncertain provider outcomes are reconciled rather than blindly retried.
 
+Phase 1V selects Razorpay behind the existing payment/refund ports (ADR-005). HTTPX creates Orders
+from PostgreSQL amount/currency with a stable attempt receipt, and refunds the canonical successful
+provider payment with an explicit amount and documented X-Refund-Idempotency. No provider-specific
+columns are required. Auto-capture is an Operations Dashboard requirement. Raw-body webhook HMAC
+precedes parsing; captured/paid truth must match the stored Order and amount/currency before the
+existing atomic acceptance transition. Checkout-return verification is UX/reference confirmation
+only. Uncertain Orders/refunds are not blindly POSTed again. RefundRequested joins the existing
+finite publisher allow-list and reaches a dedicated lock-renewing Peek-Lock consumer with resumable
+inbox and conservative interrupted-PROCESSING recovery. All financial network I/O occurs outside
+PostgreSQL transactions; no saga, Redis, gateway routing or deployment redesign is introduced.
+
 ## 8. Cancellation boundary
 
 A customer may cancel while the request is `ACCEPTED`.
@@ -846,7 +857,6 @@ Do not silently decide:
 - item category taxonomy;
 - final pricing formula;
 - exact values for planning lead time `N`, compaction attempt limit `P`, rider acceptance deadlines, and retention periods;
-- final payment gateway;
 - final CI/CD provider;
 - frontend/mobile technology;
 - detailed material-mismatch workflow;

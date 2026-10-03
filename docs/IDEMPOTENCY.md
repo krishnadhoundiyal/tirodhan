@@ -315,6 +315,39 @@ the same result. Reassignment has no external side effect and writes no outbox e
 
 Refund creation serializes through the payment row. Total committed refunds must never exceed the original successful payment amount.
 
+### Razorpay production financial side effects (Phase 1V)
+
+Payment command scope/key, fingerprint and durable attempt remain unchanged. Razorpay opts out of
+the legacy stable-provider-key replay guarantee: only the command claim creator invokes Order POST.
+Same-key concurrent replay locks the attempt and returns the established attempt; if still CREATED,
+it conservatively marks INITIATION_UNCERTAIN. Completed pending/failed/succeeded and uncertain
+replays never create a second Order. A known original response can still replace that conservative
+uncertainty; a terminal authenticated success is never overwritten. Stable `ta_<UUID hex>` receipt
+and generic provider-order uniqueness are backstops, not claimed response-recovery guarantees.
+
+Webhook business/transport identity is `(RAZORPAY, x-razorpay-event-id)` after raw-byte HMAC
+authentication, with body SHA-256 fallback for exact retries lacking a valid header. Amount/currency
+and stored Order must match before acceptance. Conflicting internal/provider IDs reconcile rather
+than silently selecting an identity. An unknown authenticated event is durably UNMATCHED and
+acknowledged. Checkout confirmation naturally serializes on its owned PaymentAttempt; same verified
+order/payment reference is replayable, another reference conflicts. It changes no financial state.
+
+Refund transport identity is `(refund-execution, message_id)`; business identity is refund_id.
+Inbox PROCESSING commits before execution, then PROCESSED commits after a durable refund outcome
+before broker settlement. A crash while Refund is PENDING resumes the same intent. The refund row
+lock permits one PENDING -> PROCESSING claimant. Interrupted/overlapping PROCESSING is conservatively
+INITIATION_UNCERTAIN without reissuing a POST; ambiguity still reserves refundable balance. Original
+known results can resolve conservative uncertainty; terminal webhook truth is not overwritten.
+Razorpay's documented normal-refund header uses SHA-256 hex of provider_idempotency_key with an
+unchanged explicit amount/body. Native idempotency is defense-in-depth, not automatic reconciliation.
+Uncertainty settles transport after durable recording so it does not strand the inbox in PROCESSING.
+Missing prerequisites/configuration before execution leave PENDING and abandon for recovery.
+
+RefundRequested joins only ServiceabilityRequested and CollectionGroupDispatchRequested in the finite
+publisher allow-list. Queue configuration is dedicated; payload is `{refund_id}` only. Actual send
+must succeed before PUBLISHED. Send failure remains PENDING; a post-send crash may resend the same
+outbox UUID. The refund worker uses Peek-Lock, zero prefetch and AutoLockRenewer.
+
 ### Duplicate planning work
 
 A completed `planning_batch_id` is a terminal idempotency boundary. Redelivery must not create new groups, membership, pickup executions, or downstream events.

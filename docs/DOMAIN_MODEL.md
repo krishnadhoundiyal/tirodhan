@@ -91,6 +91,15 @@ is primary; checkout uses the same operation as a PENDING-only fallback (ADR-015
 
 A collection request has one logical payment obligation. Retries are separate `payment_attempt` rows. Provider events deduplicate/reconcile both payment and refund provider callbacks. Refunds are independent financial objects.
 
+Phase 1V's production provider is RAZORPAY. Each attempt creates a server-priced Razorpay Order;
+the frontend Checkout return can verify/associate a reference but cannot establish business success.
+Authenticated captured/paid webhooks correlate by stored Order (and matching internal note if present),
+validate amount/currency, and reuse the existing atomic acceptance/canonical-attempt rules.
+Authenticated authorized/unknown events do not satisfy payment. Refunds target the canonical
+successful provider payment; provider processed/pending/failed states map to existing refund states.
+RefundRequested drives asynchronous execution. Ambiguous Orders/refunds and interrupted refund
+execution retain durable reconciliation state, never an automatic second financial POST.
+
 ### Planning
 
 - `planning_batch`
@@ -385,7 +394,6 @@ Do not silently decide:
 - item category taxonomy;
 - final pricing formula;
 - exact planning lead time, compaction-attempt limit, compaction distance, maximum group-request count, rider-offer deadline and retention periods;
-- final payment provider;
 - final CI/CD provider;
 - frontend/mobile technology;
 - exact mismatch workflow when collected material differs from booking;

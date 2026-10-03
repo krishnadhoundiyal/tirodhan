@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -104,6 +104,21 @@ async def initiate_payment_attempt(
                     "payment attempt creation is already in progress"
                 )
             attempt = await _load_attempt(session, replay.resource_id)
+            if provider.reconcile_uncertain_initiation:
+                locked = await session.scalar(
+                    select(PaymentAttempt)
+                    .where(PaymentAttempt.payment_attempt_id == attempt.payment_attempt_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                if locked is None:
+                    raise RuntimeError("durable payment attempt disappeared")
+                attempt = locked
+                if attempt.status == ATTEMPT_CREATED:
+                    # The original process may still be invoking the provider, or have crashed.
+                    # The replay cannot prove that no external side effect occurred.
+                    attempt.status = ATTEMPT_UNCERTAIN
+                    attempt.failure_code = "PROVIDER_EXECUTION_INTERRUPTED"
         else:
             row = (
                 await session.execute(
@@ -149,7 +164,10 @@ async def initiate_payment_attempt(
         stable_key = attempt.provider_idempotency_key
         attempt_status = attempt.status
 
-    if attempt_status not in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN}:
+    if (not claim.created and provider.reconcile_uncertain_initiation) or attempt_status not in {
+        ATTEMPT_CREATED,
+        ATTEMPT_UNCERTAIN,
+    }:
         return attempt
 
     async with session_factory() as session:
@@ -250,9 +268,14 @@ async def process_authenticated_payment_event(
         if provider_event is None:
             raise RuntimeError("inserted provider event could not be loaded")
         record = provider_event
+        if event.outcome == PaymentEventOutcome.IGNORED:
+            record.processing_status = EVENT_UNMATCHED
+            record.failure_code = event.validation_failure_code or "EVENT_IGNORED"
+            record.processed_at = now
+            return record
         # Route explicitly based on presence of IDs
         has_refund_id = event.refund_id is not None or event.provider_refund_id is not None
-        has_payment_id = event.payment_attempt_id is not None
+        has_payment_id = event.payment_attempt_id is not None or event.provider_order_id is not None
 
         if has_refund_id and not has_payment_id:
             return await _process_refund_event(session, record, event, now)
@@ -272,11 +295,28 @@ async def process_authenticated_payment_event(
             record.processed_at = now
             return record
 
-        attempt = await session.scalar(
-            select(PaymentAttempt)
-            .where(PaymentAttempt.payment_attempt_id == event.payment_attempt_id)
-            .with_for_update()
+        attempts = list(
+            await session.scalars(
+                select(PaymentAttempt)
+                .where(
+                    PaymentAttempt.provider == event.provider,
+                    or_(
+                        PaymentAttempt.payment_attempt_id == event.payment_attempt_id,
+                        PaymentAttempt.provider_order_id == event.provider_order_id
+                        if event.provider_order_id is not None
+                        else false(),
+                    ),
+                )
+                .order_by(PaymentAttempt.payment_attempt_id)
+                .with_for_update()
+            )
         )
+        if len(attempts) > 1:
+            record.processing_status = EVENT_RECONCILIATION_REQUIRED
+            record.failure_code = "ATTEMPT_IDENTITY_CONFLICT"
+            record.processed_at = now
+            return record
+        attempt = attempts[0] if attempts else None
         if attempt is None or attempt.provider != event.provider:
             provider_event.processing_status = EVENT_UNMATCHED
             provider_event.failure_code = "ATTEMPT_NOT_MAPPED"
@@ -289,6 +329,39 @@ async def process_authenticated_payment_event(
         )
         if payment is None:
             raise RuntimeError("payment attempt references a missing payment")
+
+        failure = event.validation_failure_code
+        if (
+            event.payment_attempt_id is not None
+            and attempt.payment_attempt_id != event.payment_attempt_id
+        ):
+            failure = "ATTEMPT_IDENTITY_CONFLICT"
+        elif (
+            event.provider_order_id is not None
+            and attempt.provider_order_id != event.provider_order_id
+        ):
+            failure = "ORDER_ID_MISMATCH"
+        elif event.amount_minor is not None and event.amount_minor != payment.amount_minor:
+            failure = "PAYMENT_AMOUNT_MISMATCH"
+        elif event.currency is not None and event.currency != payment.currency:
+            failure = "PAYMENT_CURRENCY_MISMATCH"
+        elif (
+            event.amount_minor is not None
+            and attempt.provider_payment_id is not None
+            and event.provider_payment_id != attempt.provider_payment_id
+        ):
+            failure = "PAYMENT_REFERENCE_CONFLICT"
+        if failure:
+            record.processing_status = EVENT_RECONCILIATION_REQUIRED
+            record.failure_code = failure
+            record.processed_at = now
+            return record
+
+        if event.outcome not in {PaymentEventOutcome.SUCCEEDED, PaymentEventOutcome.FAILED}:
+            record.processing_status = EVENT_UNMATCHED
+            record.failure_code = "PAYMENT_OUTCOME_UNSUPPORTED"
+            record.processed_at = now
+            return record
 
         attempt.provider_order_id = event.provider_order_id or attempt.provider_order_id
         attempt.provider_payment_id = event.provider_payment_id or attempt.provider_payment_id
@@ -408,34 +481,77 @@ async def _process_refund_event(
     event: AuthenticatedPaymentEvent,
     now: datetime,
 ) -> PaymentProviderEvent:
-    # Match Refund
-    if event.refund_id is not None:
-        stmt = select(Refund).where(Refund.refund_id == event.refund_id).with_for_update()
-        refund = await session.scalar(stmt)
-        if refund and refund.provider != event.provider:
-            # Provider mismatch for the given internal refund_id
-            record.processing_status = EVENT_RECONCILIATION_REQUIRED
-            record.processed_at = now
-            return record
-    elif event.provider_refund_id is not None:
-        stmt = (
+    # Both authenticated identities must resolve to the same refund; neither may win silently.
+    refunds = list(
+        await session.scalars(
             select(Refund)
             .where(
-                Refund.provider == event.provider,
-                Refund.provider_refund_id == event.provider_refund_id,
+                or_(
+                    Refund.refund_id == event.refund_id,
+                    and_(
+                        Refund.provider == event.provider,
+                        Refund.provider_refund_id == event.provider_refund_id,
+                    )
+                    if event.provider_refund_id is not None
+                    else false(),
+                ),
             )
+            .order_by(Refund.refund_id)
             .with_for_update()
         )
-        refund = await session.scalar(stmt)
-    else:
-        refund = None
+    )
+    if len(refunds) > 1 or (
+        len(refunds) == 1
+        and event.refund_id is not None
+        and refunds[0].refund_id != event.refund_id
+    ):
+        record.processing_status = EVENT_RECONCILIATION_REQUIRED
+        record.failure_code = "REFUND_IDENTITY_CONFLICT"
+        record.processed_at = now
+        return record
+    refund = refunds[0] if refunds else None
 
     if not refund:
         record.processing_status = EVENT_UNMATCHED
         record.processed_at = now
         return record
 
+    if refund.provider != event.provider:
+        record.processing_status = EVENT_RECONCILIATION_REQUIRED
+        record.failure_code = "REFUND_PROVIDER_MISMATCH"
+        record.processed_at = now
+        return record
+
     record.refund_id = refund.refund_id
+
+    attempt = await session.get(PaymentAttempt, refund.payment_attempt_id)
+    failure = event.validation_failure_code
+    if event.amount_minor is not None and event.amount_minor != refund.amount_minor:
+        failure = "REFUND_AMOUNT_MISMATCH"
+    elif event.currency is not None and event.currency != refund.currency:
+        failure = "REFUND_CURRENCY_MISMATCH"
+    elif event.provider_payment_id is not None and (
+        attempt is None or event.provider_payment_id != attempt.provider_payment_id
+    ):
+        failure = "REFUND_PAYMENT_MISMATCH"
+    if failure:
+        record.processing_status = EVENT_RECONCILIATION_REQUIRED
+        record.failure_code = failure
+        record.processed_at = now
+        return record
+
+    if event.provider_refund_id is not None:
+        mapped_id = await session.scalar(
+            select(Refund.refund_id).where(
+                Refund.provider == event.provider,
+                Refund.provider_refund_id == event.provider_refund_id,
+            )
+        )
+        if mapped_id is not None and mapped_id != refund.refund_id:
+            record.processing_status = EVENT_RECONCILIATION_REQUIRED
+            record.failure_code = "REFUND_IDENTITY_CONFLICT"
+            record.processed_at = now
+            return record
 
     # If provider_refund_id is known, and refund lacks it, set it (unless conflict)
     if event.provider_refund_id and not refund.provider_refund_id:
@@ -467,6 +583,9 @@ async def _process_refund_event(
             refund.status = "FAILED"
             refund.completed_at = now
             record.processing_status = EVENT_PROCESSED
+    elif event.outcome == PaymentEventOutcome.SUBMITTED:
+        if refund.status not in {"SUCCEEDED", "FAILED"}:
+            refund.status = "SUBMITTED"
 
     if record.processing_status == EVENT_RECEIVED:
         record.processing_status = EVENT_PROCESSED

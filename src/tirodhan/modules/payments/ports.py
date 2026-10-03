@@ -23,6 +23,8 @@ class PaymentInitiationResult:
 class PaymentEventOutcome(str, Enum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    SUBMITTED = "SUBMITTED"
+    IGNORED = "IGNORED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,9 +39,17 @@ class AuthenticatedPaymentEvent:
     provider_order_id: str | None = None
     provider_payment_id: str | None = None
     failure_code: str | None = None
+    amount_minor: int | None = None
+    currency: str | None = None
+    validation_failure_code: str | None = None
 
 
 class PaymentProvider(Protocol):
+    @property
+    def reconcile_uncertain_initiation(self) -> bool:
+        """Legacy ports guarantee stable-key retries; adapters without that guarantee opt out."""
+        return False
+
     @property
     def provider_code(self) -> str: ...
 
@@ -71,7 +81,19 @@ class PaymentProviderUncertainError(RuntimeError):
         self.failure_code = failure_code
 
 
+class CheckoutConfirmationError(RuntimeError):
+    pass
+
+
+class CheckoutConfirmationVerifier(Protocol):
+    def verify_checkout_signature(
+        self, *, stored_order_id: str, payment_id: str, signature: str
+    ) -> None: ...
+
+
 class UnconfiguredPaymentProvider:
+    reconcile_uncertain_initiation = True
+
     @property
     def provider_code(self) -> str:
         raise PaymentProviderNotConfiguredError("production payment provider is not configured")

@@ -6,7 +6,7 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
@@ -17,8 +17,11 @@ from tirodhan.api.dependencies import (
 from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
 from tirodhan.modules.customers.service import IdempotencyCommandInProgressError
+from tirodhan.modules.payments.checkout import confirm_checkout
 from tirodhan.modules.payments.models import PaymentAttempt
 from tirodhan.modules.payments.ports import (
+    CheckoutConfirmationError,
+    CheckoutConfirmationVerifier,
     PaymentProvider,
     PaymentProviderAuthenticationError,
     PaymentProviderNotConfiguredError,
@@ -47,6 +50,41 @@ class PaymentAttemptResponse(BaseModel):
 class ProviderEventResponse(BaseModel):
     payment_provider_event_id: UUID
     processing_status: str
+
+
+class CheckoutConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    razorpay_order_id: str = Field(min_length=1, max_length=200)
+    razorpay_payment_id: str = Field(min_length=1, max_length=200)
+    razorpay_signature: SecretStr
+
+
+@router.post(
+    "/attempts/{payment_attempt_id}/checkout-confirmation", response_model=PaymentAttemptResponse
+)
+async def post_checkout_confirmation(
+    payment_attempt_id: UUID,
+    body: CheckoutConfirmationRequest,
+    customer_id: Annotated[UUID, Depends(get_current_customer_id)],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+    provider: Annotated[PaymentProvider, Depends(get_payment_provider)],
+) -> PaymentAttemptResponse:
+    if not hasattr(provider, "verify_checkout_signature"):
+        raise HTTPException(status_code=503, detail="Checkout verification is not configured")
+    try:
+        return _attempt_response(
+            await confirm_checkout(
+                session_factory,
+                customer_id=customer_id,
+                attempt_id=payment_attempt_id,
+                order_id=body.razorpay_order_id,
+                payment_id=body.razorpay_payment_id,
+                signature=body.razorpay_signature.get_secret_value(),
+                verifier=cast(CheckoutConfirmationVerifier, provider),
+            )
+        )
+    except CheckoutConfirmationError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 def _attempt_response(attempt: PaymentAttempt) -> PaymentAttemptResponse:
