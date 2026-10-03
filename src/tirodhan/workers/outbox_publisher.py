@@ -42,6 +42,7 @@ async def run() -> None:
                 serviceability_entity=settings.serviceability_queue_name or "",
                 batch_size=settings.outbox_publish_batch_size,
                 rider_notification_entity=settings.rider_notification_queue_name,
+                refund_entity=settings.refund_queue_name,
             )
     finally:
         await engine.dispose()

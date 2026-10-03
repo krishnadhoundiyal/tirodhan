@@ -325,6 +325,28 @@ Successful result persistence, request transitions, attempt/batch completion, th
 
 ### Worker crash after external provider call
 
+Phase 1V payment order establishment first looks up `pa_<attempt_uuid_hex>` receipt, then creates
+only if absent. A duplicate/ambiguous POST is followed by a bounded recovery read of that exact
+receipt. All recovered/created orders must match entity, ID, receipt, amount and currency. An
+unrecoverable outcome stays INITIATION_UNCERTAIN; command replay uses the same attempt/receipt,
+never another random provider identity. Concurrent calls may repeat transport, not logical orders.
+
+Razorpay normal refunds use `X-Refund-Idempotency: rf_<refund_uuid_hex>` with a deterministic
+integer amount, normal speed, same receipt and internal-ID-only notes. The stored neutral key
+`refund:<uuid>` is unchanged. PENDING/PROCESSING/INITIATION_UNCERTAIN resume outside DB sessions;
+native same-key/same-body replay converges after remote commit/local crash. Result persistence
+re-locks Refund and preserves terminal webhook truth and established provider identity.
+
+RefundRequested uses explicit publisher routing and inbox `(refund-execution, message_id)` with
+refund UUID business key. PROCESSING resumes; only SUBMITTED/SUCCEEDED/FAILED marks PROCESSED
+before settlement. Retryable uncertainty remains PROCESSING and is abandoned. No exactly-once
+network-delivery claim, generic route, automatic refund or new commercial policy is introduced.
+
+Razorpay HMAC authentication precedes parsing/DB mutation, signs exact bytes and requires bounded
+x-razorpay-event-id. Existing event uniqueness arbitrates duplicate delivery. Persisted order and
+payment references must converge; wrong amount/currency or distinct additional captured payment
+reconciles. Failed-before-captured can establish the successful ID; stale failure cannot overwrite it.
+
 If the provider supports idempotency, use a stable provider key derived from the logical local operation.
 
 If the provider does not support idempotency, persist durable local operation state and reconcile before repeating a potentially destructive action.

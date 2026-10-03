@@ -1,6 +1,6 @@
 # ADR-005: Payments and Refunds
 
-**Status:** Accepted at architecture level; provider open
+**Status:** Accepted; production provider Razorpay (Phase 1V)
 
 ## Decision
 
@@ -48,12 +48,33 @@ Any additional successful charge becomes a reconciliation/refund condition. It m
 
 ## Open
 
-- production payment gateway vendor;
 - exact retry/retention timings.
 
 ### Refund Concurrency and Lifecycle Decisions
 - Expiration concurrency aligns through `Payment` locking first to correctly serialize financial ownership rules against webhook success markers.
-- The target production Payment and Refund provider are explicitly deferred.
+- Production payment and normal refund execution use Razorpay (`RAZORPAY`).
 - Customer-cancellation refund policies (i.e. partial / exact commercial outcomes on cancellation) remain functionally open.
 - Over-refunding concurrency operates through checking explicitly unfailed refunds to prevent race-condition payouts.
 - Processing anomalies in external integrations fallback to `INITIATION_UNCERTAIN` for reconciliation instead of silent retries to guarantee provider replay-safety.
+
+## Phase 1V runtime decision
+
+Use async httpx Basic Auth with bounded timeout and disabled automatic HTTP retries.
+Orders use receipt `pa_<payment_attempt_id.hex>`: lookup before creation and receipt recovery
+after duplicate/ambiguous creation. Never change receipt to escape uncertainty. Validate entity,
+provider ID, receipt, exact amount/currency before returning an established order.
+Dashboard auto-capture is required; payment.captured is authoritative, payment.authorized is not.
+Raw-byte HMAC verification and required x-razorpay-event-id precede DB mutation. Persisted provider
+order/payment references arbitrate correlation, not payment notes; amount/currency must equal
+the locked logical Payment. Existing canonical success, planning lock/cutoff and expiry rules remain.
+
+Normal refunds use identical bodies and native `X-Refund-Idempotency: rf_<refund_id.hex>`;
+stored provider-neutral key remains `refund:<uuid>`. PROCESSING/UNCERTAIN safely resume this
+same operation after crashes. Validate identity/canonical charge/amount/currency and preserve
+terminal webhook truth on stale worker results. RefundRequested is identifier-only, explicitly
+routed to a dedicated queue; resumable Peek-Lock inbox completes only on durable initiation
+outcome SUBMITTED/SUCCEEDED/FAILED. Provider calls run without DB sessions/locks.
+
+No manual capture, instant refunds, client-authoritative success, auto-refund, new financial schema
+or deployment Terraform. Account activation, auto-capture, webhook subscriptions, queue/RBAC and
+secret injection are operational prerequisites (see PHASE_1V_COMPLETION.md).

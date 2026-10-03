@@ -62,6 +62,7 @@ async def publish_outbox_batch(
     serviceability_entity: str,
     batch_size: int,
     rider_notification_entity: str | None = None,
+    refund_entity: str | None = None,
 ) -> int:
     """Finite explicit route. Duplicate sends across Jobs are intentionally tolerated."""
     if batch_size <= 0:
@@ -77,6 +78,7 @@ async def publish_outbox_batch(
                     OutboxEvent.event_type.in_(
                         ["ServiceabilityRequested"]
                         + ([DISPATCH_REQUESTED] if rider_notification_entity else [])
+                        + (["RefundRequested"] if refund_entity else [])
                     ),
                 )
                 .order_by(OutboxEvent.available_at, OutboxEvent.outbox_event_id)
@@ -97,6 +99,9 @@ async def publish_outbox_batch(
             elif event.event_type == DISPATCH_REQUESTED and rider_notification_entity:
                 message = dispatch_message(event)
                 await publisher.send(rider_notification_entity, message)
+            elif event.event_type == "RefundRequested" and refund_entity:
+                message = refund_message(event)
+                await publisher.send(refund_entity, message)
             else:
                 continue
         except Exception:
@@ -113,3 +118,19 @@ async def publish_outbox_batch(
             )
         published += 1
     return published
+
+
+def refund_message(event: OutboxEvent) -> RoutedMessage:
+    if event.aggregate_type != "refund" or set(event.payload) != {"refund_id"}:
+        raise ValueError("invalid refund outbox metadata")
+    try:
+        refund_id = UUID(event.payload["refund_id"])
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("invalid refund outbox metadata") from None
+    if refund_id != event.aggregate_id:
+        raise ValueError("inconsistent refund outbox identity")
+    return RoutedMessage(
+        str(event.outbox_event_id),
+        "RefundRequested",
+        json.dumps({"refund_id": str(refund_id)}).encode(),
+    )
