@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     service_bus_managed_identity_client_id: str | None = None
     service_bus_operation_timeout_seconds: float | None = None
     serviceability_lock_renewal_seconds: int | None = None
+    rider_notification_lock_renewal_seconds: int | None = None
     outbox_publish_batch_size: int | None = None
     command_idempotency_ttl_seconds: int | None = None
     serviceability_context_ttl_seconds: int | None = None
@@ -100,6 +101,7 @@ class Settings(BaseSettings):
         "media_photo_max_size_bytes",
         "media_video_max_size_bytes",
         "serviceability_lock_renewal_seconds",
+        "rider_notification_lock_renewal_seconds",
         "outbox_publish_batch_size",
         "rider_offer_lifetime_seconds",
     )

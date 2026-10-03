@@ -5,7 +5,7 @@ import logging
 
 from azure.identity.aio import DefaultAzureCredential
 from azure.servicebus import ServiceBusReceiveMode
-from azure.servicebus.aio import ServiceBusClient
+from azure.servicebus.aio import AutoLockRenewer, ServiceBusClient
 
 from tirodhan.core.config import get_settings
 from tirodhan.core.logging import configure_logging
@@ -28,6 +28,8 @@ async def run() -> None:
         or settings.rider_offer_lifetime_seconds is None
     ):
         raise ValueError("rider notification runtime configuration is incomplete")
+    if settings.rider_notification_lock_renewal_seconds is None:
+        raise ValueError("Rider notification lock renewal duration must be configured")
     push = FcmPushNotificationPort(settings)
     engine = create_database_engine(settings)
     try:
@@ -42,6 +44,7 @@ async def run() -> None:
                 logging_enable=False,
                 socket_timeout=settings.service_bus_operation_timeout_seconds,
             ) as bus,
+            AutoLockRenewer() as renewer,
             bus.get_queue_receiver(
                 queue_name=settings.rider_notification_queue_name,
                 receive_mode=ServiceBusReceiveMode.PEEK_LOCK,
@@ -49,6 +52,11 @@ async def run() -> None:
             ) as receiver,
         ):
             async for message in receiver:
+                renewer.register(
+                    receiver,
+                    message,
+                    max_lock_renewal_duration=settings.rider_notification_lock_renewal_seconds,
+                )
                 try:
                     await handle_dispatch_delivery(
                         AzureDispatchDelivery(receiver, message),

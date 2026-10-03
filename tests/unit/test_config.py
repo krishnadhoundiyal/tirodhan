@@ -20,6 +20,22 @@ def test_settings_reject_non_postgresql_database() -> None:
         Settings(_env_file=None, database_url="sqlite+aiosqlite:///:memory:")
 
 
+@pytest.mark.parametrize("duration", [0, -1])
+def test_settings_reject_nonpositive_rider_notification_lock_renewal(duration: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rider_notification_lock_renewal_seconds=duration)
+
+
+def test_rider_notification_lock_renewal_is_optional_and_independent(monkeypatch) -> None:
+    monkeypatch.delenv("TIRODHAN_RIDER_NOTIFICATION_LOCK_RENEWAL_SECONDS", raising=False)
+    assert Settings(_env_file=None).rider_notification_lock_renewal_seconds is None
+    monkeypatch.setenv("TIRODHAN_RIDER_NOTIFICATION_LOCK_RENEWAL_SECONDS", "180")
+    monkeypatch.setenv("TIRODHAN_SERVICEABILITY_LOCK_RENEWAL_SECONDS", "90")
+    settings = Settings(_env_file=None)
+    assert settings.rider_notification_lock_renewal_seconds == 180
+    assert settings.serviceability_lock_renewal_seconds == 90
+
+
 @pytest.mark.parametrize(
     "field_name",
     [
