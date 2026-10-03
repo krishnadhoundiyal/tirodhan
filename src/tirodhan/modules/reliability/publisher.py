@@ -12,6 +12,30 @@ from tirodhan.db.values import utc_now
 from tirodhan.modules.reliability.models import OutboxEvent
 
 
+def dispatch_message(event: OutboxEvent) -> RoutedMessage:
+    if event.aggregate_type != "collection_group" or set(event.payload) != {
+        "collection_group_id",
+        "planning_batch_id",
+        "cell_id",
+        "slot_start",
+        "slot_end",
+        "dispatch_stage",
+    }:
+        raise ValueError("invalid dispatch outbox metadata")
+    try:
+        group_id = UUID(event.payload["collection_group_id"])
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("invalid dispatch outbox metadata") from None
+    if group_id != event.aggregate_id:
+        raise ValueError("inconsistent dispatch outbox identity")
+
+    return RoutedMessage(
+        str(event.outbox_event_id),
+        "CollectionGroupDispatchRequested",
+        __import__("json").dumps(event.payload).encode(),
+    )
+
+
 @dataclass(frozen=True)
 class RoutedMessage:
     message_id: str
@@ -47,6 +71,7 @@ async def publish_outbox_batch(
     publisher: MessagePublisher,
     *,
     serviceability_entity: str,
+    notification_entity: str = "",
     batch_size: int,
 ) -> int:
     """Finite explicit route. Duplicate sends across Jobs are intentionally tolerated."""
@@ -60,7 +85,9 @@ async def publish_outbox_batch(
                 .where(
                     OutboxEvent.status == "PENDING",
                     OutboxEvent.available_at <= utc_now(),
-                    OutboxEvent.event_type == "ServiceabilityRequested",
+                    OutboxEvent.event_type.in_(
+                        ["ServiceabilityRequested", "CollectionGroupDispatchRequested"]
+                    ),
                 )
                 .order_by(OutboxEvent.available_at, OutboxEvent.outbox_event_id)
                 .limit(batch_size)
@@ -74,8 +101,17 @@ async def publish_outbox_batch(
     published = 0
     for event in events:
         try:
-            message = serviceability_message(event)
-            await publisher.send(serviceability_entity, message)
+            if event.event_type == "ServiceabilityRequested":
+                message = serviceability_message(event)
+
+            elif event.event_type == "CollectionGroupDispatchRequested":
+                if not notification_entity:
+                    raise ValueError("Notification entity not provided")
+                message = dispatch_message(event)
+                await publisher.send(notification_entity, message)
+            else:
+                continue
+
         except Exception:
             # Never log SDK exception text/envelope. Leave the event recoverably pending.
             continue
