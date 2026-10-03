@@ -68,6 +68,11 @@ The platform separately tracks whether an available rider is currently `IDLE`, `
 - prefer established application/domain patterns rather than bespoke schema where the workflow is conventional;
 - idempotency is required for every retryable/replayable/concurrent mutation.
 
+Phase 1V selects Razorpay (`RAZORPAY`) for production payments and normal idempotent refunds.
+Orders use stable per-attempt receipts with lookup/recovery. Authenticated payment.captured
+webhooks, not client return, authorize financial success. Authorized Refund intents execute
+asynchronously through Service Bus; cancellation/late-success refund policy remains open.
+
 ## Explicitly open
 
 The following are not yet fixed:

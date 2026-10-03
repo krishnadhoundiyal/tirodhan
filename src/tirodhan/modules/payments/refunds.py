@@ -8,6 +8,7 @@ from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.customers.service import command_fingerprint
 from tirodhan.modules.payments.models import Payment, PaymentAttempt, Refund
 from tirodhan.modules.payments.ports import (
+    PaymentProviderNotConfiguredError,
     PaymentProviderUncertainError,
     RefundInitiationOutcome,
     RefundProvider,
@@ -169,13 +170,12 @@ async def execute_refund_provider_call(
             refund = await session.scalar(stmt)
             if not refund:
                 return  # Not found
-            if refund.status != "PENDING":
-                return  # Already processed or processing
+            if refund.status not in {"PENDING", "PROCESSING", "INITIATION_UNCERTAIN"}:
+                return  # Provider initiation already durably established.
 
             # Need the successful attempt's provider_payment_id
             if provider.provider_code != refund.provider:
-                # Not the correct provider for this refund
-                return
+                raise PaymentProviderNotConfiguredError("Refund provider does not match intent")
 
             attempt_stmt = select(PaymentAttempt).where(
                 PaymentAttempt.payment_attempt_id == refund.payment_attempt_id
@@ -186,10 +186,7 @@ async def execute_refund_provider_call(
                 or attempt.payment_id != refund.payment_id
                 or not attempt.provider_payment_id
             ):
-                # Missing provider payment reference fails closed
-                # DO NOT CALL PROVIDER, DO NOT SET UNCERTAIN.
-                # Leave status as PENDING (it won't be processed)
-                return
+                raise RefundConflictError("Refund canonical provider reference is missing")
 
             provider_payment_id = attempt.provider_payment_id
             amount_minor = refund.amount_minor
@@ -197,7 +194,7 @@ async def execute_refund_provider_call(
             provider_idempotency_key = refund.provider_idempotency_key
 
             refund.status = "PROCESSING"
-            refund.processing_started_at = utc_now()
+            refund.processing_started_at = refund.processing_started_at or utc_now()
 
     # 2. Call provider outside DB transaction
     try:
@@ -216,7 +213,7 @@ async def execute_refund_provider_call(
         async with session.begin():
             stmt = select(Refund).where(Refund.refund_id == refund_id).with_for_update()
             refund = await session.scalar(stmt)
-            if not refund or refund.status != "PROCESSING":
+            if not refund or refund.status not in {"PROCESSING", "INITIATION_UNCERTAIN"}:
                 return
 
             # Prevent contradiction

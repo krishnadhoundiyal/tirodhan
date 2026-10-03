@@ -23,6 +23,8 @@ class PaymentInitiationResult:
 class PaymentEventOutcome(str, Enum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    SUBMITTED = "SUBMITTED"
+    IGNORED = "IGNORED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +39,10 @@ class AuthenticatedPaymentEvent:
     provider_order_id: str | None = None
     provider_payment_id: str | None = None
     failure_code: str | None = None
+
+    amount_minor: int | None = None
+    currency: str | None = None
+    validation_failure_code: str | None = None
 
 
 class PaymentProvider(Protocol):
@@ -63,6 +69,10 @@ class PaymentProviderNotConfiguredError(RuntimeError):
 
 class PaymentProviderAuthenticationError(RuntimeError):
     pass
+
+
+class PaymentProviderEventInputError(ValueError):
+    """Authenticated provider envelope lacks safe required metadata."""
 
 
 class PaymentProviderUncertainError(RuntimeError):
