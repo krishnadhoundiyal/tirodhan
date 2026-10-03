@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,6 +17,11 @@ from tirodhan.modules.collection_requests.service import (
     CollectionRequestCompletionError,
     CollectionRequestNotFoundError,
     complete_collection_request,
+)
+from tirodhan.modules.dispatch.fleet_service import (
+    FleetCommand,
+    FleetCommandError,
+    execute_fleet_command,
 )
 from tirodhan.modules.dispatch.models import RiderAssignment
 from tirodhan.modules.dispatch.queries import (
@@ -312,3 +317,168 @@ async def post_complete_collection_request(
         raise _not_found() from error
     except CollectionRequestCompletionError as error:
         raise _conflict(error) from error
+
+
+class FleetCreateRequest(ManagerCommandModel):
+    client_command_id: UUID
+    name: str = Field(min_length=1, max_length=200)
+
+
+class FleetStatusRequest(ManagerCommandModel):
+    client_command_id: UUID
+    status: Literal["ACTIVE", "INACTIVE"]
+
+
+class FleetMembershipRequest(ManagerCommandModel):
+    client_command_id: UUID
+    rider_id: UUID
+
+
+class FleetMembershipEndRequest(FleetMembershipRequest):
+    membership_id: UUID
+
+
+class CoverageRequest(ManagerCommandModel):
+    client_command_id: UUID
+    cell_id: str = Field(min_length=1, max_length=200)
+    active: bool
+
+
+class FleetCommandResponse(BaseModel):
+    resource_id: UUID
+
+
+async def _run_fleet_command(
+    session_factory: async_sessionmaker[AsyncSession],
+    principal: AuthenticatedPrincipal,
+    request: Request,
+    command: FleetCommand,
+) -> FleetCommandResponse:
+    try:
+        resource_id = await execute_fleet_command(
+            session_factory,
+            manager_id=principal.user_id,
+            command=command,
+            idempotency_expires_at=_idempotency_expiry(request),
+        )
+    except (
+        FleetCommandError,
+        RiderNotEligibleError,
+        RiderNotFoundError,
+        IdempotencyKeyConflictError,
+    ) as error:
+        raise _conflict(error) from error
+    return FleetCommandResponse(resource_id=resource_id)
+
+
+@router.post("/fleets", response_model=FleetCommandResponse)
+async def post_fleet(
+    body: FleetCreateRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand("CREATE", body.client_command_id, name=body.name),
+    )
+
+
+@router.put("/fleets/{fleet_id}/status", response_model=FleetCommandResponse)
+async def put_fleet_status(
+    fleet_id: UUID,
+    body: FleetStatusRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand("STATUS", body.client_command_id, fleet_id=fleet_id, status=body.status),
+    )
+
+
+@router.post("/fleets/{fleet_id}/memberships", response_model=FleetCommandResponse)
+async def post_fleet_membership(
+    fleet_id: UUID,
+    body: FleetMembershipRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand("JOIN", body.client_command_id, fleet_id=fleet_id, rider_id=body.rider_id),
+    )
+
+
+@router.post("/fleets/{fleet_id}/memberships/end", response_model=FleetCommandResponse)
+async def post_end_fleet_membership(
+    fleet_id: UUID,
+    body: FleetMembershipEndRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand(
+            "LEAVE",
+            body.client_command_id,
+            fleet_id=fleet_id,
+            rider_id=body.rider_id,
+            membership_id=body.membership_id,
+        ),
+    )
+
+
+@router.put("/fleets/{fleet_id}/service-cells", response_model=FleetCommandResponse)
+async def put_fleet_service_cell(
+    fleet_id: UUID,
+    body: CoverageRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand(
+            "FLEET_CELL",
+            body.client_command_id,
+            fleet_id=fleet_id,
+            cell_id=body.cell_id,
+            active=body.active,
+        ),
+    )
+
+
+@router.put("/riders/{rider_id}/service-cells", response_model=FleetCommandResponse)
+async def put_rider_service_cell(
+    rider_id: UUID,
+    body: CoverageRequest,
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_role(ROLE_MANAGER))],
+    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> FleetCommandResponse:
+    return await _run_fleet_command(
+        session_factory,
+        principal,
+        request,
+        FleetCommand(
+            "RIDER_CELL",
+            body.client_command_id,
+            rider_id=rider_id,
+            cell_id=body.cell_id,
+            active=body.active,
+        ),
+    )

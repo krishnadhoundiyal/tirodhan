@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import utc_now
+from tirodhan.modules.dispatch.events import DISPATCH_REQUESTED, parse_dispatch_message
 from tirodhan.modules.reliability.models import OutboxEvent
 
 
@@ -21,6 +22,18 @@ class RoutedMessage:
 
 class MessagePublisher(Protocol):
     async def send(self, entity: str, message: RoutedMessage) -> None: ...
+
+
+def dispatch_message(event: OutboxEvent) -> RoutedMessage:
+    message = parse_dispatch_message(json.dumps(event.payload).encode())
+    if (
+        event.aggregate_type != "collection_group"
+        or event.aggregate_id != message.collection_group_id
+    ):
+        raise ValueError("inconsistent dispatch outbox identity")
+    return RoutedMessage(
+        str(event.outbox_event_id), DISPATCH_REQUESTED, json.dumps(message.payload()).encode()
+    )
 
 
 def serviceability_message(event: OutboxEvent) -> RoutedMessage:
@@ -48,6 +61,7 @@ async def publish_outbox_batch(
     *,
     serviceability_entity: str,
     batch_size: int,
+    rider_notification_entity: str | None = None,
 ) -> int:
     """Finite explicit route. Duplicate sends across Jobs are intentionally tolerated."""
     if batch_size <= 0:
@@ -60,7 +74,10 @@ async def publish_outbox_batch(
                 .where(
                     OutboxEvent.status == "PENDING",
                     OutboxEvent.available_at <= utc_now(),
-                    OutboxEvent.event_type == "ServiceabilityRequested",
+                    OutboxEvent.event_type.in_(
+                        ["ServiceabilityRequested"]
+                        + ([DISPATCH_REQUESTED] if rider_notification_entity else [])
+                    ),
                 )
                 .order_by(OutboxEvent.available_at, OutboxEvent.outbox_event_id)
                 .limit(batch_size)
@@ -74,8 +91,14 @@ async def publish_outbox_batch(
     published = 0
     for event in events:
         try:
-            message = serviceability_message(event)
-            await publisher.send(serviceability_entity, message)
+            if event.event_type == "ServiceabilityRequested":
+                message = serviceability_message(event)
+                await publisher.send(serviceability_entity, message)
+            elif event.event_type == DISPATCH_REQUESTED and rider_notification_entity:
+                message = dispatch_message(event)
+                await publisher.send(rider_notification_entity, message)
+            else:
+                continue
         except Exception:
             # Never log SDK exception text/envelope. Leave the event recoverably pending.
             continue

@@ -455,7 +455,7 @@ updated_at               timestamptz NOT NULL
 
 ```text
 fleet_id                 uuid PK
-name                     varchar(...) NOT NULL
+name                     varchar(200) NOT NULL
 status                   varchar(24) NOT NULL
 created_at               timestamptz NOT NULL
 updated_at               timestamptz NOT NULL
@@ -477,6 +477,63 @@ Initial rule:
 ```text
 UNIQUE(rider_id) WHERE left_at IS NULL
 ```
+
+Fleet status is `ACTIVE` or `INACTIVE` with a CHECK. All Phase 1U IDs use UUIDv7.
+Current membership in an inactive fleet does not make a rider independent.
+
+### `fleet_service_cell` / `rider_service_cell`
+
+```text
+fleet_service_cell_id    uuid PK             # fleet table only
+rider_service_cell_id    uuid PK             # rider table only
+fleet_id                 uuid NOT NULL FK -> fleet          # fleet table only
+rider_id                 uuid NOT NULL FK -> rider_profile  # rider table only
+cell_id                  varchar(200) NOT NULL
+activated_at             timestamptz NOT NULL
+deactivated_at           timestamptz NULL
+created_at               timestamptz NOT NULL
+```
+
+Each is a separate relational table, not a polymorphic owner. Partial unique indexes protect
+`(fleet_id, cell_id)` and `(rider_id, cell_id)` respectively WHERE deactivated_at IS NULL.
+Coverage uses existing canonical H3 resolution-7 cells; deactivation preserves history.
+
+### `push_registration`
+
+```text
+push_registration_id     uuid PK
+rider_id                 uuid NOT NULL FK -> rider_profile
+client_device_id         varchar(200) NOT NULL
+provider                 varchar(16) NOT NULL CHECK provider = 'FCM'
+platform                 varchar(16) NOT NULL CHECK platform IN ('ANDROID', 'IOS')
+registration_token       varchar(4096) NOT NULL
+created_at               timestamptz NOT NULL
+updated_at               timestamptz NOT NULL
+revoked_at               timestamptz NULL
+```
+
+Partial UNIQUE(rider_id, client_device_id) WHERE revoked_at IS NULL. Re-registering a current
+device updates its token; revoked rows remain history and new registration may create a new row.
+Tokens never enter logs, broker messages, inbox/outbox, idempotency or notification payloads.
+
+### `offer_notification_delivery`
+
+```text
+offer_notification_delivery_id uuid PK
+offer_id                       uuid NOT NULL FK -> assignment_offer
+push_registration_id           uuid NOT NULL FK -> push_registration
+status                         varchar(24) NOT NULL
+attempt_count                  integer NOT NULL
+last_attempt_at                timestamptz NULL
+sent_at                        timestamptz NULL
+provider_message_id            varchar(200) NULL
+created_at                     timestamptz NOT NULL
+UNIQUE(offer_id, push_registration_id)
+```
+
+CHECK status IN ('PENDING', 'SENT', 'PERMANENTLY_FAILED'). Complete cohort/device pairs commit
+before FCM I/O; transient PENDING rows resume, never creating new offers or a changed recipient
+snapshot on redelivery. Delivery contains no token copy or provider error/body.
 
 ### `rider_availability`
 
@@ -501,6 +558,8 @@ offer_id                   uuid PK
 collection_group_id        uuid FK -> collection_group
 rider_id                   uuid FK -> rider_profile
 resolved_assignment_id     uuid NULL FK -> rider_assignment
+audience_kind              varchar(16) NOT NULL DEFAULT 'INDEPENDENT'
+fleet_id                   uuid NULL FK -> fleet
 offer_round                integer NOT NULL
 status                     varchar(24) NOT NULL
 offered_at                 timestamptz NOT NULL
@@ -518,6 +577,11 @@ Phase 1H offer status is `OPEN`, `ACCEPTED`, or `CLOSED_LOST`. The timestamp, no
 status, determines whether an open offer remains live. From Phase 1I,
 `resolved_assignment_id` records the assignment that resolved an `ACCEPTED` or `CLOSED_LOST`
 offer. It is nullable for open and historically inconsistent pre-linkage offers.
+
+Phase 1U adds CHECK `(audience_kind = 'FLEET' AND fleet_id IS NOT NULL) OR
+(audience_kind = 'INDEPENDENT' AND fleet_id IS NULL)`. Pre-fleet offers are backfilled INDEPENDENT.
+Provenance belongs only on offers, never RiderProfile/RiderAssignment. The existing offer
+business constraint plus the collection-group lock protects complete automatic cohorts.
 
 ### `rider_assignment`
 

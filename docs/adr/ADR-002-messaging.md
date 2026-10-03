@@ -45,3 +45,21 @@ Inbox/outbox plus domain idempotency addresses the real failure boundaries:
 - the contract is at-least-once transport with exactly-once intended business effect, not distributed exactly-once execution.
 
 See `docs/IDEMPOTENCY.md` and ADR-014.
+
+## Phase 1U dispatch notifications
+
+Normal/fallback planning appends CollectionGroupDispatchRequested transactionally per new group.
+One message per group/stage (FLEET_FIRST or INDEPENDENT), never one per rider, carries group ID,
+batch ID, canonical H3 cell, slot and stage only. The finite publisher adds this explicit route
+to the configured rider notification queue; ServiceabilityRequested still actually sends to its
+existing queue before PUBLISHED. No arbitrary-event route is introduced.
+
+The Peek-Lock notification consumer prepares complete offer/device delivery rows in PostgreSQL,
+calls Firebase Admin multicast outside transactions, then persists per-device results. Durable
+PROCESSING inbox state resumes after crash/ambiguous send; only no remaining retryable delivery
+allows PROCESSED then settlement. Permanent invalid tokens are revoked, transient failures retry.
+Push is at-least-once/best-effort; duplicate notification is acceptable, duplicate assignment is not.
+PostgreSQL owns assignment truth and synchronous HTTP acceptance still establishes ownership.
+Service Bus transports notification work, with no saga/orchestrator/queued acceptance.
+Workload identity remains the Azure-access contract. Runtime entry points do not freeze deployment
+hosting/scheduling topology; no Terraform is introduced here.

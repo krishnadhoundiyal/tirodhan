@@ -142,7 +142,7 @@ not distributed exactly-once execution.
 | Singleton fallback | planning batch | same planning-result boundary | fallback persisted once |
 | Generate rider offer | `(group, rider, offer_round)` | unique constraint | retry does not duplicate same-round offer |
 | Rider accepts offer | group/offer command | one active assignment constraint | same rider retry gets existing result; concurrent riders yield one winner |
-| Fleet auto-assignment | group/generation | assignment constraints | retry cannot double assign |
+| Fleet/independent cohort | group/stage | group row lock + offer business uniqueness | reuse complete cohort, never expand on replay |
 | Manual assignment | manager command + group | assignment constraints | double-click cannot double assign |
 | Reassignment | `pickup-reassignment` + `client_reassignment_id` | assignment history + idempotency record + active-group/current-item partial uniqueness | exact replay returns the recorded successor in any later assignment state; a different command cannot create another successor |
 | Create pickup execution | request ID | `UNIQUE(request_id)` | exactly one logical pickup execution |
@@ -259,6 +259,45 @@ boundary; it creates no `idempotency_record`. The transaction begins with a requ
 `COMPLETED` and return the established row and original `completed_at` without querying pickup,
 handover, evidence, incident, assignment, or media state. Prerequisite rows are read but not locked.
 No completion outbox event is emitted in Phase 1N.
+
+### Fleet dispatch and push (Phase 1U)
+
+- New normal/fallback planning groups append exactly one initial dispatch event in the same
+  transaction. Event key is `collection-group-dispatch:<group_id>:<stage>`. Completed planning
+  replay creates neither groups nor dispatch events. Transport message ID is the outbox UUID.
+- One group/stage item represents notification work, never one per rider. The consumer validates
+  identifiers/cell/slot against PostgreSQL and uses inbox `(rider-dispatch-notifications, message_id)`.
+  Group row locking and `(collection_group_id, rider_id, offer_round)` uniqueness establish a whole
+  cohort once. All offers share one offered_at/expires_at/round. Historical cohort replay does not
+  revalidate later live eligibility or expand the population. Assignment acceptance itself retains
+  its existing historical replay, live eligibility and one-winner rules.
+- The first cohort preparation commits all `(offer_id, push_registration_id)` unique delivery
+  pairs before FCM. PROCESSING resumes the fixed device set (including a valid empty set), whereas
+  PROCESSED skips. Pending sends use a batch port outside all DB transactions; >500-device chunks
+  start concurrently. Results commit SENT/PERMANENTLY_FAILED or retain retryable PENDING. Transient
+  failures abandon/fail the broker invocation; only no pending work permits durable PROCESSED
+  before settlement. No durable provider lease or exactly-once phone delivery is claimed.
+- Crash after preparation and before FCM reuses offers/deliveries. Ambiguous outcomes may duplicate
+  generic push, not business assignment. Invalid token revocation checks the actually-sent token
+  so a concurrent token replacement is not revoked by an old result. No token/provider body/error
+  enters reliability stores or logs. Publisher sends ServiceabilityRequested unchanged and adds
+  only the dispatch route; send-before-mark preserves recovery and may resend.
+- Fleet timeout scans a bounded candidate set and locks the group just like acceptance/manual
+  assignment. Active assignment first means no independent event. Expiry first means one stable
+  independent-stage event and the old offer cannot be accepted after its deadline. One independent
+  cohort only; its expiry leaves manager fallback, not automatic repeat rounds or a saga.
+- Manager fleet mutations use `client_command_id` in customer-independent scope
+  `fleet.command:<manager_id>` with SHA-256 fingerprint and resource ID only. Command, history row
+  and completion share a transaction. Exact replay returns the original ID even after a membership
+  ended; changed input conflicts. Current membership/coverage partial uniqueness and fleet/rider
+  row locks protect different concurrent command keys. Add-member checks live rider authorization
+  and ACTIVE fleet; moving between fleets requires explicit end then join.
+- Push registration is a serialized current-state upsert keyed by authenticated rider/device with
+  active-device partial uniqueness. Exact same token/platform is a no-op; changed token replaces
+  the current value, last committed intent wins. Revoke is current-device idempotent DELETE (missing
+  active registration succeeds); re-registration after revocation is a fresh registration. Tokens
+  stay only in registration storage and transient provider recipients. No external I/O occurs in
+  fleet/device command transactions.
 
 ### Pickup incident and reassignment
 
