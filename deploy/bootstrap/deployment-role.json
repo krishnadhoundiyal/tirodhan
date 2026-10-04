@@ -1,0 +1,31 @@
+{
+  "Name": "Tirodhan NONPROD Deployment",
+  "IsCustom": true,
+  "Description": "NONPROD control plane; never retrieve storage account keys.",
+  "Actions": [
+    "*/read",
+    "Microsoft.App/managedEnvironments/*",
+    "Microsoft.App/containerApps/*",
+    "Microsoft.App/jobs/*",
+    "Microsoft.ManagedIdentity/userAssignedIdentities/*",
+    "Microsoft.DBforPostgreSQL/flexibleServers/*",
+    "Microsoft.ServiceBus/namespaces/write",
+    "Microsoft.ServiceBus/namespaces/delete",
+    "Microsoft.ServiceBus/namespaces/queues/*",
+    "Microsoft.Storage/storageAccounts/write",
+    "Microsoft.Storage/storageAccounts/delete",
+    "Microsoft.Storage/storageAccounts/blobServices/write",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+    "Microsoft.Storage/storageAccounts/managementPolicies/write",
+    "Microsoft.Storage/storageAccounts/managementPolicies/delete",
+    "Microsoft.KeyVault/vaults/write",
+    "Microsoft.KeyVault/vaults/delete"
+  ],
+  "NotActions": [
+    "Microsoft.Storage/storageAccounts/listKeys/action"
+  ],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": []
+}

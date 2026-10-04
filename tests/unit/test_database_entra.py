@@ -29,22 +29,26 @@ async def test_async_creator_parses_url_and_uses_entra_token() -> None:
 
     async def async_get_token(*args, **kwargs):
         return mock_token
+
     mock_credential.get_token = async_get_token
 
     with patch("tirodhan.db.session.DefaultAzureCredential", return_value=mock_credential_cls):
         mock_credential_cls.return_value.__aenter__ = MagicMock(return_value=mock_credential)
+
         # Needs to be proper async mock for aenter
         async def mock_aenter(self):
             return mock_credential
+
         async def mock_aexit(self, exc_type, exc_val, exc_tb):
             pass
 
         mock_credential_cls.__aenter__ = mock_aenter
         mock_credential_cls.__aexit__ = mock_aexit
 
-        with patch("asyncpg.connect") as mock_connect, patch(
-            "ssl.create_default_context"
-        ) as mock_ssl:
+        with (
+            patch("asyncpg.connect") as mock_connect,
+            patch("ssl.create_default_context") as mock_ssl,
+        ):
             mock_ssl.return_value = "fake-ssl-context"
             await _async_creator(settings)
 
@@ -81,4 +85,5 @@ def test_create_database_engine_applies_null_pool() -> None:
         args, kwargs = mock_engine.call_args
         assert "pool_size" not in kwargs
         from sqlalchemy.pool import NullPool
+
         assert kwargs["poolclass"] == NullPool

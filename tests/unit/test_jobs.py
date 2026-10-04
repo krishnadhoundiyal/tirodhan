@@ -36,11 +36,13 @@ async def test_pending_payment_expiry_propagates_failure(monkeypatch) -> None:
 
     async def mock_aenter(self):
         return mock_session
+
     async def mock_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
     async def mock_tx_aenter(self):
         return mock_transaction
+
     async def mock_tx_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
@@ -53,14 +55,18 @@ async def test_pending_payment_expiry_propagates_failure(monkeypatch) -> None:
 
     mock_sf = MagicMock(return_value=mock_session)
 
-    with patch(
-        "tirodhan.workers.pending_payment_expiry.create_database_engine", return_value=mock_engine
-    ), patch(
-        "tirodhan.workers.pending_payment_expiry.create_session_factory", return_value=mock_sf
-    ), patch(
-        "tirodhan.workers.pending_payment_expiry.expire_pending_collection_requests"
-    ) as mock_expire:
-
+    with (
+        patch(
+            "tirodhan.workers.pending_payment_expiry.create_database_engine",
+            return_value=mock_engine,
+        ),
+        patch(
+            "tirodhan.workers.pending_payment_expiry.create_session_factory", return_value=mock_sf
+        ),
+        patch(
+            "tirodhan.workers.pending_payment_expiry.expire_pending_collection_requests"
+        ) as mock_expire,
+    ):
         mock_expire.side_effect = RuntimeError("Database error")
         with pytest.raises(RuntimeError, match="Database error"):
             await pending_payment_run()
@@ -89,11 +95,13 @@ async def test_planning_scheduler_propagates_partial_failures(monkeypatch) -> No
 
     async def mock_aenter(self):
         return mock_session
+
     async def mock_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
     async def mock_tx_aenter(self):
         return mock_transaction
+
     async def mock_tx_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
@@ -106,15 +114,17 @@ async def test_planning_scheduler_propagates_partial_failures(monkeypatch) -> No
 
     mock_sf = MagicMock(return_value=mock_session)
 
-    with patch(
-        "tirodhan.workers.planning_scheduler.create_database_engine", return_value=mock_engine
-    ), patch(
-        "tirodhan.workers.planning_scheduler.create_session_factory", return_value=mock_sf
-    ), patch(
-        "tirodhan.workers.planning_scheduler.discover_due_planning_work_units",
-        return_value=[mock_work_unit_1, mock_work_unit_2]
-    ), patch("tirodhan.workers.planning_scheduler.freeze_planning_batch") as mock_freeze:
-
+    with (
+        patch(
+            "tirodhan.workers.planning_scheduler.create_database_engine", return_value=mock_engine
+        ),
+        patch("tirodhan.workers.planning_scheduler.create_session_factory", return_value=mock_sf),
+        patch(
+            "tirodhan.workers.planning_scheduler.discover_due_planning_work_units",
+            return_value=[mock_work_unit_1, mock_work_unit_2],
+        ),
+        patch("tirodhan.workers.planning_scheduler.freeze_planning_batch") as mock_freeze,
+    ):
         # Make the first work unit fail and the second succeed
         mock_freeze.side_effect = [RuntimeError("Freeze failed"), None]
 

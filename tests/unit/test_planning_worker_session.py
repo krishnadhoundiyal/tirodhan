@@ -18,27 +18,29 @@ async def test_planning_worker_handle_delivery_logging() -> None:
     with patch("tirodhan.workers.planning_worker.logger.error") as mock_logger_error:
         await handle_planning_delivery(delivery_mock, AsyncMock())
         mock_logger_error.assert_called_with(
-            "planning_message_invalid",
-            extra={"error_type": "JSONDecodeError"}
+            "planning_message_invalid", extra={"error_type": "JSONDecodeError"}
         )
         delivery_mock.dead_letter.assert_awaited_once()
 
     import uuid
+
     delivery_mock = AsyncMock(spec=AzurePlanningDelivery)
     batch_id = str(uuid.uuid4())
-    delivery_mock.body = f'{{"planning_batch_id": "{batch_id}"}}'.encode("utf-8")
+    delivery_mock.body = f'{{"planning_batch_id": "{batch_id}"}}'.encode()
 
     delivery_mock.message_id = "test-msg"
     delivery_mock.message_type = "test-type"
 
-    with patch(
-        "tirodhan.workers.planning_worker.execute_planning_attempt",
-        side_effect=RuntimeError("Some transient DB issue")
-    ), patch("tirodhan.workers.planning_worker.logger.error") as mock_logger_error:
+    with (
+        patch(
+            "tirodhan.workers.planning_worker.execute_planning_attempt",
+            side_effect=RuntimeError("Some transient DB issue"),
+        ),
+        patch("tirodhan.workers.planning_worker.logger.error") as mock_logger_error,
+    ):
         await handle_planning_delivery(delivery_mock, AsyncMock())
         mock_logger_error.assert_called_with(
-            "planning_delivery_failed",
-            extra={"error_type": "RuntimeError"}
+            "planning_delivery_failed", extra={"error_type": "RuntimeError"}
         )
         delivery_mock.abandon.assert_awaited_once()
 
@@ -72,6 +74,7 @@ async def test_planning_worker_session_acquisition(monkeypatch) -> None:
 
     async def mock_aenter(self):
         return mock_receiver
+
     async def mock_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
@@ -83,6 +86,7 @@ async def test_planning_worker_session_acquisition(monkeypatch) -> None:
 
     async def mock_bus_aenter(self):
         return mock_bus
+
     async def mock_bus_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
@@ -94,6 +98,7 @@ async def test_planning_worker_session_acquisition(monkeypatch) -> None:
 
     async def mock_renewer_aenter(self):
         return mock_renewer
+
     async def mock_renewer_aexit(self, exc_type, exc_val, exc_tb):
         pass
 
@@ -101,24 +106,19 @@ async def test_planning_worker_session_acquisition(monkeypatch) -> None:
     mock_renewer.__aexit__ = mock_renewer_aexit
 
     mock_engine = AsyncMock()
-    with patch(
-        "tirodhan.workers.planning_worker.ServiceBusClient", return_value=mock_bus
-    ), patch(
-        "tirodhan.workers.planning_worker.AutoLockRenewer", return_value=mock_renewer
-    ), patch(
-        "tirodhan.workers.planning_worker.DefaultAzureCredential"
-    ), patch(
-        "tirodhan.workers.planning_worker.create_database_engine", return_value=mock_engine
-    ), patch(
-        "tirodhan.workers.planning_worker.create_session_factory"
-    ), patch(
-        "tirodhan.workers.planning_worker.handle_planning_delivery", new_callable=AsyncMock
+    with (
+        patch("tirodhan.workers.planning_worker.ServiceBusClient", return_value=mock_bus),
+        patch("tirodhan.workers.planning_worker.AutoLockRenewer", return_value=mock_renewer),
+        patch("tirodhan.workers.planning_worker.DefaultAzureCredential"),
+        patch("tirodhan.workers.planning_worker.create_database_engine", return_value=mock_engine),
+        patch("tirodhan.workers.planning_worker.create_session_factory"),
+        patch("tirodhan.workers.planning_worker.handle_planning_delivery", new_callable=AsyncMock),
     ):
-
         with pytest.raises(KeyboardInterrupt):
             await planning_worker_run()
 
     from azure.servicebus import ServiceBusReceiveMode
+
     mock_bus.get_queue_receiver.assert_called_with(
         queue_name="planning-q",
         receive_mode=ServiceBusReceiveMode.PEEK_LOCK,

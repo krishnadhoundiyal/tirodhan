@@ -20,8 +20,6 @@ from tirodhan.modules.reliability.service_bus import AzurePlanningDelivery
 logger = logging.getLogger(__name__)
 
 
-
-
 async def handle_planning_delivery(
     delivery: AzurePlanningDelivery,
     session_factory: async_sessionmaker[AsyncSession],
@@ -51,16 +49,10 @@ async def handle_planning_delivery(
         await delivery.complete()
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
-        logger.error(
-            "planning_message_invalid",
-            extra={"error_type": type(e).__name__}
-        )
+        logger.error("planning_message_invalid", extra={"error_type": type(e).__name__})
         await delivery.dead_letter()
     except Exception as e:
-        logger.error(
-            "planning_delivery_failed",
-            extra={"error_type": type(e).__name__}
-        )
+        logger.error("planning_delivery_failed", extra={"error_type": type(e).__name__})
         await delivery.abandon()
 
 
@@ -121,12 +113,13 @@ async def run() -> None:
                     continue
                 except Exception as e:
                     import azure.servicebus.exceptions
+
                     if isinstance(e, azure.servicebus.exceptions.OperationTimeoutError):
                         await asyncio.sleep(5)
                     else:
                         logger.warning(
                             "planning_session_acquisition_failed",
-                            extra={"error_type": type(e).__name__}
+                            extra={"error_type": type(e).__name__},
                         )
                         await asyncio.sleep(5)
     finally:
