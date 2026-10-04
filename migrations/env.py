@@ -4,12 +4,11 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from tirodhan.core.config import Settings
 from tirodhan.db.base import Base
+from tirodhan.db.session import create_database_engine
 from tirodhan.modules.collection_requests import models as collection_request_models  # noqa: F401
 from tirodhan.modules.customers import models as customer_models  # noqa: F401
 from tirodhan.modules.dispatch import models as dispatch_models  # noqa: F401
@@ -56,13 +55,8 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_database_url()
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    settings = Settings()
+    connectable = create_database_engine(settings, use_null_pool=True)
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

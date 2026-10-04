@@ -18,6 +18,7 @@ class RoutedMessage:
     message_id: str
     message_type: str
     body: bytes
+    session_id: str | None = None
 
 
 class MessagePublisher(Protocol):
@@ -63,6 +64,7 @@ async def publish_outbox_batch(
     batch_size: int,
     rider_notification_entity: str | None = None,
     refund_entity: str | None = None,
+    planning_entity: str | None = None,
 ) -> int:
     """Finite explicit route. Duplicate sends across Jobs are intentionally tolerated."""
     if batch_size <= 0:
@@ -79,6 +81,10 @@ async def publish_outbox_batch(
                         ["ServiceabilityRequested"]
                         + ([DISPATCH_REQUESTED] if rider_notification_entity else [])
                         + (["RefundRequested"] if refund_entity else [])
+                        + (
+                            ["PlanningBatchReady", "PlanningAttemptRequested"]
+                            if planning_entity else []
+                        )
                     ),
                 )
                 .order_by(OutboxEvent.available_at, OutboxEvent.outbox_event_id)
@@ -102,6 +108,12 @@ async def publish_outbox_batch(
             elif event.event_type == "RefundRequested" and refund_entity:
                 message = refund_message(event)
                 await publisher.send(refund_entity, message)
+            elif (
+                event.event_type in ("PlanningBatchReady", "PlanningAttemptRequested")
+                and planning_entity
+            ):
+                message = planning_message(event)
+                await publisher.send(planning_entity, message)
             else:
                 continue
         except Exception:
@@ -133,4 +145,30 @@ def refund_message(event: OutboxEvent) -> RoutedMessage:
         str(event.outbox_event_id),
         "RefundRequested",
         json.dumps({"refund_id": str(refund_id)}).encode(),
+    )
+
+
+def planning_message(event: OutboxEvent) -> RoutedMessage:
+    if event.aggregate_type != "planning_batch":
+        raise ValueError("invalid planning outbox metadata")
+    if (
+        "planning_batch_id" not in event.payload
+        or "cell_id" not in event.payload
+        or "attempt_number" not in event.payload
+    ):
+        raise ValueError("invalid planning outbox metadata")
+
+    try:
+        batch_id = UUID(event.payload["planning_batch_id"])
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("invalid planning outbox metadata") from None
+
+    if batch_id != event.aggregate_id:
+        raise ValueError("inconsistent planning outbox identity")
+
+    return RoutedMessage(
+        str(event.outbox_event_id),
+        event.event_type,
+        json.dumps(event.payload).encode(),
+        session_id=str(event.payload["cell_id"]),
     )

@@ -76,3 +76,14 @@ def test_blob_account_url_must_be_https() -> None:
 
     with pytest.raises(ValueError, match="must use HTTPS"):
         Settings(media_blob_account_url="http://insecure.blob.core.windows.net")
+
+
+def test_db_pool_limits_rejection() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from tirodhan.core.config import Settings
+
+    # -1 is unlimited in sqlalchemy, but we explicitly disallow it.
+    with pytest.raises(ValidationError, match="db_max_overflow must be non-negative"):
+        Settings(db_max_overflow=-1)

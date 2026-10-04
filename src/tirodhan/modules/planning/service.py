@@ -436,6 +436,7 @@ async def record_planning_technical_failure(
                 event_type=PLANNING_ATTEMPT_REQUESTED_MESSAGE,
                 payload={
                     "planning_batch_id": str(batch.planning_batch_id),
+                    "cell_id": batch.cell_id,
                     "attempt_number": next_attempt,
                 },
             )
