@@ -79,6 +79,10 @@ resource "azurerm_container_app_job" "migration" {
         }
       }
       env {
+        name  = "JOB_STARTUP_SECONDS"
+        value = "300"
+      }
+      env {
         name        = "LOG_SAS"
         secret_name = "fluent-bit-sas"
       }
@@ -177,6 +181,10 @@ resource "azurerm_container_app_job" "scheduled" {
           name  = env.key
           value = env.value
         }
+      }
+      env {
+        name  = "JOB_STARTUP_SECONDS"
+        value = "120"
       }
       env {
         name        = "LOG_SAS"

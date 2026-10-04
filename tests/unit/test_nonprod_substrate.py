@@ -118,6 +118,18 @@ def test_all_workloads_have_budgeted_sidecar_and_emptydir() -> None:
         assert "tirodhan.deployment.job" in main["args"]
 
 
+@pytest.mark.parametrize("name, startup_seconds", [("migration", "300"), ("scheduled", "120")])
+def test_job_sidecar_has_explicit_startup_tolerance(name: str, startup_seconds: str) -> None:
+    job = resource("jobs.tf", "azurerm_container_app_job", name)
+    sidecar = next(
+        container
+        for container in job["template"][0]["container"]
+        if container["name"] == "fluent-bit"
+    )
+    env = {entry["name"]: entry.get("value") for entry in sidecar["env"]}
+    assert env["JOB_STARTUP_SECONDS"] == startup_seconds
+
+
 def test_database_exception_is_nonprod_with_no_password() -> None:
     db = resource("database.tf", "azurerm_postgresql_flexible_server", "database")
     assert db["sku_name"] == "B_Standard_B1ms"

@@ -5,6 +5,18 @@ This stack implements the accepted NONPROD deployment brief on top of main
 alter business lifecycles, or add production pricing. `UnconfiguredPricingPort`
 still prevents a fully fresh booking flow until pricing is supplied separately.
 
+## Pre-deployment GitHub protection prerequisite
+
+Do not treat Azure OIDC federation/deployment as ready until a repository
+administrator has verified:
+
+- `main` is protected by a GitHub branch protection rule or ruleset;
+- repository checks are required for merge;
+- `nonprod` is a protected GitHub Environment with the intended approval policy;
+- both `nonprod-plan` and `nonprod` are restricted to trusted `main`.
+
+This is repository-admin configuration, not Azure Terraform work.
+
 ## Inputs and one-time bootstrap
 
 Use Terraform **1.13.5**, AzureRM **5.8.0** and the committed provider lockfile.
@@ -80,7 +92,13 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
    SELECT; the UAMI owns its migration-created tables. Admin pre-creates PostGIS.
    TLS certificates are verified, Entra tokens are obtained per connection, and
    Alembic retains its existing NullPool behavior. Password auth is disabled.
-3. Allow RBAC propagation. Seed enabled Key Vault versions with the approved
+3. Authenticate **as the restricted deployment identity** before initial
+   application secret seeding and initial Fluent Bit user-delegation SAS creation,
+   not as the one-time bootstrap operator or the PostgreSQL administrator from
+   step 2. These commands use the restricted service principal's Azure CLI/Entra
+   authentication and its granted Key Vault secret-management and application
+   storage delegation/data permissions. Allow RBAC propagation.
+   Seed enabled Key Vault versions with the approved
    provider credentials, RSA key pair, encryption/HMAC material and read-only
    GHCR PAT. Set `KEY_VAULT_URL`, run
    `python -m tirodhan.deployment.seed_secrets deploy/operator-inputs/secrets.json`.
@@ -152,8 +170,11 @@ Finite commands run through `tirodhan.deployment.job`: immediate/periodic
 heartbeat, protected stdout/stderr JSON records, exact exit code, done marker.
 Arbitrary console content is intentionally redacted, including Alembic/provider
 tracebacks; application-controlled JSON still flows directly to the file. Sidecar
-exits on done, stale heartbeat (30 s), missing startup heartbeat (60 s), or SIGTERM
-after bounded final flush. All five Jobs use this contract; business code unchanged.
+exits on done, stale heartbeat (30 s), missing startup heartbeat, or SIGTERM
+after bounded final flush. ACA Job sidecars explicitly set `JOB_STARTUP_SECONDS`
+to 300 s for migration and 120 s for scheduled Jobs, allowing delayed application
+startup without changing normal stale-heartbeat detection. All five Jobs use this
+contract; business code unchanged.
 
 Schedules are UTC: outbox/planning/fleet each minute, payment expiry every five
 minutes. Parallelism 1 applies to **one execution**, not a no-overlap guarantee.
