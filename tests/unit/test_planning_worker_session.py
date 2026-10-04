@@ -8,6 +8,42 @@ from tirodhan.workers.planning_worker import run as planning_worker_run
 
 
 @pytest.mark.asyncio
+async def test_planning_worker_handle_delivery_logging() -> None:
+    from tirodhan.modules.reliability.service_bus import AzurePlanningDelivery
+    from tirodhan.workers.planning_worker import handle_planning_delivery
+
+    delivery_mock = AsyncMock(spec=AzurePlanningDelivery)
+    delivery_mock.body = b"not-json"
+
+    with patch("tirodhan.workers.planning_worker.logger.error") as mock_logger_error:
+        await handle_planning_delivery(delivery_mock, AsyncMock())
+        mock_logger_error.assert_called_with(
+            "planning_message_invalid",
+            extra={"error_type": "JSONDecodeError"}
+        )
+        delivery_mock.dead_letter.assert_awaited_once()
+
+    import uuid
+    delivery_mock = AsyncMock(spec=AzurePlanningDelivery)
+    batch_id = str(uuid.uuid4())
+    delivery_mock.body = f'{{"planning_batch_id": "{batch_id}"}}'.encode("utf-8")
+
+    delivery_mock.message_id = "test-msg"
+    delivery_mock.message_type = "test-type"
+
+    with patch(
+        "tirodhan.workers.planning_worker.execute_planning_attempt",
+        side_effect=RuntimeError("Some transient DB issue")
+    ), patch("tirodhan.workers.planning_worker.logger.error") as mock_logger_error:
+        await handle_planning_delivery(delivery_mock, AsyncMock())
+        mock_logger_error.assert_called_with(
+            "planning_delivery_failed",
+            extra={"error_type": "RuntimeError"}
+        )
+        delivery_mock.abandon.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_planning_worker_session_acquisition(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,

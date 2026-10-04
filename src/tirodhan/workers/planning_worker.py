@@ -51,10 +51,16 @@ async def handle_planning_delivery(
         await delivery.complete()
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
-        logger.error(f"Failed to parse planning message {delivery.message_id}: {e}")
+        logger.error(
+            "planning_message_invalid",
+            extra={"error_type": type(e).__name__}
+        )
         await delivery.dead_letter()
     except Exception as e:
-        logger.error(f"Transient error processing planning message {delivery.message_id}: {e}")
+        logger.error(
+            "planning_delivery_failed",
+            extra={"error_type": type(e).__name__}
+        )
         await delivery.abandon()
 
 
@@ -114,11 +120,14 @@ async def run() -> None:
                 except asyncio.TimeoutError:
                     continue
                 except Exception as e:
-                    # Ignore transient errors, e.g. timeouts or no active sessions
-                    if "No active session" in str(e) or "Timeout" in str(e):
+                    import azure.servicebus.exceptions
+                    if isinstance(e, azure.servicebus.exceptions.OperationTimeoutError):
                         await asyncio.sleep(5)
                     else:
-                        logger.warning("planning_session_acquisition_error", exc_info=e)
+                        logger.warning(
+                            "planning_session_acquisition_failed",
+                            extra={"error_type": type(e).__name__}
+                        )
                         await asyncio.sleep(5)
     finally:
         await engine.dispose()

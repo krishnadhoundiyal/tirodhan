@@ -7,6 +7,23 @@ from tirodhan.workers.pending_payment_expiry import run as pending_payment_run
 from tirodhan.workers.planning_scheduler import run as planning_scheduler_run
 
 
+def test_job_main_exits_cleanly_on_failure() -> None:
+    from tirodhan.workers.pending_payment_expiry import main as pp_main
+    from tirodhan.workers.planning_scheduler import main as ps_main
+
+    with patch(
+        "tirodhan.workers.pending_payment_expiry.run", side_effect=RuntimeError("Job Failed")
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            pp_main()
+        assert exc_info.value.code == 1
+
+    with patch("tirodhan.workers.planning_scheduler.run", side_effect=RuntimeError("Job Failed")):
+        with pytest.raises(SystemExit) as exc_info:
+            ps_main()
+        assert exc_info.value.code == 1
+
+
 @pytest.mark.asyncio
 async def test_pending_payment_expiry_propagates_failure(monkeypatch) -> None:
     settings = Settings(_env_file=None)

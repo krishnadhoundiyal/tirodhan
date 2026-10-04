@@ -39,7 +39,12 @@ async def run() -> None:
 
 
 def main() -> None:
-    asyncio.run(run())
+    import sys
+
+    try:
+        asyncio.run(run())
+    except Exception:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
