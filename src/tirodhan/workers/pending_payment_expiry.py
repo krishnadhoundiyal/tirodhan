@@ -23,10 +23,17 @@ async def run() -> None:
 
         async with session_factory() as session, session.begin():
             expired_count = await expire_pending_collection_requests(session, now)
-            logger.info(f"Expired {expired_count} pending payment collection requests.")
+            logger.info(
+                "pending_payment_expiry_completed",
+                extra={"expired_count": expired_count}
+            )
 
     except Exception as e:
-        logger.exception("Failed to expire pending payment collection requests", exc_info=e)
+        logger.error(
+            "pending_payment_expiry_failed",
+            extra={"error_type": type(e).__name__}
+        )
+        raise
     finally:
         await engine.dispose()
 

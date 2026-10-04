@@ -17,22 +17,25 @@ from tirodhan.core.config import Settings
 
 
 async def _async_creator(settings: Settings) -> Any:
+    import ssl
+
     import asyncpg
+    from sqlalchemy.engine.url import make_url
 
     url = settings.database_url.get_secret_value()
     # Ensure it is a valid format before parsing
     if not url.startswith("postgresql+asyncpg://"):
         raise ValueError("Invalid URL scheme")
 
-    # Extract db parts roughly
-    import urllib.parse
-    parsed = urllib.parse.urlparse(url.replace("postgresql+asyncpg", "postgresql"))
+    parsed = make_url(url)
 
-    host = parsed.hostname
+    host = parsed.host
     port = parsed.port or 5432
     user = parsed.username
-    database = parsed.path.lstrip("/")
+    database = parsed.database
     password = parsed.password
+
+    ssl_context = None
 
     if settings.database_entra_authentication:
         async with DefaultAzureCredential(
@@ -40,6 +43,7 @@ async def _async_creator(settings: Settings) -> Any:
         ) as credential:
             token = await credential.get_token("https://ossrdbms-aad.database.windows.net/.default")
             password = token.token
+        ssl_context = ssl.create_default_context()
 
     return await asyncpg.connect(
         host=host,
@@ -47,6 +51,7 @@ async def _async_creator(settings: Settings) -> Any:
         user=user,
         password=password,
         database=database,
+        ssl=ssl_context,
     )
 
 

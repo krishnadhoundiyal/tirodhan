@@ -6,7 +6,7 @@ import logging
 from uuid import UUID
 
 from azure.identity.aio import DefaultAzureCredential
-from azure.servicebus import ServiceBusReceiveMode
+from azure.servicebus import NEXT_AVAILABLE_SESSION, ServiceBusReceiveMode
 from azure.servicebus.aio import AutoLockRenewer, ServiceBusClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -86,26 +86,40 @@ async def run() -> None:
                 socket_timeout=settings.service_bus_operation_timeout_seconds,
             ) as bus,
             AutoLockRenewer() as renewer,
-            bus.get_queue_receiver(
-                queue_name=settings.planning_queue_name,
-                receive_mode=ServiceBusReceiveMode.PEEK_LOCK,
-                prefetch_count=0,
-                session_id="NEXT_AVAILABLE_SESSION",
-            ) as receiver,
         ):
-            # Register the session lock renewal once when the receiver/session is acquired.
-            renewer.register(
-                receiver.session,
-                max_lock_renewal_duration=settings.planning_lock_renewal_seconds,
-            )
-            async for message in receiver:
+            while True:
                 try:
-                    await handle_planning_delivery(
-                        AzurePlanningDelivery(receiver, message),
-                        session_factory,
-                    )
-                except Exception:
-                    logger.warning("planning_delivery_failed")
+                    async with bus.get_queue_receiver(
+                        queue_name=settings.planning_queue_name,
+                        receive_mode=ServiceBusReceiveMode.PEEK_LOCK,
+                        prefetch_count=0,
+                        session_id=NEXT_AVAILABLE_SESSION,
+                        max_wait_time=5,
+                    ) as receiver:
+                        # Register the session lock renewal once when the receiver/session is
+                        # acquired.
+                        renewer.register(
+                            receiver,
+                            receiver.session,
+                            max_lock_renewal_duration=settings.planning_lock_renewal_seconds,
+                        )
+                        async for message in receiver:
+                            try:
+                                await handle_planning_delivery(
+                                    AzurePlanningDelivery(receiver, message),
+                                    session_factory,
+                                )
+                            except Exception:
+                                logger.warning("planning_delivery_failed")
+                except asyncio.TimeoutError:
+                    continue
+                except Exception as e:
+                    # Ignore transient errors, e.g. timeouts or no active sessions
+                    if "No active session" in str(e) or "Timeout" in str(e):
+                        await asyncio.sleep(5)
+                    else:
+                        logger.warning("planning_session_acquisition_error", exc_info=e)
+                        await asyncio.sleep(5)
     finally:
         await engine.dispose()
 

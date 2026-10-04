@@ -162,6 +162,13 @@ class Settings(BaseSettings):
             raise ValueError("provider timeout must be finite and positive")
         return value
 
+    @field_validator("db_max_overflow")
+    @classmethod
+    def db_max_overflow_must_be_non_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("db_max_overflow must be non-negative")
+        return value
+
     @field_validator(
         "google_maps_http_timeout_seconds",
         "service_bus_operation_timeout_seconds",

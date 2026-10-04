@@ -39,6 +39,7 @@ async def run() -> None:
             now=now,
         )
 
+        failed_count = 0
         for work_unit in work_units:
             try:
                 await freeze_planning_batch(
@@ -51,8 +52,22 @@ async def run() -> None:
                     now=now,
                 )
             except Exception as e:
-                logger.exception("Failed to freeze planning batch for work unit", exc_info=e)
+                failed_count += 1
+                logger.error(
+                    "planning_scheduler_work_unit_failed",
+                    extra={
+                        "error_type": type(e).__name__,
+                        "cell_id": work_unit.cell_id,
+                        "slot_start": str(work_unit.slot_start),
+                    }
+                )
 
+        if failed_count > 0:
+            raise RuntimeError(f"planning scheduler finished with {failed_count} failures")
+
+    except Exception as e:
+        logger.error("planning_scheduler_failed", extra={"error_type": type(e).__name__})
+        raise
     finally:
         await engine.dispose()
 
