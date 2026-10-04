@@ -19,6 +19,7 @@ class AzureServiceBusPublisher:
                     message_id=message.message_id,
                     subject=message.message_type,
                     content_type="application/json",
+                    session_id=message.session_id,
                 ),
                 timeout=self._timeout,
             )
@@ -90,5 +91,14 @@ class AzureRefundDelivery(AzureServiceabilityDelivery):
         await self._receiver.dead_letter_message(
             self._message,
             reason="INVALID_REFUND_MESSAGE",
+            error_description="Message could not be processed",
+        )
+
+
+class AzurePlanningDelivery(AzureServiceabilityDelivery):
+    async def dead_letter(self) -> None:
+        await self._receiver.dead_letter_message(
+            self._message,
+            reason="INVALID_PLANNING_MESSAGE",
             error_description="Message could not be processed",
         )

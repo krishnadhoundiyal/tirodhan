@@ -19,6 +19,11 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://tirodhan:tirodhan@localhost:5432/tirodhan"
     )
     database_echo: bool = False
+    database_managed_identity_client_id: str | None = None
+    database_entra_authentication: bool = False
+    db_pool_size: int | None = None
+    db_max_overflow: int | None = None
+    db_pool_timeout: float | None = None
     google_maps_api_key: SecretStr | None = None
     google_maps_http_timeout_seconds: float | None = None
     google_maps_delhi_admin_aliases: list[str] = [
@@ -31,7 +36,9 @@ class Settings(BaseSettings):
     serviceability_queue_name: str | None = None
     rider_notification_queue_name: str | None = None
     refund_queue_name: str | None = None
+    planning_queue_name: str | None = None
     refund_lock_renewal_seconds: int | None = None
+    planning_lock_renewal_seconds: int | None = None
     razorpay_key_id: str | None = None
     razorpay_key_secret: SecretStr | None = None
     razorpay_webhook_secret: SecretStr | None = None
@@ -107,8 +114,10 @@ class Settings(BaseSettings):
         "media_photo_max_size_bytes",
         "media_video_max_size_bytes",
         "serviceability_lock_renewal_seconds",
+        "db_pool_size",
         "rider_notification_lock_renewal_seconds",
         "refund_lock_renewal_seconds",
+        "planning_lock_renewal_seconds",
         "outbox_publish_batch_size",
         "rider_offer_lifetime_seconds",
     )
@@ -157,6 +166,7 @@ class Settings(BaseSettings):
         "google_maps_http_timeout_seconds",
         "service_bus_operation_timeout_seconds",
         "razorpay_http_timeout_seconds",
+        "db_pool_timeout",
     )
     @classmethod
     def runtime_timeout_must_be_bounded(cls, value: float | None) -> float | None:
