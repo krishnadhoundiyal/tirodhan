@@ -72,7 +72,8 @@ grant_role Reader "$state_id" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
 grant_role "Storage Blob Delegator" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
 grant_role "Key Vault Secrets Officer" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
 # Deployment may manage only these runtime data roles, never Owner/Contributor.
-roles="{69a216fc-b8fb-44d8-bc22-1f3c2cd27a39, 4f6db5ce-55e8-4d65-b4d2-4d2aade53608, ba92f5b4-2d11-453d-a403-e96b0029c9fe, db58b8e5-c6ad-4a2a-8342-4190687cbf4a, 4633458b-17de-408a-b874-0445c86b69e6}"
+# Keep these built-in role IDs synchronized with Microsoft's published role IDs.
+roles="{69a216fc-b8fb-44d8-bc22-1f3c2cd27a39, 4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0, ba92f5b4-2d11-453d-a403-e96b0029c9fe, db58b8e5-c6ad-4a2a-8342-4190687cbf4a, 4633458b-17de-408a-b874-0445c86b69e6}"
 condition="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals $roles)) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals $roles))"
 grant_role "Role Based Access Control Administrator" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal "$condition"
 for environment in nonprod-plan nonprod; do
