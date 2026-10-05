@@ -76,11 +76,11 @@ variable "runtime_env" {
     error_message = "runtime_env accepts only nonsecret TIRODHAN settings; secrets use Key Vault references."
   }
   validation {
-    condition = var.deployment_stage == 0 || alltrue([
+    condition = var.deployment_stage < 2 || alltrue([
       for key in split("\n", replace(trimspace(file("${path.module}/../../../deploy/runtime-env.names")), "\r", "")) :
       key == "TIRODHAN_LOG_LEVEL" || try(length(trimspace(var.runtime_env[key])) > 0, false)
     ])
-    error_message = "Configure all explicit runtime values in deploy/runtime-env.names before enabling workloads."
+    error_message = "Configure all explicit runtime values in deploy/runtime-env.names before enabling the API/runtime workloads."
   }
 }
 variable "runtime_secret_names" {
