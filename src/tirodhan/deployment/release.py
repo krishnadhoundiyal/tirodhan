@@ -45,9 +45,7 @@ def enabled_secret_names(state: dict[str, Any]) -> frozenset[str]:
     metadata = cli_json(
         ["az", "keyvault", "secret", "list", "--vault-name", state["key_vault_name"]]
     )
-    return frozenset(
-        item["name"] for item in metadata if item["attributes"].get("enabled", True)
-    )
+    return frozenset(item["name"] for item in metadata if item["attributes"].get("enabled", True))
 
 
 def require_secrets(available: frozenset[str], required: frozenset[str]) -> None:
