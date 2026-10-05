@@ -28,9 +28,17 @@ az group create -n "$rg" -l "$AZURE_LOCATION" --output none
 az group create -n "$state_rg" -l "$AZURE_LOCATION" --output none
 az storage account create -n "$state_account" -g "$state_rg" -l "$AZURE_LOCATION" \
   --sku Standard_LRS --kind StorageV2 --allow-shared-key-access false \
-  --allow-blob-public-access false --default-to-oauth-authentication true \
+  --allow-blob-public-access false \
   --min-tls-version TLS1_2 --https-only true --output none
 state_id="$scope/resourceGroups/$state_rg/providers/Microsoft.Storage/storageAccounts/$state_account"
+# Azure CLI does not expose defaultToOAuthAuthentication on storage account create.
+# Set the ARM property explicitly while keeping Shared Key disabled above.
+az rest \
+  --method patch \
+  --url "https://management.azure.com${state_id}?api-version=2025-06-01" \
+  --headers "Content-Type=application/json" \
+  --body '{"properties":{"defaultToOAuthAuthentication":true}}' \
+  --output none
 rg_scope="$scope/resourceGroups/$rg"
 grant_role "Storage Blob Data Contributor" "$state_id" "$OPERATOR_OBJECT_ID" User
 # RBAC propagation is asynchronous. Bounded retries, no key-auth fallback.
