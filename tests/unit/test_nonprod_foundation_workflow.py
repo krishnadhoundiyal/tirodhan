@@ -27,9 +27,18 @@ def test_foundation_workflow_is_manual_main_only_and_approval_gated() -> None:
 
 
 def test_staged_deployment_stops_cleanly_until_foundation_exists() -> None:
-    deploy = yaml.safe_load((WORKFLOWS / "nonprod-deploy.yml").read_text())
+    deploy_path = WORKFLOWS / "nonprod-deploy.yml"
+    deploy = yaml.safe_load(deploy_path.read_text())
     jobs = deploy["jobs"]
 
     assert jobs["foundation-ready"]["environment"] == "nonprod-plan"
     assert jobs["migration-plan"]["needs"] == ["build", "foundation-ready"]
     assert jobs["migration-plan"]["if"] == "needs.foundation-ready.outputs.ready == 'true'"
+
+    text = deploy_path.read_text()
+    assert "TF_VAR_deployment_stage=0 terraform plan -input=false -detailed-exitcode" in text
+    assert "plan_status=$?" in text
+    assert 'echo "ready=true" >> "$GITHUB_OUTPUT"' in text
+    assert 'echo "ready=false" >> "$GITHUB_OUTPUT"' in text
+    assert "NONPROD foundation is incomplete" in text
+    assert ".deployment_stage.value != null" not in text
