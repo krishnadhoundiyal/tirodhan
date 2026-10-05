@@ -41,3 +41,4 @@ def test_runtime_env_is_allowlisted_but_not_required_for_deployment() -> None:
     assert "for key in keys(var.runtime_env)" in variables
     assert "Configure all explicit runtime values" not in variables
     assert "var.deployment_stage < 2" not in variables
+    assert "Optional until the consuming feature is configured" in variables
