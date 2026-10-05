@@ -65,7 +65,7 @@ variable "fluent_bit_image" {
 }
 variable "ghcr_username" { type = string }
 variable "runtime_env" {
-  description = "Explicit nonsecret TIRODHAN runtime values. No provider credentials/key material."
+  description = "Explicit nonsecret TIRODHAN runtime values. Optional until the consuming feature is configured."
   type        = map(string)
   default     = {}
   validation {
@@ -73,14 +73,7 @@ variable "runtime_env" {
       for key in keys(var.runtime_env) :
       contains(split("\n", replace(trimspace(file("${path.module}/../../../deploy/runtime-env.names")), "\r", "")), key)
     ])
-    error_message = "runtime_env accepts only nonsecret TIRODHAN settings; secrets use Key Vault references."
-  }
-  validation {
-    condition = var.deployment_stage < 2 || alltrue([
-      for key in split("\n", replace(trimspace(file("${path.module}/../../../deploy/runtime-env.names")), "\r", "")) :
-      key == "TIRODHAN_LOG_LEVEL" || try(length(trimspace(var.runtime_env[key])) > 0, false)
-    ])
-    error_message = "Configure all explicit runtime values in deploy/runtime-env.names before enabling the API/runtime workloads."
+    error_message = "runtime_env accepts only declared nonsecret TIRODHAN settings; secrets use Key Vault references."
   }
 }
 variable "runtime_secret_names" {
