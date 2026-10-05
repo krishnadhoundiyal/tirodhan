@@ -1,0 +1,33 @@
+name: Rotate NONPROD log user-delegation SAS
+on:
+  schedule:
+    - cron: '23 4 */3 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: nonprod-log-sas
+  cancel-in-progress: false
+jobs:
+  rotate:
+    if: github.ref == 'refs/heads/main'
+    environment: nonprod-plan
+    runs-on: ubuntu-latest
+    env:
+      DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
+      LOG_ACCOUNT_NAME: ${{ vars.NONPROD_LOG_ACCOUNT_NAME }}
+      KEY_VAULT_URL: ${{ vars.NONPROD_KEY_VAULT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - run: python -m pip install -e .
+      - run: python -m tirodhan.deployment.azure_controls
+      - run: python -m tirodhan.deployment.rotate_log_sas

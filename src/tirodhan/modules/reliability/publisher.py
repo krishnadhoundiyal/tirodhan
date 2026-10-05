@@ -83,7 +83,8 @@ async def publish_outbox_batch(
                         + (["RefundRequested"] if refund_entity else [])
                         + (
                             ["PlanningBatchReady", "PlanningAttemptRequested"]
-                            if planning_entity else []
+                            if planning_entity
+                            else []
                         )
                     ),
                 )

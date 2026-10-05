@@ -59,7 +59,7 @@ async def run() -> None:
                         "error_type": type(e).__name__,
                         "cell_id": work_unit.cell_id,
                         "slot_start": str(work_unit.slot_start),
-                    }
+                    },
                 )
 
         if failed_count > 0:

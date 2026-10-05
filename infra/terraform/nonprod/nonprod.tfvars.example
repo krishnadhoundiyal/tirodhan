@@ -1,0 +1,21 @@
+# Safe example only. Supply real identifiers and approved numeric policies locally.
+subscription_id         = "00000000-0000-0000-0000-000000000000"
+tenant_id               = "00000000-0000-0000-0000-000000000000"
+location                = "<azure-region>"
+resource_group_name     = "tirodhan-np-demo"
+suffix                  = "demo"
+postgres_admin_object_id = "00000000-0000-0000-0000-000000000000"
+postgres_admin_name     = "<entra-admin-name>"
+postgres_admin_type     = "Group"
+ghcr_username           = "<package-reader>"
+# Deliberately no product/retention defaults: replace these nulls with approved values.
+blob_soft_delete_days   = null
+media_cool_after_days   = null
+media_delete_after_days = null
+logs_delete_after_days  = null
+runtime_env = {
+  TIRODHAN_LOG_LEVEL = "INFO"
+  # Populate all names in deploy/runtime-env.names with explicitly chosen values.
+}
+# Foundation first. Images and subsequent stages are set by the controlled workflow.
+deployment_stage = 0

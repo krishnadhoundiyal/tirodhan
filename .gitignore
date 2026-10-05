@@ -13,3 +13,14 @@ build/
 .idea/
 .vscode/
 .docker-tmp/
+
+# Local deployment tooling, generated state/plans and operator inputs.
+.tools/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+deploy/operator-inputs/

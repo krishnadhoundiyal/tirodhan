@@ -436,6 +436,7 @@ async def test_technical_failure_requests_explicit_next_attempt_and_old_delivery
     assert retry_events[0].payload == {
         "planning_batch_id": str(batch.planning_batch_id),
         "attempt_number": 2,
+        "cell_id": "result-cell",
     }
     assert statuses == {REQUEST_PRE_PLANNING}
 

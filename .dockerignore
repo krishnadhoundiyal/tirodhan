@@ -1,4 +1,8 @@
 .git
+.tools
+infra
+deploy/operator-inputs
+.github
 .gitignore
 .env
 .venv
