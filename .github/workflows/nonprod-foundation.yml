@@ -30,11 +30,14 @@ jobs:
       - working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
-          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null \
-            && jq -e '.deployment_stage.value != null' /tmp/nonprod-output.json >/dev/null; then
-            echo "Foundation state already exists; refusing to plan deployment_stage=0." >&2
-            exit 1
+          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null; then
+            existing_stage="$(jq -r '.deployment_stage.value // empty' /tmp/nonprod-output.json)"
+            if [[ -n "$existing_stage" && "$existing_stage" != "0" ]]; then
+              echo "Foundation state is already beyond stage 0; refusing foundation plan." >&2
+              exit 1
+            fi
           fi
+          # Stage 0 is deliberately rerunnable so a partial failed first apply can converge safely.
           TF_VAR_deployment_stage=0 terraform plan -input=false -out=foundation.tfplan
           terraform show -json foundation.tfplan | python -m tirodhan.deployment.check_state
       - uses: actions/upload-artifact@v4
@@ -59,10 +62,12 @@ jobs:
       - working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
-          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null \
-            && jq -e '.deployment_stage.value != null' /tmp/nonprod-output.json >/dev/null; then
-            echo "Foundation state appeared after planning; refusing stage-0 apply." >&2
-            exit 1
+          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null; then
+            existing_stage="$(jq -r '.deployment_stage.value // empty' /tmp/nonprod-output.json)"
+            if [[ -n "$existing_stage" && "$existing_stage" != "0" ]]; then
+              echo "Foundation state advanced after planning; refusing stage-0 apply." >&2
+              exit 1
+            fi
           fi
           terraform apply -input=false foundation.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
