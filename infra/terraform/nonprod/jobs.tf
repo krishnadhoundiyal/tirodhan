@@ -176,6 +176,10 @@ resource "azurerm_container_app_job" "scheduled" {
         }
       }
       env {
+        name  = "JOB_STARTUP_SECONDS"
+        value = "120"
+      }
+      env {
         name        = "LOG_SAS"
         secret_name = "fluent-bit-sas"
       }
