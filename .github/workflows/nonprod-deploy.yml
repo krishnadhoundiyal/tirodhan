@@ -64,8 +64,32 @@ jobs:
             -v "$PWD/tests/deployment:/verification:ro" \
             -v "$PWD/deploy/fluent-bit:/source:ro" \
             "$FLUENT_BIT_IMAGE" /verification/fluent_bit_probe.py
-  migration-plan:
+  foundation-ready:
     needs: build
+    environment: nonprod-plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      ready: ${{ steps.state.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - id: state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null \
+            && jq -e '.deployment_stage.value != null' /tmp/nonprod-output.json >/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NONPROD foundation is not applied. Run the NONPROD foundation workflow, then rerun this deployment."
+          fi
+  migration-plan:
+    needs: [build, foundation-ready]
+    if: needs.foundation-ready.outputs.ready == 'true'
     environment: nonprod-plan
     runs-on: ubuntu-latest
     permissions:
