@@ -99,6 +99,17 @@ variable "runtime_secret_names" {
     TIRODHAN_ADDRESS_ENCRYPTION_KEYS  = "address-encryption-keys"
   }
 }
+variable "enabled_runtime_secret_names" {
+  description = "Existing runtime Key Vault secret names to bind; names only, never values."
+  type        = set(string)
+  default     = []
+  validation {
+    condition = alltrue([
+      for name in var.enabled_runtime_secret_names : contains(values(var.runtime_secret_names), name)
+    ])
+    error_message = "enabled_runtime_secret_names may contain only declared runtime secret names."
+  }
+}
 variable "blob_soft_delete_days" {
   type = number
   validation {
