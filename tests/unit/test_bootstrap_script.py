@@ -25,7 +25,11 @@ def test_bootstrap_uses_immutable_github_oidc_subjects() -> None:
 
     assert 'github_owner_id="46423210"' in script
     assert 'github_repository_id="1385964140"' in script
-    assert 'github_subject_repo="krishnadhoundiyal@${github_owner_id}/tirodhan@${github_repository_id}"' in script
+    expected_repo_subject = (
+        'github_subject_repo="krishnadhoundiyal@${github_owner_id}/'
+        'tirodhan@${github_repository_id}"'
+    )
+    assert expected_repo_subject in script
     assert 'subject="repo:$github_subject_repo:environment:$environment"' in script
     assert 'subject "repo:$GITHUB_REPOSITORY:environment:$environment"' not in script
     assert "federated-credential delete" in script
