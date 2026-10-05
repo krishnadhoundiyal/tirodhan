@@ -142,7 +142,7 @@ resource "azurerm_container_app_job" "scheduled" {
         }
       }
       dynamic "env" {
-        for_each = var.runtime_secret_names
+        for_each = local.runtime_secret_env
         content {
           name        = env.key
           secret_name = env.value
@@ -174,10 +174,6 @@ resource "azurerm_container_app_job" "scheduled" {
           name  = env.key
           value = env.value
         }
-      }
-      env {
-        name  = "JOB_STARTUP_SECONDS"
-        value = "120"
       }
       env {
         name        = "LOG_SAS"
