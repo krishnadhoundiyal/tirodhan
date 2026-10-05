@@ -13,6 +13,14 @@ resource "azurerm_postgresql_flexible_server" "database" {
     password_auth_enabled         = false
     tenant_id                     = var.tenant_id
   }
+
+  # NONPROD deliberately uses a burstable SKU without HA. When zone is omitted,
+  # Azure assigns one automatically; ignore that service-owned placement so
+  # subsequent applies do not try to move/unset the primary zone.
+  lifecycle {
+    ignore_changes = [zone]
+  }
+
   tags = local.tags
 }
 resource "azurerm_postgresql_flexible_server_database" "application" {
