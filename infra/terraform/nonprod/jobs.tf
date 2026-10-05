@@ -21,7 +21,7 @@ resource "azurerm_container_app_job" "migration" {
     password_secret_name = "ghcr-pull-pat"
   }
   dynamic "secret" {
-    for_each = local.secret_refs
+    for_each = local.migration_secret_refs
     content {
       name                = secret.key
       key_vault_secret_id = secret.value
@@ -42,13 +42,6 @@ resource "azurerm_container_app_job" "migration" {
         content {
           name  = env.key
           value = env.value
-        }
-      }
-      dynamic "env" {
-        for_each = var.runtime_secret_names
-        content {
-          name        = env.key
-          secret_name = env.value
         }
       }
 
@@ -95,7 +88,7 @@ resource "azurerm_container_app_job" "migration" {
   lifecycle {
     precondition {
       condition     = var.migration_image != null && var.fluent_bit_image != null
-      error_message = "Publish migration and logging images and seed secrets before stage 1."
+      error_message = "Publish migration and logging images before stage 1."
     }
   }
   depends_on = [azurerm_role_assignment.secrets, azurerm_postgresql_flexible_server_configuration.extensions, azurerm_postgresql_flexible_server_active_directory_administrator.administrator]
@@ -149,7 +142,7 @@ resource "azurerm_container_app_job" "scheduled" {
         }
       }
       dynamic "env" {
-        for_each = var.runtime_secret_names
+        for_each = local.runtime_secret_env
         content {
           name        = env.key
           secret_name = env.value

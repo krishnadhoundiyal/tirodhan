@@ -52,7 +52,7 @@ resource "azurerm_container_app" "api" {
         }
       }
       dynamic "env" {
-        for_each = var.runtime_secret_names
+        for_each = local.runtime_secret_env
         content {
           name        = env.key
           secret_name = env.value
@@ -169,7 +169,7 @@ resource "azurerm_container_app" "worker" {
         }
       }
       dynamic "env" {
-        for_each = var.runtime_secret_names
+        for_each = local.runtime_secret_env
         content {
           name        = env.key
           secret_name = env.value

@@ -39,13 +39,18 @@ locals {
     TIRODHAN_MEDIA_BLOB_ACCOUNT_URL                 = azurerm_storage_account.application.primary_blob_endpoint
     TIRODHAN_MEDIA_BLOB_CONTAINER_NAME              = "media"
   })
-  secret_refs = merge(
-    { for env, name in var.runtime_secret_names : name => "${azurerm_key_vault.runtime.vault_uri}secrets/${name}" },
-    {
-      ghcr-pull-pat  = "${azurerm_key_vault.runtime.vault_uri}secrets/ghcr-pull-pat"
-      fluent-bit-sas = "${azurerm_key_vault.runtime.vault_uri}secrets/fluent-bit-sas"
-    }
-  )
+  migration_secret_refs = {
+    ghcr-pull-pat  = "${azurerm_key_vault.runtime.vault_uri}secrets/ghcr-pull-pat"
+    fluent-bit-sas = "${azurerm_key_vault.runtime.vault_uri}secrets/fluent-bit-sas"
+  }
+  runtime_secret_env = {
+    for env, name in var.runtime_secret_names : env => name
+    if contains(var.enabled_runtime_secret_names, name)
+  }
+  runtime_secret_refs = {
+    for env, name in local.runtime_secret_env : name => "${azurerm_key_vault.runtime.vault_uri}secrets/${name}"
+  }
+  secret_refs = merge(local.runtime_secret_refs, local.migration_secret_refs)
   sidecar_env = {
     LOG_ACCOUNT_NAME = azurerm_storage_account.application.name
     LOG_SHARED_DIR   = local.shared_dir
