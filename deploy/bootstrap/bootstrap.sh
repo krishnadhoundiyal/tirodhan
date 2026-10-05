@@ -6,6 +6,11 @@ set -euo pipefail
 : "${FEDERATED_APP_OBJECT_ID:?}" "${GITHUB_REPOSITORY:?}"
 [[ "$NONPROD_SUFFIX" =~ ^[a-z0-9]{4,10}$ ]] || exit 2
 [[ "$GITHUB_REPOSITORY" == "krishnadhoundiyal/tirodhan" ]] || exit 2
+# GitHub repositories created after 2026-07-15 use immutable OIDC subjects by default.
+# These IDs are stable GitHub identities for the validated repository above.
+github_owner_id="46423210"
+github_repository_id="1385964140"
+github_subject_repo="krishnadhoundiyal@${github_owner_id}/tirodhan@${github_repository_id}"
 az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 [[ "$(az account show --query tenantId -o tsv)" == "$AZURE_TENANT_ID" ]] || exit 2
 # Stable role-assignment GUIDs make repeated bootstrap calls idempotent.
@@ -71,9 +76,16 @@ roles="{69a216fc-b8fb-44d8-bc22-1f3c2cd27a39, 4f6db5ce-55e8-4d65-b4d2-4d2aade536
 condition="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals $roles)) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals $roles))"
 grant_role "Role Based Access Control Administrator" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal "$condition"
 for environment in nonprod-plan nonprod; do
-  jq -n --arg name "tirodhan-$environment" --arg subject "repo:$GITHUB_REPOSITORY:environment:$environment" \
+  credential_name="tirodhan-$environment"
+  subject="repo:$github_subject_repo:environment:$environment"
+  jq -n --arg name "$credential_name" --arg subject "$subject" \
     '{name:$name,issuer:"https://token.actions.githubusercontent.com",subject:$subject,audiences:["api://AzureADTokenExchange"]}' > "$temp_dir/federation.json"
-  if ! az ad app federated-credential list --id "$FEDERATED_APP_OBJECT_ID" --query "[?name=='tirodhan-$environment'].name" -o tsv | grep -q .; then
+  existing_subject="$(az ad app federated-credential show --id "$FEDERATED_APP_OBJECT_ID" --federated-credential-id "$credential_name" --query subject -o tsv 2>/dev/null || true)"
+  if [[ -n "$existing_subject" && "$existing_subject" != "$subject" ]]; then
+    az ad app federated-credential delete --id "$FEDERATED_APP_OBJECT_ID" --federated-credential-id "$credential_name"
+    existing_subject=""
+  fi
+  if [[ -z "$existing_subject" ]]; then
     az ad app federated-credential create --id "$FEDERATED_APP_OBJECT_ID" --parameters "$temp_dir/federation.json" --output none
   fi
 done
