@@ -18,3 +18,15 @@ def test_bootstrap_uses_supported_storage_cli_and_preserves_security_controls() 
     assert "az rest" in script
     assert "defaultToOAuthAuthentication" in script
     assert "api-version=2025-06-01" in script
+
+
+def test_bootstrap_uses_immutable_github_oidc_subjects() -> None:
+    script = BOOTSTRAP.read_text(encoding="utf-8")
+
+    assert 'github_owner_id="46423210"' in script
+    assert 'github_repository_id="1385964140"' in script
+    assert 'github_subject_repo="krishnadhoundiyal@${github_owner_id}/tirodhan@${github_repository_id}"' in script
+    assert 'subject="repo:$github_subject_repo:environment:$environment"' in script
+    assert 'subject "repo:$GITHUB_REPOSITORY:environment:$environment"' not in script
+    assert "federated-credential delete" in script
+    assert "federated-credential create" in script
