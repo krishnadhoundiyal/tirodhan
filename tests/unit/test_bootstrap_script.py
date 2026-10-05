@@ -34,3 +34,10 @@ def test_bootstrap_uses_immutable_github_oidc_subjects() -> None:
     assert 'subject "repo:$GITHUB_REPOSITORY:environment:$environment"' not in script
     assert "federated-credential delete" in script
     assert "federated-credential create" in script
+
+
+def test_bootstrap_allows_published_service_bus_receiver_role() -> None:
+    script = BOOTSTRAP.read_text(encoding="utf-8")
+
+    assert "4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0" in script
+    assert "4f6db5ce-55e8-4d65-b4d2-4d2aade53608" not in script
