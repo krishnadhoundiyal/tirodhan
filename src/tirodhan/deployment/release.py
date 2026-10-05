@@ -13,6 +13,9 @@ from tirodhan.deployment.azure_controls import assert_no_list_keys
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.seed_secrets import SECRET_NAMES
 
+MIGRATION_SECRET_NAMES = frozenset({"ghcr-pull-pat", "fluent-bit-sas"})
+RUNTIME_SECRET_NAMES = SECRET_NAMES | MIGRATION_SECRET_NAMES
+
 
 def output_values() -> dict[str, Any]:
     result = subprocess.run(
@@ -23,7 +26,7 @@ def output_values() -> dict[str, Any]:
 
 def migration_variables(state: dict[str, Any], image: str, sidecar: str) -> dict[str, Any]:
     if "deployment_stage" not in state:
-        raise RuntimeError("Apply foundation, bootstrap PostgreSQL and seed secrets first")
+        raise RuntimeError("Apply foundation and bootstrap PostgreSQL first")
     return {
         "deployment_stage": max(1, int(state["deployment_stage"])),
         "migration_image": image,
@@ -39,19 +42,22 @@ def cli_json(command: list[str]) -> Any:
     )
 
 
-def check_secret_metadata(state: dict[str, Any]) -> None:
+def check_secret_metadata(state: dict[str, Any], required: frozenset[str]) -> None:
     metadata = cli_json(
         ["az", "keyvault", "secret", "list", "--vault-name", state["key_vault_name"]]
     )
     available = {item["name"] for item in metadata if item["attributes"].get("enabled", True)}
-    if not (SECRET_NAMES | {"fluent-bit-sas"}).issubset(available):
-        raise RuntimeError("Required enabled Key Vault secrets are missing; run controlled seeding")
+    missing = required - available
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise RuntimeError(f"Required enabled Key Vault secrets are missing: {names}")
 
 
 def plan(mode: str, path: str) -> None:
     assert_no_list_keys()  # Before the provider can refresh storage state.
     state = output_values()
-    check_secret_metadata(state)
+    required_secrets = RUNTIME_SECRET_NAMES if mode == "runtime" else MIGRATION_SECRET_NAMES
+    check_secret_metadata(state, required_secrets)
     image, sidecar = os.environ["APPLICATION_IMAGE"], os.environ["FLUENT_BIT_IMAGE"]
     values = migration_variables(state, image, sidecar)
     if mode == "runtime":
