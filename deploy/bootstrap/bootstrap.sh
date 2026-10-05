@@ -20,7 +20,7 @@ grant_role() {
   assignment="$(python3 -c 'import sys,uuid; print(uuid.uuid5(uuid.NAMESPACE_URL,"/".join(sys.argv[1:])))' "$role" "$target" "$principal")"
   local args=(--name "$assignment" --assignee-object-id "$principal" --assignee-principal-type "$kind" --role "$role" --scope "$target" --output none)
   if [[ -n "$condition" ]]; then
-    existing="$(az role assignment list --all --assignee-object-id "$principal" --scope "$target" --role "$role" --fill-principal-name false -o json | jq -c --arg assignment "$assignment" '[.[] | select(.name == $assignment)][0]')"
+    existing="$(az role assignment list --assignee-object-id "$principal" --scope "$target" --role "$role" --fill-principal-name false -o json | jq -c --arg assignment "$assignment" '[.[] | select(.name == $assignment)][0]')"
     if [[ "$existing" != "null" ]]; then
       updated="$(jq -c --arg condition "$condition" '.condition=$condition | .conditionVersion="2.0"' <<<"$existing")"
       az role assignment update --role-assignment "$updated" --output none
