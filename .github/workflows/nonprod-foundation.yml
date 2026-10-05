@@ -1,0 +1,71 @@
+name: NONPROD foundation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nonprod-release
+  cancel-in-progress: false
+env:
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: 'true'
+  ARM_USE_AZUREAD: 'true'
+  STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
+  STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
+  NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
+  DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
+jobs:
+  foundation-plan:
+    if: github.ref == 'refs/heads/main'
+    environment: nonprod-plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null \
+            && jq -e '.deployment_stage.value != null' /tmp/nonprod-output.json >/dev/null; then
+            echo "Foundation state already exists; refusing to plan deployment_stage=0." >&2
+            exit 1
+          fi
+          TF_VAR_deployment_stage=0 terraform plan -input=false -out=foundation.tfplan
+          terraform show -json foundation.tfplan | python -m tirodhan.deployment.check_state
+      - uses: actions/upload-artifact@v4
+        with:
+          name: foundation-plan
+          path: infra/terraform/nonprod/foundation.tfplan
+          retention-days: 1
+  foundation-apply:
+    needs: foundation-plan
+    environment: nonprod
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: foundation-plan
+          path: infra/terraform/nonprod
+      - working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          if terraform output -json >/tmp/nonprod-output.json 2>/dev/null \
+            && jq -e '.deployment_stage.value != null' /tmp/nonprod-output.json >/dev/null; then
+            echo "Foundation state appeared after planning; refusing stage-0 apply." >&2
+            exit 1
+          fi
+          terraform apply -input=false foundation.tfplan
+          terraform show -json | python -m tirodhan.deployment.check_state
+          terraform output -json >/tmp/nonprod-foundation-output.json
+          jq -e '.deployment_stage.value == 0' /tmp/nonprod-foundation-output.json >/dev/null
+          echo "NONPROD foundation applied at deployment_stage=0."
