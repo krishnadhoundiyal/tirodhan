@@ -41,3 +41,4 @@ def test_bootstrap_allows_published_service_bus_receiver_role() -> None:
 
     assert "4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0" in script
     assert "4f6db5ce-55e8-4d65-b4d2-4d2aade53608" not in script
+    assert "az role assignment update --role-assignment" in script
