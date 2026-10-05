@@ -34,7 +34,10 @@ def test_runtime_binds_only_enabled_key_vault_secrets() -> None:
     assert 'variable "enabled_runtime_secret_names"' in variables
 
 
-def test_full_runtime_env_is_required_only_when_api_is_enabled() -> None:
+def test_runtime_env_is_allowlisted_but_not_required_for_deployment() -> None:
     variables = (TF / "variables.tf").read_text(encoding="utf-8")
 
-    assert "condition = var.deployment_stage < 2 || alltrue([" in variables
+    assert 'variable "runtime_env"' in variables
+    assert "for key in keys(var.runtime_env)" in variables
+    assert "Configure all explicit runtime values" not in variables
+    assert "var.deployment_stage < 2" not in variables
