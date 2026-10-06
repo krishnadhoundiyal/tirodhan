@@ -96,7 +96,7 @@ resource "azurerm_container_app_job" "migration" {
 }
 resource "azurerm_container_app_job" "scheduled" {
   for_each                     = var.deployment_stage >= 4 ? local.jobs : {}
-  name                         = "${local.prefix}-${replace(each.key, "_", "-")}"
+  name                         = "${local.prefix}-${local.scheduled_job_resource_names[each.key]}"
   resource_group_name          = data.azurerm_resource_group.nonprod.name
   location                     = var.location
   container_app_environment_id = azurerm_container_app_environment.nonprod.id
