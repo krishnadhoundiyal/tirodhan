@@ -7,6 +7,12 @@ locals {
     refund         = { module = "refunds", cpu = 0.25, memory = "0.5Gi", max = 1 }
     planning       = { module = "planning_worker", cpu = 0.5, memory = "1Gi", max = 2 }
   }
+  worker_resource_names = {
+    serviceability = "svc"
+    rider          = "rider"
+    refund         = "refund"
+    planning       = "planning"
+  }
   queues = {
     serviceability = "serviceability"
     rider          = "rider-notification"
@@ -18,6 +24,12 @@ locals {
     planning_scheduler     = "planning_scheduler"
     fleet_timeout          = "fleet_timeout"
     pending_payment_expiry = "pending_payment_expiry"
+  }
+  scheduled_job_resource_names = {
+    outbox                 = "outbox"
+    planning_scheduler     = "plansched"
+    fleet_timeout          = "fleet-tmo"
+    pending_payment_expiry = "pay-expiry"
   }
   # Paths are deployment choices, not domain configuration.
   shared_dir = "/var/log/tirodhan"
