@@ -14,6 +14,7 @@ from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.seed_secrets import SECRET_NAMES
 
 MIGRATION_SECRET_NAMES = frozenset({"ghcr-pull-pat", "fluent-bit-sas"})
+RUNTIME_SECRET_NAMES = SECRET_NAMES - MIGRATION_SECRET_NAMES
 
 
 def output_values() -> dict[str, Any]:
@@ -48,6 +49,10 @@ def enabled_secret_names(state: dict[str, Any]) -> frozenset[str]:
     return frozenset(item["name"] for item in metadata if item["attributes"].get("enabled", True))
 
 
+def runtime_secret_names(available: frozenset[str]) -> frozenset[str]:
+    return available & RUNTIME_SECRET_NAMES
+
+
 def require_secrets(available: frozenset[str], required: frozenset[str]) -> None:
     missing = required - available
     if missing:
@@ -67,7 +72,7 @@ def plan(mode: str, path: str) -> None:
             deployment_stage=4,
             application_image=image,
             fluent_bit_image=sidecar,
-            enabled_runtime_secret_names=json.dumps(sorted(available & SECRET_NAMES)),
+            enabled_runtime_secret_names=json.dumps(sorted(runtime_secret_names(available))),
         )
     environment = os.environ | {
         f"TF_VAR_{key}": json.dumps(value) if value is None else str(value)
