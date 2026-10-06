@@ -117,7 +117,7 @@ resource "azurerm_container_app" "api" {
 }
 resource "azurerm_container_app" "worker" {
   for_each                     = var.deployment_stage >= 3 ? local.workers : {}
-  name                         = "${local.prefix}-${each.key}"
+  name                         = "${local.prefix}-${local.worker_resource_names[each.key]}"
   resource_group_name          = data.azurerm_resource_group.nonprod.name
   container_app_environment_id = azurerm_container_app_environment.nonprod.id
   workload_profile_name        = "Consumption"
