@@ -48,8 +48,12 @@ def test_terraform_uses_bounded_aliases_for_dynamic_aca_resources() -> None:
 
     worker_name = '${local.prefix}-${local.worker_resource_names[each.key]}'
     scheduled_name = '${local.prefix}-${local.scheduled_job_resource_names[each.key]}'
+    legacy_scheduled_name = (
+        'name                         = "${local.prefix}-'
+        '${replace(each.key, "_", "-")}"'
+    )
 
     assert f'name                         = "{worker_name}"' in container_apps
     assert f'name                         = "{scheduled_name}"' in jobs
     assert 'name                         = "${local.prefix}-${each.key}"' not in container_apps
-    assert 'name                         = "${local.prefix}-${replace(each.key, "_", "-")}"' not in jobs
+    assert legacy_scheduled_name not in jobs
