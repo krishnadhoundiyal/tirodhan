@@ -66,7 +66,9 @@ jobs:
             "$FLUENT_BIT_IMAGE" /verification/fluent_bit_probe.py
   foundation-ready:
     needs: build
-    environment: nonprod-plan
+    environment:
+      name: nonprod-plan
+      deployment: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -107,7 +109,9 @@ jobs:
   migration-plan:
     needs: [build, foundation-ready]
     if: needs.foundation-ready.outputs.ready == 'true'
-    environment: nonprod-plan
+    environment:
+      name: nonprod-plan
+      deployment: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,7 +147,9 @@ jobs:
           python -m tirodhan.deployment.release migrate
   runtime-plan:
     needs: migration-apply
-    environment: nonprod-plan
+    environment:
+      name: nonprod-plan
+      deployment: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
