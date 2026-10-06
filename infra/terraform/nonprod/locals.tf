@@ -29,7 +29,7 @@ locals {
     outbox                 = "outbox"
     planning_scheduler     = "plansched"
     fleet_timeout          = "fleet-tmo"
-    pending_payment_expiry = "pay-expiry"
+    pending_payment_expiry = "pay-exp"
   }
   # Paths are deployment choices, not domain configuration.
   shared_dir = "/var/log/tirodhan"
