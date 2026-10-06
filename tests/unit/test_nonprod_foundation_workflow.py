@@ -31,7 +31,10 @@ def test_staged_deployment_stops_cleanly_until_foundation_exists() -> None:
     deploy = yaml.safe_load(deploy_path.read_text())
     jobs = deploy["jobs"]
 
-    assert jobs["foundation-ready"]["environment"] == "nonprod-plan"
+    assert jobs["foundation-ready"]["environment"] == {
+        "name": "nonprod-plan",
+        "deployment": False,
+    }
     assert jobs["migration-plan"]["needs"] == ["build", "foundation-ready"]
     assert jobs["migration-plan"]["if"] == "needs.foundation-ready.outputs.ready == 'true'"
 
