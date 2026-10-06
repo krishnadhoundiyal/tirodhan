@@ -15,3 +15,17 @@ def test_migration_still_requires_foundation_ready_output() -> None:
     workflow = Path(".github/workflows/nonprod-deploy.yml").read_text(encoding="utf-8")
 
     assert "if: needs.foundation-ready.outputs.ready == 'true'" in workflow
+
+
+def test_nonprod_plan_jobs_do_not_create_deployments() -> None:
+    workflow = Path(".github/workflows/nonprod-deploy.yml").read_text(encoding="utf-8")
+    plan_environment = "\n".join(
+        [
+            "    environment:",
+            "      name: nonprod-plan",
+            "      deployment: false",
+        ]
+    )
+
+    assert workflow.count(plan_environment) == 3
+    assert workflow.count("    environment: nonprod\n") == 2
