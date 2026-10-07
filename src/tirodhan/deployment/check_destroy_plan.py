@@ -60,7 +60,7 @@ def validate_destroy_plan(
         if change.get("mode", "managed") != "managed":
             raise RuntimeError(f"Refusing non-managed delete: {address}")
         if actions != ["delete"]:
-            raise RuntimeError(f"Refusing replacement/mixed destroy action for {address}: {actions}")
+            raise RuntimeError(\n                f"Refusing replacement/mixed destroy action for {address}: {actions}"\n            )
         if resource_type not in ALLOWED_DESTROY_TYPES:
             raise RuntimeError(
                 f"Refusing destroy of unapproved resource type {resource_type!r}: {address}"
