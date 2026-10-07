@@ -1,0 +1,274 @@
+name: Destroy NONPROD
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DESTROY_NONPROD exactly
+        required: true
+        type: string
+      expected_suffix:
+        description: NONPROD suffix expected in the current Terraform state
+        required: true
+        default: tdnp01
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nonprod-release
+  cancel-in-progress: false
+
+env:
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: 'true'
+  ARM_USE_AZUREAD: 'true'
+
+  STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
+  STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
+  NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
+
+  DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
+
+jobs:
+  destroy-plan:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment:
+      name: nonprod-plan
+      deployment: false
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/nonprod-setup
+
+      - name: Configure destroy-only Key Vault behaviour
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("infra/terraform/nonprod/providers.tf")
+          text = path.read_text(encoding="utf-8")
+
+          old = """  features {}"""
+          new = """  features {
+              key_vault {
+                purge_soft_delete_on_destroy = false
+              }
+            }"""
+
+          if old not in text:
+              raise SystemExit(
+                  "Expected AzureRM features block not found; refusing destroy."
+              )
+
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          cd infra/terraform/nonprod
+          terraform validate
+
+      - name: Guard current NONPROD state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          if [[ "$STATE_RESOURCE_GROUP" == "$NONPROD_RESOURCE_GROUP" ]]; then
+            echo "State RG must not equal application RG." >&2
+            exit 1
+          fi
+
+          configured_suffix="$(jq -r '.suffix' nonprod.auto.tfvars.json)"
+          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+            echo "Expected suffix does not match NONPROD Terraform input." >&2
+            exit 1
+          fi
+
+          current_rg="$(terraform output -raw resource_group_name)"
+          current_stage="$(terraform output -raw deployment_stage)"
+          application_storage="$(terraform output -raw storage_account_name)"
+
+          if [[ "$current_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
+            echo "Terraform state belongs to an unexpected application RG." >&2
+            exit 1
+          fi
+
+          if [[ "$current_stage" != "4" ]]; then
+            echo "Refusing teardown unless deployment_stage is exactly 4." >&2
+            exit 1
+          fi
+
+          if [[ "$application_storage" == "$STATE_ACCOUNT_NAME" ]]; then
+            echo "Application storage unexpectedly equals state storage." >&2
+            exit 1
+          fi
+
+          echo "Destroy boundary checks passed."
+
+      - name: Create guarded destroy plan
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          terraform plan \
+            -destroy \
+            -input=false \
+            -out=destroy.tfplan
+
+          terraform show -json destroy.tfplan \
+            | python -m tirodhan.deployment.check_destroy_plan \
+                --protected-state-account "$STATE_ACCOUNT_NAME" \
+                --protected-state-container tfstate
+
+          terraform show -json destroy.tfplan \
+            | python -m tirodhan.deployment.check_state
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nonprod-destroy-plan
+          path: infra/terraform/nonprod/destroy.tfplan
+          retention-days: 1
+
+
+  destroy-apply:
+    needs: destroy-plan
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment: nonprod
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/nonprod-setup
+
+      - name: Configure destroy-only Key Vault behaviour
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("infra/terraform/nonprod/providers.tf")
+          text = path.read_text(encoding="utf-8")
+
+          old = """  features {}"""
+          new = """  features {
+              key_vault {
+                purge_soft_delete_on_destroy = false
+              }
+            }"""
+
+          if old not in text:
+              raise SystemExit(
+                  "Expected AzureRM features block not found; refusing destroy."
+              )
+
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          cd infra/terraform/nonprod
+          terraform validate
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nonprod-destroy-plan
+          path: infra/terraform/nonprod
+
+      - name: Revalidate saved destroy plan
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          configured_suffix="$(jq -r '.suffix' nonprod.auto.tfvars.json)"
+          current_rg="$(terraform output -raw resource_group_name)"
+          current_stage="$(terraform output -raw deployment_stage)"
+
+          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+            echo "NONPROD suffix changed after planning; refusing apply." >&2
+            exit 1
+          fi
+
+          if [[ "$current_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
+            echo "Application RG changed after planning; refusing apply." >&2
+            exit 1
+          fi
+
+          if [[ "$current_stage" != "4" ]]; then
+            echo "Deployment stage changed after planning; refusing apply." >&2
+            exit 1
+          fi
+
+          terraform show -json destroy.tfplan \
+            | python -m tirodhan.deployment.check_destroy_plan \
+                --protected-state-account "$STATE_ACCOUNT_NAME" \
+                --protected-state-container tfstate
+
+      - name: Apply approved destroy plan
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          terraform apply \
+            -input=false \
+            destroy.tfplan
+
+      - name: Verify Terraform application state is empty
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          remaining="$(terraform state list)"
+
+          if [[ -n "$remaining" ]]; then
+            echo "Terraform-managed resources remain after destroy:" >&2
+            echo "$remaining" >&2
+            exit 1
+          fi
+
+          echo "Terraform-managed NONPROD application state is empty."
+
+      - name: Verify preserved bootstrap resources
+        run: |
+          set -euo pipefail
+
+          az group show \
+            --name "$NONPROD_RESOURCE_GROUP" \
+            --output none
+
+          az group show \
+            --name "$STATE_RESOURCE_GROUP" \
+            --output none
+
+          az storage account show \
+            --resource-group "$STATE_RESOURCE_GROUP" \
+            --name "$STATE_ACCOUNT_NAME" \
+            --output none
+
+          az storage container show \
+            --account-name "$STATE_ACCOUNT_NAME" \
+            --name tfstate \
+            --auth-mode login \
+            --output none
+
+          echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
+          echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
+          echo "Preserved Terraform state account: $STATE_ACCOUNT_NAME"
+          echo "Preserved Terraform state container: tfstate"
+          echo "NONPROD Terraform-managed application resources are destroyed."
