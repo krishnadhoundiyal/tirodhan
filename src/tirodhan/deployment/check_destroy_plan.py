@@ -41,13 +41,20 @@ def _strings(value: Any) -> Iterable[str]:
             yield from _strings(item)
 
 
+def _expected_scope(subscription_id: str, resource_group: str) -> str:
+    return f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}".lower()
+
+
 def validate_destroy_plan(
     plan: dict[str, Any],
     *,
+    expected_subscription_id: str,
+    expected_resource_group: str,
     protected_state_account: str,
     protected_state_container: str,
 ) -> int:
     delete_count = 0
+    expected_scope = _expected_scope(expected_subscription_id, expected_resource_group)
 
     for change in plan.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
@@ -68,11 +75,23 @@ def validate_destroy_plan(
                 f"Refusing destroy of unapproved resource type {resource_type!r}: {address}"
             )
 
-        before_strings = set(_strings(change.get("change", {}).get("before")))
+        before = change.get("change", {}).get("before")
+        before_strings = set(_strings(before))
         if protected_state_account in before_strings:
             raise RuntimeError(f"Refusing destroy that references state account: {address}")
         if protected_state_container in before_strings:
             raise RuntimeError(f"Refusing destroy that references state container: {address}")
+
+        resource_id = before.get("id") if isinstance(before, dict) else None
+        if not isinstance(resource_id, str) or not resource_id.strip():
+            raise RuntimeError(f"Refusing destroy without an Azure resource ID: {address}")
+
+        normalized_id = resource_id.lower()
+        if not normalized_id.startswith(expected_scope + "/"):
+            raise RuntimeError(
+                "Refusing destroy outside expected subscription/resource group: "
+                f"{address} ({resource_id})"
+            )
 
         delete_count += 1
 
@@ -84,6 +103,8 @@ def validate_destroy_plan(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--expected-subscription-id", required=True)
+    parser.add_argument("--expected-resource-group", required=True)
     parser.add_argument("--protected-state-account", required=True)
     parser.add_argument("--protected-state-container", required=True)
     args = parser.parse_args()
@@ -91,12 +112,14 @@ def main() -> None:
     plan = json.load(sys.stdin)
     count = validate_destroy_plan(
         plan,
+        expected_subscription_id=args.expected_subscription_id,
+        expected_resource_group=args.expected_resource_group,
         protected_state_account=args.protected_state_account,
         protected_state_container=args.protected_state_container,
     )
     print(
-        f"PASS: destroy plan contains {count} approved managed deletes; "
-        "backend resources are excluded"
+        f"PASS: destroy plan contains {count} approved managed deletes inside "
+        "the expected application scope; backend resources are excluded"
     )
 
 
