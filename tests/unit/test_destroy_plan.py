@@ -6,6 +6,9 @@ import pytest
 
 from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
 
+SUBSCRIPTION_ID = "362d539c-c919-481e-97f5-1a9cda362747"
+RESOURCE_GROUP = "tirodhan-np-tdnp01"
+
 
 def _plan(resource_type: str = "azurerm_container_app") -> dict:
     return {
@@ -16,7 +19,13 @@ def _plan(resource_type: str = "azurerm_container_app") -> dict:
                 "type": resource_type,
                 "change": {
                     "actions": ["delete"],
-                    "before": {"name": "tirodhan-np-tdnp01-example"},
+                    "before": {
+                        "id": (
+                            f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/"
+                            f"{RESOURCE_GROUP}/providers/Microsoft.App/containerApps/example"
+                        ),
+                        "name": "tirodhan-np-tdnp01-example",
+                    },
                 },
             }
         ]
@@ -26,6 +35,8 @@ def _plan(resource_type: str = "azurerm_container_app") -> dict:
 def _validate(plan: dict) -> int:
     return validate_destroy_plan(
         plan,
+        expected_subscription_id=SUBSCRIPTION_ID,
+        expected_resource_group=RESOURCE_GROUP,
         protected_state_account="tdnpstatetdnp01",
         protected_state_container="tfstate",
     )
@@ -33,6 +44,16 @@ def _validate(plan: dict) -> int:
 
 def test_destroy_guard_accepts_known_managed_delete() -> None:
     assert _validate(_plan()) == 1
+
+
+def test_destroy_guard_accepts_case_insensitive_azure_scope() -> None:
+    plan = _plan()
+    plan["resource_changes"][0]["change"]["before"]["id"] = (
+        f"/SUBSCRIPTIONS/{SUBSCRIPTION_ID.upper()}/RESOURCEGROUPS/"
+        f"{RESOURCE_GROUP.upper()}/providers/Microsoft.App/containerApps/example"
+    )
+
+    assert _validate(plan) == 1
 
 
 def test_destroy_guard_rejects_resource_group_delete() -> None:
@@ -66,6 +87,36 @@ def test_destroy_guard_rejects_state_container_reference() -> None:
     plan["resource_changes"][0]["change"]["before"]["name"] = "tfstate"
 
     with pytest.raises(RuntimeError, match="state container"):
+        _validate(plan)
+
+
+def test_destroy_guard_rejects_wrong_subscription() -> None:
+    plan = _plan()
+    plan["resource_changes"][0]["change"]["before"]["id"] = (
+        "/subscriptions/00000000-0000-0000-0000-000000000000/"
+        f"resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.App/containerApps/example"
+    )
+
+    with pytest.raises(RuntimeError, match="outside expected subscription/resource group"):
+        _validate(plan)
+
+
+def test_destroy_guard_rejects_wrong_resource_group() -> None:
+    plan = _plan()
+    plan["resource_changes"][0]["change"]["before"]["id"] = (
+        f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/not-tirodhan/"
+        "providers/Microsoft.App/containerApps/example"
+    )
+
+    with pytest.raises(RuntimeError, match="outside expected subscription/resource group"):
+        _validate(plan)
+
+
+def test_destroy_guard_rejects_missing_resource_id() -> None:
+    plan = _plan()
+    del plan["resource_changes"][0]["change"]["before"]["id"]
+
+    with pytest.raises(RuntimeError, match="without an Azure resource ID"):
         _validate(plan)
 
 
