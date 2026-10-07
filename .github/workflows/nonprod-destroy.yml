@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       expected_suffix:
-        description: NONPROD suffix expected in the current Terraform state
+        description: NONPROD suffix expected in the current Terraform input
         required: true
         default: tdnp01
         type: string
@@ -80,7 +80,7 @@ jobs:
           cd infra/terraform/nonprod
           terraform validate
 
-      - name: Guard current NONPROD state
+      - name: Guard current NONPROD configuration
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
@@ -90,32 +90,26 @@ jobs:
             exit 1
           fi
 
+          configured_subscription="$(jq -r '.subscription_id' nonprod.auto.tfvars.json)"
+          configured_rg="$(jq -r '.resource_group_name' nonprod.auto.tfvars.json)"
           configured_suffix="$(jq -r '.suffix' nonprod.auto.tfvars.json)"
+
+          if [[ "$configured_subscription" != "$ARM_SUBSCRIPTION_ID" ]]; then
+            echo "Terraform input subscription does not match the authenticated subscription." >&2
+            exit 1
+          fi
+
+          if [[ "$configured_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
+            echo "Terraform input resource group does not match NONPROD_RESOURCE_GROUP." >&2
+            exit 1
+          fi
+
           if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
             echo "Expected suffix does not match NONPROD Terraform input." >&2
             exit 1
           fi
 
-          current_rg="$(terraform output -raw resource_group_name)"
-          current_stage="$(terraform output -raw deployment_stage)"
-          application_storage="$(terraform output -raw storage_account_name)"
-
-          if [[ "$current_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
-            echo "Terraform state belongs to an unexpected application RG." >&2
-            exit 1
-          fi
-
-          if [[ "$current_stage" != "4" ]]; then
-            echo "Refusing teardown unless deployment_stage is exactly 4." >&2
-            exit 1
-          fi
-
-          if [[ "$application_storage" == "$STATE_ACCOUNT_NAME" ]]; then
-            echo "Application storage unexpectedly equals state storage." >&2
-            exit 1
-          fi
-
-          echo "Destroy boundary checks passed."
+          echo "Destroy configuration boundary checks passed."
 
       - name: Create guarded destroy plan
         working-directory: infra/terraform/nonprod
@@ -129,6 +123,8 @@ jobs:
 
           terraform show -json destroy.tfplan \
             | python -m tirodhan.deployment.check_destroy_plan \
+                --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
+                --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
                 --protected-state-container tfstate
 
@@ -140,7 +136,6 @@ jobs:
           name: nonprod-destroy-plan
           path: infra/terraform/nonprod/destroy.tfplan
           retention-days: 1
-
 
   destroy-apply:
     needs: destroy-plan
@@ -196,27 +191,29 @@ jobs:
         run: |
           set -euo pipefail
 
+          configured_subscription="$(jq -r '.subscription_id' nonprod.auto.tfvars.json)"
+          configured_rg="$(jq -r '.resource_group_name' nonprod.auto.tfvars.json)"
           configured_suffix="$(jq -r '.suffix' nonprod.auto.tfvars.json)"
-          current_rg="$(terraform output -raw resource_group_name)"
-          current_stage="$(terraform output -raw deployment_stage)"
+
+          if [[ "$configured_subscription" != "$ARM_SUBSCRIPTION_ID" ]]; then
+            echo "Terraform input subscription changed after planning; refusing apply." >&2
+            exit 1
+          fi
+
+          if [[ "$configured_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
+            echo "Terraform input resource group changed after planning; refusing apply." >&2
+            exit 1
+          fi
 
           if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
             echo "NONPROD suffix changed after planning; refusing apply." >&2
             exit 1
           fi
 
-          if [[ "$current_rg" != "$NONPROD_RESOURCE_GROUP" ]]; then
-            echo "Application RG changed after planning; refusing apply." >&2
-            exit 1
-          fi
-
-          if [[ "$current_stage" != "4" ]]; then
-            echo "Deployment stage changed after planning; refusing apply." >&2
-            exit 1
-          fi
-
           terraform show -json destroy.tfplan \
             | python -m tirodhan.deployment.check_destroy_plan \
+                --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
+                --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
                 --protected-state-container tfstate
 
