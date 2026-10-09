@@ -11,10 +11,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,6 +28,12 @@ from tirodhan.db.values import new_uuid7, utc_now
 class CollectionRequest(Base):
     __tablename__ = "collection_request"
     __table_args__ = (
+        Index(
+            "ix_customer_collection_page",
+            "customer_id",
+            text("created_at DESC"),
+            text("request_id DESC"),
+        ),
         UniqueConstraint(
             "customer_id", "client_request_id", name="uq_collection_request_customer_client"
         ),
@@ -76,6 +84,7 @@ class CollectionRequest(Base):
 
 class CollectionRequestItem(Base):
     __tablename__ = "collection_request_item"
+    __table_args__ = (Index("ix_collection_item_request", "request_id"),)
 
     request_item_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
@@ -84,6 +93,7 @@ class CollectionRequestItem(Base):
         PostgreSQLUUID(as_uuid=True), ForeignKey("collection_request.request_id"), nullable=False
     )
     item_category_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    display_name_snapshot: Mapped[str | None] = mapped_column(String(200), nullable=True)
     declared_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     declared_weight_grams: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     quoted_line_amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)

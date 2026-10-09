@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     planning_max_attempts: int | None = None
     planning_compaction_distance_m: int | None = None
     planning_max_group_requests: int | None = None
+    customer_cursor_signing_key: SecretStr | None = None
+    customer_cursor_ttl_seconds: int | None = None
 
     media_blob_account_url: str | None = None
     media_blob_container_name: str | None = None
@@ -120,6 +122,7 @@ class Settings(BaseSettings):
         "planning_lock_renewal_seconds",
         "outbox_publish_batch_size",
         "rider_offer_lifetime_seconds",
+        "customer_cursor_ttl_seconds",
     )
     @classmethod
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:

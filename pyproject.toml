@@ -23,6 +23,7 @@ dependencies = [
     "pydantic-settings>=2.7,<3",
     "PyJWT[crypto]>=2.10,<3",
     "sqlalchemy[asyncio]>=2.0,<2.1",
+    "tzdata>=2025.2",
     "uvicorn[standard]>=0.34,<1",
     "uuid6>=2024.7.10,<2027",
 ]

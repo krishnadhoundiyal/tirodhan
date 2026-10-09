@@ -5,19 +5,28 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from tirodhan.api.router import api_router
 from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
-from tirodhan.modules.customers.ports import AddressProtector
+from tirodhan.modules.collection_requests.scheduling import (
+    DelhiSlotAvailability,
+    SchedulingUnavailableError,
+    SlotAvailabilityPort,
+)
+from tirodhan.modules.customer_reads.catalogue import ProductMediaPort, UnconfiguredProductMedia
+from tirodhan.modules.customer_reads.errors import CustomerReadError
+from tirodhan.modules.customers.ports import AddressProtectionNotConfiguredError, AddressProtector
 from tirodhan.modules.evidence.azure_media import AzureBlobMediaStorage
 from tirodhan.modules.evidence.media_policy import ConfiguredMediaPolicy, UnconfiguredMediaPolicy
 from tirodhan.modules.evidence.media_ports import (
     MediaPolicy,
     MediaStoragePort,
+    MediaStorageUnavailableError,
     UnconfiguredMediaStoragePort,
 )
 from tirodhan.modules.identity.kaleyra import KaleyraVerifyOtpProvider
@@ -36,6 +45,7 @@ from tirodhan.modules.identity.tokens import (
 from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
 from tirodhan.modules.payments.razorpay import razorpay_configured
 from tirodhan.modules.payments.runtime import razorpay_runtime
+from tirodhan.modules.planning.policy import PlanningConfigurationError
 from tirodhan.modules.serviceability.h3_cells import H3CellIdDeriver
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
@@ -66,6 +76,8 @@ def create_app(
     access_token_codec: AccessTokenCodec | None = None,
     media_storage: MediaStoragePort | None = None,
     media_policy: MediaPolicy | None = None,
+    slot_availability: SlotAvailabilityPort | None = None,
+    product_media: ProductMediaPort | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
     if payment_provider is None:
@@ -151,6 +163,35 @@ def create_app(
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
     application.state.media_storage = configured_media_storage
     application.state.media_policy = media_policy or _media_policy(application_settings)
+    application.state.slot_availability = slot_availability or DelhiSlotAvailability()
+    application.state.product_media = product_media or (
+        configured_media_storage
+        if isinstance(configured_media_storage, AzureBlobMediaStorage)
+        else UnconfiguredProductMedia()
+    )
+
+    @application.exception_handler(CustomerReadError)
+    async def customer_read_error(request: Request, error: CustomerReadError) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status,
+            content={"error": {"code": error.code}},
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    async def unavailable_runtime(request: Request, error: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"code": "NOT_ELIGIBLE"}},
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    for error_type in (
+        SchedulingUnavailableError,
+        PlanningConfigurationError,
+        AddressProtectionNotConfiguredError,
+        MediaStorageUnavailableError,
+    ):
+        application.add_exception_handler(error_type, unavailable_runtime)
     application.include_router(api_router)
     return application
 

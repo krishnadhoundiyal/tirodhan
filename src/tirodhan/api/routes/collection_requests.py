@@ -30,6 +30,7 @@ from tirodhan.modules.collection_requests.ports import (
     PricingNotConfiguredError,
     PricingPort,
 )
+from tirodhan.modules.collection_requests.scheduling import SlotAvailabilityPort, SlotConflictError
 from tirodhan.modules.collection_requests.service import (
     CollectionRequestInputError,
     CollectionRequestResult,
@@ -37,6 +38,7 @@ from tirodhan.modules.collection_requests.service import (
     ServiceabilityContextIneligibleError,
     create_collection_request,
 )
+from tirodhan.modules.customer_reads.errors import CustomerReadError
 from tirodhan.modules.customers.ports import AddressProtectionNotConfiguredError, AddressProtector
 from tirodhan.modules.customers.service import IdempotencyCommandInProgressError
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
@@ -160,6 +162,10 @@ async def post_collection_request(
             protector=protector,
             location_resolver=location_resolver,
             cell_id_deriver=cells,
+            slot_availability=cast(SlotAvailabilityPort, request.app.state.slot_availability),
+            planning_lead_time_minutes=cast(
+                Settings, request.app.state.settings
+            ).planning_lead_time_minutes,
         )
         return collection_request_response(result)
     except (
@@ -169,7 +175,9 @@ async def post_collection_request(
     ) as error:
         raise HTTPException(status_code=503, detail="Required runtime is not configured") from error
     except ServiceabilityContextIneligibleError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        raise CustomerReadError(error.status, error.code) from error
+    except SlotConflictError as error:
+        raise CustomerReadError(409, error.code) from error
     except (
         CollectionRequestInputError,
         IdempotencyKeyConflictError,
