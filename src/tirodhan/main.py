@@ -29,7 +29,6 @@ from tirodhan.modules.evidence.media_ports import (
     MediaStorageUnavailableError,
     UnconfiguredMediaStoragePort,
 )
-from tirodhan.modules.identity.kaleyra import KaleyraVerifyOtpProvider
 from tirodhan.modules.identity.phone_protection import AesGcmPhoneIdentityProtector
 from tirodhan.modules.identity.ports import (
     OtpProvider,
@@ -37,6 +36,7 @@ from tirodhan.modules.identity.ports import (
     UnconfiguredOtpProvider,
     UnconfiguredPhoneIdentityProtector,
 )
+from tirodhan.modules.identity.runtime import otp_configured, otp_provider_from_settings
 from tirodhan.modules.identity.tokens import (
     AccessTokenCodec,
     Rs256AccessTokenCodec,
@@ -95,9 +95,7 @@ def create_app(
     owns_media_storage = media_storage is None
     configured_media_storage = media_storage or _media_storage(application_settings)
     owns_otp_http_client = (
-        otp_provider is None
-        and otp_http_client is None
-        and _kaleyra_configured(application_settings)
+        otp_provider is None and otp_http_client is None and otp_configured(application_settings)
     )
 
     @asynccontextmanager
@@ -110,12 +108,14 @@ def create_app(
             extra={"environment": application_settings.environment},
         )
         try:
-            if otp_provider is None and _kaleyra_configured(application_settings):
+            if otp_provider is None and otp_configured(application_settings):
                 runtime_client = otp_http_client or httpx.AsyncClient(
                     transport=httpx.AsyncHTTPTransport(retries=0)
                 )
                 application.state.otp_http_client = runtime_client
-                application.state.otp_provider = _otp_provider(application_settings, runtime_client)
+                application.state.otp_provider = otp_provider_from_settings(
+                    application_settings, runtime_client
+                )
             async with (
                 serviceability_runtime(
                     application_settings,
@@ -209,35 +209,6 @@ def _token_codec(settings: Settings) -> AccessTokenCodec:
         public_key_pem=settings.auth_jwt_public_key_pem.get_secret_value(),
         issuer=settings.auth_token_issuer,
         audience=settings.auth_token_audience,
-    )
-
-
-def _kaleyra_configured(settings: Settings) -> bool:
-    return all(
-        value is not None
-        for value in (
-            settings.kaleyra_api_domain,
-            settings.kaleyra_sid,
-            settings.kaleyra_api_key,
-            settings.kaleyra_verify_flow_id,
-            settings.kaleyra_http_timeout_seconds,
-        )
-    )
-
-
-def _otp_provider(settings: Settings, client: httpx.AsyncClient) -> OtpProvider:
-    assert settings.kaleyra_api_domain is not None
-    assert settings.kaleyra_sid is not None
-    assert settings.kaleyra_api_key is not None
-    assert settings.kaleyra_verify_flow_id is not None
-    assert settings.kaleyra_http_timeout_seconds is not None
-    return KaleyraVerifyOtpProvider(
-        api_domain=settings.kaleyra_api_domain,
-        sid=settings.kaleyra_sid,
-        api_key=settings.kaleyra_api_key.get_secret_value(),
-        flow_id=settings.kaleyra_verify_flow_id,
-        timeout_seconds=settings.kaleyra_http_timeout_seconds,
-        client=client,
     )
 
 

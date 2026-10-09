@@ -254,6 +254,7 @@ def runtime_settings() -> Settings:
     return Settings(
         _env_file=None,
         environment="test",
+        otp_provider="KALEYRA_VERIFY",
         kaleyra_api_domain="https://kaleyra.test",
         kaleyra_sid="sid",
         kaleyra_api_key=SecretStr("test-secret"),

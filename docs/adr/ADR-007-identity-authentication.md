@@ -75,6 +75,24 @@ Provider API references: [Generate OTPs](https://developers.kaleyra.io/docs/gene
 Generate returns `data.verify_id`, while Validate submits `verify_id` and `otp`. E910/E911/E912/E913
 are authentication failures, never evidence of a committed application login.
 
+### Phase 2 provider integration
+
+The approved Phase 2 provider-integration request adds 2Factor alongside Kaleyra through the same
+transaction-bound port. `TIRODHAN_OTP_PROVIDER` explicitly selects `2FACTOR` or `KALEYRA_VERIFY`;
+credentials alone do not select a provider. There is no automatic fallback. Existing Kaleyra
+deployments must now explicitly select `KALEYRA_VERIFY`. An unselected runtime fails closed on use;
+incomplete selected configuration fails during startup. A stored challenge's provider code must
+match the current runtime before verification can call the provider.
+
+2Factor uses the approved legacy GET AUTOGEN/VERIFY pair at fixed `https://2factor.in`, with an
+optional account-approved template. Only `Status=Success` and `Details=OTP Matched` verify a login.
+Provider references remain private. Path credentials require suppressed HTTP URL logging,
+sanitized exceptions without transport chaining, bounded timeouts and disabled redirects/retries.
+The local intent lifetime remains explicit product configuration; provider expiry and detailed
+error taxonomy must be confirmed with 2Factor before nonprod acceptance. Newer header APIs are not
+combined with the legacy verifier. Sources, operational prerequisites and limitations are recorded
+in [the provider integration report](../PHASE_2_PROVIDER_INTEGRATION_REPORT.md).
+
 ## Security / idempotency
 
 - OTP start first commits an `auth.start` reservation keyed by client request ID and fingerprinted
