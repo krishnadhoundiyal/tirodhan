@@ -9,6 +9,7 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from scheduling_helpers import TestSlotAvailability
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -136,7 +137,7 @@ class Pricing:
 
 
 def command(context: ServiceabilityContext) -> CreateCollectionRequestCommand:
-    start = utc_now() + timedelta(days=1)
+    start = utc_now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
     return CreateCollectionRequestCommand(
         context.user_id,
         new_uuid7(),
@@ -163,6 +164,8 @@ async def booking(
         protector=protector,
         location_resolver=resolver,
         cell_id_deriver=H3CellIdDeriver(),
+        slot_availability=TestSlotAvailability(),
+        planning_lead_time_minutes=4,
     )
 
 
@@ -566,10 +569,12 @@ async def test_checkout_api_pending_fallback_and_replay_without_header(
             database_url=migrated_database_url,
             command_idempotency_ttl_seconds=3600,
             pending_payment_lifetime_seconds=900,
+            planning_lead_time_minutes=4,
         ),
         address_protector=address_protector,
         location_resolver=resolver,
         pricing_port=pricing,
+        slot_availability=TestSlotAvailability(),
         access_token_codec=_token_codec(),
     )
     cmd = command(context)

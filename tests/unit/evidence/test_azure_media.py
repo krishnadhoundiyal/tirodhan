@@ -8,6 +8,34 @@ from tirodhan.modules.evidence.azure_media import AzureBlobMediaStorage
 from tirodhan.modules.evidence.media_ports import MediaStorageUnavailableError
 
 
+@pytest.mark.asyncio
+async def test_product_artwork_read_only_sas(mock_blob_service_client, mock_credential):
+    from urllib.parse import parse_qs, urlsplit
+
+    from azure.storage.blob import UserDelegationKey
+
+    storage = AzureBlobMediaStorage(
+        account_url="https://test.blob.core.windows.net",
+        container_name="test-container",
+        credential=mock_credential,
+        authorization_ttl_seconds=300,
+    )
+    key = UserDelegationKey()
+    key.value = "mock_key_value"
+    key.signed_expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    mock_blob_service_client.get_user_delegation_key = AsyncMock(return_value=key)
+    mock_blob_service_client.get_blob_client.return_value.url = (
+        "https://test.blob.core.windows.net/test-container/product-art/opaque"
+    )
+    authorization = await storage.authorize_product_image(object_key="product-art/opaque")
+    permissions = parse_qs(urlsplit(authorization.opaque_value).query)
+    assert permissions["sp"] == ["r"] and permissions["spr"] == ["https"]
+    assert authorization.expires_at > datetime.now(timezone.utc)
+    for object_key in ("media/private-evidence", "product-art/../media/private"):
+        with pytest.raises(MediaStorageUnavailableError):
+            await storage.authorize_product_image(object_key=object_key)
+
+
 @pytest.fixture
 def mock_blob_service_client():
     with patch(

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
     get_access_token_codec,
+    get_authenticated_principal,
     get_otp_provider,
     get_phone_identity_protector,
     get_session_factory,
@@ -27,6 +28,7 @@ from tirodhan.modules.identity.ports import (
     PhoneIdentityProtector,
 )
 from tirodhan.modules.identity.service import (
+    AuthenticatedPrincipal,
     IdentityInputError,
     LoginCommandInProgressError,
     LoginCredentialsUnavailableReplayError,
@@ -44,6 +46,20 @@ from tirodhan.modules.identity.tokens import (
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 
 router = APIRouter(prefix="/v1/auth", tags=["authentication"])
+
+
+class PrincipalResponse(BaseModel):
+    user_id: UUID
+    roles: list[str]
+
+
+@router.get("/me", response_model=PrincipalResponse)
+async def get_principal(
+    response: Response,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_authenticated_principal)],
+) -> PrincipalResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    return PrincipalResponse(user_id=principal.user_id, roles=sorted(principal.roles))
 
 
 class OtpStartRequest(BaseModel):

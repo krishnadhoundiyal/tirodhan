@@ -49,6 +49,7 @@ class Payment(Base):
 class PaymentAttempt(Base):
     __tablename__ = "payment_attempt"
     __table_args__ = (
+        Index("ix_payment_attempt_payment_created", "payment_id", "created_at"),
         UniqueConstraint(
             "provider", "provider_idempotency_key", name="uq_payment_attempt_provider_key"
         ),
@@ -122,6 +123,7 @@ class PaymentProviderEvent(Base):
 class Refund(Base):
     __tablename__ = "refund"
     __table_args__ = (
+        Index("ix_refund_payment_created", "payment_id", "created_at"),
         UniqueConstraint("provider", "provider_idempotency_key", name="uq_refund_provider_key"),
         Index(
             "uq_refund_provider_refund",

@@ -82,6 +82,7 @@ class HandoverEvent(Base):
 class HandoverEventItem(Base):
     __tablename__ = "handover_event_item"
     __table_args__ = (
+        Index("ix_handover_item_pickup", "pickup_execution_id"),
         CheckConstraint(
             "status IN ('VALIDATED', 'REJECTED')",
             name="ck_handover_event_item_status",

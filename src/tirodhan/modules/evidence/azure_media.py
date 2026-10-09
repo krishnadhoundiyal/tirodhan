@@ -130,6 +130,31 @@ class AzureBlobMediaStorage:
             logger.error("azure_storage_inspect_error", exc_info=e)
             raise MediaStorageUnavailableError("unable to inspect storage object") from e
 
+    async def authorize_product_image(self, *, object_key: str) -> UploadAuthorization:
+        # Separate product metadata cannot authorize private household evidence.
+        if not object_key.startswith("product-art/") or ".." in object_key.split("/"):
+            raise MediaStorageUnavailableError("invalid product artwork key")
+        try:
+            delegation_key = await self._get_user_delegation_key()
+            now = datetime.now(timezone.utc)
+            expiry = now + timedelta(seconds=self._authorization_ttl_seconds)
+            account_name = self._client.account_name
+            if account_name is None:
+                raise MediaStorageUnavailableError("unable to resolve blob account name")
+            sas = generate_blob_sas(
+                account_name=account_name,
+                container_name=self._container_name,
+                blob_name=object_key,
+                user_delegation_key=delegation_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=expiry,
+                protocol="https",
+            )
+            blob = self._client.get_blob_client(container=self._container_name, blob=object_key)
+            return UploadAuthorization(opaque_value=f"{blob.url}?{sas}", expires_at=expiry)
+        except AzureError as error:
+            raise MediaStorageUnavailableError("product artwork is unavailable") from error
+
     async def close(self) -> None:
         await self._client.close()
         await self._credential.close()

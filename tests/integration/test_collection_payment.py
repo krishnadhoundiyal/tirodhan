@@ -10,6 +10,7 @@ from uuid import UUID
 import pytest
 from geoalchemy2.elements import WKTElement
 from httpx import ASGITransport, AsyncClient
+from scheduling_helpers import TestSlotAvailability
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -71,7 +72,7 @@ from tirodhan.modules.serviceability.service import (
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
-SLOT_START = utc_now().replace(second=0, microsecond=0) + timedelta(days=1)
+SLOT_START = utc_now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
 SLOT_END = SLOT_START + timedelta(minutes=30)
 ITEMS = (
     DeclaredRequestItem(item_category_code="TEST_A", declared_quantity=1),
@@ -189,6 +190,8 @@ async def create_request(
         ),
         pricing or FixedPricing(),
         idempotency_expires_at=utc_now() + timedelta(hours=1),
+        slot_availability=TestSlotAvailability(),
+        planning_lead_time_minutes=4,
     )
 
 
@@ -367,8 +370,10 @@ async def test_collection_request_api_creates_pending_request_and_payment(
             database_url=migrated_database_url,
             command_idempotency_ttl_seconds=3600,
             pending_payment_lifetime_seconds=1800,
+            planning_lead_time_minutes=4,
         ),
         pricing_port=pricing,
+        slot_availability=TestSlotAvailability(),
     )
     app.dependency_overrides[get_current_customer_id] = lambda: user.user_id
     body = {

@@ -18,6 +18,14 @@ from tirodhan.modules.collection_requests.ports import (
     PricingPort,
     PricingQuote,
 )
+from tirodhan.modules.collection_requests.scheduling import (
+    SlotAvailabilityPort,
+    UnconfiguredSlotAvailability,
+    evaluate_slot,
+    validate_slot,
+)
+from tirodhan.modules.customer_reads.errors import CustomerReadError
+from tirodhan.modules.customer_reads.models import CatalogueCategory, CatalogueGroup
 from tirodhan.modules.customers.ports import AddressProtector, UnconfiguredAddressProtector
 from tirodhan.modules.customers.service import (
     IdempotencyCommandInProgressError,
@@ -66,7 +74,10 @@ class CollectionRequestInputError(ValueError):
 
 
 class ServiceabilityContextIneligibleError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status: int = 409, code: str = "NOT_ELIGIBLE") -> None:
+        self.status = status
+        self.code = code
+        super().__init__(message)
 
 
 class CollectionRequestNotFoundError(LookupError):
@@ -243,6 +254,8 @@ async def create_collection_request(
     protector: AddressProtector | None = None,
     location_resolver: LocationResolver | None = None,
     cell_id_deriver: CellIdDeriver | None = None,
+    slot_availability: SlotAvailabilityPort | None = None,
+    planning_lead_time_minutes: int | None = None,
 ) -> CollectionRequestResult:
     if not command.items:
         raise CollectionRequestInputError("at least one declared item is required")
@@ -287,6 +300,11 @@ async def create_collection_request(
                 session, request_id=replay.resource_id, customer_id=command.customer_id
             )
 
+    # Only fresh commands revalidate time; durable exact replay survives expiry,
+    # planning, and later operational policy/category changes.
+    slot = validate_slot(command.slot_start, command.slot_end, now=utc_now())
+    availability = slot_availability or UnconfiguredSlotAvailability()
+
     async with session_factory() as session:
         context = await session.scalar(
             select(ServiceabilityContext).where(
@@ -296,9 +314,13 @@ async def create_collection_request(
             )
         )
         if context is None:
-            raise ServiceabilityContextIneligibleError("owned serviceability context not found")
+            raise ServiceabilityContextIneligibleError(
+                "owned serviceability context not found", status=404
+            )
         if context.expires_at <= utc_now():
-            raise ServiceabilityContextIneligibleError("serviceability context has expired")
+            raise ServiceabilityContextIneligibleError(
+                "serviceability context has expired", code="SERVICEABILITY_EXPIRED"
+            )
         context_status = context.status
 
     if context_status == SERVICEABILITY_PENDING:
@@ -310,7 +332,13 @@ async def create_collection_request(
             cell_id_deriver=cell_id_deriver or H3CellIdDeriver(),
         )
     if context.status != SERVICEABILITY_SERVICEABLE:
-        raise ServiceabilityContextIneligibleError("serviceability context is not serviceable")
+        raise ServiceabilityContextIneligibleError(
+            "serviceability context is not serviceable",
+            status=503 if context.status == "TECHNICAL_FAILURE" else 409,
+            code="SERVICEABILITY_UNSERVICEABLE"
+            if context.status == "UNSERVICEABLE"
+            else "NOT_ELIGIBLE",
+        )
     if context.location is None or context.cell_id is None:
         raise ServiceabilityContextIneligibleError(
             "serviceability context is missing its resolved location or cell"
@@ -347,15 +375,60 @@ async def create_collection_request(
         )
         now = utc_now()
         if context is None:
-            raise ServiceabilityContextIneligibleError("owned serviceability context not found")
+            raise ServiceabilityContextIneligibleError(
+                "owned serviceability context not found", status=404
+            )
         if context.status != SERVICEABILITY_SERVICEABLE:
             raise ServiceabilityContextIneligibleError("serviceability context is not serviceable")
         if context.expires_at <= now:
-            raise ServiceabilityContextIneligibleError("serviceability context has expired")
+            raise ServiceabilityContextIneligibleError(
+                "serviceability context has expired", code="SERVICEABILITY_EXPIRED"
+            )
         if context.location is None or context.cell_id is None:
             raise ServiceabilityContextIneligibleError(
                 "serviceability context is missing its resolved location or cell"
             )
+        # Use the planning serialization boundary and query live availability in
+        # the very transaction that creates request/payment/items/idempotency.
+        dates = await availability.service_dates(session, cell_id=context.cell_id, now=now)
+        from tirodhan.modules.collection_requests.scheduling import (
+            SERVICE_TIMEZONE,
+            SlotConflictError,
+        )
+
+        if slot.start.astimezone(SERVICE_TIMEZONE).date() not in dates:
+            raise SlotConflictError()
+        await evaluate_slot(
+            session,
+            availability,
+            cell_id=context.cell_id,
+            slot=slot,
+            now=now,
+            lead_time_minutes=planning_lead_time_minutes,
+            booking=True,
+        )
+        # Recheck context/payment expiry after waiting on the planning lock.
+        now = utc_now()
+        if context.expires_at <= now:
+            raise CustomerReadError(409, "SERVICEABILITY_EXPIRED")
+        categories = (
+            await session.execute(
+                select(CatalogueCategory, CatalogueGroup)
+                .join(CatalogueGroup)
+                .where(
+                    CatalogueCategory.category_code.in_(
+                        [item.item_category_code for item in command.items]
+                    )
+                )
+                .with_for_update(of=(CatalogueCategory, CatalogueGroup))
+                .order_by(CatalogueGroup.group_id, CatalogueCategory.category_id)
+            )
+        ).all()
+        if any(not category.active or not group.active for category, group in categories):
+            raise CustomerReadError(409, "NOT_ELIGIBLE")
+        display_names = {
+            category.category_code: category.display_name for category, group in categories
+        }
         if command.payment_expires_at <= now:
             raise CollectionRequestInputError("payment expiry must be in the future")
 
@@ -381,6 +454,7 @@ async def create_collection_request(
                 request_item_id=new_uuid7(),
                 request_id=request.request_id,
                 item_category_code=declared.item_category_code,
+                display_name_snapshot=display_names.get(declared.item_category_code),
                 declared_quantity=declared.declared_quantity,
                 declared_weight_grams=declared.declared_weight_grams,
                 quoted_line_amount_minor=quoted.quoted_line_amount_minor,
