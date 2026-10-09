@@ -169,8 +169,8 @@ async def test_captured_external_mapping_duplicate_and_adversarial_state_orderin
             factory, provider, payment_body(attempt, payment_id="pay_additional"), "evt_additional"
         )
         assert (
-            extra.processing_status == "RECONCILIATION_REQUIRED"
-            and extra.failure_code == "ADDITIONAL_SUCCESS"
+            extra.processing_status == "PROCESSED"
+            and extra.failure_code == "ADDITIONAL_CAPTURE_COMPENSATED"
         )
     async with factory() as session:
         durable = await session.get(PaymentAttempt, attempt.payment_attempt_id)
@@ -230,10 +230,12 @@ async def test_captured_validation_and_existing_payment_gates(database_session_f
         )
         assert event.failure_code == code
     async with factory() as session:
-        assert (await session.get(Payment, result.payment.payment_id)).status == "PENDING"
-        assert (
-            await session.get(CollectionRequest, result.request.request_id)
-        ).status == "PENDING_PAYMENT"
+        assert (await session.get(Payment, result.payment.payment_id)).status == (
+            "SUCCEEDED" if case in {"expired", "cutoff", "frozen"} else "PENDING"
+        )
+        assert (await session.get(CollectionRequest, result.request.request_id)).status == (
+            "EXPIRED" if case in {"expired", "cutoff", "frozen"} else "PENDING_PAYMENT"
+        )
     assert await acceptance_count(factory) == 0
 
 
@@ -260,11 +262,11 @@ async def test_conflicting_order_payment_mapping_and_distinct_successful_attempt
         )
         assert sorted(e.processing_status for e in events) == [
             "PROCESSED",
-            "RECONCILIATION_REQUIRED",
+            "PROCESSED",
         ]
         assert (
-            next(e for e in events if e.processing_status != "PROCESSED").failure_code
-            == "ADDITIONAL_SUCCESS"
+            next(e for e in events if e.failure_code is not None).failure_code
+            == "ADDITIONAL_CAPTURE_COMPENSATED"
         )
     assert await acceptance_count(factory) == 1
 

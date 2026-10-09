@@ -8,6 +8,7 @@ from tirodhan.core.config import get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.expiry import expire_pending_collection_requests
+from tirodhan.workers.financial_reconciliation import run_if_configured
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,8 @@ async def run() -> None:
         async with session_factory() as session, session.begin():
             expired_count = await expire_pending_collection_requests(session, now)
             logger.info("pending_payment_expiry_completed", extra={"expired_count": expired_count})
+
+        await run_if_configured(settings)
 
     except Exception as e:
         logger.error("pending_payment_expiry_failed", extra={"error_type": type(e).__name__})

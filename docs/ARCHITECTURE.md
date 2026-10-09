@@ -876,3 +876,35 @@ Do not silently decide:
 - **Expiry:** Pending collection requests that reach `payment_expires_at` are moved to `EXPIRED`. Time-boundary expiry serializes across `Payment` and `CollectionRequest` row locks. Late successes post-expiry transition to a reconciliation truth.
 - **Refunds:** Refunds are handled independent of the CollectionRequest lifecycle via `refund` table. Concurrency is limited to the successful `Payment` to prevent over-refunding. Missing references or interruptions during provider calls will enter `INITIATION_UNCERTAIN` for controlled operations reconciliation.
 - **Provider Events:** Internal `refund_id` acts as the primary correlation, with fallback correlation over `provider_refund_id`. Terminal events mapping to local contradiction enforces operations-controlled reconciliation.
+
+
+## Phase 2 approved financial reconciliation completion
+
+The three approved policy documents now close the earlier financial decisions:
+[reconciliation/mobile status events](PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refunds](FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical exceptions](HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md).
+Their charge-level cap supersedes the historical combined canonical-only cap above.
+
+The modular monolith uses the existing PostgreSQL financial processor for authenticated
+webhooks, provider read-only inquiries and refund execution responses. CapturedCharge and
+RefundObligation extend the existing Payment/Attempt/Refund model; FinancialException and
+FinancialAudit provide operational history. They do not introduce a second payment state
+machine or deployment. A finite ACA Job entry point uses indexed due rows, leases, bounded
+GETs, backoff and explicit operational configuration, with no new infrastructure.
+The existing pending-payment-expiry Job optionally executes the same finite sweep after
+its booking transaction closes. All scheduling values absent leaves this phase disabled;
+partial configuration fails closed. Its existing minute-resolution cron is unchanged.
+
+Booking expiry releases slot eligibility independently of unresolved money. A late verified
+capture records financial truth and a manager case without accepting/freeze/replan/reschedule.
+Unambiguous additional captures receive independent full refund obligations and initial
+intents. A failed operation preserves debt and reserves money until API proof establishes
+non-payable finality; only a manager may authorize a replacement. Public Razorpay status
+metadata alone does not authorize that finality policy; the runtime gate defaults closed.
+
+Customer financial changes append identifier-only CustomerFinancialStatusChanged outbox
+records. Existing rider notification routing remains unchanged. Customer registration with
+session-linked ownership, a customer delivery consumer/route, FCM/APNs credentials and
+mobile receipt-triggered API refresh are separate dependencies; no end-to-end push claim is
+made by this backend-only implementation.

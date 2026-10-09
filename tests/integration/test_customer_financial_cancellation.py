@@ -7,6 +7,7 @@ import pytest
 from razorpay_helpers import Orders, booking, initiate, payment_body, settings, signed
 from sqlalchemy import event as sql_event
 from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from test_checkout_handoff import financial_snapshot
 from test_customer_mobile_core import app_for
 from test_operational_api import _token_for
@@ -394,7 +395,7 @@ async def test_cancellation_crash_before_commit_rolls_back_all_then_retry_conver
         ("CREATED", "PROCESSING"),
         ("INITIATION_UNCERTAIN", "CONFIRMING"),
         ("FAILED", "FAILED"),
-        ("EXPIRED", "EXPIRED"),
+        ("EXPIRED", "CONFIRMING"),
         ("RECONCILIATION", "CONFIRMING"),
     ],
 )
@@ -539,6 +540,11 @@ async def test_financial_corruption_or_unmapped_reason_is_sanitized(database_ses
             provider = RazorpayProvider(settings(), client=remote)
             await capture(factory, provider, await initiate(factory, user, result, provider))
         await cancel(factory, result.request)
+    if case == "refund_currency":
+        with pytest.raises(IntegrityError):
+            async with factory() as session, session.begin():
+                (await session.scalar(select(Refund))).currency = "USD"
+        return
     async with factory() as session, session.begin():
         payment = await session.get(Payment, result.payment.payment_id)
         if case == "missing":
@@ -699,11 +705,11 @@ async def test_additional_distinct_charge_preserves_reconciliation_facts_and_nev
             planning_lead_time_minutes=30,
             idempotency_expires_at=utc_now() + timedelta(days=1),
         )
-    assert record.processing_status == "RECONCILIATION_REQUIRED"
+    assert record.processing_status == "PROCESSED"
     assert record.provider_payment_id == "pay_additional"
     assert record.amount_minor == 500 and record.currency == "INR"
     refunds, _ = await records(factory)
-    assert len(refunds) == 1
+    assert len(refunds) == 2
     async with factory() as session:
         assert (
             await session.get(CollectionRequest, result.request.request_id)
@@ -812,17 +818,37 @@ async def test_historical_refunds_are_ordered_and_financial_reads_are_bounded_an
         [(200, "FAILED"), (200, "SUCCEEDED"), (300, "PENDING")]
     ):
         async with factory() as session, session.begin():
-            refund = await create_refund(
-                session,
+            # Historical rows are fixtures, not fresh live refund authorizations.
+            refund = Refund(
+                refund_id=new_uuid7(),
                 payment_id=result.payment.payment_id,
                 payment_attempt_id=attempt.payment_attempt_id,
                 amount_minor=amount,
+                currency="INR",
                 reason_code="CUSTOMER_CANCELLATION",
-                idempotency_key=f"historical-{index}",
-                idempotency_expires_at=utc_now() + timedelta(days=1),
+                status=status,
+                provider="RAZORPAY",
+                provider_idempotency_key=f"historical-{index}",
+                created_at=utc_now(),
+                completed_at=utc_now() if status == "SUCCEEDED" else None,
             )
-            refund.status = status
-            refund.completed_at = utc_now() if status == "SUCCEEDED" else None
+            if status == "FAILED":
+                proof = PaymentProviderEvent(
+                    provider="RAZORPAY",
+                    external_event_id=f"historical-proof-{index}",
+                    event_type="refund.inquiry",
+                    observed_outcome="FAILED",
+                    evidence_source="API_INQUIRY",
+                    definitive_non_payable=True,
+                    processing_status="PROCESSED",
+                    received_at=utc_now(),
+                )
+                session.add(proof)
+                await session.flush([proof])
+                refund.failure_evidence_id = proof.payment_provider_event_id
+                refund.non_payable_verified_at = utc_now()
+            session.add(refund)
+            await session.flush([refund])
             identities.append(str(refund.refund_id))
     await cancel(factory, result.request)
     before = await financial_snapshot(factory)
@@ -843,7 +869,7 @@ async def test_historical_refunds_are_ordered_and_financial_reads_are_bounded_an
         try:
             base = f"/v1/customer/collection-requests/{result.request.request_id}"
             for _ in range(2):
-                for path, maximum in [("/payment", 6), ("/refunds", 5)]:
+                for path, maximum in [("/payment", 7), ("/refunds", 6)]:
                     statements.clear()
                     response = await api.get(base + path)
                     assert response.status_code == 200

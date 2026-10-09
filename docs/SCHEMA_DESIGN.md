@@ -1038,3 +1038,34 @@ Still open:
 ### Refund (Phase 1D Addition)
 The `refund` table captures standalone financial adjustments related to `PaymentAttempts`.
 Constraints ensure that `amount_minor > 0` and total committed refunds (`PENDING`, `PROCESSING`, `SUBMITTED`, `SUCCEEDED`, `INITIATION_UNCERTAIN`) never exceed the canonically successful logical `Payment`. `provider_refund_id` maintains partial uniqueness across providers, ensuring correct correlation.
+
+
+## Phase 2 reconciliation accounting (migration 0020)
+
+The approved policies supersede the earlier combined/canonical-only refund cap above.
+The invariant is now per verified captured charge; additional real charges are independently
+refundable even when their sum exceeds the logical Payment quote.
+
+| Entity | Key/constraint | Relationships and purpose |
+|---|---|---|
+| CapturedCharge | UUID PK; unique provider/payment reference; positive bigint money | Real Payment, Attempt and first-evidence FKs; order/account binding and immutable capture facts |
+| RefundObligation | UUID PK; unique charge FK; positive amount | Debt bound to one charge; controlled reason and payout-blocked flag; outstanding is derived |
+| FinancialException | UUID PK; unique case key; status/time index | Payment plus optional typed Charge/Refund/evidence FKs; OPEN/RESOLVED, reason and timestamps |
+| FinancialAudit | UUID PK; unique command UUID | Actor User, Payment and optional Refund/evidence FKs; submitted reference, action, decision and timestamp |
+
+Refund adds nullable charge, obligation and failure-evidence FKs, verified non-payable time,
+indexed due time, claim token/deadline and check count. Old identities/keys/history remain.
+A charge-row trigger validates new-intent ownership, currency, obligation and aggregate
+reservations, including known legacy canonical reservations. Unverified FAILED operations
+still reserve. Outcome updates record provider truth, including contradictions, rather than
+hiding completed payouts behind a database rejection.
+
+Attempt adds account binding, indexed next_check_at and lease/check metadata. ProviderEvent
+adds source, observed outcome, account binding and non-payable evidence flag. Existing
+unresolved rows receive due timestamps only; migration never guesses captures or payouts.
+Payment adds a fresh-cancellation compensation marker, default false for historical rows.
+All new entities use real FKs, integer minor-unit money, UUIDv7 and UTC timestamps.
+
+Downgrade removes new accounting/evidence while retaining pre-existing Payment, Attempt,
+Refund and provider-event rows. Export the new accounting and evidence before rollback.
+The extension-owned spatial_ref_sys and two legitimate migration-0007 indexes remain.

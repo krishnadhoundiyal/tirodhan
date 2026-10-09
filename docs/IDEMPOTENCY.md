@@ -446,3 +446,34 @@ reconciliation exceptions under ADR-005. The minimal event facts added by migrat
 charge identity without increasing the canonical refund cap. Legacy cancellation without an
 intent and definitively failed cancellation compensation need an audited operational resolution;
 replay does not fabricate a new financial operation.
+
+
+## Phase 2 reconciliation completion: superseding financial rules
+
+The approved [reconciliation](PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refund](FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical exception](HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md) policies replace the
+historical combined/canonical-only cap. Reservations are bounded per actual captured charge.
+FAILED releases no reservation until provider API proof verifies non-payable finality.
+
+| Operation | Logical key / protection | Transaction, replay, concurrency, external rule |
+|---|---|---|
+| Capture from webhook/inquiry | unique provider event plus unique provider/payment charge | Payment before Attempt, Charge, work-unit/request; one acceptance; additional full obligation/intent in same transaction; exact evidence replay returns stored event |
+| Due reconciliation | indexed next_check_at, claim UUID/deadline; SKIP LOCKED bounded selection | lease commits before read-only GET; overlapping live claims skip; expired claims recover; outcome uses the shared processor; conditional token release cannot overwrite another claim |
+| Manager inquiry | financial.manager + command UUID/fingerprint; unique audit command | Payment then live manager user/role and command; short reservation commit, GET outside DB, shared financial processor, audit/completion commit; interrupted readonly inquiry may safely repeat; exact completed replay avoids GET |
+| Initial charge compensation | charge-compensation UUID plus unique obligation charge FK | caller owns Payment; full obligation, execution, RefundRequested and customer event commit together; existing failed execution never creates another automatic operation |
+| Manager replacement/recovery | financial.manager + command UUID/fingerprint, audit, existing full obligation | current read-only inquiry precedes authorization; Payment then live manager/command and descendants; one winner reserves outstanding balance; exact success/refusal replay retains audit; new execution gets a new native stable key |
+| Refund execution/outcome | stable Refund UUID/native key and provider event identity | Payment before Refund for claim/outcome; no ancestor lock after Refund; HTTP outside DB; same uncertain operation resumes using the same receipt/body/native key; webhook/inquiry/worker outcome share one processor |
+| Financial status event | deterministic event key, unique outbox key | emitted only in financial transaction; Payment lock serializes replay guards; no duplicate logical notification; transport/delivery remain at-least-once |
+| Historical discovery | bounded manager inventory; deterministic exception case key | repeated verified inquiry creates no payout; insufficient mappings remain OPEN; fresh audited approval alone creates missing intent |
+
+Planning takes work-unit/request locks without acquiring financial ancestors. Cancellation,
+expiry, capture, inquiry application, refund approval/execution and refund outcomes all take
+Payment first when touching overlapping financial descendants. Scheduling lease transactions
+lock only their own rows and never request Payment. No global financial mutex or Redis exists.
+Provider calls hold no DB transaction. Completion/freeze cannot reopen expired bookings.
+
+The five-minute mobile UX timer has no backend financial transition. Booking expiry persists
+EXPIRED on CollectionRequest, while unresolved Payment stays PENDING and its due Attempt is
+retained. Customer projection uses existing CONFIRMING with retry disabled for an unresolved
+expired booking. Late money is SUCCEEDED with a durable manager case, never re-accepted.

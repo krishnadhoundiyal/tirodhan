@@ -11,6 +11,7 @@ from uuid import UUID
 import httpx
 
 from tirodhan.core.config import Settings
+from tirodhan.db.values import new_uuid7
 from tirodhan.modules.payments.ports import (
     AuthenticatedPaymentEvent,
     PaymentEventOutcome,
@@ -84,6 +85,209 @@ class RazorpayProvider:
         self._webhook_secret = settings.razorpay_webhook_secret.get_secret_value().encode()
         self._timeout = settings.razorpay_http_timeout_seconds
         self.public_key_id = settings.razorpay_key_id or ""
+        # Account identity is non-secret. Key rotation needs the same configured account.
+        self.account_key = hashlib.sha256(
+            (settings.razorpay_account_id or self.public_key_id).encode()
+        ).hexdigest()
+        self._account_id = settings.razorpay_account_id
+        self._refund_finality = settings.razorpay_normal_refund_failure_finality_confirmed
+
+    def _observation(
+        self,
+        entity: dict[str, Any],
+        *,
+        refund_id: UUID | None = None,
+        attempt_id: UUID | None = None,
+    ) -> AuthenticatedPaymentEvent:
+        refund = refund_id is not None
+        kind = "refund" if refund else "payment"
+        ref = _reference(entity.get("id"), "rfnd" if refund else "pay")
+        pay = _reference(entity.get("payment_id"), "pay") if refund else ref
+        order = None if refund else _reference(entity.get("order_id"), "order")
+        if (
+            entity.get("entity") != kind
+            or not ref
+            or not pay
+            or not _money(entity)
+            or (not refund and not order)
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_FACTS_INVALID")
+        state = entity.get("status")
+        if not isinstance(state, str):
+            raise PaymentProviderUncertainError("INQUIRY_STATE_UNKNOWN")
+        if refund:
+            outcome = {
+                "processed": PaymentEventOutcome.SUCCEEDED,
+                "failed": PaymentEventOutcome.FAILED,
+                "pending": PaymentEventOutcome.SUBMITTED,
+            }.get(state)
+        else:
+            outcome = {
+                "captured": PaymentEventOutcome.SUCCEEDED,
+                "refunded": PaymentEventOutcome.SUCCEEDED,
+                "failed": PaymentEventOutcome.FAILED,
+                "authorized": PaymentEventOutcome.SUBMITTED,
+                "created": PaymentEventOutcome.SUBMITTED,
+            }.get(state)
+            if outcome == PaymentEventOutcome.SUCCEEDED and entity.get("captured") is not True:
+                raise PaymentProviderUncertainError("INQUIRY_CAPTURE_UNVERIFIED")
+            if outcome == PaymentEventOutcome.FAILED and entity.get("captured") is not False:
+                raise PaymentProviderUncertainError("INQUIRY_STATE_CONTRADICTION")
+        if outcome is None:
+            raise PaymentProviderUncertainError("INQUIRY_STATE_UNKNOWN")
+        return AuthenticatedPaymentEvent(
+            provider=self.provider_code,
+            external_event_id=f"inquiry:{new_uuid7()}",
+            event_type=f"{kind}.inquiry",
+            outcome=outcome,
+            payment_attempt_id=attempt_id,
+            refund_id=refund_id,
+            provider_refund_id=ref if refund else None,
+            provider_payment_id=pay,
+            provider_order_id=order,
+            amount_minor=entity["amount"],
+            currency=entity["currency"],
+            evidence_source="API_INQUIRY",
+            provider_account_key=self.account_key,
+            definitive_non_payable=bool(
+                refund
+                and state == "failed"
+                and self._refund_finality
+                and entity.get("speed_requested") == "normal"
+            ),
+        )
+
+    async def inquire_payment(
+        self,
+        *,
+        attempt_id: UUID,
+        order_id: str | None,
+        amount_minor: int,
+        currency: str,
+        reported_payment_id: str | None = None,
+    ) -> list[AuthenticatedPaymentEvent]:
+        receipt = f"pa_{attempt_id.hex}"
+        if order_id is None:
+            found = await self._find_order(receipt, amount_minor, currency)
+            if found is None:
+                return []  # Missing order is uncertainty, never proof of failure.
+            order_id = found
+        if not _reference(order_id, "order"):
+            raise PaymentProviderUncertainError("INQUIRY_ORDER_INVALID")
+        order = await self._request("GET", f"/orders/{order_id}")
+        assert order is not None
+        if self._order(order, receipt, amount_minor, currency) != order_id:
+            raise PaymentProviderUncertainError("INQUIRY_ORDER_MISMATCH")
+        collection = await self._request("GET", f"/orders/{order_id}/payments")
+        assert collection is not None
+        items = self._collection(collection)
+        if reported_payment_id is not None:
+            if not _reference(reported_payment_id, "pay"):
+                raise PaymentProviderUncertainError("INQUIRY_PAYMENT_INVALID")
+            reported = await self._request("GET", f"/payments/{reported_payment_id}")
+            assert reported is not None
+            if reported.get("id") != reported_payment_id:
+                raise PaymentProviderUncertainError("INQUIRY_PAYMENT_MISMATCH")
+            items = [item for item in items if item.get("id") != reported_payment_id] + [reported]
+        observations = [self._observation(item, attempt_id=attempt_id) for item in items]
+        if any(
+            o.provider_order_id != order_id
+            or o.amount_minor != amount_minor
+            or o.currency != currency
+            for o in observations
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_OWNERSHIP_MISMATCH")
+        # A failed instrument does not close an order with another unresolved instrument.
+        if any(o.outcome == PaymentEventOutcome.SUBMITTED for o in observations):
+            observations = [o for o in observations if o.outcome != PaymentEventOutcome.FAILED]
+        return sorted(observations, key=lambda o: o.outcome == PaymentEventOutcome.FAILED)
+
+    @staticmethod
+    def _collection(value: dict[str, Any]) -> list[dict[str, Any]]:
+        items = value.get("items")
+        if (
+            value.get("entity") != "collection"
+            or not isinstance(items, list)
+            or value.get("count") != len(items)
+            or len(items) >= 100
+            or any(not isinstance(i, dict) for i in items)
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_COLLECTION_INCOMPLETE")
+        return items
+
+    async def _charge_refunds(self, provider_payment_id: str) -> list[dict[str, Any]]:
+        if not _reference(provider_payment_id, "pay"):
+            raise PaymentProviderUncertainError("INQUIRY_PAYMENT_INVALID")
+        value = await self._request(
+            "GET", f"/payments/{provider_payment_id}/refunds", params={"count": 100}
+        )
+        assert value is not None
+        items = self._collection(value)
+        if any(
+            i.get("entity") != "refund"
+            or i.get("payment_id") != provider_payment_id
+            or not _money(i)
+            or not _reference(i.get("id"), "rfnd")
+            for i in items
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_REFUND_INVALID")
+        return items
+
+    async def inspect_charge_refunds(
+        self, provider_payment_id: str
+    ) -> dict[str, tuple[int, str, str]]:
+        items = await self._charge_refunds(provider_payment_id)
+        # Historical approval fails closed for any external payout/reservation, even failed
+        # operations: those must be mapped and reconciled before recovery can be authorized.
+        if len({i["id"] for i in items}) != len(items) or any(
+            i.get("status") not in {"pending", "processed", "failed"} for i in items
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_REFUND_AMBIGUOUS")
+        return {i["id"]: (i["amount"], i["currency"], i["status"]) for i in items}
+
+    async def inquire_refund(
+        self,
+        *,
+        refund_id: UUID,
+        provider_refund_id: str | None,
+        provider_payment_id: str,
+        amount_minor: int,
+        currency: str,
+    ) -> list[AuthenticatedPaymentEvent]:
+        if provider_refund_id:
+            if not _reference(provider_refund_id, "rfnd"):
+                raise PaymentProviderUncertainError("INQUIRY_REFUND_INVALID")
+            entity = await self._request("GET", f"/refunds/{provider_refund_id}")
+            assert entity is not None
+            if entity.get("id") != provider_refund_id:
+                raise PaymentProviderUncertainError("INQUIRY_REFUND_MISMATCH")
+        else:
+            candidates = [
+                i
+                for i in await self._charge_refunds(provider_payment_id)
+                if i.get("receipt") == f"rf_{refund_id.hex}"
+            ]
+            if not candidates:
+                return []
+            if len(candidates) != 1:
+                raise PaymentProviderUncertainError("INQUIRY_REFUND_AMBIGUOUS")
+            entity = candidates[0]
+        observation = self._observation(entity, refund_id=refund_id)
+        if (
+            observation.provider_payment_id != provider_payment_id
+            or observation.amount_minor != amount_minor
+            or observation.currency != currency
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_REFUND_MISMATCH")
+        if entity.get("receipt") not in {None, f"rf_{refund_id.hex}"}:
+            raise PaymentProviderUncertainError("INQUIRY_REFUND_MISMATCH")
+        notes = entity.get("notes")
+        if isinstance(notes, dict) and notes.get("tirodhan_refund_id") not in {
+            None,
+            str(refund_id),
+        }:
+            raise PaymentProviderUncertainError("INQUIRY_REFUND_MISMATCH")
+        return [observation]
 
     async def _request(
         self,
@@ -289,6 +493,12 @@ class RazorpayProvider:
             raise PaymentProviderEventInputError("Razorpay event envelope is malformed") from None
         event_type = data.get("event") if isinstance(data, dict) else None
         if (
+            self._account_id is not None
+            and isinstance(data, dict)
+            and data.get("account_id") != self._account_id
+        ):
+            raise PaymentProviderAuthenticationError("Razorpay webhook account mismatch")
+        if (
             not isinstance(event_type, str)
             or re.fullmatch(r"[a-z][a-z0-9_.]{0,99}", event_type) is None
         ):
@@ -298,6 +508,7 @@ class RazorpayProvider:
             external_event_id=event_id,
             event_type=event_type,
             payment_attempt_id=None,
+            provider_account_key=self.account_key,
         )
         if event_type not in {
             "payment.captured",

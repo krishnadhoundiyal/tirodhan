@@ -105,3 +105,24 @@ per-charge accounting is a separate architectural decision. Existing non-cancell
 captures remain in their established reconciliation path; this policy does not authorize their
 commercial disposition. Legacy cancelled records without compensation require an audited recovery
 decision; ordinary command replay must not silently rewrite history.
+
+
+## Accepted Phase 2 reconciliation extension
+
+The current user-approved business policies are incorporated at:
+[reconciliation/mobile events](../PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refund recovery](../FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical exceptions](../HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md).
+They supersede the historical canonical-only combined refund cap and the previously open
+late/historical recovery decisions in this ADR. Full compensation is per actual verified
+captured charge, preserving one logical Payment and the canonical booking acceptance.
+
+Existing Refund represents provider execution; RefundObligation preserves debt independent
+of a failed execution. Manager replacement requires current non-payable API proof and
+complete charge/balance accounting, with new operation/native idempotency identity.
+Missing/ambiguous evidence fails closed. Exceptional unfulfillable late captures require a
+manager decision; ordinary authorized cancellation and extra-charge compensation remain
+automatic. Historical transactions are not guessed or silently backfilled. Scheduling values
+and account-specific normal-refund failure finality still require operational/provider
+confirmation, not inferred production defaults. See the completion report for implementation,
+compatibility, validation and remaining deployment prerequisites.

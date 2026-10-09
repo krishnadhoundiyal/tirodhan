@@ -107,3 +107,23 @@ reference/amount/currency on PaymentProviderEvent retain additional-charge recon
 they do not introduce a second financial aggregate or relax the canonical refund/balance invariant.
 `PENDING_PAYMENT -> CANCELLED` is now an approved lifecycle edge, alongside accepted cancellation.
 Cancellation compensation and later canonical capture use the existing Refund/outbox relationship.
+
+
+## Phase 2 charge accounting extension
+
+```mermaid
+erDiagram
+    PAYMENT ||--o{ CAPTURED_CHARGE : records
+    PAYMENT_ATTEMPT ||--o{ CAPTURED_CHARGE : captures
+    PAYMENT_PROVIDER_EVENT ||--o{ CAPTURED_CHARGE : evidences
+    CAPTURED_CHARGE ||--o| REFUND_OBLIGATION : owes
+    REFUND_OBLIGATION ||--o{ REFUND : executed_by
+    CAPTURED_CHARGE ||--o{ REFUND : refunded_by
+    PAYMENT ||--o{ FINANCIAL_EXCEPTION : reviewed_as
+    PAYMENT ||--o{ FINANCIAL_AUDIT : audited_as
+    APP_USER ||--o{ FINANCIAL_AUDIT : authorizes
+```
+
+Migration 0020 adds these typed relationships. Legacy Refund links remain nullable until
+verified; no generic polymorphic financial references or guessed backfill are introduced.
+Charge-level bounds supersede the historical Batch B combined canonical-only cap.

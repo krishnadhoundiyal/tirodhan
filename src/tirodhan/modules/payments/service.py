@@ -19,7 +19,21 @@ from tirodhan.modules.customers.service import (
     IdempotencyCommandInProgressError,
     command_fingerprint,
 )
-from tirodhan.modules.payments.models import Payment, PaymentAttempt, PaymentProviderEvent, Refund
+from tirodhan.modules.payments.accounting import (
+    compensate_charge,
+    open_exception,
+    record_charge,
+    resolve_uncertainty,
+    status_event,
+)
+from tirodhan.modules.payments.models import (
+    CapturedCharge,
+    Payment,
+    PaymentAttempt,
+    PaymentProviderEvent,
+    Refund,
+    RefundObligation,
+)
 from tirodhan.modules.payments.ports import (
     AuthenticatedPaymentEvent,
     PaymentEventOutcome,
@@ -27,7 +41,7 @@ from tirodhan.modules.payments.ports import (
     PaymentProvider,
     PaymentProviderUncertainError,
 )
-from tirodhan.modules.payments.refunds import ensure_cancellation_refund
+from tirodhan.modules.payments.refunds import RefundConflictError, ensure_cancellation_refund
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch
 from tirodhan.modules.planning.policy import planning_cutoff_reached
@@ -158,6 +172,7 @@ async def initiate_payment_attempt(
                 provider=provider_code,
                 provider_idempotency_key=f"payment-attempt:{attempt_id}",
                 status=ATTEMPT_CREATED,
+                provider_account_key=getattr(provider, "account_key", None),
                 created_at=now,
             )
             session.add(attempt)
@@ -257,6 +272,15 @@ async def process_authenticated_payment_event(
                 payload_hash=payload_hash,
                 processing_status=EVENT_RECEIVED,
                 received_at=now,
+                evidence_source=event.evidence_source,
+                provider_account_key=event.provider_account_key,
+                definitive_non_payable=event.definitive_non_payable,
+                observed_outcome=event.outcome.value,
+                provider_payment_id=event.provider_payment_id,
+                amount_minor=event.amount_minor
+                if event.amount_minor and event.amount_minor > 0
+                else None,
+                currency=event.currency,
             )
             .on_conflict_do_nothing(index_elements=["provider", "external_event_id"])
             .returning(PaymentProviderEvent.payment_provider_event_id)
@@ -394,16 +418,27 @@ async def process_authenticated_payment_event(
         ):
             failure = "PAYMENT_FACTS_MISSING"
         elif (
-            event.outcome == PaymentEventOutcome.SUCCEEDED
-            and (event.amount_minor is not None or event.provider == "RAZORPAY")
-            and attempt.status == ATTEMPT_SUCCEEDED
-            and event.provider_payment_id is not None
-            and attempt.provider_payment_id not in {None, event.provider_payment_id}
+            attempt.provider_account_key is not None
+            and event.provider_account_key is not None
+            and attempt.provider_account_key != event.provider_account_key
         ):
-            failure = "ADDITIONAL_SUCCESS"
+            failure = "PROVIDER_ACCOUNT_MISMATCH"
         if failure:
             record.processing_status = EVENT_RECONCILIATION
             record.failure_code = failure
+            record.processed_at = now
+            await open_exception(
+                session, payment, failure, evidence_id=record.payment_provider_event_id
+            )
+            return record
+        if event.outcome == PaymentEventOutcome.SUBMITTED:
+            if attempt.status != ATTEMPT_SUCCEEDED:
+                # Current provider inquiry showing an unresolved instrument revokes a
+                # previously observed failed-order retry permission.
+                attempt.status = ATTEMPT_PENDING
+                attempt.failure_code = None
+                attempt.next_check_at = now
+            record.processing_status = EVENT_PROCESSED
             record.processed_at = now
             return record
         if event.outcome not in {PaymentEventOutcome.SUCCEEDED, PaymentEventOutcome.FAILED}:
@@ -419,15 +454,78 @@ async def process_authenticated_payment_event(
                 attempt.status = ATTEMPT_FAILED
                 attempt.failure_code = event.failure_code or "PROVIDER_REPORTED_FAILURE"
                 attempt.completed_at = utc_now()
+                attempt.next_check_at = None
+                other_unresolved = await session.scalar(
+                    select(PaymentAttempt.payment_attempt_id)
+                    .where(
+                        PaymentAttempt.payment_id == payment.payment_id,
+                        PaymentAttempt.payment_attempt_id != attempt.payment_attempt_id,
+                        PaymentAttempt.status.in_({"CREATED", "PENDING", "INITIATION_UNCERTAIN"}),
+                    )
+                    .limit(1)
+                )
+                if other_unresolved is None:
+                    await resolve_uncertainty(session, payment)
+                await status_event(
+                    session,
+                    payment,
+                    f"payment-failed:{attempt.payment_attempt_id}",
+                    "PAYMENT_FAILED",
+                )
             provider_event.processing_status = EVENT_PROCESSED
             provider_event.processed_at = utc_now()
             return provider_event
 
+        charge = await record_charge(session, payment, attempt, record, event)
+        if event.amount_minor is not None and event.provider_payment_id and charge is None:
+            record.processing_status = EVENT_RECONCILIATION
+            record.failure_code = "CHARGE_IDENTITY_CONFLICT"
+            record.processed_at = now
+            return record
+        additional = payment.successful_attempt_id is not None and (
+            payment.successful_attempt_id != attempt.payment_attempt_id
+            or (
+                attempt.status == ATTEMPT_SUCCEEDED
+                and attempt.provider_payment_id != event.provider_payment_id
+            )
+        )
         attempt.provider_order_id = event.provider_order_id or attempt.provider_order_id
-        attempt.provider_payment_id = event.provider_payment_id or attempt.provider_payment_id
+        if attempt.status != ATTEMPT_SUCCEEDED:
+            attempt.provider_payment_id = event.provider_payment_id or attempt.provider_payment_id
+            attempt.completed_at = now
         attempt.status = ATTEMPT_SUCCEEDED
         attempt.failure_code = None
-        attempt.completed_at = utc_now()
+        attempt.next_check_at = None
+        if event.provider_account_key:
+            attempt.provider_account_key = event.provider_account_key
+        await resolve_uncertainty(session, payment)
+        if additional and charge is not None:
+            if idempotency_expires_at is None:
+                raise PaymentNotEligibleError("Compensation retention is not configured")
+            try:
+                await compensate_charge(
+                    session,
+                    payment,
+                    charge,
+                    "ADDITIONAL_SUCCESS",
+                    expires_at=idempotency_expires_at,
+                )
+            except RefundConflictError:
+                await open_exception(
+                    session,
+                    payment,
+                    "REFUND_REVIEW_REQUIRED",
+                    charge=charge,
+                    evidence_id=record.payment_provider_event_id,
+                )
+                record.processing_status = EVENT_RECONCILIATION
+                record.failure_code = "REFUND_REVIEW_REQUIRED"
+                record.processed_at = now
+                return record
+            record.processing_status = EVENT_PROCESSED
+            record.failure_code = "ADDITIONAL_CAPTURE_COMPENSATED"
+            record.processed_at = now
+            return record
 
         if (
             payment.status == PAYMENT_SUCCEEDED
@@ -445,6 +543,15 @@ async def process_authenticated_payment_event(
             provider_event.failure_code = "ADDITIONAL_SUCCESS"
             provider_event.processed_at = utc_now()
             return provider_event
+
+        # Captured money is authoritative even when the booking cannot be accepted.
+        was_pending = payment.status == PAYMENT_PENDING
+        payment.status = PAYMENT_SUCCEEDED
+        payment.successful_attempt_id = attempt.payment_attempt_id
+        payment.succeeded_at = payment.succeeded_at or now
+        await status_event(
+            session, payment, f"payment-confirmed:{payment.payment_id}", "PAYMENT_CONFIRMED"
+        )
 
         request = await session.get(CollectionRequest, payment.request_id)
         if request is None:
@@ -465,6 +572,18 @@ async def process_authenticated_payment_event(
         if request is None:
             raise RuntimeError("payment references a missing collection request")
         if request.status == "CANCELLED":
+            if not payment.cancellation_compensation_authorized:
+                await open_exception(
+                    session,
+                    payment,
+                    "HISTORICAL_CANCELLED_MISSING_REFUND",
+                    charge=charge,
+                    evidence_id=record.payment_provider_event_id,
+                )
+                record.processing_status = EVENT_RECONCILIATION
+                record.failure_code = "HISTORICAL_CANCELLED_MISSING_REFUND"
+                record.processed_at = now
+                return record
             if idempotency_expires_at is None:
                 raise PaymentNotEligibleError("Compensation retention is not configured")
             # The charge is confirmed, but the collection commitment stays
@@ -494,9 +613,19 @@ async def process_authenticated_payment_event(
             is not None
         )
         if batch_exists:
+            if request.status == REQUEST_PENDING_PAYMENT:
+                request.status = "EXPIRED"
+                request.expired_at = now
             provider_event.processing_status = EVENT_RECONCILIATION
             provider_event.failure_code = "WORK_UNIT_FROZEN"
             provider_event.processed_at = utc_now()
+            await open_exception(
+                session,
+                payment,
+                "WORK_UNIT_FROZEN",
+                charge=charge,
+                evidence_id=record.payment_provider_event_id,
+            )
             return provider_event
 
         if planning_cutoff_reached(
@@ -504,22 +633,38 @@ async def process_authenticated_payment_event(
             planning_lead_time_minutes,
             now=utc_now(),
         ):
+            if request.status == REQUEST_PENDING_PAYMENT:
+                request.status = "EXPIRED"
+                request.expired_at = now
             provider_event.processing_status = EVENT_RECONCILIATION
             provider_event.failure_code = "PLANNING_CUTOFF_REACHED"
             provider_event.processed_at = utc_now()
+            await open_exception(
+                session,
+                payment,
+                "PLANNING_CUTOFF_REACHED",
+                charge=charge,
+                evidence_id=record.payment_provider_event_id,
+            )
             return provider_event
 
         if request.payment_expires_at <= utc_now():
             provider_event.processing_status = EVENT_RECONCILIATION
             provider_event.failure_code = "PAYMENT_WINDOW_EXPIRED"
             provider_event.processed_at = utc_now()
+            if request.status == REQUEST_PENDING_PAYMENT:
+                request.status = "EXPIRED"
+                request.expired_at = now
+            await open_exception(
+                session,
+                payment,
+                "PAYMENT_WINDOW_EXPIRED",
+                charge=charge,
+                evidence_id=record.payment_provider_event_id,
+            )
             return provider_event
 
-        if (
-            payment.status == PAYMENT_PENDING
-            and payment.successful_attempt_id is None
-            and request.status == REQUEST_PENDING_PAYMENT
-        ):
+        if was_pending and request.status == REQUEST_PENDING_PAYMENT:
             accepted_at = utc_now()
             transitioned_id = await session.scalar(
                 update(CollectionRequest)
@@ -550,6 +695,13 @@ async def process_authenticated_payment_event(
         provider_event.processing_status = EVENT_RECONCILIATION
         provider_event.failure_code = "ADDITIONAL_SUCCESS"
         provider_event.processed_at = utc_now()
+        await open_exception(
+            session,
+            payment,
+            "BOOKING_INELIGIBLE",
+            charge=charge,
+            evidence_id=record.payment_provider_event_id,
+        )
         return provider_event
 
 
@@ -560,6 +712,22 @@ async def _process_refund_event(
     now: datetime,
 ) -> PaymentProviderEvent:
     # Both authenticated identities must resolve to the same refund; neither may win silently.
+    matching = or_(
+        Refund.refund_id == event.refund_id,
+        and_(
+            Refund.provider == event.provider, Refund.provider_refund_id == event.provider_refund_id
+        )
+        if event.provider_refund_id is not None
+        else false(),
+    )
+    payment_ids = list(await session.scalars(select(Refund.payment_id).where(matching).distinct()))
+    if payment_ids:
+        await session.scalars(
+            select(Payment)
+            .where(Payment.payment_id.in_(payment_ids))
+            .order_by(Payment.payment_id)
+            .with_for_update()
+        )
     refunds = list(
         await session.scalars(
             select(Refund)
@@ -593,29 +761,67 @@ async def _process_refund_event(
         record.processing_status = EVENT_UNMATCHED
         record.processed_at = now
         return record
+    if refund.payment_id not in payment_ids:
+        raise PaymentNotEligibleError("Refund mapping changed during reconciliation")
+    payment = await session.get(Payment, refund.payment_id)
+    assert payment is not None
 
     if refund.provider != event.provider:
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
         record.failure_code = "REFUND_PROVIDER_MISMATCH"
         record.processed_at = now
+        await open_exception(
+            session,
+            payment,
+            "REFUND_PROVIDER_MISMATCH",
+            refund=refund,
+            evidence_id=record.payment_provider_event_id,
+        )
         return record
 
     record.refund_id = refund.refund_id
 
     attempt = await session.get(PaymentAttempt, refund.payment_attempt_id)
+    charge = (
+        await session.get(CapturedCharge, refund.captured_charge_id)
+        if refund.captured_charge_id
+        else None
+    )
     failure = event.validation_failure_code
     if event.amount_minor is not None and event.amount_minor != refund.amount_minor:
         failure = "REFUND_AMOUNT_MISMATCH"
     elif event.currency is not None and event.currency != refund.currency:
         failure = "REFUND_CURRENCY_MISMATCH"
     elif event.provider_payment_id is not None and (
-        attempt is None or event.provider_payment_id != attempt.provider_payment_id
+        event.provider_payment_id
+        != (
+            charge.provider_payment_id
+            if charge
+            else attempt.provider_payment_id
+            if attempt
+            else None
+        )
     ):
         failure = "REFUND_PAYMENT_MISMATCH"
+    elif (
+        charge
+        and event.provider_account_key
+        and charge.provider_account_key
+        and charge.provider_account_key != event.provider_account_key
+    ):
+        failure = "PROVIDER_ACCOUNT_MISMATCH"
     if failure:
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
         record.failure_code = failure
         record.processed_at = now
+        await open_exception(
+            session,
+            payment,
+            failure,
+            charge=charge,
+            refund=refund,
+            evidence_id=record.payment_provider_event_id,
+        )
         return record
 
     if event.provider_refund_id is not None:
@@ -629,6 +835,14 @@ async def _process_refund_event(
             record.processing_status = EVENT_RECONCILIATION_REQUIRED
             record.failure_code = "REFUND_IDENTITY_CONFLICT"
             record.processed_at = now
+            await open_exception(
+                session,
+                payment,
+                "REFUND_IDENTITY_CONFLICT",
+                charge=charge,
+                refund=refund,
+                evidence_id=record.payment_provider_event_id,
+            )
             return record
 
     # If provider_refund_id is known, and refund lacks it, set it (unless conflict)
@@ -637,6 +851,20 @@ async def _process_refund_event(
     elif event.provider_refund_id and refund.provider_refund_id != event.provider_refund_id:
         # Correlation conflict
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
+        record.failure_code = "REFUND_IDENTITY_CONFLICT"
+        if event.evidence_source == "PROVIDER_RESPONSE" and refund.status not in {
+            "SUCCEEDED",
+            "FAILED",
+        }:
+            refund.status = "INITIATION_UNCERTAIN"
+        await open_exception(
+            session,
+            payment,
+            "REFUND_IDENTITY_CONFLICT",
+            charge=charge,
+            refund=refund,
+            evidence_id=record.payment_provider_event_id,
+        )
         record.processed_at = now
         return record
 
@@ -645,13 +873,30 @@ async def _process_refund_event(
     if event.outcome == PaymentEventOutcome.SUCCEEDED:
         if refund.status == "SUCCEEDED":
             pass  # duplicate, idempotent
-        elif refund.status == "FAILED":
+        elif refund.status == "FAILED" and refund.refund_obligation_id is None:
             # Conflict with local terminal state
             record.processing_status = EVENT_RECONCILIATION_REQUIRED
         else:
+            if refund.status == "FAILED" and refund.non_payable_verified_at is not None:
+                obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+                if obligation:
+                    obligation.payout_blocked = True
+                await open_exception(
+                    session,
+                    payment,
+                    "REFUND_FINALITY_CONTRADICTION",
+                    charge=charge,
+                    refund=refund,
+                    evidence_id=record.payment_provider_event_id,
+                )
             refund.status = "SUCCEEDED"
+            refund.non_payable_verified_at = None
+            refund.next_check_at = None
             refund.completed_at = now
             record.processing_status = EVENT_PROCESSED
+            await status_event(
+                session, payment, f"refund-completed:{refund.refund_id}", "REFUND_COMPLETED"
+            )
     elif event.outcome == PaymentEventOutcome.FAILED:
         if refund.status == "FAILED":
             pass  # duplicate, idempotent
@@ -661,12 +906,45 @@ async def _process_refund_event(
             refund.status = "FAILED"
             refund.completed_at = now
             record.processing_status = EVENT_PROCESSED
+        if refund.status == "FAILED":
+            if event.evidence_source == "API_INQUIRY" and event.definitive_non_payable:
+                refund.non_payable_verified_at = now
+                refund.failure_evidence_id = record.payment_provider_event_id
+            await open_exception(
+                session,
+                payment,
+                "REFUND_FAILED",
+                charge=charge,
+                refund=refund,
+                evidence_id=record.payment_provider_event_id,
+            )
+            await status_event(
+                session, payment, f"refund-failed:{refund.refund_id}", "REFUND_FAILED"
+            )
     elif event.outcome == PaymentEventOutcome.SUBMITTED:
+        if refund.status == "FAILED" and refund.non_payable_verified_at is not None:
+            obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+            if obligation:
+                obligation.payout_blocked = True
+            refund.non_payable_verified_at = None
+            record.processing_status = EVENT_RECONCILIATION_REQUIRED
+            record.failure_code = "REFUND_FINALITY_CONTRADICTION"
+            await open_exception(
+                session,
+                payment,
+                "REFUND_FINALITY_CONTRADICTION",
+                charge=charge,
+                refund=refund,
+                evidence_id=record.payment_provider_event_id,
+            )
         if refund.status not in {"SUCCEEDED", "FAILED"}:
             refund.status = "SUBMITTED"
 
     if record.processing_status == EVENT_RECEIVED:
         record.processing_status = EVENT_PROCESSED
+
+    if record.processing_status == EVENT_PROCESSED and refund.status in {"SUCCEEDED", "FAILED"}:
+        await resolve_uncertainty(session, payment, refund=refund)
 
     record.processed_at = now
     return record

@@ -58,7 +58,11 @@ def signed(body, event_id="evt_test"):
 async def process(factory, provider, body, event_id="evt_test", lead=30):
     event = await provider.authenticate_webhook(raw_body=body, headers=signed(body, event_id))
     return await process_authenticated_payment_event(
-        factory, event, payload_hash=hashlib.sha256(body).digest(), planning_lead_time_minutes=lead
+        factory,
+        event,
+        payload_hash=hashlib.sha256(body).digest(),
+        planning_lead_time_minutes=lead,
+        idempotency_expires_at=utc_now() + timedelta(days=1),
     )
 
 

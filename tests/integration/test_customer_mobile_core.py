@@ -705,9 +705,8 @@ async def test_detail_financial_truth(
         assert data["payment"]["status"] == "SUCCEEDED"
         assert data["refunds"][0]["status"] == expected
         assert data["refund_status"] == expected
-        assert data["cancellation"]["refund_expectation"] == (
-            "FULL_PAYMENT" if state == "FAILED" else "REVIEW_REQUIRED"
-        )
+        # Failed status without authoritative non-payable proof still reserves money.
+        assert data["cancellation"]["refund_expectation"] == "REVIEW_REQUIRED"
 
 
 async def test_fresh_booking_policy_failure_inactive_category_and_immutable_display_snapshot(

@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.customer_reads.errors import CustomerReadError
-from tirodhan.modules.payments.models import Payment, PaymentAttempt, PaymentProviderEvent, Refund
+from tirodhan.modules.payments.models import (
+    CapturedCharge,
+    Payment,
+    PaymentAttempt,
+    PaymentProviderEvent,
+    Refund,
+)
 
 
 @dataclass
@@ -32,6 +38,12 @@ async def load_financials(
     )
     by_request = {p.request_id: p for p in payments}
     ids = [p.payment_id for p in payments]
+    charges = {
+        c.captured_charge_id: c
+        for c in await session.scalars(
+            select(CapturedCharge).where(CapturedCharge.payment_id.in_(ids))
+        )
+    }
     attempts: dict[UUID, list[PaymentAttempt]] = defaultdict(list)
     for attempt in await session.scalars(
         select(PaymentAttempt)
@@ -96,7 +108,19 @@ async def load_financials(
             or any(
                 r.currency != payment.currency
                 or r.amount_minor <= 0
-                or r.payment_attempt_id != payment.successful_attempt_id
+                or (
+                    r.captured_charge_id is None
+                    and r.payment_attempt_id != payment.successful_attempt_id
+                )
+                or (
+                    r.captured_charge_id is not None
+                    and (
+                        r.captured_charge_id not in charges
+                        or charges[r.captured_charge_id].payment_id != payment.payment_id
+                        or charges[r.captured_charge_id].payment_attempt_id != r.payment_attempt_id
+                        or charges[r.captured_charge_id].currency != r.currency
+                    )
+                )
                 or not any(
                     a.payment_attempt_id == r.payment_attempt_id
                     and a.provider == r.provider
@@ -106,7 +130,23 @@ async def load_financials(
                 )
                 for r in refunded
             )
-            or sum(r.amount_minor for r in refunded if r.status != "FAILED") > payment.amount_minor
+            or sum(
+                r.amount_minor
+                for r in refunded
+                if r.captured_charge_id is None and r.non_payable_verified_at is None
+            )
+            > payment.amount_minor
+            or any(
+                sum(
+                    r.amount_minor
+                    for r in refunded
+                    if r.captured_charge_id == c.captured_charge_id
+                    and r.non_payable_verified_at is None
+                )
+                > c.amount_minor
+                for c in charges.values()
+                if c.payment_id == payment.payment_id
+            )
         ):
             raise CustomerReadError(503, "NOT_ELIGIBLE")
         result[request.request_id] = FinancialSnapshot(

@@ -895,8 +895,8 @@ async def test_freeze_wins_shared_lock_and_prevents_acceptance(
         )
     assert event.processing_status == EVENT_RECONCILIATION
     assert event.failure_code == "WORK_UNIT_FROZEN"
-    assert request is not None and request.status == REQUEST_PENDING_PAYMENT
-    assert payment is not None and payment.status == PAYMENT_PENDING
+    assert request is not None and request.status == "EXPIRED"
+    assert payment is not None and payment.status == "SUCCEEDED"
     assert durable_attempt is not None and durable_attempt.status == ATTEMPT_SUCCEEDED
     assert outbox_count == 0
 

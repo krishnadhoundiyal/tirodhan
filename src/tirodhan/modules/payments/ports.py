@@ -43,6 +43,38 @@ class AuthenticatedPaymentEvent:
     amount_minor: int | None = None
     currency: str | None = None
     validation_failure_code: str | None = None
+    evidence_source: str = "WEBHOOK"
+    provider_account_key: str | None = None
+    definitive_non_payable: bool = False
+
+
+class FinancialInquiryProvider(Protocol):
+    provider_code: str
+    account_key: str
+
+    async def inquire_payment(
+        self,
+        *,
+        attempt_id: UUID,
+        order_id: str | None,
+        amount_minor: int,
+        currency: str,
+        reported_payment_id: str | None = None,
+    ) -> list[AuthenticatedPaymentEvent]: ...
+
+    async def inquire_refund(
+        self,
+        *,
+        refund_id: UUID,
+        provider_refund_id: str | None,
+        provider_payment_id: str,
+        amount_minor: int,
+        currency: str,
+    ) -> list[AuthenticatedPaymentEvent]: ...
+
+    async def inspect_charge_refunds(
+        self, provider_payment_id: str
+    ) -> dict[str, tuple[int, str, str]]: ...
 
 
 class PaymentProvider(Protocol):

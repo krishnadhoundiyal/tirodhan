@@ -47,7 +47,10 @@ def payment_projection(
     )
     status = payment.status
     if status == "PENDING":
-        if reconciliation:
+        if reconciliation or (
+            (request.status == "EXPIRED" or request.payment_expires_at <= now)
+            and any(a.status in {"CREATED", "PENDING", "INITIATION_UNCERTAIN"} for a in attempts)
+        ):
             status = "CONFIRMING"
         elif request.status == "EXPIRED" or request.payment_expires_at <= now:
             status = "EXPIRED"

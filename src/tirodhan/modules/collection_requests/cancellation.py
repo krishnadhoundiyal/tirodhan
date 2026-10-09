@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.db.values import utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
+from tirodhan.modules.payments.accounting import status_event
 from tirodhan.modules.payments.models import Payment
 from tirodhan.modules.payments.refunds import RefundConflictError, ensure_cancellation_refund
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
@@ -179,6 +180,10 @@ async def cancel_collection_request_by_customer(
     # concurrent planning winner.
     request.status = "CANCELLED"
     request.cancelled_at = time_now
+    payment.cancellation_compensation_authorized = True
+    await status_event(
+        session, payment, f"collection-cancelled:{request_id}", "COLLECTION_CANCELLED"
+    )
     if payment.status == "PENDING":
         payment.status = "CANCELLED"
         payment.cancelled_at = time_now

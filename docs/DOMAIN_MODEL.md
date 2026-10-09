@@ -416,3 +416,35 @@ A `Refund` operates across the following independent status boundaries:
 - `SUCCEEDED`: Provider confirmed.
 - `FAILED`: Provider definitively rejected/failed.
 - `INITIATION_UNCERTAIN`: Ambiguous invocation outcome, awaits reconciliation.
+
+
+## Phase 2 financial reconciliation completion
+
+This approved extension supersedes the historical canonical-only combined refund cap
+and the open reconciliation decisions recorded in earlier phase descriptions.
+See [reconciliation](PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refund recovery](FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical financial exceptions](HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md).
+
+Payment remains the logical booking payment. PaymentAttempt remains an order/checkout
+attempt. CapturedCharge records each verified distinct provider payment, with actual
+money/currency and first evidence. An attempt may have several captured charges.
+Only its first canonical charge funds booking; another charge never re-accepts a booking,
+changes its quote, or replaces the canonical reference.
+
+RefundObligation is debt against one captured charge. Existing Refund is its provider
+execution operation. Failed execution preserves debt. Outstanding amount is the obligation
+minus verified successful payouts. Replacement requires a manager command plus current
+API evidence verifying the original operation as definitively non-payable. A status string,
+timeout or absent webhook alone never suffices. Contradictory later original success blocks
+new payout and opens a case, preserving external truth and all completed operations.
+
+Expiry releases booking eligibility, leaving unresolved Payment/Attempt financially pending.
+Late verified capture records Payment SUCCEEDED plus an operational exception without
+reviving the slot. Historical cancellations lacking explicit compensation authorization
+require manager recovery. Only a fresh customer cancellation sets that authorization marker;
+ordinary cancellation replay never invents historical compensation.
+
+FinancialException is an operational case, not a CollectionRequest lifecycle state.
+FinancialAudit is append-only manager provenance. API_INQUIRY is distinct from WEBHOOK
+and PROVIDER_RESPONSE evidence. No new customer-facing enum is introduced.

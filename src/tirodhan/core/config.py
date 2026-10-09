@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     razorpay_key_secret: SecretStr | None = None
     razorpay_webhook_secret: SecretStr | None = None
     razorpay_http_timeout_seconds: float | None = None
+    razorpay_account_id: str | None = None
+    razorpay_normal_refund_failure_finality_confirmed: bool = False
+    financial_reconciliation_batch_size: int | None = None
+    financial_reconciliation_interval_seconds: int | None = None
+    financial_reconciliation_max_backoff_seconds: int | None = None
+    financial_reconciliation_lease_seconds: int | None = None
+    financial_unresolved_threshold_seconds: int | None = None
     rider_offer_lifetime_seconds: int | None = None
     fcm_project_id: str | None = None
     fcm_credentials_json: SecretStr | None = None
@@ -108,6 +115,11 @@ class Settings(BaseSettings):
 
     @field_validator(
         "command_idempotency_ttl_seconds",
+        "financial_reconciliation_batch_size",
+        "financial_reconciliation_interval_seconds",
+        "financial_reconciliation_max_backoff_seconds",
+        "financial_reconciliation_lease_seconds",
+        "financial_unresolved_threshold_seconds",
         "serviceability_context_ttl_seconds",
         "pending_payment_lifetime_seconds",
         "auth_access_token_ttl_seconds",
