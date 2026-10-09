@@ -296,13 +296,24 @@ processing_status           varchar(24) NOT NULL
 received_at                 timestamptz NOT NULL
 processed_at                timestamptz NULL
 failure_code                varchar(64) NULL
+provider_payment_id         varchar(200) NULL
+amount_minor                bigint NULL
+currency                    char(3) NULL
 ```
 
 Required:
 
 ```text
 UNIQUE(provider, external_event_id)
+amount_minor IS NULL OR amount_minor > 0
 ```
+
+Migration 0019 adds only nullable authenticated-capture facts to `payment_provider_event`.
+They preserve distinct additional-charge identity for reconciliation without raw payloads,
+payment-instrument data or guessed historical backfill. Existing rows remain valid and retained.
+These fields are private provider metadata, excluded from customer DTOs and reliability payloads.
+Downgrade retains event rows but removes the new facts; export them before a rollback that must
+preserve reconciliation evidence.
 
 ### `refund`
 
@@ -921,9 +932,16 @@ One transaction persists:
 
 One transaction persists:
 
-- request `ACCEPTED -> CANCELLED`;
-- refund record;
-- refund-requested outbox event.
+- command idempotency claim/completion and request `ACCEPTED/PENDING_PAYMENT -> CANCELLED`;
+- full canonical refund record and `RefundRequested` outbox, when confirmed funds exist;
+- unsettled `Payment -> CANCELLED`, when no charge has settled.
+
+The Payment row is locked before work-unit advisory and request locks. Refund creation locks
+Payment before its own command key and validates the canonical settled charge and reserved balance.
+The first verified capture of an already cancelled collection atomically establishes canonical
+Payment success and the same stable cancellation-refund intent/outbox, without reacceptance.
+Partial reservations refuse the fresh cancellation; an existing full reservation creates no second
+intent. See `IDEMPOTENCY.md` for all overlapping lock paths and replay behavior.
 
 ### Planning freeze
 

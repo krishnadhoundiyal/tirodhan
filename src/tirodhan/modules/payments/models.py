@@ -93,6 +93,9 @@ class PaymentProviderEvent(Base):
         UniqueConstraint(
             "provider", "external_event_id", name="uq_payment_provider_event_identity"
         ),
+        CheckConstraint(
+            "amount_minor IS NULL OR amount_minor > 0", name="ck_provider_event_amount"
+        ),
     )
 
     payment_provider_event_id: Mapped[UUID] = mapped_column(
@@ -118,6 +121,11 @@ class PaymentProviderEvent(Base):
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Authenticated capture facts survive even when a second charge cannot be
+    # assigned as canonical. Never store a raw provider payload here.
+    provider_payment_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str | None] = mapped_column(CHAR(3), nullable=True)
 
 
 class Refund(Base):

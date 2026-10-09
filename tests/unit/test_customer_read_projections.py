@@ -47,6 +47,7 @@ def payment(req: CollectionRequest, status: str = "PENDING") -> Payment:
         amount_minor=100,
         currency="INR",
         succeeded_at=NOW if status == "SUCCEEDED" else None,
+        successful_attempt_id=uuid4() if status == "SUCCEEDED" else None,
     )
 
 
@@ -181,7 +182,7 @@ def test_missing_financial_truth_and_unmapped_refund_fail_safely() -> None:
         refund_projection(refund)
 
 
-def test_cancellation_boundaries_freeze_and_open_compensation_policy() -> None:
+def test_cancellation_boundaries_freeze_and_full_compensation_policy() -> None:
     req = request()
     p = payment(req, "SUCCEEDED")
     cutoff = req.slot_start - timedelta(minutes=4)
@@ -190,7 +191,7 @@ def test_cancellation_boundaries_freeze_and_open_compensation_policy() -> None:
     ).allowed
     result = cancellation_projection(req, p, now=cutoff, lead_time_minutes=4)
     assert not result.allowed and result.reason == "PLANNING_CUTOFF_REACHED"
-    assert result.refund_expectation == "REVIEW_REQUIRED"
+    assert result.refund_expectation == "FULL_PAYMENT"
     assert (
         cancellation_projection(req, p, now=NOW, lead_time_minutes=4, frozen=True).reason
         == "PLANNING_STARTED"
@@ -221,6 +222,54 @@ def test_journey_uses_recorded_facts_and_rejected_handover_never_completes_recei
     result = journey_projection(req, pickup, [rejected])
     assert all(m.state == "COMPLETE" for m in result.milestones)
     assert result.handover.validated_at == rejected.evaluated_at
+
+
+@pytest.mark.parametrize("reason", ["ADDITIONAL_SUCCESS", "LATE_SUCCESS"])
+def test_precise_payment_correction_reasons_are_mapped(reason):
+    refund = Refund(
+        refund_id=uuid4(),
+        status="PENDING",
+        reason_code=reason,
+        amount_minor=100,
+        currency="INR",
+        created_at=NOW,
+    )
+    assert refund_projection(refund).reason == "PAYMENT_CORRECTION"
+
+
+@pytest.mark.parametrize(
+    "amount, allowed, expectation",
+    [
+        (0, True, "FULL_PAYMENT"),
+        (50, False, "REVIEW_REQUIRED"),
+        (100, True, "FULL_PAYMENT"),
+    ],
+)
+def test_cancellation_full_balance_policy_matches_command(amount, allowed, expectation):
+    req = request()
+    p = payment(req, "SUCCEEDED")
+    refunds = (
+        []
+        if amount == 0
+        else [
+            Refund(
+                payment_attempt_id=p.successful_attempt_id,
+                amount_minor=amount,
+                currency="INR",
+                status="PENDING",
+            )
+        ]
+    )
+    value = cancellation_projection(req, p, now=NOW, lead_time_minutes=4, refunds=refunds)
+    assert value.allowed == allowed and value.refund_expectation == expectation
+
+
+def test_retry_blocked_by_planning_read_and_pending_cancellation_is_allowed():
+    req = request("PENDING_PAYMENT")
+    p = payment(req)
+    assert not payment_projection(req, p, [], now=NOW, retry_blocked=True).retry_allowed
+    capability = cancellation_projection(req, p, now=NOW, lead_time_minutes=4)
+    assert capability.allowed and capability.refund_expectation == "NONE"
 
 
 @pytest.mark.parametrize(

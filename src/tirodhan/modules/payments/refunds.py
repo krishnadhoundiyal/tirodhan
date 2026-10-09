@@ -34,6 +34,70 @@ class RefundConflictError(RuntimeError):
     pass
 
 
+def cancellation_refund_amount(payment: Payment, refunds: list[Refund]) -> int:
+    """Full compensation or an already reserved full refund; no invented partial policy."""
+    if payment.status not in {"PENDING", "CANCELLED", "EXPIRED", "SUCCEEDED"}:
+        raise RefundConflictError("Payment accounting is inconsistent")
+    if payment.status != "SUCCEEDED":
+        if refunds:
+            raise RefundConflictError("Refund exists without a captured payment")
+        return 0
+    if payment.successful_attempt_id is None or payment.succeeded_at is None:
+        raise RefundConflictError("Canonical captured payment is missing")
+    if any(
+        r.currency != payment.currency
+        or r.amount_minor <= 0
+        or r.payment_attempt_id != payment.successful_attempt_id
+        or r.status
+        not in {"PENDING", "PROCESSING", "SUBMITTED", "SUCCEEDED", "FAILED", "INITIATION_UNCERTAIN"}
+        for r in refunds
+    ):
+        raise RefundConflictError("Refund accounting is inconsistent")
+    reserved = sum(r.amount_minor for r in refunds if r.status != "FAILED")
+    if reserved == payment.amount_minor:
+        return 0
+    if reserved != 0 or payment.amount_minor <= 0:
+        raise RefundConflictError("Partial compensation requires financial review")
+    return payment.amount_minor
+
+
+async def ensure_cancellation_refund(
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    customer_id: UUID,
+    idempotency_expires_at: datetime,
+) -> Refund | None:
+    # Caller owns Payment FOR UPDATE. All callers use one business key, independent
+    # of cancellation command IDs and provider delivery IDs.
+    refunds = list(
+        await session.scalars(select(Refund).where(Refund.payment_id == payment.payment_id))
+    )
+    amount = cancellation_refund_amount(payment, refunds)
+    if payment.status == "SUCCEEDED":
+        attempt = await session.scalar(
+            select(PaymentAttempt).where(
+                PaymentAttempt.payment_attempt_id == payment.successful_attempt_id,
+                PaymentAttempt.payment_id == payment.payment_id,
+            )
+        )
+        if attempt is None or attempt.status != "SUCCEEDED" or not attempt.provider_payment_id:
+            raise RefundConflictError("Canonical captured charge reference is missing")
+    if not amount:
+        return None
+    assert payment.successful_attempt_id is not None
+    return await create_refund(
+        session,
+        payment_id=payment.payment_id,
+        payment_attempt_id=payment.successful_attempt_id,
+        amount_minor=amount,
+        reason_code="CUSTOMER_CANCELLATION",
+        idempotency_key=f"customer-cancellation:{payment.request_id}",
+        idempotency_expires_at=idempotency_expires_at,
+        requested_by_user_id=customer_id,
+    )
+
+
 async def create_refund(
     session: AsyncSession,
     *,
@@ -57,6 +121,17 @@ async def create_refund(
 
     if amount_minor <= 0:
         raise RefundInputError("Refund amount must be positive")
+
+    # Financial lock precedes the refund command key as well as any attempt/FK
+    # lock. Cancellation/capture may already hold this same Payment lock.
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.payment_id == payment_id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if payment is None:
+        raise RefundNotFoundError("Payment not found")
 
     scope = f"refund.create:{payment_id}"
     try:
@@ -90,13 +165,6 @@ async def create_refund(
                 raise RefundNotFoundError("Refund not found")
             return refund
 
-    # Serialize through Payment
-    payment_stmt = select(Payment).where(Payment.payment_id == payment_id).with_for_update()
-    payment = await session.scalar(payment_stmt)
-
-    if not payment:
-        raise RefundNotFoundError("Payment not found")
-
     if payment.status != "SUCCEEDED":
         raise RefundConflictError("Payment has not succeeded")
 
@@ -108,7 +176,12 @@ async def create_refund(
         PaymentAttempt.payment_attempt_id == payment_attempt_id
     )
     attempt = await session.scalar(attempt_stmt)
-    if not attempt or attempt.payment_id != payment.payment_id or attempt.status != "SUCCEEDED":
+    if (
+        not attempt
+        or attempt.payment_id != payment.payment_id
+        or attempt.status != "SUCCEEDED"
+        or not attempt.provider_payment_id
+    ):
         raise RefundConflictError("Invalid successful payment attempt")
 
     # Calculate reserved balance

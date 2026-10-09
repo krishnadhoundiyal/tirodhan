@@ -180,6 +180,7 @@ async def create_successful_payment(session, request: CollectionRequest, amount_
 async def test_cancellation_own_accepted_request(database_session_factory):
     async with database_session_factory() as session, session.begin():
         request = await create_dummy_request(session)
+        await create_successful_payment(session, request)
         result = await cancel_collection_request_by_customer(
             session,
             request_id=request.request_id,
@@ -210,6 +211,7 @@ async def test_cancellation_foreign_customer_forbidden(database_session_factory)
 async def test_cancellation_concurrent_race(database_session_factory):
     async with database_session_factory() as session, session.begin():
         request = await create_dummy_request(session)
+        await create_successful_payment(session, request)
         request_id = request.request_id
         customer_id = request.customer_id
         work_unit = PlanningWorkUnit(

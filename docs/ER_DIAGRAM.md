@@ -100,3 +100,10 @@ OUTBOX_EVENT
 They are reliability infrastructure rather than business aggregates.
 
 See `IDEMPOTENCY.md`.
+
+Phase 2 Batch B preserves all financial relationships: one logical Payment per collection,
+attempt history, provider events and canonical-charge Refunds. Nullable authenticated capture
+reference/amount/currency on PaymentProviderEvent retain additional-charge reconciliation facts;
+they do not introduce a second financial aggregate or relax the canonical refund/balance invariant.
+`PENDING_PAYMENT -> CANCELLED` is now an approved lifecycle edge, alongside accepted cancellation.
+Cancellation compensation and later canonical capture use the existing Refund/outbox relationship.

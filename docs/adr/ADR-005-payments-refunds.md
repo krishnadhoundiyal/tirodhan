@@ -53,7 +53,8 @@ Any additional successful charge becomes a reconciliation/refund condition. It m
 ### Refund Concurrency and Lifecycle Decisions
 - Expiration concurrency aligns through `Payment` locking first to correctly serialize financial ownership rules against webhook success markers.
 - Production payment and normal refund execution use Razorpay (`RAZORPAY`).
-- Customer-cancellation refund policies (i.e. partial / exact commercial outcomes on cancellation) remain functionally open.
+- Phase 2 Batch B approves full customer-cancellation compensation before cutoff/freeze;
+  partial commercial outcomes remain open (see the policy below).
 - Over-refunding concurrency operates through checking explicitly unfailed refunds to prevent race-condition payouts.
 - Processing anomalies in external integrations fallback to `INITIATION_UNCERTAIN` for reconciliation instead of silent retries to guarantee provider replay-safety.
 
@@ -78,3 +79,29 @@ outcome SUBMITTED/SUCCEEDED/FAILED. Provider calls run without DB sessions/locks
 No manual capture, instant refunds, client-authoritative success, auto-refund, new financial schema
 or deployment Terraform. Account activation, auto-capture, webhook subscriptions, queue/RBAC and
 secret injection are operational prerequisites (see PHASE_1V_COMPLETION.md).
+
+## Phase 2 Batch B customer cancellation policy
+
+The Batch B implementation request approves one customer command before the existing planning
+cutoff/freeze: cancel an `ACCEPTED` or still-unsettled `PENDING_PAYMENT` collection. A confirmed
+canonical successful payment receives a full refund intent, subject to the authoritative balance.
+An already reserved full refund is reused. A partial reservation without an approved partial policy
+refuses cancellation for financial review. Definitively failed refunds do not reserve balance.
+
+Cancellation, refund intent, `RefundRequested` and command completion commit together. No provider
+HTTP occurs in this transaction. An unsettled cancellation creates no refund and closes the logical
+payment obligation. If a later authenticated capture establishes its first canonical successful
+charge, that event transaction persists financial success and the full cancellation refund/outbox,
+while leaving the collection `CANCELLED`, including after expiry or planning freeze.
+
+This supersedes Phase 1V's exclusion of automatic customer-cancellation refund initiation only.
+Razorpay execution and refund lifecycle remain unchanged. A durable intent is not a completed refund.
+
+The existing canonical-attempt-only refund model and logical-payment-wide amount cap remain
+authoritative. A separate additional charge cannot be automatically refunded within those rules.
+Its authenticated charge reference, amount and currency are retained on the provider event, which
+remains `RECONCILIATION_REQUIRED`; no extra acceptance or fabricated refund is permitted. Approving
+per-charge accounting is a separate architectural decision. Existing non-cancelled expiry/cutoff
+captures remain in their established reconciliation path; this policy does not authorize their
+commercial disposition. Legacy cancelled records without compensation require an audited recovery
+decision; ordinary command replay must not silently rewrite history.

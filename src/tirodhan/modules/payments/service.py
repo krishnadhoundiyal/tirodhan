@@ -27,6 +27,7 @@ from tirodhan.modules.payments.ports import (
     PaymentProvider,
     PaymentProviderUncertainError,
 )
+from tirodhan.modules.payments.refunds import ensure_cancellation_refund
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch
 from tirodhan.modules.planning.policy import planning_cutoff_reached
@@ -126,6 +127,30 @@ async def initiate_payment_attempt(
                 or request.payment_expires_at <= now
             ):
                 raise PaymentNotEligibleError("payment is not eligible for another attempt")
+            unsettled = await session.scalar(
+                select(PaymentAttempt.payment_attempt_id)
+                .where(
+                    PaymentAttempt.payment_id == payment.payment_id,
+                    PaymentAttempt.status != ATTEMPT_FAILED,
+                )
+                .limit(1)
+            )
+            reconciliation = await session.scalar(
+                select(PaymentProviderEvent.payment_provider_event_id)
+                .join(
+                    PaymentAttempt,
+                    PaymentAttempt.payment_attempt_id == PaymentProviderEvent.payment_attempt_id,
+                )
+                .where(
+                    PaymentAttempt.payment_id == payment.payment_id,
+                    PaymentProviderEvent.processing_status == EVENT_RECONCILIATION,
+                )
+                .limit(1)
+            )
+            if unsettled is not None or reconciliation is not None:
+                raise PaymentNotEligibleError(
+                    "Payment is already processing or requires reconciliation"
+                )
             attempt_id = new_uuid7()
             attempt = PaymentAttempt(
                 payment_attempt_id=attempt_id,
@@ -215,6 +240,7 @@ async def process_authenticated_payment_event(
     *,
     payload_hash: bytes,
     planning_lead_time_minutes: int | None,
+    idempotency_expires_at: datetime | None = None,
 ) -> PaymentProviderEvent:
     now = utc_now()
     async with session_factory() as session, session.begin():
@@ -267,7 +293,17 @@ async def process_authenticated_payment_event(
 
         if has_payment_id and not has_refund_id:
             # Continues below to payment attempt path
-            pass
+            if (
+                event.outcome == PaymentEventOutcome.SUCCEEDED
+                and event.validation_failure_code is None
+            ):
+                record.provider_payment_id = event.provider_payment_id
+                record.amount_minor = (
+                    event.amount_minor
+                    if event.amount_minor is not None and event.amount_minor > 0
+                    else None
+                )
+                record.currency = event.currency
 
         elif has_refund_id and has_payment_id:
             record.processing_status = EVENT_RECONCILIATION_REQUIRED
@@ -280,21 +316,35 @@ async def process_authenticated_payment_event(
             record.processed_at = now
             return record
 
+        # Resolve immutable payment ownership without an attempt lock, then lock
+        # payments in stable order BEFORE attempts. Refund FK checks under a
+        # Payment lock must never wait for an attempt whose owner waits on Payment.
+        matching = (
+            PaymentAttempt.provider == event.provider,
+            or_(
+                PaymentAttempt.payment_attempt_id == event.payment_attempt_id,
+                PaymentAttempt.provider_order_id == event.provider_order_id
+                if event.provider_order_id is not None
+                else false(),
+                PaymentAttempt.provider_payment_id == event.provider_payment_id
+                if event.provider_payment_id is not None
+                else false(),
+            ),
+        )
+        candidate_ids = list(
+            await session.scalars(select(PaymentAttempt.payment_id).where(*matching).distinct())
+        )
+        if candidate_ids:
+            await session.scalars(
+                select(Payment)
+                .where(Payment.payment_id.in_(candidate_ids))
+                .order_by(Payment.payment_id)
+                .with_for_update()
+            )
         attempts = list(
             await session.scalars(
                 select(PaymentAttempt)
-                .where(
-                    PaymentAttempt.provider == event.provider,
-                    or_(
-                        PaymentAttempt.payment_attempt_id == event.payment_attempt_id,
-                        PaymentAttempt.provider_order_id == event.provider_order_id
-                        if event.provider_order_id is not None
-                        else false(),
-                        PaymentAttempt.provider_payment_id == event.provider_payment_id
-                        if event.provider_payment_id is not None
-                        else false(),
-                    ),
-                )
+                .where(*matching)
                 .order_by(PaymentAttempt.payment_attempt_id)
                 .with_for_update()
             )
@@ -310,6 +360,10 @@ async def process_authenticated_payment_event(
             provider_event.failure_code = "ATTEMPT_NOT_MAPPED"
             provider_event.processed_at = utc_now()
             return provider_event
+        if attempt.payment_id not in candidate_ids:
+            # Mapping became visible after the unlocked lookup. Redelivery can
+            # resolve it in Payment-first order; never take Payment after Attempt.
+            raise PaymentNotEligibleError("Payment mapping changed during reconciliation")
         provider_event.payment_attempt_id = attempt.payment_attempt_id
 
         payment = await session.scalar(
@@ -402,6 +456,33 @@ async def process_authenticated_payment_event(
             slot_start=request.slot_start,
             slot_end=request.slot_end,
         )
+        request = await session.scalar(
+            select(CollectionRequest)
+            .where(CollectionRequest.request_id == payment.request_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if request is None:
+            raise RuntimeError("payment references a missing collection request")
+        if request.status == "CANCELLED":
+            if idempotency_expires_at is None:
+                raise PaymentNotEligibleError("Compensation retention is not configured")
+            # The charge is confirmed, but the collection commitment stays
+            # cancelled. Canonical financial truth and its full refund/outbox
+            # share the event transaction; no second acceptance is possible.
+            payment.status = PAYMENT_SUCCEEDED
+            payment.successful_attempt_id = attempt.payment_attempt_id
+            payment.succeeded_at = attempt.completed_at
+            await ensure_cancellation_refund(
+                session,
+                payment,
+                customer_id=request.customer_id,
+                idempotency_expires_at=idempotency_expires_at,
+            )
+            record.processing_status = EVENT_PROCESSED
+            record.failure_code = "CANCELLED_CAPTURE_COMPENSATED"
+            record.processed_at = utc_now()
+            return record
         batch_exists = (
             await session.scalar(
                 select(PlanningBatch.planning_batch_id).where(

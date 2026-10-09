@@ -610,6 +610,14 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
         key="success-attempt-one",
         order_id="order-success-one",
     )
+    # A retry starts only after a definitive failure. Its earlier charge may
+    # nevertheless report late success, which must still be reconciled.
+    async with database_session_factory() as session, session.begin():
+        await session.execute(
+            update(PaymentAttempt)
+            .where(PaymentAttempt.payment_attempt_id == first.payment_attempt_id)
+            .values(status="FAILED")
+        )
     second, _ = await create_ready_attempt(
         database_session_factory,
         user.user_id,

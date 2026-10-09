@@ -23,6 +23,7 @@ async def expire_pending_collection_requests(
             Payment.status == "PENDING",
             CollectionRequest.payment_expires_at <= evaluation_time,
         )
+        .order_by(Payment.payment_id)
     )
     result = await session.execute(stmt)
     candidates = result.all()

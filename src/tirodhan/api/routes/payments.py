@@ -129,8 +129,13 @@ async def post_provider_webhook(
             event,
             payload_hash=hashlib.sha256(raw_body).digest(),
             planning_lead_time_minutes=settings.planning_lead_time_minutes,
+            idempotency_expires_at=(
+                utc_now() + timedelta(seconds=settings.command_idempotency_ttl_seconds)
+                if settings.command_idempotency_ttl_seconds is not None
+                else None
+            ),
         )
-    except PlanningConfigurationError as error:
+    except (PlanningConfigurationError, PaymentNotEligibleError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return ProviderEventResponse(
         payment_provider_event_id=persisted.payment_provider_event_id,

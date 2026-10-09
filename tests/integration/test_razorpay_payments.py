@@ -245,6 +245,8 @@ async def test_conflicting_order_payment_mapping_and_distinct_successful_attempt
     async with httpx.AsyncClient(transport=httpx.MockTransport(Orders())) as client:
         provider = RazorpayProvider(settings(), client=client)
         a = await initiate(factory, user, result, provider, "a")
+        async with factory() as session, session.begin():
+            (await session.get(PaymentAttempt, a.payment_attempt_id)).status = "FAILED"
         b = await initiate(factory, user, result, provider, "b")
         async with factory() as session, session.begin():
             (await session.get(PaymentAttempt, b.payment_attempt_id)).provider_payment_id = "pay_b"

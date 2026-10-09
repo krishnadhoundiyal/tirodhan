@@ -10,6 +10,7 @@ from tirodhan.modules.collection_requests.models import CollectionRequest, Colle
 from tirodhan.modules.collection_requests.scheduling import SlotWindow
 from tirodhan.modules.customer_reads.cursor import Cursor, CursorCodec
 from tirodhan.modules.customer_reads.errors import CustomerReadError
+from tirodhan.modules.customer_reads.finance import load_financials
 from tirodhan.modules.customer_reads.models import CatalogueCategory, CatalogueGroup
 from tirodhan.modules.customer_reads.projections import (
     cancellation_projection,
@@ -30,8 +31,8 @@ from tirodhan.modules.customer_reads.schemas import (
 )
 from tirodhan.modules.customers.ports import AddressProtector
 from tirodhan.modules.handovers.models import HandoverEvent, HandoverEventItem
-from tirodhan.modules.payments.models import Payment, PaymentAttempt, PaymentProviderEvent, Refund
 from tirodhan.modules.planning.models import PickupExecution, PlanningBatch
+from tirodhan.modules.planning.policy import PlanningConfigurationError, planning_cutoff_reached
 
 ACTIVE = ("PENDING_PAYMENT", "ACCEPTED", "PRE_PLANNING", "PLANNED")
 HISTORY = ("CANCELLED", "COMPLETED", "EXPIRED")
@@ -55,37 +56,7 @@ async def projections(
         .order_by(CollectionRequestItem.created_at, CollectionRequestItem.request_item_id)
     ):
         items_by_request[item.request_id].append(item)
-    payments = list(await session.scalars(select(Payment).where(Payment.request_id.in_(ids))))
-    payment_by_request = {p.request_id: p for p in payments}
-    payment_ids = [p.payment_id for p in payments]
-    attempts: dict[UUID, list[PaymentAttempt]] = defaultdict(list)
-    for attempt in await session.scalars(
-        select(PaymentAttempt)
-        .where(PaymentAttempt.payment_id.in_(payment_ids))
-        .order_by(PaymentAttempt.created_at, PaymentAttempt.payment_attempt_id)
-    ):
-        attempts[attempt.payment_id].append(attempt)
-    refunds: dict[UUID, list[Refund]] = defaultdict(list)
-    for refund in await session.scalars(
-        select(Refund)
-        .where(Refund.payment_id.in_(payment_ids))
-        .order_by(Refund.created_at, Refund.refund_id)
-    ):
-        refunds[refund.payment_id].append(refund)
-    reconciliation = set(
-        await session.scalars(
-            select(PaymentAttempt.payment_id)
-            .join(
-                PaymentProviderEvent,
-                PaymentProviderEvent.payment_attempt_id == PaymentAttempt.payment_attempt_id,
-            )
-            .where(
-                PaymentAttempt.payment_id.in_(payment_ids),
-                PaymentProviderEvent.processing_status == "RECONCILIATION_REQUIRED",
-            )
-            .distinct()
-        )
-    )
+    finances = await load_financials(session, requests)
     pickups = list(
         await session.scalars(select(PickupExecution).where(PickupExecution.request_id.in_(ids)))
     )
@@ -119,16 +90,15 @@ async def projections(
     batch_by_id = {batch.planning_batch_id: batch for batch in batches}
     results: list[CollectionSummaryDto] = []
     for request in requests:
-        payment = payment_by_request.get(request.request_id)
-        if payment is None:
-            raise CustomerReadError(503, "NOT_ELIGIBLE")
+        finance = finances[request.request_id]
+        payment = finance.payment
         request_items = items_by_request[request.request_id]
         if not request_items:
             raise CustomerReadError(503, "NOT_ELIGIBLE")
         pickup = pickup_by_request.get(request.request_id)
         events = handovers[pickup.pickup_execution_id] if pickup else []
         journey = journey_projection(request, pickup, events)
-        refunded = [refund_projection(r) for r in refunds[payment.payment_id]]
+        refunded = [refund_projection(r) for r in finance.refunds]
         complete = [m.code for m in journey.milestones if m.state == "COMPLETE"]
         timestamps = [request.created_at]
         batch = batch_by_id.get(request.planning_batch_id) if request.planning_batch_id else None
@@ -150,10 +120,9 @@ async def projections(
         )
         timestamps.extend(e.created_at for e in events)
         timestamps.extend(e.evaluated_at for e in events)
-        timestamps.extend(a.completed_at or a.created_at for a in attempts[payment.payment_id])
+        timestamps.extend(a.completed_at or a.created_at for a in finance.attempts)
         timestamps.extend(
-            r.completed_at or r.processing_started_at or r.created_at
-            for r in refunds[payment.payment_id]
+            r.completed_at or r.processing_started_at or r.created_at for r in finance.refunds
         )
         slot = SlotWindow(request.slot_start, request.slot_end)
         summary = CollectionSummaryDto.model_validate(
@@ -187,6 +156,10 @@ async def projections(
             results.append(summary)
             continue
         text = await protector.unprotect(bytes(request.pickup_address_snapshot_encrypted))
+        try:
+            cutoff = planning_cutoff_reached(request.slot_start, lead_time_minutes, now=now)
+        except PlanningConfigurationError:
+            cutoff = True
         results.append(
             CollectionDetailDto(
                 **summary.model_dump(),
@@ -206,9 +179,11 @@ async def projections(
                 payment=payment_projection(
                     request,
                     payment,
-                    attempts[payment.payment_id],
+                    finance.attempts,
                     now=now,
-                    reconciliation=payment.payment_id in reconciliation,
+                    reconciliation=finance.reconciliation,
+                    retry_blocked=cutoff
+                    or (request.cell_id, request.slot_start, request.slot_end) in frozen,
                 ),
                 cancellation=cancellation_projection(
                     request,
@@ -216,6 +191,7 @@ async def projections(
                     now=now,
                     lead_time_minutes=lead_time_minutes,
                     frozen=(request.cell_id, request.slot_start, request.slot_end) in frozen,
+                    refunds=finance.refunds,
                 ),
                 journey=journey,
                 refunds=refunded,

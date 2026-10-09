@@ -13,6 +13,7 @@ from tirodhan.modules.customer_reads.schemas import (
 )
 from tirodhan.modules.handovers.models import HandoverEvent
 from tirodhan.modules.payments.models import Payment, PaymentAttempt, Refund
+from tirodhan.modules.payments.refunds import RefundConflictError, cancellation_refund_amount
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.planning.policy import PlanningConfigurationError, planning_cutoff_time
 
@@ -24,6 +25,7 @@ def payment_projection(
     *,
     now: datetime,
     reconciliation: bool = False,
+    retry_blocked: bool = False,
 ) -> PaymentDto:
     latest = attempts[-1] if attempts else None
     statuses = {
@@ -62,6 +64,7 @@ def payment_projection(
         and request.status == "PENDING_PAYMENT"
         and request.payment_expires_at > now
         and not reconciliation
+        and not retry_blocked
         and all(a.status == "FAILED" for a in attempts)
     )
     return PaymentDto.model_validate(
@@ -88,7 +91,15 @@ def refund_projection(refund: Refund) -> RefundDto:
         "FAILED": "FAILED",
         "INITIATION_UNCERTAIN": "CONFIRMING",
     }
-    reasons = {"CUSTOMER_CANCELLATION", "SERVICE_UNAVAILABLE", "PAYMENT_CORRECTION"}
+    reasons = {
+        "CUSTOMER_CANCELLATION": "CUSTOMER_CANCELLATION",
+        "SERVICE_UNAVAILABLE": "SERVICE_UNAVAILABLE",
+        "PAYMENT_CORRECTION": "PAYMENT_CORRECTION",
+        # These controlled reasons explicitly mean correction of an extra or
+        # late captured payment. A general operations adjustment has no mapping.
+        "ADDITIONAL_SUCCESS": "PAYMENT_CORRECTION",
+        "LATE_SUCCESS": "PAYMENT_CORRECTION",
+    }
     if (
         refund.status not in statuses
         or refund.reason_code not in reasons
@@ -104,7 +115,7 @@ def refund_projection(refund: Refund) -> RefundDto:
             "currency": refund.currency,
             "initiated_at": refund.created_at,
             "completed_at": refund.completed_at if refund.status == "SUCCEEDED" else None,
-            "reason": refund.reason_code,
+            "reason": reasons[refund.reason_code],
         }
     )
 
@@ -116,6 +127,7 @@ def cancellation_projection(
     now: datetime,
     lead_time_minutes: int | None,
     frozen: bool = False,
+    refunds: list[Refund] | None = None,
 ) -> CancellationDto:
     try:
         cutoff = planning_cutoff_time(request.slot_start, lead_time_minutes)
@@ -130,18 +142,25 @@ def cancellation_projection(
         or request.status in ("PRE_PLANNING", "PLANNED")
     ):
         reason = "PLANNING_STARTED"
-    elif request.status != "ACCEPTED":
+    elif request.status not in {"ACCEPTED", "PENDING_PAYMENT"}:
         reason = "NOT_ACCEPTED"
     elif cutoff is None:
         reason = "NOT_ELIGIBLE"
     elif now >= cutoff:
         reason = "PLANNING_CUTOFF_REACHED"
+    expectation = "FULL_PAYMENT" if payment.status == "SUCCEEDED" else "NONE"
+    if payment.status == "SUCCEEDED":
+        try:
+            cancellation_refund_amount(payment, refunds or [])
+        except RefundConflictError:
+            expectation = "REVIEW_REQUIRED"
+            reason = reason or "NOT_ELIGIBLE"
     return CancellationDto.model_validate(
         {
             "allowed": reason is None,
             "cutoff_at": cutoff,
             "reason": reason,
-            "refund_expectation": "REVIEW_REQUIRED" if payment.status == "SUCCEEDED" else "NONE",
+            "refund_expectation": expectation,
         }
     )
 

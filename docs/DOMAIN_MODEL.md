@@ -97,7 +97,9 @@ Persisted provider references, exact amount and currency govern webhook correlat
 not internal payment IDs in notes or client callbacks. Failed provider attempts within one Order
 may precede capture; their reference must never replace an established captured payment ID.
 Explicitly authorized refunds use the canonical charge and normal native-idempotent execution.
-Provider execution recovery does not change cancellation, expiry or additional-success policy.
+Provider execution recovery does not change financial identity. Phase 2 Batch B adds the approved
+full customer-cancellation compensation policy in ADR-005; non-cancelled expiry and separate
+additional-charge accounting remain reconciliation decisions.
 
 ### Planning
 
@@ -314,6 +316,7 @@ capture; no polymorphic target columns or cross-table trigger are used.
 ```text
 PENDING_PAYMENT
     ├── EXPIRED
+    ├── customer cancellation before cutoff/freeze → CANCELLED
     └── payment confirmed
             ↓
         ACCEPTED
@@ -328,6 +331,13 @@ PENDING_PAYMENT
 ```
 
 Operational exceptions such as customer unavailable or rider unable to continue are not collection-request statuses.
+
+Phase 2 Batch B permits cancellation while payment is unsettled, as required for the
+cancellation-before-capture race. This closes `Payment` as `CANCELLED` without synthesizing funds.
+A later verified canonical capture may make `Payment` `SUCCEEDED` with a separate full
+`CUSTOMER_CANCELLATION` Refund intent in the same transaction; the collection remains `CANCELLED`.
+An accepted paid cancellation also creates/reuses full compensation atomically. Partial reserved
+balances require review. No new collection, attempt or refund status is introduced.
 
 ### Payment
 
