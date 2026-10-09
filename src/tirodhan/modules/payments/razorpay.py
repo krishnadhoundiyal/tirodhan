@@ -83,6 +83,7 @@ class RazorpayProvider:
         )
         self._webhook_secret = settings.razorpay_webhook_secret.get_secret_value().encode()
         self._timeout = settings.razorpay_http_timeout_seconds
+        self.public_key_id = settings.razorpay_key_id or ""
 
     async def _request(
         self,

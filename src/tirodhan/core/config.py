@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     auth_access_token_ttl_seconds: int | None = None
     auth_refresh_session_ttl_seconds: int | None = None
     auth_otp_challenge_ttl_seconds: int | None = None
+    otp_provider: Literal["2FACTOR", "KALEYRA_VERIFY"] | None = None
+    twofactor_api_key: SecretStr | None = None
+    twofactor_template_name: str | None = None
+    twofactor_http_timeout_seconds: float | None = None
+    razorpay_merchant_display_name: str | None = None
     kaleyra_api_domain: str | None = None
     kaleyra_sid: str | None = None
     kaleyra_api_key: SecretStr | None = None
@@ -135,6 +140,8 @@ class Settings(BaseSettings):
         "auth_token_audience",
         "media_blob_account_url",
         "media_blob_container_name",
+        "razorpay_merchant_display_name",
+        "twofactor_template_name",
     )
     @classmethod
     def optional_auth_identifier_must_not_be_blank(cls, value: str | None) -> str | None:
@@ -176,6 +183,7 @@ class Settings(BaseSettings):
         "google_maps_http_timeout_seconds",
         "service_bus_operation_timeout_seconds",
         "razorpay_http_timeout_seconds",
+        "twofactor_http_timeout_seconds",
         "db_pool_timeout",
     )
     @classmethod

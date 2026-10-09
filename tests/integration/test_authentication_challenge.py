@@ -672,6 +672,7 @@ async def test_configured_runtime_login_uses_kaleyra_and_encrypted_phone(
                 auth_refresh_session_ttl_seconds=3600,
                 command_idempotency_ttl_seconds=3600,
                 kaleyra_api_domain="https://kaleyra.test",
+                otp_provider="KALEYRA_VERIFY",
                 kaleyra_sid="test-sid",
                 kaleyra_api_key=SecretStr("private-test-api-key"),
                 kaleyra_verify_flow_id="test-flow",
