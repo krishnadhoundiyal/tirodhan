@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
@@ -19,8 +19,8 @@ from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.collection_requests.scheduling import (
     SlotAvailabilityPort,
     SlotConflictError,
-    daily_grid,
     evaluate_slot,
+    operating_grid,
 )
 from tirodhan.modules.customer_reads.catalogue import (
     ProductMediaPort,
@@ -40,6 +40,7 @@ from tirodhan.modules.customer_reads.schemas import (
 )
 from tirodhan.modules.customers.ports import AddressProtector
 from tirodhan.modules.planning.models import PlanningBatch
+from tirodhan.modules.planning.policy import latest_due_slot_start
 from tirodhan.modules.serviceability.models import ServiceabilityContext
 
 router = APIRouter(prefix="/v1/customer", tags=["customer projections"])
@@ -120,18 +121,31 @@ async def get_slots(
     if len(dates) > 366:
         raise CustomerReadError(503, "NOT_ELIGIBLE")
     slots: list[OfferedSlotDto] = []
-    grids = [slot for day in sorted(set(dates)) for slot in daily_grid(day)]
-    frozen_starts = set(
-        await session.scalars(
-            select(PlanningBatch.slot_start).where(
-                PlanningBatch.cell_id == context.cell_id,
-                PlanningBatch.slot_start.in_([slot.start for slot in grids]),
-            )
+    # Validate the existing lead-time configuration even when no candidates remain.
+    cutoff_start = latest_due_slot_start(now, settings.planning_lead_time_minutes)
+    grids = [
+        slot
+        for day in sorted(set(dates))
+        for slot in operating_grid(day)
+        if slot.start > cutoff_start
+    ]
+    frozen_windows = (
+        set(
+            (
+                await session.execute(
+                    select(PlanningBatch.slot_start, PlanningBatch.slot_end).where(
+                        PlanningBatch.cell_id == context.cell_id,
+                        tuple_(PlanningBatch.slot_start, PlanningBatch.slot_end).in_(
+                            [(slot.start, slot.end) for slot in grids]
+                        ),
+                    )
+                )
+            ).all()
         )
+        if grids
+        else set()
     )
     for slot in grids:
-        if slot.start <= now:
-            continue
         try:
             available = await evaluate_slot(
                 session,
@@ -140,7 +154,7 @@ async def get_slots(
                 slot=slot,
                 now=now,
                 lead_time_minutes=settings.planning_lead_time_minutes,
-                frozen=slot.start in frozen_starts,
+                frozen=(slot.start, slot.end) in frozen_windows,
             )
         except SlotConflictError:
             continue

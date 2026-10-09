@@ -24,6 +24,7 @@ from tirodhan.modules.collection_requests.scheduling import (
     SERVICE_TIMEZONE,
     SlotConflictError,
     SlotWindow,
+    UnconfiguredSlotAvailability,
     daily_grid,
 )
 from tirodhan.modules.collection_requests.service import (
@@ -231,7 +232,7 @@ async def test_slots_owned_context_policy_failure_and_available_full_grid(
     context = await create_context(database_session_factory, owner.user_id)
     other = await create_user(database_session_factory)
     foreign = await create_context(database_session_factory, other.user_id)
-    app = app_for(database_session_factory, owner.user_id)
+    app = app_for(database_session_factory, owner.user_id, policy=UnconfiguredSlotAvailability())
     path = "/v1/customer/pickup-slots"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
@@ -249,7 +250,7 @@ async def test_slots_owned_context_policy_failure_and_available_full_grid(
         )
         assert response.status_code == 200, response.text
         data = response.json()
-        assert len(data["slots"]) == 48
+        assert len(data["slots"]) == 32
         assert sum(slot["availability"] == "FULL" for slot in data["slots"]) == 2
         assert data["expires_at"] == context.expires_at.isoformat().replace("+00:00", "Z")
         async with database_session_factory() as session, session.begin():
@@ -669,7 +670,12 @@ async def test_fresh_booking_policy_failure_inactive_category_and_immutable_disp
     owner = await create_user(database_session_factory)
     context = await create_context(database_session_factory, owner.user_id)
     slot = daily_grid((utc_now().astimezone(SERVICE_TIMEZONE) + timedelta(days=1)).date())[0]
-    app = app_for(database_session_factory, owner.user_id, address_protector)
+    app = app_for(
+        database_session_factory,
+        owner.user_id,
+        address_protector,
+        policy=UnconfiguredSlotAvailability(),
+    )
     body = {
         "client_request_id": str(new_uuid7()),
         "serviceability_context_id": str(context.serviceability_context_id),

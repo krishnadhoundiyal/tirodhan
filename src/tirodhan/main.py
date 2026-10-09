@@ -14,9 +14,9 @@ from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.collection_requests.ports import PricingPort, UnconfiguredPricingPort
 from tirodhan.modules.collection_requests.scheduling import (
+    DelhiSlotAvailability,
     SchedulingUnavailableError,
     SlotAvailabilityPort,
-    UnconfiguredSlotAvailability,
 )
 from tirodhan.modules.customer_reads.catalogue import ProductMediaPort, UnconfiguredProductMedia
 from tirodhan.modules.customer_reads.errors import CustomerReadError
@@ -163,7 +163,7 @@ def create_app(
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)
     application.state.media_storage = configured_media_storage
     application.state.media_policy = media_policy or _media_policy(application_settings)
-    application.state.slot_availability = slot_availability or UnconfiguredSlotAvailability()
+    application.state.slot_availability = slot_availability or DelhiSlotAvailability()
     application.state.product_media = product_media or (
         configured_media_storage
         if isinstance(configured_media_storage, AzureBlobMediaStorage)

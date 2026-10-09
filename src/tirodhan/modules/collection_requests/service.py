@@ -19,8 +19,8 @@ from tirodhan.modules.collection_requests.ports import (
     PricingQuote,
 )
 from tirodhan.modules.collection_requests.scheduling import (
+    DelhiSlotAvailability,
     SlotAvailabilityPort,
-    UnconfiguredSlotAvailability,
     evaluate_slot,
     validate_slot,
 )
@@ -303,7 +303,7 @@ async def create_collection_request(
     # Only fresh commands revalidate time; durable exact replay survives expiry,
     # planning, and later operational policy/category changes.
     slot = validate_slot(command.slot_start, command.slot_end, now=utc_now())
-    availability = slot_availability or UnconfiguredSlotAvailability()
+    availability = slot_availability or DelhiSlotAvailability()
 
     async with session_factory() as session:
         context = await session.scalar(

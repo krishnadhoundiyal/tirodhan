@@ -1,5 +1,9 @@
 # Phase 2 / Batch A implementation report
 
+Scheduling follow-up: the approved Delhi launch availability policy is implemented in
+[the operational slot correction](PHASE_2_SLOT_AVAILABILITY_REPORT.md). The original
+Batch A results below describe commit `2634ecb` before that approval and correction.
+
 Implementation date: 2026-10-09. This branch is for local review only. Batch A's
 production definition of done is **blocked by unapproved operational scheduling
 policy**. No operational availability, taxonomy, pricing, receiving-point identity,

@@ -1,8 +1,8 @@
 """One scheduling grid and eligibility calculation for offering and booking.
 
-Operational policy is deliberately a port, with no inferred production availability.
-Implementations run inside the transaction and share the planning work-unit lock for
-eligibility changes. They must use PostgreSQL truth, not external I/O or rider guesses.
+The initial Delhi policy offers seven local dates and 06:00–22:00 operating hours.
+Callers validate PostgreSQL-owned serviceability and planning truth; this policy adds
+no capacity quota or rider-allocation guarantee. No external I/O occurs here.
 """
 
 from dataclasses import dataclass
@@ -19,6 +19,9 @@ from tirodhan.modules.planning.policy import as_utc_instant, planning_cutoff_rea
 
 SERVICE_TIMEZONE = ZoneInfo("Asia/Kolkata")
 SLOT_DURATION = timedelta(minutes=30)
+SERVICE_DATE_COUNT = 7
+OPERATING_START = time(6)
+OPERATING_END = time(22)
 
 
 class SchedulingUnavailableError(RuntimeError):
@@ -61,12 +64,42 @@ class UnconfiguredSlotAvailability:
     async def service_dates(
         self, session: AsyncSession, *, cell_id: str, now: datetime
     ) -> tuple[date, ...]:
-        raise SchedulingUnavailableError("operational slot availability policy is not approved")
+        raise SchedulingUnavailableError("operational slot availability is unavailable")
 
     async def availability(
         self, session: AsyncSession, *, cell_id: str, slot: SlotWindow, now: datetime
     ) -> Literal["AVAILABLE", "FULL"] | None:
-        raise SchedulingUnavailableError("operational slot availability policy is not approved")
+        raise SchedulingUnavailableError("operational slot availability is unavailable")
+
+
+class DelhiSlotAvailability:
+    """Approved launch policy, composed with authoritative context/freeze checks.
+
+    The port receives the resolved cell only after the caller validates an owned,
+    unexpired SERVICEABLE context. evaluate_slot owns cutoff and PostgreSQL freeze
+    checks (batched for reads, under the shared work-unit lock for bookings).
+    Consequently neither port method needs a per-slot database query.
+    """
+
+    async def service_dates(
+        self, session: AsyncSession, *, cell_id: str, now: datetime
+    ) -> tuple[date, ...]:
+        if not cell_id:
+            raise SchedulingUnavailableError("resolved serviceability cell is unavailable")
+        today = as_utc_instant(now).astimezone(SERVICE_TIMEZONE).date()
+        return tuple(today + timedelta(days=number) for number in range(SERVICE_DATE_COUNT))
+
+    async def availability(
+        self, session: AsyncSession, *, cell_id: str, slot: SlotWindow, now: datetime
+    ) -> Literal["AVAILABLE", "FULL"] | None:
+        dates = await self.service_dates(session, cell_id=cell_id, now=now)
+        try:
+            slot = validate_slot(slot.start, slot.end, now=now)
+        except SlotConflictError:
+            return None
+        if slot.start.astimezone(SERVICE_TIMEZONE).date() not in dates:
+            return None
+        return "AVAILABLE" if within_operating_hours(slot) else None
 
 
 def daily_grid(day: date) -> tuple[SlotWindow, ...]:
@@ -78,6 +111,21 @@ def daily_grid(day: date) -> tuple[SlotWindow, ...]:
         )
         for number in range(48)
     )
+
+
+def within_operating_hours(slot: SlotWindow) -> bool:
+    start = slot.start.astimezone(SERVICE_TIMEZONE)
+    end = slot.end.astimezone(SERVICE_TIMEZONE)
+    return (
+        start.date() == end.date()
+        and OPERATING_START <= start.time() < OPERATING_END
+        and end.time() <= OPERATING_END
+    )
+
+
+def operating_grid(day: date) -> tuple[SlotWindow, ...]:
+    """The approved 32 operating intervals, retaining the canonical 48-slot grid."""
+    return tuple(slot for slot in daily_grid(day) if within_operating_hours(slot))
 
 
 def validate_slot(start: datetime, end: datetime, *, now: datetime) -> SlotWindow:
