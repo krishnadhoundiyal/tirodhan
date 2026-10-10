@@ -81,4 +81,8 @@ async def get_refunds(
 ) -> RefundsResponse:
     row = await owned_request(session, request_id, customer)
     finance = (await load_financials(session, [row]))[row.request_id]
-    return RefundsResponse(refunds=[refund_projection(r) for r in finance.refunds])
+    return RefundsResponse(
+        refunds=[
+            refund_projection(r, held=r.refund_id in finance.held_refunds) for r in finance.refunds
+        ]
+    )

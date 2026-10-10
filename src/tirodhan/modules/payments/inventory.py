@@ -42,10 +42,13 @@ async def discover_inventory(
     policy: InventoryPolicy,
     financial_policy: ReconciliationPolicy,
     kind: Literal["PAYMENTS", "REFUNDS"],
+    *,
+    historical: bool = False,
 ) -> int:
     cutoff = int(utc_now().timestamp()) - policy.visibility_lag_seconds
     if cutoff <= policy.start_epoch:
         return 0
+    scan_kind = f"{kind}_HISTORY" if historical else kind
     async with factory() as session, session.begin():
         await session.execute(
             insert(FinancialScanCheckpoint)
@@ -53,7 +56,7 @@ async def discover_inventory(
                 financial_scan_checkpoint_id=new_uuid7(),
                 provider=provider.provider_code,
                 provider_account_key=provider.account_key,
-                scan_kind=kind,
+                scan_kind=scan_kind,
                 window_start=policy.start_epoch,
                 window_end=min(cutoff, policy.start_epoch + policy.window_seconds),
             )
@@ -70,7 +73,7 @@ async def discover_inventory(
                 .where(
                     FinancialScanCheckpoint.provider == provider.provider_code,
                     FinancialScanCheckpoint.provider_account_key == provider.account_key,
-                    FinancialScanCheckpoint.scan_kind == kind,
+                    FinancialScanCheckpoint.scan_kind == scan_kind,
                     or_(
                         FinancialScanCheckpoint.claim_until.is_(None),
                         FinancialScanCheckpoint.claim_until <= now,
@@ -141,6 +144,8 @@ async def discover_inventory(
                 ).hexdigest()
                 checkpoint.claim_token = None
                 checkpoint.claim_until = None
+                checkpoint.last_checked_at = utc_now()
+                checkpoint.last_error_code = None
                 if len(items) == 100:
                     checkpoint.page_offset += 100
                 else:
@@ -159,6 +164,15 @@ async def discover_inventory(
                         checkpoint.window_end = min(
                             cutoff, checkpoint.window_start + policy.window_seconds
                         )
+                        if historical and end >= cutoff:
+                            # Creation-time filters cannot discover a later capture
+                            # of an old payment after its window has been retired.
+                            # Cycle the merchant's configured history, with the
+                            # same durable page budget and two-pass comparison.
+                            checkpoint.window_start = policy.start_epoch
+                            checkpoint.window_end = min(
+                                cutoff, policy.start_epoch + policy.window_seconds
+                            )
                         checkpoint.previous_digest = None
             completed_pages += 1
         except PaymentProviderUncertainError:
@@ -173,6 +187,8 @@ async def discover_inventory(
                 )
                 if checkpoint:
                     checkpoint.claim_token = None
+                    checkpoint.last_checked_at = utc_now()
+                    checkpoint.last_error_code = "PROVIDER_INVENTORY_UNCERTAIN"
                     checkpoint.claim_until = utc_now() + timedelta(
                         seconds=financial_policy.interval_seconds
                     )

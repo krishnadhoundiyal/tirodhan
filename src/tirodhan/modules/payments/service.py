@@ -537,6 +537,16 @@ async def process_authenticated_payment_event(
             record.processed_at = now
             return record
         if event.outcome == PaymentEventOutcome.FAILED:
+            # A webhook/account item describes one instrument, not an exhausted
+            # order. Only the validated order inquiry can establish retry safety.
+            if event.provider == "RAZORPAY" and event.evidence_source != "API_INQUIRY":
+                if attempt.status != ATTEMPT_SUCCEEDED:
+                    attempt.status = "PENDING"
+                    attempt.next_check_at = now
+                    attempt.completed_at = None
+                provider_event.processing_status = EVENT_PROCESSED
+                provider_event.processed_at = now
+                return provider_event
             if attempt.status != ATTEMPT_SUCCEEDED:
                 attempt.provider_order_id = event.provider_order_id or attempt.provider_order_id
                 attempt.provider_payment_id = (
@@ -987,13 +997,29 @@ async def _process_refund_event(
     ):
         failure = "REFUND_PAYMENT_MISMATCH"
     elif (
-        charge
-        and event.provider_account_key
-        and charge.provider_account_key
-        and charge.provider_account_key != event.provider_account_key
+        event.provider_account_key
+        and (
+            charge.provider_account_key
+            if charge
+            else attempt.provider_account_key
+            if attempt
+            else None
+        )
+        and (
+            charge.provider_account_key
+            if charge
+            else attempt.provider_account_key
+            if attempt
+            else None
+        )
+        != event.provider_account_key
     ):
         failure = "PROVIDER_ACCOUNT_MISMATCH"
     if failure:
+        if refund.refund_obligation_id:
+            obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+            if obligation:
+                obligation.payout_blocked = True
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
         record.failure_code = failure
         record.processed_at = now
@@ -1015,6 +1041,10 @@ async def _process_refund_event(
             )
         )
         if mapped_id is not None and mapped_id != refund.refund_id:
+            if refund.refund_obligation_id:
+                obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+                if obligation:
+                    obligation.payout_blocked = True
             record.processing_status = EVENT_RECONCILIATION_REQUIRED
             record.failure_code = "REFUND_IDENTITY_CONFLICT"
             record.processed_at = now
@@ -1033,6 +1063,10 @@ async def _process_refund_event(
         refund.provider_refund_id = event.provider_refund_id
     elif event.provider_refund_id and refund.provider_refund_id != event.provider_refund_id:
         # Correlation conflict
+        if refund.refund_obligation_id:
+            obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+            if obligation:
+                obligation.payout_blocked = True
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
         record.failure_code = "REFUND_IDENTITY_CONFLICT"
         if event.evidence_source == "PROVIDER_RESPONSE" and refund.status not in {
@@ -1056,9 +1090,6 @@ async def _process_refund_event(
     if event.outcome == PaymentEventOutcome.SUCCEEDED:
         if refund.status == "SUCCEEDED":
             pass  # duplicate, idempotent
-        elif refund.status == "FAILED" and refund.refund_obligation_id is None:
-            # Conflict with local terminal state
-            record.processing_status = EVENT_RECONCILIATION_REQUIRED
         else:
             if refund.status == "FAILED" and refund.non_payable_verified_at is not None:
                 obligation = await session.get(RefundObligation, refund.refund_obligation_id)

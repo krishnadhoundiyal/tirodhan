@@ -1,20 +1,23 @@
 """Shared, bounded financial snapshots for standalone and embedded customer reads."""
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.customer_reads.errors import CustomerReadError
+from tirodhan.modules.payments.accounting import PAYOUT_HOLD_REASONS
 from tirodhan.modules.payments.models import (
     CapturedCharge,
+    FinancialException,
     Payment,
     PaymentAttempt,
     PaymentProviderEvent,
     Refund,
+    RefundObligation,
 )
 
 
@@ -24,6 +27,7 @@ class FinancialSnapshot:
     attempts: list[PaymentAttempt]
     refunds: list[Refund]
     reconciliation: bool
+    held_refunds: set[UUID] = field(default_factory=set)
 
 
 async def load_financials(
@@ -52,12 +56,35 @@ async def load_financials(
     ):
         attempts[attempt.payment_id].append(attempt)
     refunds: dict[UUID, list[Refund]] = defaultdict(list)
-    for refund in await session.scalars(
-        select(Refund)
+    held: set[UUID] = set()
+    payout_held = or_(
+        select(RefundObligation.refund_obligation_id)
+        .where(
+            RefundObligation.refund_obligation_id == Refund.refund_obligation_id,
+            RefundObligation.payout_blocked.is_(True),
+        )
+        .exists(),
+        select(FinancialException.financial_exception_id)
+        .where(
+            FinancialException.payment_id == Refund.payment_id,
+            FinancialException.status == "OPEN",
+            FinancialException.reason_code.in_(PAYOUT_HOLD_REASONS),
+            or_(
+                FinancialException.refund_id == Refund.refund_id,
+                FinancialException.captured_charge_id.is_not(None)
+                & (FinancialException.captured_charge_id == Refund.captured_charge_id),
+            ),
+        )
+        .exists(),
+    )
+    for refund, is_held in await session.execute(
+        select(Refund, payout_held)
         .where(Refund.payment_id.in_(ids))
         .order_by(Refund.created_at, Refund.refund_id)
     ):
         refunds[refund.payment_id].append(refund)
+        if is_held:
+            held.add(refund.refund_id)
     reconciliation = set(
         await session.scalars(
             select(PaymentAttempt.payment_id)
@@ -150,6 +177,6 @@ async def load_financials(
         ):
             raise CustomerReadError(503, "NOT_ELIGIBLE")
         result[request.request_id] = FinancialSnapshot(
-            payment, current, refunded, payment.payment_id in reconciliation
+            payment, current, refunded, payment.payment_id in reconciliation, held
         )
     return result

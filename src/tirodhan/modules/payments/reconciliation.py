@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import TypedDict, cast
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -29,6 +29,7 @@ from tirodhan.modules.payments.ports import FinancialInquiryProvider, PaymentPro
 from tirodhan.modules.payments.refunds import RefundConflictError, create_refund
 from tirodhan.modules.payments.service import process_authenticated_payment_event
 from tirodhan.modules.reliability.primitives import (
+    append_outbox_event,
     claim_idempotency_record,
     complete_idempotency_record,
     get_completed_idempotency_result,
@@ -49,6 +50,65 @@ class RefundInquiryArguments(TypedDict):
     provider_payment_id: str
     amount_minor: int
     currency: str
+
+
+async def escalate_unresolved_cases(
+    factory: async_sessionmaker[AsyncSession],
+    policy: "ReconciliationPolicy",
+) -> int:
+    now = utc_now()
+    threshold = timedelta(seconds=policy.unresolved_threshold_seconds)
+    async with factory() as session:
+        identities = list(
+            (
+                await session.execute(
+                    select(
+                        FinancialException.financial_exception_id,
+                        FinancialException.payment_id,
+                    )
+                    .where(
+                        FinancialException.status == "OPEN",
+                        FinancialException.detected_at <= now - threshold,
+                        or_(
+                            FinancialException.last_escalated_at.is_(None),
+                            FinancialException.last_escalated_at <= now - threshold,
+                        ),
+                    )
+                    .order_by(FinancialException.detected_at)
+                    .limit(policy.batch_size)
+                )
+            ).all()
+        )
+    count = 0
+    for case_id, payment_id in identities:
+        async with factory() as session, session.begin():
+            await session.scalar(
+                select(Payment).where(Payment.payment_id == payment_id).with_for_update()
+            )
+            case = await session.scalar(
+                select(FinancialException)
+                .where(FinancialException.financial_exception_id == case_id)
+                .with_for_update()
+            )
+            if (
+                case is None
+                or case.status != "OPEN"
+                or case.last_escalated_at
+                and case.last_escalated_at > now - threshold
+            ):
+                continue
+            bucket = int(now.timestamp()) // policy.unresolved_threshold_seconds
+            await append_outbox_event(
+                session,
+                event_key=f"financial-aging:{case_id}:{case.occurrence_count}:{bucket}",
+                aggregate_type="payment",
+                aggregate_id=payment_id,
+                event_type="FinancialExceptionRaised",
+                payload={"financial_exception_id": str(case_id)},
+            )
+            case.last_escalated_at = now
+            count += 1
+    return count
 
 
 @dataclass(frozen=True)
@@ -190,7 +250,27 @@ async def _release_claim(
         current.check_count += 1
         current.claim_token = None
         current.claim_until = None
-        terminal = current.status == "SUCCEEDED" or (not is_refund and current.status == "FAILED")
+        unmatched = False
+        if isinstance(current, PaymentAttempt):
+            unmatched = bool(
+                await session.scalar(
+                    select(
+                        exists().where(
+                            PaymentProviderEvent.provider == current.provider,
+                            PaymentProviderEvent.provider_account_key
+                            == current.provider_account_key,
+                            PaymentProviderEvent.provider_order_id == current.provider_order_id,
+                            PaymentProviderEvent.processing_status == "UNMATCHED",
+                            PaymentProviderEvent.observed_outcome == "SUCCEEDED",
+                            PaymentProviderEvent.provider_refund_id.is_(None),
+                            PaymentProviderEvent.provider_dispute_id.is_(None),
+                        )
+                    )
+                )
+            )
+        terminal = (
+            current.status == "SUCCEEDED" or (not is_refund and current.status == "FAILED")
+        ) and not unmatched
         delay = min(
             policy.max_backoff_seconds,
             policy.interval_seconds * 2 ** min(current.check_count, 20),
@@ -232,11 +312,30 @@ async def reconcile_batch(
         async with factory() as session, session.begin():
             candidates: list[PaymentAttempt | Refund] = []
             for model in (Refund, PaymentAttempt):
+                due = model.next_check_at <= now
+                if model is PaymentAttempt:
+                    # Do not replay retained events as new financial authority.
+                    # A now-mapped order with unmatched captures needs the same
+                    # existing fresh provider GET as any known unresolved order.
+                    due = or_(
+                        due,
+                        PaymentAttempt.next_check_at.is_(None)
+                        & exists().where(
+                            PaymentProviderEvent.provider == provider.provider_code,
+                            PaymentProviderEvent.provider_account_key == provider.account_key,
+                            PaymentProviderEvent.provider_order_id
+                            == PaymentAttempt.provider_order_id,
+                            PaymentProviderEvent.processing_status == "UNMATCHED",
+                            PaymentProviderEvent.observed_outcome == "SUCCEEDED",
+                            PaymentProviderEvent.provider_refund_id.is_(None),
+                            PaymentProviderEvent.provider_dispute_id.is_(None),
+                        ),
+                    )
                 candidate = await session.scalar(
                     select(model)
                     .where(
                         model.provider == provider.provider_code,
-                        model.next_check_at <= now,
+                        due,
                         or_(model.claim_until.is_(None), model.claim_until <= now),
                     )
                     .order_by(model.next_check_at, model.created_at)
@@ -256,6 +355,45 @@ async def reconcile_batch(
             row.next_check_at = row.claim_until
         try:
             await inquire_target(factory, provider, target, refund=is_refund, policy=policy)
+            if not is_refund:
+                # Match history only to charges already verified by the existing
+                # processor. This step creates no charge/refund/outbox or POST.
+                from sqlalchemy import update
+
+                async with factory() as session, session.begin():
+                    identity = await session.get(PaymentAttempt, target)
+                    assert identity is not None
+                    await session.scalar(
+                        select(Payment)
+                        .where(Payment.payment_id == identity.payment_id)
+                        .with_for_update()
+                    )
+                    verified = select(CapturedCharge.captured_charge_id).where(
+                        CapturedCharge.payment_attempt_id == target,
+                        CapturedCharge.provider == PaymentProviderEvent.provider,
+                        CapturedCharge.provider_account_key
+                        == PaymentProviderEvent.provider_account_key,
+                        CapturedCharge.provider_payment_id
+                        == PaymentProviderEvent.provider_payment_id,
+                        CapturedCharge.provider_order_id == PaymentProviderEvent.provider_order_id,
+                        CapturedCharge.amount_minor == PaymentProviderEvent.amount_minor,
+                        CapturedCharge.currency == PaymentProviderEvent.currency,
+                    )
+                    await session.execute(
+                        update(PaymentProviderEvent)
+                        .where(
+                            PaymentProviderEvent.processing_status == "UNMATCHED",
+                            PaymentProviderEvent.observed_outcome == "SUCCEEDED",
+                            PaymentProviderEvent.provider_refund_id.is_(None),
+                            PaymentProviderEvent.provider_dispute_id.is_(None),
+                            exists(verified),
+                        )
+                        .values(
+                            payment_attempt_id=target,
+                            processing_status="PROCESSED",
+                            processed_at=utc_now(),
+                        )
+                    )
         except (PaymentProviderUncertainError, RefundConflictError):
             pass  # Unavailable/missing/mismatched provider facts never become failure.
         finally:
@@ -337,6 +475,7 @@ async def manager_inquiry(
             select(Payment).where(Payment.payment_id == payment_id).with_for_update()
         )
         assert payment is not None
+        await _manager_lock(session, actor)
         claim = await claim_idempotency_record(
             session,
             scope="financial.manager",
@@ -602,10 +741,8 @@ async def _approve_refund(
         for case in cases:
             if case.reason_code == "REFUND_FINALITY_CONTRADICTION":
                 raise RefundConflictError("Contradictory refund outcomes block payout")
-            case.status = "RESOLVED"
-            case.resolved_at = utc_now()
         await status_event(
-            session, payment, f"manager-resolved:{command_id}", "MANAGER_EXCEPTION_RESOLVED"
+            session, payment, f"manager-authorized:{command_id}", "REFUND_AUTHORIZED"
         )
         await complete_idempotency_record(
             session,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -78,7 +79,7 @@ async def publish_outbox_batch(
                     OutboxEvent.status == "PENDING",
                     OutboxEvent.available_at <= utc_now(),
                     OutboxEvent.event_type.in_(
-                        ["ServiceabilityRequested"]
+                        ["ServiceabilityRequested", "FinancialExceptionRaised"]
                         + ([DISPATCH_REQUESTED] if rider_notification_entity else [])
                         + (["RefundRequested"] if refund_entity else [])
                         + (
@@ -100,7 +101,20 @@ async def publish_outbox_batch(
     published = 0
     for event in events:
         try:
-            if event.event_type == "ServiceabilityRequested":
+            if event.event_type == "FinancialExceptionRaised":
+                if (
+                    set(event.payload) != {"financial_exception_id"}
+                    or event.aggregate_type != "payment"
+                ):
+                    raise ValueError("Invalid financial attention envelope")
+                case_id = UUID(event.payload["financial_exception_id"])
+                logging.getLogger("tirodhan.financial_operations").warning(
+                    "financial_exception_attention case_id=%s payment_id=%s event_id=%s",
+                    case_id,
+                    event.aggregate_id,
+                    event.outbox_event_id,
+                )
+            elif event.event_type == "ServiceabilityRequested":
                 message = serviceability_message(event)
                 await publisher.send(serviceability_entity, message)
             elif event.event_type == DISPATCH_REQUESTED and rider_notification_entity:

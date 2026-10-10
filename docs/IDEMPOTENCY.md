@@ -495,3 +495,41 @@ Reservations lock the actual charge, including provable canonical legacy null-ch
 two independent SQL sessions cannot over-reserve. Payment-first domain locking, manager audit
 command uniqueness and read-only reconciliation remain authoritative. No generic versions,
 global mutex, Redis or automatic scheduled replacement is introduced.
+
+## Financial review recovery commands (0022)
+
+Manager investigation, hold resolution and original-operation recovery use the existing
+`financial.manager` command scope. The fingerprint binds actor, target, action and report day.
+The completed command returns its immutable FinancialAudit; changed input conflicts. A short
+initial transaction checks the live manager role and claims the command. Provider GETs run
+without a held DB connection. The final transaction takes Payment first when matched, then
+the live manager authorization lock, command and target. Revocation prevents authorization.
+Concurrent retries can repeat GETs but commit one audit and one recovery outbox effect.
+
+Hold release requires current verified evidence, complete charge refund inventory matching
+submitted local operations, an unchanged occurrence/cause, and no remaining hold on that charge. It
+never declares a payout completed. Original recovery queues the same Refund UUID with its
+persisted wire key/body/start time; the worker repeats GET, hold and retention checks. No
+replacement or manual financial status override is exposed. Standalone investigation audits
+require a real provider-event or settlement FK; they never manufacture a Payment.
+
+An unclaimed PENDING intent with no provider ID and no first-submission timestamp remains
+unpaid debt but does not need a fictitious remote refund to clear a corrected settlement hold.
+The worker always commits its claim/timestamp before external I/O. The final Payment-locked
+resolution distinguishes that local unsubmitted fact from a claimed uncertain original;
+missing provider identity on the latter still blocks release. Empty GETs never prove remote
+absence. Later original execution repeats the existing GET, hold and native-identity guards.
+
+Resolved cases reopen only when the common processor detects the problem again. The stable
+case key is retained; occurrence increments, detection time resets, and attention has an
+occurrence-specific outbox key. Aging attention uses case/occurrence/time-bucket identity,
+Payment-first locks and configured unresolved thresholds. Logging retries may duplicate
+identifier-only attention; they cannot repeat monetary effects. Logs are an Operations sink,
+not an acknowledgement by an on-call person.
+
+Account history is revisited in separate bounded PAYMENTS_HISTORY/REFUNDS_HISTORY lanes,
+using the same two-pass evidence processor and checkpoint claims. Old creation timestamps
+cannot permanently retire later captures. Historical settlement day traversal also cycles.
+Two exhausted equal passes are local coverage evidence, not a provider snapshot guarantee.
+Settlement A-to-B-to-A transitions append a new current assessment; a per-movement advisory
+lock serializes assessment identity, without provider I/O or a global financial mutex.

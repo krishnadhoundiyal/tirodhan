@@ -1070,6 +1070,26 @@ Downgrade removes new accounting/evidence while retaining pre-existing Payment, 
 Refund and provider-event rows. Export the new accounting and evidence before rollback.
 The extension-owned spatial_ref_sys and two legitimate migration-0007 indexes remain.
 
+## Migration 0022: financial review recovery
+
+No new financial transaction table or monetary status is introduced. FinancialException adds
+occurrence_count, detected_at (backfilled from created_at), and last_escalated_at. The existing
+case key stays unique. FinancialScanCheckpoint adds last_checked_at and a controlled error
+code so failed and never-run coverage remain visible.
+
+FinancialAudit's Payment FK becomes nullable solely for investigation before a mapping exists.
+New nullable SettlementEvidence and FinancialException FKs preserve the exact investigated
+movement/case. A CHECK requires Payment, provider-event or settlement evidence as an actual
+typed target. Existing actor/command/refund/evidence FKs and append-only triggers remain.
+Payment-null audit is never a fabricated logical payment. All migration changes are additive
+except relaxing the audit Payment nullability; no captured funds, refunds or keys are backfilled.
+
+Downgrade refuses when an audit uses the new typed provenance or has no Payment. Such history
+requires forward recovery, since dropping its new target would discard immutable provenance.
+A populated legacy-compatible audit/refund round trip preserves original command, outcome,
+wire identity and submission facts. Migrations 0007's two indexes and spatial_ref_sys remain
+the known Alembic comparison baseline; 0022 adds no comparison exclusions.
+
 ## Migration 0021: financial correctness controls
 
 The approved closure requires two narrowly typed artifacts absent from existing reliability

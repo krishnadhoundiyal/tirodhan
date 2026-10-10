@@ -5,7 +5,7 @@ import hmac
 import json
 import re
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -84,6 +84,16 @@ class RazorpayProvider:
             settings.razorpay_key_id or "", settings.razorpay_key_secret.get_secret_value()
         )
         self._webhook_secret = settings.razorpay_webhook_secret.get_secret_value().encode()
+        previous = settings.razorpay_webhook_previous_secret
+        until = settings.razorpay_webhook_previous_secret_until
+        if (previous is None) != (until is None) or (until and until.utcoffset() is None):
+            raise PaymentProviderNotConfiguredError(
+                "Webhook rotation requires secret and UTC deadline"
+            )
+        if previous and not previous.get_secret_value().strip():
+            raise PaymentProviderNotConfiguredError("Retiring webhook secret must not be empty")
+        self._previous_webhook_secret = previous.get_secret_value().encode() if previous else None
+        self._previous_webhook_until = until
         self._timeout = settings.razorpay_http_timeout_seconds
         self.public_key_id = settings.razorpay_key_id or ""
         # Account identity is non-secret. Key rotation needs the same configured account.
@@ -362,6 +372,47 @@ class RazorpayProvider:
             raise PaymentProviderUncertainError("INQUIRY_REFUND_AMBIGUOUS")
         return {i["id"]: (i["amount"], i["currency"], i["status"]) for i in items}
 
+    async def inquire_external_reference(
+        self, reference: str, *, refund: bool
+    ) -> AuthenticatedPaymentEvent:
+        """Fresh minimal evidence, never authority to manufacture an operation."""
+        from dataclasses import replace
+
+        if _reference(reference, "rfnd" if refund else "pay") is None:
+            raise PaymentProviderUncertainError("EXTERNAL_REFERENCE_INVALID")
+        entity = await self._request("GET", f"/{'refunds' if refund else 'payments'}/{reference}")
+        assert entity is not None
+        if entity.get("id") != reference:
+            raise PaymentProviderUncertainError("EXTERNAL_REFERENCE_CONFLICT")
+        internal = None
+        conflict = None
+        if refund:
+            notes = entity.get("notes")
+            note = notes.get("tirodhan_refund_id") if isinstance(notes, dict) else None
+            receipt = entity.get("receipt")
+            if isinstance(note, str):
+                try:
+                    candidate = UUID(note)
+                except ValueError:
+                    candidate = None
+                    conflict = "REFUND_IDENTITY_CONFLICT"
+                if candidate and receipt == f"rf_{candidate.hex}":
+                    internal = candidate
+                elif candidate and receipt is not None:
+                    conflict = "REFUND_IDENTITY_CONFLICT"
+            elif note is not None:
+                conflict = "REFUND_IDENTITY_CONFLICT"
+        observation = self._observation(entity, refund_id=internal)
+        # A single failed payment read still cannot prove order failure.
+        return replace(
+            observation,
+            validation_failure_code=conflict,
+            event_type="refund.external_inquiry" if refund else "payment.external_inquiry",
+            evidence_source="API_INVENTORY"
+            if not refund and observation.outcome == PaymentEventOutcome.FAILED
+            else "API_INQUIRY",
+        )
+
     async def inquire_refund(
         self,
         *,
@@ -427,7 +478,13 @@ class RazorpayProvider:
         params: dict[str, str | int] | None = None,
         headers: dict[str, str] | None = None,
         allow_rejection: bool = False,
+        replay_deadline: datetime | None = None,
     ) -> dict[str, Any] | None:
+        if (
+            replay_deadline is not None
+            and utc_now() + timedelta(seconds=self._timeout or 0) >= replay_deadline
+        ):
+            raise PaymentProviderUncertainError("REFUND_REPLAY_DEADLINE_EXPIRED")
         try:
             response = await self._client.request(
                 method,
@@ -536,6 +593,7 @@ class RazorpayProvider:
         amount_minor: int,
         currency: str,
         provider_idempotency_key: str,
+        replay_deadline: datetime | None = None,
     ) -> RefundInitiationResult:
         if _reference(provider_payment_id, "pay") is None:
             raise PaymentProviderNotConfiguredError(
@@ -561,6 +619,7 @@ class RazorpayProvider:
                 "notes": {"tirodhan_refund_id": str(refund_id)},
             },
             headers={"X-Refund-Idempotency": key},
+            replay_deadline=replay_deadline,
             allow_rejection=True,
         )
         if data is None:
@@ -628,10 +687,18 @@ class RazorpayProvider:
     ) -> AuthenticatedPaymentEvent:
         normalized = {key.lower(): value for key, value in headers.items()}
         signature = normalized.get("x-razorpay-signature", "")
-        expected = hmac.new(self._webhook_secret, raw_body, hashlib.sha256).hexdigest()
-        if re.fullmatch(r"[0-9a-f]{64}", signature) is None or not hmac.compare_digest(
-            expected, signature
+        secrets = [self._webhook_secret]
+        if (
+            self._previous_webhook_secret
+            and self._previous_webhook_until
+            and utc_now() < self._previous_webhook_until
         ):
+            secrets.append(self._previous_webhook_secret)
+        matches = [
+            hmac.compare_digest(hmac.new(secret, raw_body, hashlib.sha256).hexdigest(), signature)
+            for secret in secrets
+        ]
+        if re.fullmatch(r"[0-9a-f]{64}", signature) is None or not any(matches):
             raise PaymentProviderAuthenticationError("Invalid Razorpay webhook signature")
         event_id = normalized.get("x-razorpay-event-id", "")
         if re.fullmatch(r"[A-Za-z0-9_-]{1,200}", event_id) is None:
@@ -675,6 +742,7 @@ class RazorpayProvider:
             return self.dispute_observation(entity, **base)
         if event_type not in {
             "payment.captured",
+            "payment.authorized",
             "payment.failed",
             "refund.processed",
             "refund.failed",
@@ -700,7 +768,14 @@ class RazorpayProvider:
             if entity.get("order_id") is not None and order_id is None:
                 raise PaymentProviderEventInputError("Razorpay order reference is malformed")
             success = event_type == "payment.captured"
-            if entity.get("status") != ("captured" if success else "failed") or (
+            expected_state = (
+                "captured"
+                if success
+                else "authorized"
+                if event_type == "payment.authorized"
+                else "failed"
+            )
+            if entity.get("status") != expected_state or (
                 success and entity.get("captured") is not True
             ):
                 raise PaymentProviderEventInputError("Razorpay payment state is contradictory")
@@ -709,8 +784,12 @@ class RazorpayProvider:
                 **base,
                 **facts,
                 provider_order_id=order_id,
-                outcome=PaymentEventOutcome.SUCCEEDED if success else PaymentEventOutcome.FAILED,
-                failure_code=None if success else "RAZORPAY_PAYMENT_FAILED",
+                outcome=PaymentEventOutcome.SUCCEEDED
+                if success
+                else PaymentEventOutcome.SUBMITTED
+                if event_type == "payment.authorized"
+                else PaymentEventOutcome.FAILED,
+                failure_code="RAZORPAY_PAYMENT_FAILED" if event_type == "payment.failed" else None,
             )
         refund_ref = _reference(entity.get("id"), "rfnd")
         if refund_ref is None:

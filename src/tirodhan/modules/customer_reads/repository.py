@@ -98,7 +98,9 @@ async def projections(
         pickup = pickup_by_request.get(request.request_id)
         events = handovers[pickup.pickup_execution_id] if pickup else []
         journey = journey_projection(request, pickup, events)
-        refunded = [refund_projection(r) for r in finance.refunds]
+        refunded = [
+            refund_projection(r, held=r.refund_id in finance.held_refunds) for r in finance.refunds
+        ]
         complete = [m.code for m in journey.milestones if m.state == "COMPLETE"]
         timestamps = [request.created_at]
         batch = batch_by_id.get(request.planning_batch_id) if request.planning_batch_id else None

@@ -321,22 +321,38 @@ class FinancialException(Base):
     status: Mapped[str] = mapped_column(String(24), default="OPEN")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FinancialAudit(Base):
     __tablename__ = "financial_audit"
-    __table_args__ = (UniqueConstraint("command_id", name="uq_financial_audit_command"),)
+    __table_args__ = (
+        UniqueConstraint("command_id", name="uq_financial_audit_command"),
+        CheckConstraint(
+            "payment_id IS NOT NULL OR evidence_id IS NOT NULL "
+            "OR settlement_evidence_id IS NOT NULL",
+            name="ck_financial_audit_target",
+        ),
+    )
     financial_audit_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
     )
     command_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True))
     actor_user_id: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
-    payment_id: Mapped[UUID] = mapped_column(ForeignKey("payment.payment_id"))
+    payment_id: Mapped[UUID | None] = mapped_column(ForeignKey("payment.payment_id"))
     refund_id: Mapped[UUID | None] = mapped_column(ForeignKey("refund.refund_id"))
     evidence_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("payment_provider_event.payment_provider_event_id")
     )
     submitted_reference: Mapped[str | None] = mapped_column(String(200))
+    settlement_evidence_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("settlement_evidence.settlement_evidence_id")
+    )
+    financial_exception_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("financial_exception.financial_exception_id")
+    )
     action: Mapped[str] = mapped_column(String(64))
     result_code: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -364,6 +380,8 @@ class FinancialScanCheckpoint(Base):
     last_exhausted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claim_token: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
     claim_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
 
 
 class SettlementEvidence(Base):

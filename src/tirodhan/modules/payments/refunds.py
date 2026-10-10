@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import false, func, or_, select
@@ -6,9 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.customers.service import command_fingerprint
-from tirodhan.modules.payments.accounting import compensate_charge, ensure_obligation, status_event
+from tirodhan.modules.payments.accounting import (
+    PAYOUT_HOLD_REASONS,
+    compensate_charge,
+    ensure_obligation,
+    status_event,
+)
 from tirodhan.modules.payments.models import (
     CapturedCharge,
+    FinancialException,
     Payment,
     PaymentAttempt,
     Refund,
@@ -336,6 +342,30 @@ async def create_refund(
     return refund
 
 
+async def retain_preflight_uncertainty(
+    factory: async_sessionmaker[AsyncSession],
+    refund_id: UUID,
+) -> None:
+    from tirodhan.modules.payments.accounting import open_exception
+
+    async with factory() as session, session.begin():
+        identity = await session.get(Refund, refund_id)
+        assert identity is not None
+        payment = await session.scalar(
+            select(Payment).where(Payment.payment_id == identity.payment_id).with_for_update()
+        )
+        current = await session.scalar(
+            select(Refund)
+            .where(Refund.refund_id == refund_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        assert payment is not None and current is not None
+        if current.status in {"PENDING", "PROCESSING", "INITIATION_UNCERTAIN"}:
+            current.status = "INITIATION_UNCERTAIN"
+            await open_exception(session, payment, "REFUND_UNRESOLVED", refund=current)
+
+
 async def execute_refund_provider_call(
     session_factory: async_sessionmaker[AsyncSession],
     refund_id: UUID,
@@ -389,10 +419,25 @@ async def execute_refund_provider_call(
             )
             if obligation and obligation.payout_blocked:
                 raise RefundConflictError("Refund obligation is blocked")
+            if await session.scalar(
+                select(FinancialException.financial_exception_id)
+                .where(
+                    FinancialException.status == "OPEN",
+                    FinancialException.reason_code.in_(PAYOUT_HOLD_REASONS),
+                    or_(
+                        FinancialException.refund_id == refund_id,
+                        FinancialException.captured_charge_id == refund.captured_charge_id
+                        if refund.captured_charge_id
+                        else false(),
+                    ),
+                )
+                .limit(1)
+            ):
+                raise RefundConflictError("Refund evidence requires verified resolution")
             if (
-                charge
-                and charge.provider_account_key
-                and getattr(provider, "account_key", None) != charge.provider_account_key
+                charge.provider_account_key if charge else attempt.provider_account_key
+            ) and getattr(provider, "account_key", None) != (
+                charge.provider_account_key if charge else attempt.provider_account_key
             ):
                 raise PaymentProviderNotConfiguredError(
                     "Refund account does not match captured charge"
@@ -431,15 +476,19 @@ async def execute_refund_provider_call(
     from tirodhan.modules.payments.ports import FinancialInquiryProvider
     from tirodhan.modules.payments.service import process_authenticated_payment_event
 
-    if recovery and provider.provider_code == "RAZORPAY":
+    if provider.provider_code == "RAZORPAY":
         inquiry = cast(FinancialInquiryProvider, provider)
-        observations = await inquiry.inquire_refund(
-            refund_id=refund_id,
-            provider_refund_id=identity.provider_refund_id,
-            provider_payment_id=provider_payment_id,
-            amount_minor=amount_minor,
-            currency=currency,
-        )
+        try:
+            observations = await inquiry.inquire_refund(
+                refund_id=refund_id,
+                provider_refund_id=identity.provider_refund_id,
+                provider_payment_id=provider_payment_id,
+                amount_minor=amount_minor,
+                currency=currency,
+            )
+        except PaymentProviderUncertainError:
+            await retain_preflight_uncertainty(session_factory, refund_id)
+            raise RefundConflictError("Refund preflight is unresolved") from None
         if observations:
             for observation in observations:
                 await process_authenticated_payment_event(
@@ -450,7 +499,9 @@ async def execute_refund_provider_call(
                 )
             return
         window = getattr(provider, "refund_replay_window_seconds", None)
-        if window is None or (utc_now() - first_submission).total_seconds() >= window:
+        if recovery and (
+            window is None or (utc_now() - first_submission).total_seconds() >= window
+        ):
             async with session_factory() as session, session.begin():
                 payment = await session.scalar(
                     select(Payment)
@@ -474,15 +525,161 @@ async def execute_refund_provider_call(
                     )
             raise RefundConflictError("Native refund replay protection is unconfirmed or expired")
 
+    if provider.provider_code == "RAZORPAY":
+        # Discover cross-channel refunds before a still-avoidable POST. This is
+        # not atomic with Dashboard; all observations retain their real identity.
+        from tirodhan.modules.payments.ports import AuthenticatedPaymentEvent, PaymentEventOutcome
+
+        inquiry = cast(FinancialInquiryProvider, provider)
+        try:
+            external = await inquiry.inspect_charge_refunds(provider_payment_id)
+        except PaymentProviderUncertainError:
+            await retain_preflight_uncertainty(session_factory, refund_id)
+            raise RefundConflictError("Refund inventory is unresolved") from None
+        async with session_factory() as session:
+            operations = list(
+                await session.scalars(
+                    select(Refund).where(
+                        Refund.payment_id == identity.payment_id,
+                        Refund.provider == provider.provider_code,
+                        or_(
+                            Refund.captured_charge_id == identity.captured_charge_id
+                            if identity.captured_charge_id
+                            else false(),
+                            (Refund.captured_charge_id.is_(None))
+                            & (Refund.payment_attempt_id == identity.payment_attempt_id),
+                        ),
+                    )
+                )
+            )
+            known = {
+                operation.provider_refund_id: operation
+                for operation in operations
+                if operation.provider_refund_id
+            }
+        for reference, (money, denomination, state) in external.items():
+            local = known.get(reference)
+            if local and (
+                local.amount_minor,
+                local.currency,
+                {"SUCCEEDED": "processed", "FAILED": "failed"}.get(local.status, "pending"),
+            ) == (money, denomination, state):
+                continue
+            digest = hashlib.sha256(
+                str(
+                    (
+                        provider.provider_code,
+                        getattr(provider, "account_key", None),
+                        reference,
+                        money,
+                        denomination,
+                        state,
+                    )
+                ).encode()
+            ).hexdigest()
+            await process_authenticated_payment_event(
+                session_factory,
+                AuthenticatedPaymentEvent(
+                    provider=provider.provider_code,
+                    external_event_id=f"preflight:{digest}",
+                    event_type="refund.preflight",
+                    outcome={
+                        "processed": PaymentEventOutcome.SUCCEEDED,
+                        "failed": PaymentEventOutcome.FAILED,
+                        "pending": PaymentEventOutcome.SUBMITTED,
+                    }[state],
+                    payment_attempt_id=None,
+                    refund_id=local.refund_id if local else None,
+                    provider_refund_id=reference,
+                    provider_payment_id=provider_payment_id,
+                    amount_minor=money,
+                    currency=denomination,
+                    evidence_source="API_INQUIRY",
+                    provider_account_key=getattr(provider, "account_key", None),
+                ),
+                payload_hash=bytes.fromhex(digest),
+                planning_lead_time_minutes=None,
+            )
+
+    # Revalidate after all GETs. Never hold a DB connection during provider I/O.
+    async with session_factory() as session, session.begin():
+        await session.scalar(
+            select(Payment).where(Payment.payment_id == identity.payment_id).with_for_update()
+        )
+        current = await session.scalar(
+            select(Refund)
+            .where(Refund.refund_id == refund_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        assert current is not None
+        if current.status not in {"PENDING", "PROCESSING", "INITIATION_UNCERTAIN"}:
+            return
+        current_obligation = (
+            await session.get(RefundObligation, current.refund_obligation_id)
+            if current.refund_obligation_id
+            else None
+        )
+        held = await session.scalar(
+            select(FinancialException.financial_exception_id)
+            .where(
+                FinancialException.status == "OPEN",
+                FinancialException.reason_code.in_(PAYOUT_HOLD_REASONS),
+                or_(
+                    FinancialException.refund_id == refund_id,
+                    FinancialException.captured_charge_id == current.captured_charge_id
+                    if current.captured_charge_id
+                    else false(),
+                ),
+            )
+            .limit(1)
+        )
+        if (current_obligation and current_obligation.payout_blocked) or held:
+            raise RefundConflictError("A new financial hold prevents execution")
+        if recovery and provider.provider_code == "RAZORPAY":
+            window = getattr(provider, "refund_replay_window_seconds", None)
+            timeout = getattr(provider, "_timeout", 0) or 0
+            if window is None or (utc_now() - first_submission).total_seconds() + timeout >= window:
+                from tirodhan.modules.payments.accounting import open_exception
+
+                current.status = "INITIATION_UNCERTAIN"
+                payment = await session.get(Payment, current.payment_id)
+                assert payment is not None
+                await open_exception(
+                    session, payment, "REFUND_REPLAY_RETENTION_UNCONFIRMED", refund=current
+                )
+                # Raise after committing the retained blocker below.
+                replay_blocked = True
+            else:
+                replay_blocked = False
+        else:
+            replay_blocked = False
+    if replay_blocked:
+        raise RefundConflictError("Native refund replay deadline cannot cover the request")
+
     # Call provider outside DB transaction.
     try:
-        result = await provider.initiate_refund(
-            refund_id=refund_id,
-            provider_payment_id=provider_payment_id,
-            amount_minor=amount_minor,
-            currency=currency,
-            provider_idempotency_key=provider_idempotency_key,
-        )
+        from tirodhan.modules.payments.razorpay import RazorpayProvider
+
+        if isinstance(provider, RazorpayProvider):
+            window = provider.refund_replay_window_seconds
+            deadline = first_submission + timedelta(seconds=window) if recovery and window else None
+            result = await provider.initiate_refund(
+                refund_id=refund_id,
+                provider_payment_id=provider_payment_id,
+                amount_minor=amount_minor,
+                currency=currency,
+                provider_idempotency_key=provider_idempotency_key,
+                replay_deadline=deadline,
+            )
+        else:
+            result = await provider.initiate_refund(
+                refund_id=refund_id,
+                provider_payment_id=provider_payment_id,
+                amount_minor=amount_minor,
+                currency=currency,
+                provider_idempotency_key=provider_idempotency_key,
+            )
     except PaymentProviderUncertainError:
         result = None
 

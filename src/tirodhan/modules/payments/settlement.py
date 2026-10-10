@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -160,6 +160,18 @@ async def record_settlement(
             # Provider outcomes acquire the same Payment lock. Re-read after it
             # so an earlier unlocked lookup cannot create a stale mismatch.
             await session.refresh(operation)
+        # The closure request explicitly requires current settlement evidence to
+        # supersede stale matches. The real-DB A->held->A regression fails before
+        # this change. This lock affects one movement; no provider POST occurs.
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {
+                "key": (
+                    f"settlement:{account_key}:{movement.provider_entity_id}:"
+                    f"{movement.provider_settlement_id}"
+                )
+            },
+        )
         classification = "MATCHED"
         if movement.movement_type in {"transfer", "adjustment"}:
             classification = "SETTLEMENT_ADJUSTMENT_REVIEW"
@@ -224,6 +236,36 @@ async def record_settlement(
                 ]
             ).encode()
         ).hexdigest()
+        latest = await session.scalar(
+            select(SettlementEvidence)
+            .where(
+                SettlementEvidence.provider_account_key == account_key,
+                SettlementEvidence.provider_entity_id == movement.provider_entity_id,
+                SettlementEvidence.provider_settlement_id.is_not_distinct_from(
+                    movement.provider_settlement_id
+                ),
+            )
+            .order_by(
+                SettlementEvidence.observed_at.desc(),
+                SettlementEvidence.settlement_evidence_id.desc(),
+            )
+            .limit(1)
+        )
+        if (
+            latest
+            and all(getattr(latest, field) == value for field, value in movement.fields().items())
+            and (
+                latest.classification == classification
+                and latest.fee_includes_tax == fee_includes_tax
+                and latest.captured_charge_id == (charge.captured_charge_id if charge else None)
+                and latest.refund_id == (operation.refund_id if operation else None)
+            )
+        ):
+            return latest
+        if latest:
+            observation_key = hashlib.sha256(
+                f"{observation_key}:{latest.settlement_evidence_id}".encode()
+            ).hexdigest()
         identity = await session.scalar(
             insert(SettlementEvidence)
             .values(
@@ -315,20 +357,26 @@ async def check_expected_settlement(
                 or operation.status != "SUCCEEDED"
             ):
                 raise ValueError("Expected refund membership is invalid")
-            found = await session.scalar(
-                select(SettlementEvidence.settlement_evidence_id)
+            latest = await session.scalar(
+                select(SettlementEvidence)
                 .where(
                     SettlementEvidence.provider_account_key == account_key,
                     SettlementEvidence.provider_settlement_id == item.settlement_id,
                     SettlementEvidence.provider_entity_id
                     == (operation.provider_refund_id if operation else charge.provider_payment_id),
-                    SettlementEvidence.settled.is_(True),
-                    SettlementEvidence.on_hold.is_(False),
-                    SettlementEvidence.classification.in_(["MATCHED", "MATCHED_GROSS"]),
+                )
+                .order_by(
+                    SettlementEvidence.observed_at.desc(),
+                    SettlementEvidence.settlement_evidence_id.desc(),
                 )
                 .limit(1)
             )
-            if found is None:
+            if (
+                latest is None
+                or not latest.settled
+                or latest.on_hold
+                or latest.classification not in {"MATCHED", "MATCHED_GROSS"}
+            ):
                 case = await open_exception(
                     session, payment, "SETTLEMENT_EXPECTED_MISSING", charge=charge, refund=operation
                 )
@@ -395,14 +443,31 @@ async def reconcile_settlement_day(
             checkpoint.claim_token = token
             checkpoint.claim_until = utc_now() + timedelta(seconds=lease_seconds)
             identity, offset = checkpoint.financial_scan_checkpoint_id, checkpoint.page_offset
-        items = await provider.settlement_page(day, offset)
-        for item in items:
-            await record_settlement(
-                factory,
-                provider.account_key,
-                SettlementMovement.parse(item),
-                fee_includes_tax=fee_includes_tax,
-            )
+        try:
+            items = await provider.settlement_page(day, offset)
+            for item in items:
+                await record_settlement(
+                    factory,
+                    provider.account_key,
+                    SettlementMovement.parse(item),
+                    fee_includes_tax=fee_includes_tax,
+                )
+        except PaymentProviderUncertainError:
+            async with factory() as session, session.begin():
+                checkpoint = await session.scalar(
+                    select(FinancialScanCheckpoint)
+                    .where(
+                        FinancialScanCheckpoint.financial_scan_checkpoint_id == identity,
+                        FinancialScanCheckpoint.claim_token == token,
+                    )
+                    .with_for_update()
+                )
+                if checkpoint:
+                    checkpoint.claim_token = None
+                    checkpoint.claim_until = None
+                    checkpoint.last_checked_at = utc_now()
+                    checkpoint.last_error_code = "SETTLEMENT_REPORT_UNCERTAIN"
+            raise
         async with factory() as session, session.begin():
             checkpoint = await session.scalar(
                 select(FinancialScanCheckpoint)
@@ -416,6 +481,8 @@ async def reconcile_settlement_day(
                 continue
             checkpoint.claim_token = None
             checkpoint.claim_until = None
+            checkpoint.last_checked_at = utc_now()
+            checkpoint.last_error_code = None
             if len(items) == 1000:
                 checkpoint.page_offset += 1000
             else:

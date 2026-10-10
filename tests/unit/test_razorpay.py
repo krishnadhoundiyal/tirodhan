@@ -354,7 +354,7 @@ async def test_refund_ambiguous_or_conflicting_response_is_uncertain(problem):
 
 @pytest.mark.asyncio
 async def test_exact_raw_webhook_authentication_precedes_json_and_requires_event_id():
-    body = b'{ "event" : "payment.authorized", "payload":{} }'
+    body = b'{ "event" : "unhandled.event", "payload":{} }'
     async with httpx.AsyncClient() as client:
         provider = RazorpayProvider(configuration(), client=client)
         result = await provider.authenticate_webhook(raw_body=body, headers=signed(body))
@@ -368,6 +368,11 @@ async def test_exact_raw_webhook_authentication_precedes_json_and_requires_event
                 await provider.authenticate_webhook(raw_body=changed, headers=headers)
         with pytest.raises(PaymentProviderEventInputError):
             await provider.authenticate_webhook(raw_body=body, headers=signed(body, event_id=""))
+        malformed_authorized = b'{ "event" : "payment.authorized", "payload":{} }'
+        with pytest.raises(PaymentProviderEventInputError):
+            await provider.authenticate_webhook(
+                raw_body=malformed_authorized, headers=signed(malformed_authorized)
+            )
 
 
 @pytest.mark.asyncio

@@ -155,10 +155,12 @@ erDiagram
     REFUND o|--o{ FINANCIAL_EXCEPTION : concerns
     PAYMENT_PROVIDER_EVENT o|--o{ FINANCIAL_EXCEPTION : evidence
     SETTLEMENT_EVIDENCE o|--o{ FINANCIAL_EXCEPTION : evidence
-    PAYMENT ||--o{ FINANCIAL_AUDIT : audit_history
+    PAYMENT o|--o{ FINANCIAL_AUDIT : matched_audit_history
     APP_USER ||--o{ FINANCIAL_AUDIT : actor
     REFUND o|--o{ FINANCIAL_AUDIT : target
     PAYMENT_PROVIDER_EVENT o|--o{ FINANCIAL_AUDIT : evidence
+    SETTLEMENT_EVIDENCE o|--o{ FINANCIAL_AUDIT : investigation
+    FINANCIAL_EXCEPTION o|--o{ FINANCIAL_AUDIT : resolution
 ```
 
 Composite Attempt/Payment ownership FKs protect canonical success, captures and refunds.

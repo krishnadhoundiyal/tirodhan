@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -57,6 +58,8 @@ class Settings(BaseSettings):
     razorpay_key_id: str | None = None
     razorpay_key_secret: SecretStr | None = None
     razorpay_webhook_secret: SecretStr | None = None
+    razorpay_webhook_previous_secret: SecretStr | None = None
+    razorpay_webhook_previous_secret_until: datetime | None = None
     razorpay_http_timeout_seconds: float | None = None
     razorpay_account_id: str | None = None
     razorpay_normal_refund_failure_finality_confirmed: bool = False

@@ -192,7 +192,7 @@ async def test_captured_external_mapping_duplicate_and_adversarial_state_orderin
         ("amount", "AMOUNT_MISMATCH"),
         ("currency", "CURRENCY_MISMATCH"),
         ("unknown", "ATTEMPT_NOT_MAPPED"),
-        ("authorized", "EVENT_IGNORED"),
+        ("authorized", None),
         ("expired", "PAYMENT_WINDOW_EXPIRED"),
         ("cutoff", "PLANNING_CUTOFF_REACHED"),
         ("frozen", "WORK_UNIT_FROZEN"),
@@ -229,6 +229,9 @@ async def test_captured_validation_and_existing_payment_gates(database_session_f
             factory, provider, payment_body(attempt, event_type=event_type, **extra)
         )
         assert event.failure_code == code
+        if case == "authorized":
+            assert event.observed_outcome == "SUBMITTED"
+            assert event.processing_status == "PROCESSED"
     async with factory() as session:
         assert (await session.get(Payment, result.payment.payment_id)).status == (
             "SUCCEEDED" if case in {"expired", "cutoff", "frozen"} else "PENDING"
@@ -236,6 +239,11 @@ async def test_captured_validation_and_existing_payment_gates(database_session_f
         assert (await session.get(CollectionRequest, result.request.request_id)).status == (
             "EXPIRED" if case in {"expired", "cutoff", "frozen"} else "PENDING_PAYMENT"
         )
+        if case == "authorized":
+            current = await session.get(PaymentAttempt, attempt.payment_attempt_id)
+            assert current.status == "PENDING"
+            assert current.next_check_at is not None
+            assert current.completed_at is None
     assert await acceptance_count(factory) == 0
 
 

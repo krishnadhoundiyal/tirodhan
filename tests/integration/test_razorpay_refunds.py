@@ -158,7 +158,7 @@ async def test_refund_crash_redelivery_resumes_identical_key_body_one_external_e
     async def transport(request):
         nonlocal die
         response = remote(request)
-        if die and crash == "after_remote":
+        if die and crash == "after_remote" and request.method == "POST":
             die = False
             raise asyncio.CancelledError()
         return response
@@ -213,7 +213,7 @@ async def test_uncertain_provider_abandons_processing_inbox_then_retry_converges
 
     def transport(request):
         response = remote(request)
-        if uncertain:
+        if uncertain and request.method == "POST":
             raise httpx.ReadTimeout("provider private payload", request=request)
         return response
 
@@ -326,12 +326,17 @@ async def test_worker_conflicting_refund_id_does_not_overwrite(database_session_
     async with factory() as session, session.begin():
         row = await session.get(Refund, refund.refund_id)
         row.provider_refund_id = "rfnd_established"
-    async with httpx.AsyncClient(transport=httpx.MockTransport(Refunds())) as client:
-        await execute_refund_provider_call(
-            factory,
-            refund.refund_id,
-            RazorpayProvider(settings(razorpay_refund_replay_window_seconds=600), client=client),
-        )
+    remote = Refunds()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(remote)) as client:
+        with pytest.raises(RefundConflictError):
+            await execute_refund_provider_call(
+                factory,
+                refund.refund_id,
+                RazorpayProvider(
+                    settings(razorpay_refund_replay_window_seconds=600), client=client
+                ),
+            )
+    assert not remote.effects and not remote.calls
     async with factory() as session:
         row = await session.get(Refund, refund.refund_id)
         assert row.provider_refund_id == "rfnd_established" and row.status == "INITIATION_UNCERTAIN"
@@ -394,7 +399,7 @@ async def test_refund_webhook_contradictory_facts_reconcile_without_mutation(
         assert row.status == "PENDING" and row.provider_refund_id is None
 
 
-async def test_refund_created_nonterminal_failed_then_processed_is_conflict(
+async def test_legacy_refund_created_failed_then_processed_preserves_verified_truth(
     database_session_factory,
 ):
     factory = database_session_factory
@@ -413,9 +418,10 @@ async def test_refund_created_nonterminal_failed_then_processed_is_conflict(
         failed = await process(factory, provider, body(refund, kind="refund.failed"), "evt_failed")
         assert failed.processing_status == "PROCESSED"
         late = await process(factory, provider, body(refund), "evt_late")
-        assert late.processing_status == "RECONCILIATION_REQUIRED"
+        assert late.processing_status == "PROCESSED"
     async with factory() as session:
-        assert (await session.get(Refund, refund.refund_id)).status == "FAILED"
+        row = await session.get(Refund, refund.refund_id)
+        assert row.status == "SUCCEEDED" and row.completed_at is not None
 
 
 @pytest.mark.parametrize(

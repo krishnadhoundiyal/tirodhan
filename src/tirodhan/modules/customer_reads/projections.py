@@ -85,7 +85,7 @@ def payment_projection(
     )
 
 
-def refund_projection(refund: Refund) -> RefundDto:
+def refund_projection(refund: Refund, *, held: bool = False) -> RefundDto:
     statuses = {
         "PENDING": "INITIATED",
         "PROCESSING": "PROCESSING",
@@ -113,7 +113,9 @@ def refund_projection(refund: Refund) -> RefundDto:
     return RefundDto.model_validate(
         {
             "refund_id": refund.refund_id,
-            "status": statuses[refund.status],
+            "status": "CONFIRMING"
+            if held and refund.status != "SUCCEEDED"
+            else statuses[refund.status],
             "amount_minor": refund.amount_minor,
             "currency": refund.currency,
             "initiated_at": refund.created_at,

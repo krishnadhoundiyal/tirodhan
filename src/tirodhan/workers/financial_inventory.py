@@ -13,6 +13,7 @@ from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.payments.inventory import InventoryPolicy, discover_inventory
 from tirodhan.modules.payments.models import FinancialScanCheckpoint
+from tirodhan.modules.payments.ports import PaymentProviderUncertainError
 from tirodhan.modules.payments.runtime import razorpay_runtime
 from tirodhan.modules.payments.settlement import reconcile_settlement_day
 from tirodhan.workers.financial_reconciliation import configured_policy
@@ -43,8 +44,11 @@ async def run() -> None:
             if provider is None:
                 raise ValueError("Inventory reconciliation requires configured Razorpay")
             factory = create_session_factory(engine)
-            await discover_inventory(factory, provider, inventory_policy, policy, "PAYMENTS")
-            await discover_inventory(factory, provider, inventory_policy, policy, "REFUNDS")
+            for historical in (False, True):
+                for kind in ("PAYMENTS", "REFUNDS"):
+                    await discover_inventory(
+                        factory, provider, inventory_policy, policy, kind, historical=historical
+                    )
             if settings.financial_settlement_start_date is not None:
                 first = date.fromisoformat(settings.financial_settlement_start_date)
                 zone = ZoneInfo(settings.financial_settlement_timezone or "")
@@ -80,6 +84,9 @@ async def run() -> None:
                         history.financial_scan_checkpoint_id,
                         history.window_start,
                     )
+                    if datetime.fromtimestamp(history_epoch, timezone.utc).date() >= cutoff:
+                        history.window_start, history.window_end = epoch, epoch + 86400
+                        history_epoch = epoch
                 day = datetime.fromtimestamp(history_epoch, timezone.utc).date()
                 days = {day} if day < cutoff else set()
                 for offset in range(1, (settings.financial_settlement_revisit_days or 0) + 1):
@@ -88,14 +95,17 @@ async def run() -> None:
                         days.add(recent)
                 for report_day in sorted(days):
                     started_at = utc_now()
-                    await reconcile_settlement_day(
-                        factory,
-                        provider,
-                        report_day,
-                        page_budget=inventory_policy.page_budget,
-                        lease_seconds=policy.lease_seconds,
-                        fee_includes_tax=settings.financial_settlement_fee_includes_tax,
-                    )
+                    try:
+                        await reconcile_settlement_day(
+                            factory,
+                            provider,
+                            report_day,
+                            page_budget=inventory_policy.page_budget,
+                            lease_seconds=policy.lease_seconds,
+                            fee_includes_tax=settings.financial_settlement_fee_includes_tax,
+                        )
+                    except PaymentProviderUncertainError:
+                        continue  # One poisoned report does not suppress other dates.
                     if report_day == day:
                         async with factory() as session, session.begin():
                             exhausted = await session.scalar(

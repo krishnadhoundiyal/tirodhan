@@ -5,7 +5,11 @@ import asyncio
 from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
-from tirodhan.modules.payments.reconciliation import ReconciliationPolicy, reconcile_batch
+from tirodhan.modules.payments.reconciliation import (
+    ReconciliationPolicy,
+    escalate_unresolved_cases,
+    reconcile_batch,
+)
 from tirodhan.modules.payments.runtime import razorpay_runtime
 
 
@@ -33,7 +37,9 @@ async def run() -> None:
         async with razorpay_runtime(settings) as provider:
             if provider is None:
                 raise ValueError("Financial reconciliation requires configured Razorpay")
-            await reconcile_batch(create_session_factory(engine), provider, policy)
+            factory = create_session_factory(engine)
+            await reconcile_batch(factory, provider, policy)
+            await escalate_unresolved_cases(factory, policy)
     finally:
         await engine.dispose()
 
@@ -56,6 +62,7 @@ async def run_if_configured(settings: Settings) -> None:
         engine = create_database_engine(settings, use_null_pool=True)
         try:
             await reconcile_batch(create_session_factory(engine), provider, policy)
+            await escalate_unresolved_cases(create_session_factory(engine), policy)
         finally:
             await engine.dispose()
 

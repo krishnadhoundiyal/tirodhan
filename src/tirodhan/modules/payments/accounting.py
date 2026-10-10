@@ -65,22 +65,33 @@ async def open_exception(
             reason_code=reason,
             status="OPEN",
             created_at=utc_now(),
+            detected_at=utc_now(),
         )
         .on_conflict_do_nothing(index_elements=["case_key"])
     )
     case = await session.scalar(
-        select(FinancialException).where(FinancialException.case_key == key)
+        select(FinancialException).where(FinancialException.case_key == key).with_for_update()
     )
     assert case is not None
+    if case.status == "RESOLVED":
+        case.status = "OPEN"
+        case.resolved_at = None
+        case.occurrence_count += 1
+        case.detected_at = utc_now()
+        case.last_escalated_at = None
+    if evidence_id:
+        # New contradictions invalidate investigations begun against earlier facts.
+        case.evidence_id = evidence_id
+    event_key = f"financial-exception:{case.financial_exception_id}"
+    if case.occurrence_count > 1:
+        event_key += f":{case.occurrence_count}"
     if await session.scalar(
-        select(OutboxEvent.outbox_event_id).where(
-            OutboxEvent.event_key == f"financial-exception:{case.financial_exception_id}"
-        )
+        select(OutboxEvent.outbox_event_id).where(OutboxEvent.event_key == event_key)
     ):
         return case
     await append_outbox_event(
         session,
-        event_key=f"financial-exception:{case.financial_exception_id}",
+        event_key=event_key,
         aggregate_type="payment",
         aggregate_id=payment.payment_id,
         event_type="FinancialExceptionRaised",
@@ -216,13 +227,38 @@ async def record_charge(
     return charge
 
 
+PAYOUT_HOLD_REASONS = frozenset(
+    {
+        "PAYMENT_DISPUTE",
+        "REFUND_DISPUTE_DOUBLE_CREDIT_RISK",
+        "EXTERNAL_REFUND_UNMAPPED",
+        "EVENT_PAYLOAD_CONFLICT",
+        "PROVIDER_EVIDENCE_MISMATCH",
+        "PROVIDER_ACCOUNT_MISMATCH",
+        "SETTLEMENT_MISMATCH",
+        "SETTLEMENT_UNKNOWN_REFUND",
+        "SETTLEMENT_DISPUTE_REVIEW",
+        "SETTLEMENT_EXPECTED_MISSING",
+        "SETTLEMENT_ADJUSTMENT_REVIEW",
+        "REFUND_IDENTITY_CONFLICT",
+        "REFUND_AMOUNT_MISMATCH",
+        "REFUND_CURRENCY_MISMATCH",
+        "REFUND_PAYMENT_MISMATCH",
+        "REFUND_FINALITY_CONTRADICTION",
+        "REFUND_LEGACY_KEY_UNPROVEN",
+    }
+)
+
+
 async def resolve_uncertainty(
     session: AsyncSession, payment: Payment, *, refund: Refund | None = None
 ) -> None:
     """Close settled outcome cases; commercial/identity cases still need review."""
     reasons = {"REFUND_UNRESOLVED" if refund else "PAYMENT_UNRESOLVED"}
     if refund and refund.status == "SUCCEEDED":
-        reasons.add("REFUND_FAILED")
+        reasons.update({"REFUND_FAILED", "REFUND_REPLAY_RETENTION_UNCONFIRMED"})
+    elif refund and refund.status == "FAILED" and refund.non_payable_verified_at is not None:
+        reasons.add("REFUND_REPLAY_RETENTION_UNCONFIRMED")
     await session.execute(
         update(FinancialException)
         .where(
@@ -235,6 +271,35 @@ async def resolve_uncertainty(
         )
         .values(status="RESOLVED", resolved_at=utc_now())
     )
+    if refund and refund.status == "SUCCEEDED" and refund.refund_obligation_id:
+        from sqlalchemy import func
+
+        obligation = await session.get(RefundObligation, refund.refund_obligation_id)
+        paid = await session.scalar(
+            select(func.coalesce(func.sum(Refund.amount_minor), 0)).where(
+                Refund.refund_obligation_id == refund.refund_obligation_id,
+                Refund.status == "SUCCEEDED",
+            )
+        )
+        if obligation and not obligation.payout_blocked and paid == obligation.amount_minor:
+            await session.execute(
+                update(FinancialException)
+                .where(
+                    FinancialException.captured_charge_id == obligation.captured_charge_id,
+                    FinancialException.status == "OPEN",
+                    FinancialException.reason_code.in_(
+                        [
+                            "WORK_UNIT_FROZEN",
+                            "PLANNING_CUTOFF_REACHED",
+                            "PAYMENT_WINDOW_EXPIRED",
+                            "HISTORICAL_CANCELLED_MISSING_REFUND",
+                            "REFUND_FAILED",
+                            "CHARGE_REFUND_REVIEW_REQUIRED",
+                        ]
+                    ),
+                )
+                .values(status="RESOLVED", resolved_at=utc_now())
+            )
 
 
 async def ensure_obligation(
@@ -251,21 +316,7 @@ async def ensure_obligation(
             .where(
                 FinancialException.captured_charge_id == charge.captured_charge_id,
                 FinancialException.status == "OPEN",
-                FinancialException.reason_code.in_(
-                    [
-                        "PAYMENT_DISPUTE",
-                        "REFUND_DISPUTE_DOUBLE_CREDIT_RISK",
-                        "EXTERNAL_REFUND_UNMAPPED",
-                        "EVENT_PAYLOAD_CONFLICT",
-                        "PROVIDER_EVIDENCE_MISMATCH",
-                        "SETTLEMENT_MISMATCH",
-                        "SETTLEMENT_UNKNOWN_REFUND",
-                        "SETTLEMENT_DISPUTE_REVIEW",
-                        "SETTLEMENT_EXPECTED_MISSING",
-                        "SETTLEMENT_ADJUSTMENT_REVIEW",
-                        "REFUND_IDENTITY_CONFLICT",
-                    ]
-                ),
+                FinancialException.reason_code.in_(PAYOUT_HOLD_REASONS),
             )
             .limit(1)
         )
