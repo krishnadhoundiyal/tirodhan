@@ -45,7 +45,12 @@ from tirodhan.modules.identity.tokens import (
 from tirodhan.modules.payments.ports import PaymentProvider, UnconfiguredPaymentProvider
 from tirodhan.modules.payments.razorpay import razorpay_configured
 from tirodhan.modules.payments.runtime import razorpay_runtime
+from tirodhan.modules.payments.webhook_queue import (
+    UnconfiguredWebhookPublisher,
+    webhook_publisher_runtime,
+)
 from tirodhan.modules.planning.policy import PlanningConfigurationError
+from tirodhan.modules.reliability.publisher import MessagePublisher
 from tirodhan.modules.serviceability.h3_cells import H3CellIdDeriver
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
@@ -70,6 +75,7 @@ def create_app(
     pricing_port: PricingPort | None = None,
     payment_provider: PaymentProvider | None = None,
     payment_http_client: httpx.AsyncClient | None = None,
+    financial_webhook_publisher: MessagePublisher | None = None,
     otp_provider: OtpProvider | None = None,
     otp_http_client: httpx.AsyncClient | None = None,
     phone_identity_protector: PhoneIdentityProtector | None = None,
@@ -128,8 +134,12 @@ def create_app(
                     client=payment_http_client,
                     enabled=payment_provider is None,
                 ) as financial_runtime,
+                webhook_publisher_runtime(
+                    application_settings, financial_webhook_publisher
+                ) as webhook_publisher,
             ):
                 application.state.location_resolver = runtime.resolver
+                application.state.financial_webhook_publisher = webhook_publisher
                 if financial_runtime is not None:
                     application.state.payment_provider = financial_runtime
                 yield
@@ -158,6 +168,9 @@ def create_app(
     application.state.cell_id_deriver = cell_id_deriver or H3CellIdDeriver()
     application.state.pricing_port = pricing_port or UnconfiguredPricingPort()
     application.state.payment_provider = payment_provider or UnconfiguredPaymentProvider()
+    application.state.financial_webhook_publisher = (
+        financial_webhook_publisher or UnconfiguredWebhookPublisher()
+    )
     application.state.otp_provider = otp_provider or UnconfiguredOtpProvider()
     application.state.phone_identity_protector = configured_phone_protector
     application.state.access_token_codec = access_token_codec or _token_codec(application_settings)

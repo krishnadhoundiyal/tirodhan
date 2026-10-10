@@ -5,9 +5,11 @@ from tirodhan.api.routes import (
     auth,
     checkout,
     collection_requests,
+    customer_finance,
     customer_reads,
     health,
     manager,
+    manager_finance,
     payments,
     rider,
     serviceability,
@@ -20,7 +22,9 @@ api_router.include_router(addresses.router)
 api_router.include_router(serviceability.router)
 api_router.include_router(collection_requests.router)
 api_router.include_router(customer_reads.router)
+api_router.include_router(customer_finance.router)
 api_router.include_router(checkout.router)
 api_router.include_router(payments.router)
 api_router.include_router(rider.router)
 api_router.include_router(manager.router)
+api_router.include_router(manager_finance.router)

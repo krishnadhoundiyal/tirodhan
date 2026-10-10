@@ -97,7 +97,9 @@ Persisted provider references, exact amount and currency govern webhook correlat
 not internal payment IDs in notes or client callbacks. Failed provider attempts within one Order
 may precede capture; their reference must never replace an established captured payment ID.
 Explicitly authorized refunds use the canonical charge and normal native-idempotent execution.
-Provider execution recovery does not change cancellation, expiry or additional-success policy.
+Provider execution recovery does not change financial identity. Phase 2 Batch B adds the approved
+full customer-cancellation compensation policy in ADR-005; non-cancelled expiry and separate
+additional-charge accounting remain reconciliation decisions.
 
 ### Planning
 
@@ -314,6 +316,7 @@ capture; no polymorphic target columns or cross-table trigger are used.
 ```text
 PENDING_PAYMENT
     ├── EXPIRED
+    ├── customer cancellation before cutoff/freeze → CANCELLED
     └── payment confirmed
             ↓
         ACCEPTED
@@ -328,6 +331,13 @@ PENDING_PAYMENT
 ```
 
 Operational exceptions such as customer unavailable or rider unable to continue are not collection-request statuses.
+
+Phase 2 Batch B permits cancellation while payment is unsettled, as required for the
+cancellation-before-capture race. This closes `Payment` as `CANCELLED` without synthesizing funds.
+A later verified canonical capture may make `Payment` `SUCCEEDED` with a separate full
+`CUSTOMER_CANCELLATION` Refund intent in the same transaction; the collection remains `CANCELLED`.
+An accepted paid cancellation also creates/reuses full compensation atomically. Partial reserved
+balances require review. No new collection, attempt or refund status is introduced.
 
 ### Payment
 
@@ -406,3 +416,59 @@ A `Refund` operates across the following independent status boundaries:
 - `SUCCEEDED`: Provider confirmed.
 - `FAILED`: Provider definitively rejected/failed.
 - `INITIATION_UNCERTAIN`: Ambiguous invocation outcome, awaits reconciliation.
+
+
+## Phase 2 financial reconciliation completion
+
+This approved extension supersedes the historical canonical-only combined refund cap
+and the open reconciliation decisions recorded in earlier phase descriptions.
+See [reconciliation](PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refund recovery](FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical financial exceptions](HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md).
+
+Payment remains the logical booking payment. PaymentAttempt remains an order/checkout
+attempt. CapturedCharge records each verified distinct provider payment, with actual
+money/currency and first evidence. An attempt may have several captured charges.
+Only its first canonical charge funds booking; another charge never re-accepts a booking,
+changes its quote, or replaces the canonical reference.
+
+RefundObligation is debt against one captured charge. Existing Refund is its provider
+execution operation. Failed execution preserves debt. Outstanding amount is the obligation
+minus verified successful payouts. Replacement requires a manager command plus current
+API evidence verifying the original operation as definitively non-payable. A status string,
+timeout or absent webhook alone never suffices. Contradictory later original success blocks
+new payout and opens a case, preserving external truth and all completed operations.
+
+Expiry releases booking eligibility, leaving unresolved Payment/Attempt financially pending.
+Late verified capture records Payment SUCCEEDED plus an operational exception without
+reviving the slot. Historical cancellations lacking explicit compensation authorization
+require manager recovery. Only a fresh customer cancellation sets that authorization marker;
+ordinary cancellation replay never invents historical compensation.
+
+FinancialException is an operational case, not a CollectionRequest lifecycle state.
+FinancialAudit is append-only manager provenance. API_INQUIRY is distinct from WEBHOOK
+and PROVIDER_RESPONSE evidence. No new customer-facing enum is introduced.
+
+## Phase 2 financial control evidence — 2026-10-10
+
+Authenticated webhooks are durable ingress receipts, then provider observations applied by
+the existing financial processor. A conflicting payload for one provider event identity is
+retained as a separate contradictory observation linked to the original. Unmatched evidence
+retains provider references and may be retried when its mapping becomes available.
+
+Provider inventory is independent of logical Payment status: a successful Payment can acquire
+another actual charge. A Dashboard refund is external evidence, never a fabricated local
+Refund intent/execution. Unmapped refunds and disputes block unsafe compensation for their
+known charge. Won/closed dispute observations retain history and require manual commercial
+review; they do not automatically authorize a refund or erase an earlier hold.
+
+SettlementEvidence is immutable control evidence, not a ledger, booking state or payout
+instruction. Each typed observation retains merchant binding, financial entity, settlement,
+gross, debit, credit, fees, tax and provider timestamps. Reclassification after verified local
+matching or a confirmed fee rule appends another assessment and preserves the previous one.
+FinancialException links relevant settlement evidence or verified expected membership/due
+facts. Unknown entities remain visible in the manager evidence inventory even without a local
+Payment FK. FinancialScanCheckpoint is bounded account/page progress, not a domain aggregate.
+
+No status is inferred from elapsed time. A missing webhook or unresolved provider response
+cannot release reservations. See [closure evidence](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

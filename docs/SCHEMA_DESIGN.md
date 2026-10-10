@@ -296,13 +296,24 @@ processing_status           varchar(24) NOT NULL
 received_at                 timestamptz NOT NULL
 processed_at                timestamptz NULL
 failure_code                varchar(64) NULL
+provider_payment_id         varchar(200) NULL
+amount_minor                bigint NULL
+currency                    char(3) NULL
 ```
 
 Required:
 
 ```text
 UNIQUE(provider, external_event_id)
+amount_minor IS NULL OR amount_minor > 0
 ```
+
+Migration 0019 adds only nullable authenticated-capture facts to `payment_provider_event`.
+They preserve distinct additional-charge identity for reconciliation without raw payloads,
+payment-instrument data or guessed historical backfill. Existing rows remain valid and retained.
+These fields are private provider metadata, excluded from customer DTOs and reliability payloads.
+Downgrade retains event rows but removes the new facts; export them before a rollback that must
+preserve reconciliation evidence.
 
 ### `refund`
 
@@ -921,9 +932,16 @@ One transaction persists:
 
 One transaction persists:
 
-- request `ACCEPTED -> CANCELLED`;
-- refund record;
-- refund-requested outbox event.
+- command idempotency claim/completion and request `ACCEPTED/PENDING_PAYMENT -> CANCELLED`;
+- full canonical refund record and `RefundRequested` outbox, when confirmed funds exist;
+- unsettled `Payment -> CANCELLED`, when no charge has settled.
+
+The Payment row is locked before work-unit advisory and request locks. Refund creation locks
+Payment before its own command key and validates the canonical settled charge and reserved balance.
+The first verified capture of an already cancelled collection atomically establishes canonical
+Payment success and the same stable cancellation-refund intent/outbox, without reacceptance.
+Partial reservations refuse the fresh cancellation; an existing full reservation creates no second
+intent. See `IDEMPOTENCY.md` for all overlapping lock paths and replay behavior.
 
 ### Planning freeze
 
@@ -1020,3 +1038,70 @@ Still open:
 ### Refund (Phase 1D Addition)
 The `refund` table captures standalone financial adjustments related to `PaymentAttempts`.
 Constraints ensure that `amount_minor > 0` and total committed refunds (`PENDING`, `PROCESSING`, `SUBMITTED`, `SUCCEEDED`, `INITIATION_UNCERTAIN`) never exceed the canonically successful logical `Payment`. `provider_refund_id` maintains partial uniqueness across providers, ensuring correct correlation.
+
+
+## Phase 2 reconciliation accounting (migration 0020)
+
+The approved policies supersede the earlier combined/canonical-only refund cap above.
+The invariant is now per verified captured charge; additional real charges are independently
+refundable even when their sum exceeds the logical Payment quote.
+
+| Entity | Key/constraint | Relationships and purpose |
+|---|---|---|
+| CapturedCharge | UUID PK; unique provider/payment reference; positive bigint money | Real Payment, Attempt and first-evidence FKs; order/account binding and immutable capture facts |
+| RefundObligation | UUID PK; unique charge FK; positive amount | Debt bound to one charge; controlled reason and payout-blocked flag; outstanding is derived |
+| FinancialException | UUID PK; unique case key; status/time index | Payment plus optional typed Charge/Refund/evidence FKs; OPEN/RESOLVED, reason and timestamps |
+| FinancialAudit | UUID PK; unique command UUID | Actor User, Payment and optional Refund/evidence FKs; submitted reference, action, decision and timestamp |
+
+Refund adds nullable charge, obligation and failure-evidence FKs, verified non-payable time,
+indexed due time, claim token/deadline and check count. Old identities/keys/history remain.
+A charge-row trigger validates new-intent ownership, currency, obligation and aggregate
+reservations, including known legacy canonical reservations. Unverified FAILED operations
+still reserve. Outcome updates record provider truth, including contradictions, rather than
+hiding completed payouts behind a database rejection.
+
+Attempt adds account binding, indexed next_check_at and lease/check metadata. ProviderEvent
+adds source, observed outcome, account binding and non-payable evidence flag. Existing
+unresolved rows receive due timestamps only; migration never guesses captures or payouts.
+Payment adds a fresh-cancellation compensation marker, default false for historical rows.
+All new entities use real FKs, integer minor-unit money, UUIDv7 and UTC timestamps.
+
+Downgrade removes new accounting/evidence while retaining pre-existing Payment, Attempt,
+Refund and provider-event rows. Export the new accounting and evidence before rollback.
+The extension-owned spatial_ref_sys and two legitimate migration-0007 indexes remain.
+
+## Migration 0021: financial correctness controls
+
+The approved closure requires two narrowly typed artifacts absent from existing reliability
+and transaction tables. Neither Inbox/Outbox nor locally known Attempt/Refund rows represent
+account-wide provider windows/page offsets or independent settlement movements.
+
+| Table/change | Physical protection | Facts and relationships |
+|---|---|---|
+| FinancialScanCheckpoint | UUIDv7 PK; UNIQUE(provider,account,scan_kind); nonnegative offset/window CHECK | Closed window, page offset, rolling/repeated-pass digests, last exhaustion and claim UUID/deadline. Account scans and bounded report day/history progress only |
+| SettlementEvidence | UUIDv7 PK; UNIQUE(account,observation_key); money CHECK; classification/UUID and partial unmapped-payment indexes; UPDATE/DELETE prohibited | Typed payment/refund/transfer/adjustment entity and optional settlement/payment/dispute IDs; gross/currency/debit/credit/fee/tax, settled/hold flags, timestamps, nullable confirmed fee-tax rule; optional real Charge/Refund FKs |
+| PaymentProviderEvent | review and partial unmatched-payment indexes; real self-FK contradicted_event_id; observation facts UPDATE/DELETE prohibited | Nullable provider order/refund/dispute refs, dispute state and deducted amount. Processing status and subsequently verified typed local mapping remain mutable |
+| FinancialException | nullable real SettlementEvidence FK | Verified expected settlement reference/due time; existing Payment and optional Charge/Refund/provider-event relationships retained |
+| Payment/Attempt ownership | UNIQUE(Attempt UUID,Payment UUID); composite Payment-successful-Attempt FK, deferred for the existing cycle | Prevents a canonical Attempt belonging to another Payment |
+| CapturedCharge/Refund ownership | composite Attempt/Payment FKs | Prevents mismatched aggregate ownership while retaining nullable legacy charge/obligation links |
+| CapturedCharge | immutable economic/owner/provider/account/evidence/time facts; delete prohibited | Status is not stored or rewritten on a capture |
+| Refund | submitted UUID/body/key/owner/charge/start facts immutable | Status/outcome evidence may change; submitted first-call time cannot reset |
+| FinancialAudit | UPDATE/DELETE prohibited | Existing actor, command UUID, Payment, optional Refund and provider-event FKs retained |
+
+The direct two-session test proved 0020's early return for null-charge legacy Refund inserts
+could bypass a concurrent known-charge cap. 0021 replaces only that reservation function:
+provable canonical legacy mappings acquire the same charge lock, count mapped and legacy
+payable reservations, and apply the existing obligation/charge caps. Unmapped history is not
+guessed or backfilled. Only FAILED with verified non-payable timestamp releases reservations;
+contradictory provider outcomes are still recorded rather than rejected by a status trigger.
+
+Only provable Razorpay `refund:<exact UUID>` keys normalize to `rf_<same UUID hex>`, matching
+the historical adapter's actual wire identity. Other keys are not guessed. Upgrade validates
+existing composite ownership; an inconsistent production row must be investigated first.
+There is no CASCADE financial FK or universal version/history table.
+
+Downgrade restores 0020's reservation function and drops only 0021 controls/constraints/columns;
+original finance/history rows survive and normalized keys remain wire-compatible. Export
+settlement/checkpoint/conflict facts before any real rollback. Immutable history cleanup
+requires an explicitly approved retention/migration operation, not ordinary application DELETE.
+The three documented raw comparison differences remain unchanged; see the [closure report](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

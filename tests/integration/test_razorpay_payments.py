@@ -169,8 +169,8 @@ async def test_captured_external_mapping_duplicate_and_adversarial_state_orderin
             factory, provider, payment_body(attempt, payment_id="pay_additional"), "evt_additional"
         )
         assert (
-            extra.processing_status == "RECONCILIATION_REQUIRED"
-            and extra.failure_code == "ADDITIONAL_SUCCESS"
+            extra.processing_status == "PROCESSED"
+            and extra.failure_code == "ADDITIONAL_CAPTURE_COMPENSATED"
         )
     async with factory() as session:
         durable = await session.get(PaymentAttempt, attempt.payment_attempt_id)
@@ -230,10 +230,12 @@ async def test_captured_validation_and_existing_payment_gates(database_session_f
         )
         assert event.failure_code == code
     async with factory() as session:
-        assert (await session.get(Payment, result.payment.payment_id)).status == "PENDING"
-        assert (
-            await session.get(CollectionRequest, result.request.request_id)
-        ).status == "PENDING_PAYMENT"
+        assert (await session.get(Payment, result.payment.payment_id)).status == (
+            "SUCCEEDED" if case in {"expired", "cutoff", "frozen"} else "PENDING"
+        )
+        assert (await session.get(CollectionRequest, result.request.request_id)).status == (
+            "EXPIRED" if case in {"expired", "cutoff", "frozen"} else "PENDING_PAYMENT"
+        )
     assert await acceptance_count(factory) == 0
 
 
@@ -245,6 +247,8 @@ async def test_conflicting_order_payment_mapping_and_distinct_successful_attempt
     async with httpx.AsyncClient(transport=httpx.MockTransport(Orders())) as client:
         provider = RazorpayProvider(settings(), client=client)
         a = await initiate(factory, user, result, provider, "a")
+        async with factory() as session, session.begin():
+            (await session.get(PaymentAttempt, a.payment_attempt_id)).status = "FAILED"
         b = await initiate(factory, user, result, provider, "b")
         async with factory() as session, session.begin():
             (await session.get(PaymentAttempt, b.payment_attempt_id)).provider_payment_id = "pay_b"
@@ -258,11 +262,11 @@ async def test_conflicting_order_payment_mapping_and_distinct_successful_attempt
         )
         assert sorted(e.processing_status for e in events) == [
             "PROCESSED",
-            "RECONCILIATION_REQUIRED",
+            "PROCESSED",
         ]
         assert (
-            next(e for e in events if e.processing_status != "PROCESSED").failure_code
-            == "ADDITIONAL_SUCCESS"
+            next(e for e in events if e.failure_code is not None).failure_code
+            == "ADDITIONAL_CAPTURE_COMPENSATED"
         )
     assert await acceptance_count(factory) == 1
 
@@ -292,14 +296,27 @@ async def test_app_lifespan_real_provider_webhook_auth_and_customer_attempt(
 ):
     factory = database_session_factory
     user, result = await booking(factory)
+
+    class Publisher:
+        def __init__(self):
+            self.messages = []
+
+        async def send(self, entity, message):
+            assert entity == "financial-webhook"
+            self.messages.append(message)
+
+    publisher = Publisher()
     async with httpx.AsyncClient(transport=httpx.MockTransport(Orders())) as remote:
         app = create_app(
             settings(
                 database_url=migrated_database_url,
                 command_idempotency_ttl_seconds=3600,
                 planning_lead_time_minutes=30,
+                financial_webhook_queue_name="financial-webhook",
+                financial_webhook_send_timeout_seconds=1,
             ),
             payment_http_client=remote,
+            financial_webhook_publisher=publisher,
         )
         app.dependency_overrides[get_current_customer_id] = lambda: user.user_id
         async with (
@@ -332,8 +349,26 @@ async def test_app_lifespan_real_provider_webhook_auth_and_customer_attempt(
             response = await api.post(
                 "/v1/payments/provider/webhook", content=body, headers=signed(body)
             )
-            assert (
-                response.status_code == 200 and response.json()["processing_status"] == "PROCESSED"
+            assert response.status_code == 200 and response.json()["processing_status"] == "QUEUED"
+            async with factory() as session:
+                assert (
+                    await session.scalar(select(func.count()).select_from(PaymentProviderEvent))
+                    == 0
+                )
+                assert (
+                    await session.get(PaymentAttempt, attempt.payment_attempt_id)
+                ).status == "PENDING"
+            from tirodhan.modules.payments.webhook_queue import process_webhook_message
+
+            message = publisher.messages[0]
+            await process_webhook_message(
+                factory,
+                message_id=message.message_id,
+                message_type=message.message_type,
+                body=message.body,
+                account_key=app.state.payment_provider.account_key,
+                planning_lead_time_minutes=30,
+                command_ttl_seconds=3600,
             )
         assert not remote.is_closed
     async with factory() as session:

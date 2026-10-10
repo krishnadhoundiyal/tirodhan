@@ -100,3 +100,69 @@ OUTBOX_EVENT
 They are reliability infrastructure rather than business aggregates.
 
 See `IDEMPOTENCY.md`.
+
+Phase 2 Batch B preserves all financial relationships: one logical Payment per collection,
+attempt history, provider events and canonical-charge Refunds. Nullable authenticated capture
+reference/amount/currency on PaymentProviderEvent retain additional-charge reconciliation facts;
+they do not introduce a second financial aggregate or relax the canonical refund/balance invariant.
+`PENDING_PAYMENT -> CANCELLED` is now an approved lifecycle edge, alongside accepted cancellation.
+Cancellation compensation and later canonical capture use the existing Refund/outbox relationship.
+
+
+## Phase 2 charge accounting extension
+
+```mermaid
+erDiagram
+    PAYMENT ||--o{ CAPTURED_CHARGE : records
+    PAYMENT_ATTEMPT ||--o{ CAPTURED_CHARGE : captures
+    PAYMENT_PROVIDER_EVENT ||--o{ CAPTURED_CHARGE : evidences
+    CAPTURED_CHARGE ||--o| REFUND_OBLIGATION : owes
+    REFUND_OBLIGATION ||--o{ REFUND : executed_by
+    CAPTURED_CHARGE ||--o{ REFUND : refunded_by
+    PAYMENT ||--o{ FINANCIAL_EXCEPTION : reviewed_as
+    PAYMENT ||--o{ FINANCIAL_AUDIT : audited_as
+    APP_USER ||--o{ FINANCIAL_AUDIT : authorizes
+```
+
+Migration 0020 adds these typed relationships. Legacy Refund links remain nullable until
+verified; no generic polymorphic financial references or guessed backfill are introduced.
+Charge-level bounds supersede the historical Batch B combined canonical-only cap.
+
+## Migration 0021 financial evidence and ownership relationships
+
+```mermaid
+erDiagram
+    COLLECTION_REQUEST ||--|| PAYMENT : logical_payment
+    PAYMENT ||--o{ PAYMENT_ATTEMPT : owns
+    PAYMENT_ATTEMPT o|--o| PAYMENT : canonical_success_owned_by_same_payment
+    PAYMENT ||--o{ CAPTURED_CHARGE : owns
+    PAYMENT_ATTEMPT ||--o{ CAPTURED_CHARGE : captures_owned_charge
+    PAYMENT_ATTEMPT o|--o{ PAYMENT_PROVIDER_EVENT : verified_local_mapping
+    PAYMENT_PROVIDER_EVENT ||--o{ CAPTURED_CHARGE : first_evidence
+    CAPTURED_CHARGE ||--o| REFUND_OBLIGATION : may_owe
+    PAYMENT ||--o{ REFUND : owns
+    PAYMENT_ATTEMPT ||--o{ REFUND : attempt_owned_by_same_payment
+    APP_USER o|--o{ REFUND : optional_requesting_actor
+    CAPTURED_CHARGE o|--o{ REFUND : nullable_legacy_charge
+    REFUND_OBLIGATION o|--o{ REFUND : nullable_legacy_obligation
+    REFUND o|--o{ PAYMENT_PROVIDER_EVENT : outcome_mapping
+    PAYMENT_PROVIDER_EVENT o|--o{ REFUND : verified_failure_proof
+    PAYMENT_PROVIDER_EVENT o|--o{ PAYMENT_PROVIDER_EVENT : contradicts_original
+    CAPTURED_CHARGE o|--o{ SETTLEMENT_EVIDENCE : verified_match
+    REFUND o|--o{ SETTLEMENT_EVIDENCE : verified_match
+    PAYMENT ||--o{ FINANCIAL_EXCEPTION : has_cases
+    CAPTURED_CHARGE o|--o{ FINANCIAL_EXCEPTION : concerns
+    REFUND o|--o{ FINANCIAL_EXCEPTION : concerns
+    PAYMENT_PROVIDER_EVENT o|--o{ FINANCIAL_EXCEPTION : evidence
+    SETTLEMENT_EVIDENCE o|--o{ FINANCIAL_EXCEPTION : evidence
+    PAYMENT ||--o{ FINANCIAL_AUDIT : audit_history
+    APP_USER ||--o{ FINANCIAL_AUDIT : actor
+    REFUND o|--o{ FINANCIAL_AUDIT : target
+    PAYMENT_PROVIDER_EVENT o|--o{ FINANCIAL_AUDIT : evidence
+```
+
+Composite Attempt/Payment ownership FKs protect canonical success, captures and refunds.
+All nullable endpoints above denote optional real FKs, including unmatched external settlement
+observations. FinancialScanCheckpoint is standalone account/window control progress, unique by
+provider/account/kind, without a polymorphic entity reference. Inbox, Outbox and IdempotencyRecord
+remain cross-cutting infrastructure. No relationship uses cascading financial deletion.

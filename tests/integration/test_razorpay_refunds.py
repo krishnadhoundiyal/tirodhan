@@ -53,6 +53,10 @@ class Refunds:
         self.effects = {}
 
     def __call__(self, request):
+        if request.method == "GET":
+            # Explicit synthetic account replay-window policy tests: inventory has
+            # not yet become visible, forcing identical native-operation recovery.
+            return httpx.Response(200, json={"entity": "collection", "count": 0, "items": []})
         body = json.loads(request.content)
         key = request.headers["x-refund-idempotency"]
         self.calls.append((key, request.content))
@@ -121,13 +125,15 @@ async def test_refund_worker_terminal_initiation_duplicate_delivery_and_no_db_co
             row = await session.get(Refund, refund.refund_id)
             assert (
                 row.status == "PROCESSING"
-                and row.provider_idempotency_key == f"refund:{refund.refund_id}"
+                and row.provider_idempotency_key == f"rf_{refund.refund_id.hex}"
             )
         return remote(request)
 
     message_id = str(new_uuid7())
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         for identity in [message_id, message_id, str(new_uuid7())]:
             await message(factory, provider, refund, identity)
     assert len(remote.calls) == len(remote.effects) == 1
@@ -158,7 +164,9 @@ async def test_refund_crash_redelivery_resumes_identical_key_body_one_external_e
         return response
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         message_id = str(new_uuid7())
         if crash == "before_call":
             async with factory() as session, session.begin():
@@ -226,7 +234,9 @@ async def test_uncertain_provider_abandons_processing_inbox_then_retry_converges
 
     delivery = Delivery()
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         with pytest.raises(RefundConflictError):
             await handle_refund_delivery(delivery, factory, provider=provider)
         async with factory() as session:
@@ -258,7 +268,9 @@ async def test_overlapping_refund_deliveries_reuse_native_key_and_single_refund(
         return remote(request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         identity = str(new_uuid7())
         await asyncio.gather(
             message(factory, provider, refund, identity),
@@ -286,7 +298,9 @@ async def test_webhook_terminal_truth_wins_stale_worker_pending_response(databas
         return response
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         worker = asyncio.create_task(
             execute_refund_provider_call(factory, refund.refund_id, provider)
         )
@@ -314,7 +328,9 @@ async def test_worker_conflicting_refund_id_does_not_overwrite(database_session_
         row.provider_refund_id = "rfnd_established"
     async with httpx.AsyncClient(transport=httpx.MockTransport(Refunds())) as client:
         await execute_refund_provider_call(
-            factory, refund.refund_id, RazorpayProvider(settings(), client=client)
+            factory,
+            refund.refund_id,
+            RazorpayProvider(settings(razorpay_refund_replay_window_seconds=600), client=client),
         )
     async with factory() as session:
         row = await session.get(Refund, refund.refund_id)
@@ -337,7 +353,9 @@ async def test_refund_webhook_correlation_after_lost_response_and_duplicate(
         patches["receipt"] = None
     raw = body(refund, internal=correlation != "provider_id", **patches)
     async with httpx.AsyncClient() as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         a, b = await asyncio.gather(
             process(factory, provider, raw), process(factory, provider, raw)
         )
@@ -366,7 +384,9 @@ async def test_refund_webhook_contradictory_facts_reconcile_without_mutation(
     refund = await intent(factory)
     async with httpx.AsyncClient() as client:
         record = await process(
-            factory, RazorpayProvider(settings(), client=client), body(refund, **patch)
+            factory,
+            RazorpayProvider(settings(razorpay_refund_replay_window_seconds=600), client=client),
+            body(refund, **patch),
         )
         assert record.processing_status == "RECONCILIATION_REQUIRED" and record.failure_code == code
     async with factory() as session:
@@ -380,7 +400,9 @@ async def test_refund_created_nonterminal_failed_then_processed_is_conflict(
     factory = database_session_factory
     refund = await intent(factory)
     async with httpx.AsyncClient() as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         created = await process(
             factory, provider, body(refund, kind="refund.created"), "evt_created"
         )
@@ -423,7 +445,11 @@ async def test_invalid_refund_delivery_dead_letters_without_inbox(database_sessi
     delivery = Delivery()
     async with httpx.AsyncClient() as client:
         await handle_refund_delivery(
-            delivery, database_session_factory, provider=RazorpayProvider(settings(), client=client)
+            delivery,
+            database_session_factory,
+            provider=RazorpayProvider(
+                settings(razorpay_refund_replay_window_seconds=600), client=client
+            ),
         )
     assert delivery.settled == ["dead_letter"]
     async with database_session_factory() as session:
@@ -445,7 +471,9 @@ async def test_refund_merchant_failure_is_retryable_not_financial_failure(databa
 
     identity = str(new_uuid7())
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         with pytest.raises(PaymentProviderNotConfiguredError):
             await message(factory, provider, refund, identity)
         async with factory() as session:
@@ -466,7 +494,9 @@ async def test_refund_success_is_not_downgraded_by_stale_created_or_failed_event
     factory = database_session_factory
     refund = await intent(factory)
     async with httpx.AsyncClient() as client:
-        provider = RazorpayProvider(settings(), client=client)
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=client
+        )
         await process(factory, provider, body(refund), "evt_done")
         async with factory() as session:
             completed = (await session.get(Refund, refund.refund_id)).completed_at
@@ -497,7 +527,7 @@ async def test_known_external_refund_with_contradictory_receipt_cannot_mutate(
     async with httpx.AsyncClient() as client:
         record = await process(
             factory,
-            RazorpayProvider(settings(), client=client),
+            RazorpayProvider(settings(razorpay_refund_replay_window_seconds=600), client=client),
             body(refund, internal=False, receipt="unrelated_receipt"),
         )
         assert record.processing_status == "RECONCILIATION_REQUIRED"
@@ -517,7 +547,7 @@ async def test_refund_unknown_identity_cannot_hijack_known_external_refund(
     async with httpx.AsyncClient() as client:
         record = await process(
             factory,
-            RazorpayProvider(settings(), client=client),
+            RazorpayProvider(settings(razorpay_refund_replay_window_seconds=600), client=client),
             body(refund, receipt=f"rf_{other.hex}", notes={"tirodhan_refund_id": str(other)}),
         )
         assert (

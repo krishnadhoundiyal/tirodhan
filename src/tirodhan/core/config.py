@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,6 +36,21 @@ class Settings(BaseSettings):
     serviceability_queue_name: str | None = None
     rider_notification_queue_name: str | None = None
     refund_queue_name: str | None = None
+    financial_webhook_queue_name: str | None = None
+    financial_webhook_sender_identity_client_id: str | None = None
+    financial_webhook_receiver_identity_client_id: str | None = None
+    financial_webhook_send_timeout_seconds: float | None = None
+    financial_webhook_lock_renewal_seconds: int | None = None
+    razorpay_refund_replay_window_seconds: int | None = None
+    financial_inventory_start_epoch: int | None = None
+    financial_inventory_window_seconds: int | None = None
+    financial_inventory_overlap_seconds: int | None = None
+    financial_inventory_visibility_lag_seconds: int | None = None
+    financial_inventory_page_budget: int | None = None
+    financial_settlement_start_date: str | None = None
+    financial_settlement_revisit_days: int | None = None
+    financial_settlement_timezone: str | None = None
+    financial_settlement_fee_includes_tax: bool | None = None
     planning_queue_name: str | None = None
     refund_lock_renewal_seconds: int | None = None
     planning_lock_renewal_seconds: int | None = None
@@ -43,6 +58,13 @@ class Settings(BaseSettings):
     razorpay_key_secret: SecretStr | None = None
     razorpay_webhook_secret: SecretStr | None = None
     razorpay_http_timeout_seconds: float | None = None
+    razorpay_account_id: str | None = None
+    razorpay_normal_refund_failure_finality_confirmed: bool = False
+    financial_reconciliation_batch_size: int | None = None
+    financial_reconciliation_interval_seconds: int | None = None
+    financial_reconciliation_max_backoff_seconds: int | None = None
+    financial_reconciliation_lease_seconds: int | None = None
+    financial_unresolved_threshold_seconds: int | None = None
     rider_offer_lifetime_seconds: int | None = None
     fcm_project_id: str | None = None
     fcm_credentials_json: SecretStr | None = None
@@ -107,7 +129,20 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
+        "financial_webhook_lock_renewal_seconds",
+        "razorpay_refund_replay_window_seconds",
+        "financial_inventory_start_epoch",
+        "financial_inventory_window_seconds",
+        "financial_inventory_overlap_seconds",
+        "financial_inventory_visibility_lag_seconds",
+        "financial_inventory_page_budget",
+        "financial_settlement_revisit_days",
         "command_idempotency_ttl_seconds",
+        "financial_reconciliation_batch_size",
+        "financial_reconciliation_interval_seconds",
+        "financial_reconciliation_max_backoff_seconds",
+        "financial_reconciliation_lease_seconds",
+        "financial_unresolved_threshold_seconds",
         "serviceability_context_ttl_seconds",
         "pending_payment_lifetime_seconds",
         "auth_access_token_ttl_seconds",
@@ -133,6 +168,14 @@ class Settings(BaseSettings):
     def optional_ttl_must_be_positive(cls, value: int | None) -> int | None:
         if value is not None and value <= 0:
             raise ValueError("configured durations and attempt limits must be positive")
+        return value
+
+    @field_validator("financial_inventory_page_budget", "financial_settlement_revisit_days")
+    @classmethod
+    def bounded_financial_limits(cls, value: int | None, info: Any) -> int | None:
+        maximum = 31 if info.field_name == "financial_settlement_revisit_days" else 100
+        if value is not None and value > maximum:
+            raise ValueError("Financial scan limit exceeds the supported bound")
         return value
 
     @field_validator(
@@ -190,6 +233,13 @@ class Settings(BaseSettings):
     def runtime_timeout_must_be_bounded(cls, value: float | None) -> float | None:
         if value is not None and (not math.isfinite(value) or not 0 < value <= 60):
             raise ValueError("runtime timeout must be finite and within (0, 60] seconds")
+        return value
+
+    @field_validator("financial_webhook_send_timeout_seconds")
+    @classmethod
+    def webhook_timeout_under_provider_ack(cls, value: float | None) -> float | None:
+        if value is not None and (not math.isfinite(value) or not 0 < value <= 4):
+            raise ValueError("Webhook send timeout must be within (0, 4] seconds")
         return value
 
     @field_validator("google_maps_delhi_admin_aliases")

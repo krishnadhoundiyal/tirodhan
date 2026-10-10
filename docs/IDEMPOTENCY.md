@@ -131,7 +131,7 @@ not distributed exactly-once execution.
 | Payment webhook | `(provider, external_event_id)` | unique provider event | replay acknowledged without duplicate business effect |
 | Confirm payment | payment ID | conditional state transition | request accepted once |
 | Late success from another attempt | provider payment ID | unique external reference + reconciliation | record truth; do not accept request again; reconcile/refund duplicate charge |
-| Cancel request | request + cancellation command | atomic `ACCEPTED -> CANCELLED` | same cancellation replay returns established result |
+| Cancel request | request + cancellation command | Payment + work-unit + request locks; atomic cancellation, full canonical refund and outbox | exact replay reloads committed result; different keys cannot double-refund |
 | Create refund | logical refund ID | unique refund operation + payment-row serialization | one logical refund |
 | Call refund provider | refund ID | provider idempotency where supported | retries cannot create multiple provider refunds |
 | Refund webhook | provider event ID | unique provider event | apply once |
@@ -196,7 +196,9 @@ no recoverable bearer credential is persisted.
 
 ### Cancellation vs planning freeze
 
-Both attempt a conditional transition from `ACCEPTED`. Only one may win. No read-then-write race in application code.
+Both serialize through the same work-unit advisory lock and reload/lock the request. Only one
+transition from `ACCEPTED` may win. Cancellation also locks Payment first and checks the persisted
+batch, including for unsettled requests. No read-then-write race in application code.
 
 ### Two riders accept same group
 
@@ -396,4 +398,100 @@ are explicitly defined.
 
 ### Refund & Cancellation Idempotency (Phase 1D)
 - **Refunds:** Uses explicit command payload fingerprinting via `command_fingerprint`. Provider idempotency key strictly conforms to deterministic deterministic mappings per generated `refund_id`.
-- **Cancellations:** Replays of exact requests return successfully without generating further operations/domain side-effects. Concurrent requests racing across the freeze boundary yield exact resolution locking over `work_unit_advisory_lock`.
+- **Cancellations:** Replays of exact requests reload the committed result without generating further
+  business effects. Concurrent commands serialize financial ownership before the work-unit/request.
+
+### Phase 2 Batch B financial command boundary and lock order
+
+Cancellation claims scope `collection-request.cancel:<request_id>` with the existing customer
+fingerprint, then locks Payment, the transaction-scoped cell/slot advisory lock and the request.
+It reloads database truth after waiting. The refund business key is
+`customer-cancellation:<request_id>` under existing refund scope `refund.create:<payment_id>`;
+different cancellation IDs and different provider event IDs therefore share one intent.
+Refund identity, unique provider-neutral key, full-balance reservation, outbox event key and command
+completions commit with cancellation. Rollback retains none of these effects. Exact replay and a
+different-key replay of a cancelled request return the durable result without another refund.
+
+| Operation | Before Batch B | Batch B acquisition order |
+|---|---|---|
+| Payment capture/reconciliation | Provider-event identity, Attempt, Payment, work-unit | Provider-event identity, sorted Payments, sorted Attempts, work-unit advisory, request; compensation then refund command/Refund/outbox |
+| Customer cancellation | Cancellation command, work-unit, request | Cancellation command, Payment, work-unit advisory, request, refund command/Refund/outbox |
+| Refund intent | Refund command, Payment | Payment, refund command, canonical Attempt read, Refund insert/FK checks, outbox |
+| Payment initiation | Attempt command, Payment, new Attempt | Same; unsettled/reconciliation guard under Payment; HTTP after commit; result transaction locks only Attempt |
+| Payment expiry | Payment, request row per candidate | Candidates sorted by Payment UUID, then Payment and request per candidate |
+| Planning freeze | Work-unit advisory, batch uniqueness, conditional requests | Same; never subsequently requests Payment/Attempt locks |
+| Refund worker | Inbox transaction; Refund claim transaction; HTTP; Refund result transaction; inbox completion | Same; no Payment/work-unit/request lock or held transaction during HTTP |
+| Refund webhook | Provider-event identity, sorted Refund rows | Same; reference validation reads Attempt/Payment without locking them |
+| Financial reads | Read-only repeatable-read snapshot | Same; no row/advisory locks, mutations or provider calls |
+
+This is a partial order across overlapping financial rows, not a global lock. Payment always
+precedes locked Attempt or request/work-unit in financial commands. Refund insertion's Attempt FK
+check cannot wait on an Attempt whose owner is waiting for Payment. No path holding a work-unit or
+request lock then acquires Payment. Refund workers/webhooks never acquire the ancestor locks after
+locking Refund. Command scopes are distinct, and generic refund creation now takes Payment before
+its command key, preventing a refund-key/Payment cycle with cancellation/capture compensation.
+If an attempt mapping appears after capture's unlocked identity lookup, the event transaction
+rolls back for retry rather than obtaining Payment after Attempt. Multiple candidate financial
+identities are locked in UUID order. Unrelated payments/cells retain independent concurrency.
+
+A cancelled request's first authenticated canonical capture atomically persists the successful
+Attempt/Payment, full cancellation refund/outbox and provider event, without acceptance. Missing
+compensation retention or failed persistence rolls back the entire event so redelivery can recover.
+Duplicate capture and duplicate worker delivery reuse the same refund/receipt/native provider key.
+`PENDING`, `PROCESSING`, `SUBMITTED`, `SUCCEEDED` and `INITIATION_UNCERTAIN` reserve refund balance;
+only definitive `FAILED` frees it. No unapproved partial cancellation policy is inferred.
+
+Additional distinct charges and non-cancelled late expiry/cutoff captures remain durable
+reconciliation exceptions under ADR-005. The minimal event facts added by migration 0019 retain
+charge identity without increasing the canonical refund cap. Legacy cancellation without an
+intent and definitively failed cancellation compensation need an audited operational resolution;
+replay does not fabricate a new financial operation.
+
+
+## Phase 2 reconciliation completion: superseding financial rules
+
+The approved [reconciliation](PAYMENT_RECONCILIATION_AND_MOBILE_STATUS_EVENTS.md),
+[failed refund](FAILED_REFUND_RECOVERY_POLICY.md), and
+[historical exception](HISTORICAL_FINANCIAL_EXCEPTIONS_POLICY.md) policies replace the
+historical combined/canonical-only cap. Reservations are bounded per actual captured charge.
+FAILED releases no reservation until provider API proof verifies non-payable finality.
+
+| Operation | Logical key / protection | Transaction, replay, concurrency, external rule |
+|---|---|---|
+| Capture from webhook/inquiry | unique provider event plus unique provider/payment charge | Payment before Attempt, Charge, work-unit/request; one acceptance; additional full obligation/intent in same transaction; exact evidence replay returns stored event |
+| Due reconciliation | indexed next_check_at, claim UUID/deadline; SKIP LOCKED bounded selection | lease commits before read-only GET; overlapping live claims skip; expired claims recover; outcome uses the shared processor; conditional token release cannot overwrite another claim |
+| Manager inquiry | financial.manager + command UUID/fingerprint; unique audit command | Payment then live manager user/role and command; short reservation commit, GET outside DB, shared financial processor, audit/completion commit; interrupted readonly inquiry may safely repeat; exact completed replay avoids GET |
+| Initial charge compensation | charge-compensation UUID plus unique obligation charge FK | caller owns Payment; full obligation, execution, RefundRequested and customer event commit together; existing failed execution never creates another automatic operation |
+| Manager replacement/recovery | financial.manager + command UUID/fingerprint, audit, existing full obligation | current read-only inquiry precedes authorization; Payment then live manager/command and descendants; one winner reserves outstanding balance; exact success/refusal replay retains audit; new execution gets a new native stable key |
+| Refund execution/outcome | stable Refund UUID/native key and provider event identity | Payment before Refund for claim/outcome; no ancestor lock after Refund; HTTP outside DB; same uncertain operation resumes using the same receipt/body/native key; webhook/inquiry/worker outcome share one processor |
+| Financial status event | deterministic event key, unique outbox key | emitted only in financial transaction; Payment lock serializes replay guards; no duplicate logical notification; transport/delivery remain at-least-once |
+| Historical discovery | bounded manager inventory; deterministic exception case key | repeated verified inquiry creates no payout; insufficient mappings remain OPEN; fresh audited approval alone creates missing intent |
+
+Planning takes work-unit/request locks without acquiring financial ancestors. Cancellation,
+expiry, capture, inquiry application, refund approval/execution and refund outcomes all take
+Payment first when touching overlapping financial descendants. Scheduling lease transactions
+lock only their own rows and never request Payment. No global financial mutex or Redis exists.
+Provider calls hold no DB transaction. Completion/freeze cannot reopen expired bookings.
+
+The five-minute mobile UX timer has no backend financial transition. Booking expiry persists
+EXPIRED on CollectionRequest, while unresolved Payment stays PENDING and its due Attempt is
+retained. Customer projection uses existing CONFIRMING with retry disabled for an unresolved
+expired booking. Late money is SUCCEEDED with a durable manager case, never re-accepted.
+
+## Financial correctness closure: transport and independent controls
+
+| Operation | Business key and DB protection | Boundary, replay, concurrency and external rule |
+|---|---|---|
+| Webhook HTTP ingress | Message SHA256(provider/account/eventID/raw-body-hash); signature over exact bounded bytes | Await dedicated trusted queue send before 2xx; send timeout/failure returns 503; no financial DB work; identical receipt on replay |
+| Webhook consumer | Inbox(consumer,messageID), UNIQUE(provider,eventID), UNIQUE(provider,paymentID) capture | Envelope/account/provenance validation; inbox + immutable observations + shared financial transition + outbox commit before Complete; lost ack/redelivery has one economic effect; changed hash creates linked contradiction |
+| Unmatched/poison delivery | Original identifiers/hash retained; schema capped at 4096 bytes | Valid unmatched event commits reviewable references and may later remap; invalid envelope dead-letters; transient DB failure abandons; DLQ replay preserves original message ID, subject and bytes |
+| Native refund recovery | Original Refund UUID, persisted effective native key, identical body; submitted identity trigger | Query before replay; default unconfirmed or aged retention never POSTs; same-key 409 stays uncertain; no replacement/key reset; external call without DB transaction |
+| Targeted inquiry lease | Due index + fresh per-target token/deadline; oldest-due cross-kind selection | JIT claim commits before GET; expired claim may be taken over; stale token release returns without changing scheduling; evidence still applies through Payment-first processor |
+| Account inventory | UNIQUE(provider,account,kind); persistent closed window/offset/pass digests/token | Bounded GET pages outside DB; observations commit before token-conditional checkpoint; crash replays deterministic account/fact evidence; two matching exhausted passes plus overlap advance; incomplete coverage cannot prove failure |
+| Settlement control | UNIQUE(account,fact-and-assessment fingerprint); immutable typed evidence, deterministic case key | GET/report outside DB; Payment lock and fresh Refund facts before matching; replay repeats no money effect; changed facts/matching/confirmed fee rule append assessment; partial page exhaustion is not universal report completeness |
+| Expected missing settlement | Verified account/entity/membership/due inputs and report coverage; bounded batch <=1000 | No age-based guessed population; deterministic case and payout hold; no provider side effect; operational membership source remains blocked until account contract verified |
+
+Reservations lock the actual charge, including provable canonical legacy null-charge operations;
+two independent SQL sessions cannot over-reserve. Payment-first domain locking, manager audit
+command uniqueness and read-only reconciliation remain authoritative. No generic versions,
+global mutex, Redis or automatic scheduled replacement is introduced.
