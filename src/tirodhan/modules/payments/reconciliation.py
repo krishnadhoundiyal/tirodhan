@@ -4,7 +4,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -157,110 +157,111 @@ async def inquire_target(
     return records
 
 
+async def _release_claim(
+    factory: async_sessionmaker[AsyncSession],
+    target: UUID,
+    is_refund: bool,
+    token: UUID,
+    policy: ReconciliationPolicy,
+) -> None:
+    async with factory() as session, session.begin():
+        model = Refund if is_refund else PaymentAttempt
+        identity = cast(PaymentAttempt | Refund | None, await session.get(model, target))
+        if identity is None:
+            return
+        payment = await session.scalar(
+            select(Payment).where(Payment.payment_id == identity.payment_id).with_for_update()
+        )
+        current = cast(
+            PaymentAttempt | Refund | None,
+            await session.scalar(
+                select(model)
+                .where(
+                    Refund.refund_id == target
+                    if is_refund
+                    else PaymentAttempt.payment_attempt_id == target
+                )
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            ),
+        )
+        if current is None or current.claim_token != token:
+            return
+        current.check_count += 1
+        current.claim_token = None
+        current.claim_until = None
+        terminal = current.status == "SUCCEEDED" or (not is_refund and current.status == "FAILED")
+        delay = min(
+            policy.max_backoff_seconds,
+            policy.interval_seconds * 2 ** min(current.check_count, 20),
+        )
+        current.next_check_at = (
+            None
+            if terminal
+            else utc_now()
+            + timedelta(seconds=min(policy.max_backoff_seconds, delay * random.uniform(0.8, 1.2)))
+        )
+        if (
+            not terminal
+            and (utc_now() - current.created_at).total_seconds()
+            >= policy.unresolved_threshold_seconds
+        ):
+            assert payment is not None
+            await open_exception(
+                session,
+                payment,
+                "REFUND_UNRESOLVED" if is_refund else "PAYMENT_UNRESOLVED",
+                refund=current if isinstance(current, Refund) else None,
+            )
+            await status_event(session, payment, f"unresolved:{target}", "FINANCIAL_UNRESOLVED")
+
+
 async def reconcile_batch(
     factory: async_sessionmaker[AsyncSession],
     provider: FinancialInquiryProvider,
     policy: ReconciliationPolicy,
 ) -> int:
-    """Claim a finite due set, commit leases, GET outside DB, conditionally release claims."""
-    now = utc_now()
-    claims: list[tuple[UUID, bool, UUID]] = []
-    async with factory() as session, session.begin():
-        model: Any
-        for model, is_refund in [(Refund, True), (PaymentAttempt, False)]:
-            remaining = policy.batch_size - len(claims)
-            if not remaining:
-                break
-            rows: list[PaymentAttempt | Refund] = list(
-                await session.scalars(
+    """Oldest-due fairness; claim each target immediately before its GET.
+
+    Leases distribute work. Financial event uniqueness/Payment locks arbitrate truth.
+    Supersession is an expected scheduling outcome, not a financial failure.
+    """
+    processed = 0
+    for _ in range(policy.batch_size):
+        now = utc_now()
+        async with factory() as session, session.begin():
+            candidates: list[PaymentAttempt | Refund] = []
+            for model in (Refund, PaymentAttempt):
+                candidate = await session.scalar(
                     select(model)
                     .where(
                         model.provider == provider.provider_code,
                         model.next_check_at <= now,
                         or_(model.claim_until.is_(None), model.claim_until <= now),
                     )
-                    .order_by(model.next_check_at)
-                    .limit(min(remaining, max(1, policy.batch_size // 2)))
+                    .order_by(model.next_check_at, model.created_at)
+                    .limit(1)
                     .with_for_update(skip_locked=True)
                 )
-            )
-            for row in rows:
-                token = new_uuid7()
-                row.claim_token = token
-                row.claim_until = now + timedelta(seconds=policy.lease_seconds)
-                row.next_check_at = row.claim_until
-                claims.append(
-                    (
-                        row.refund_id if isinstance(row, Refund) else row.payment_attempt_id,
-                        is_refund,
-                        token,
-                    )
-                )
-    for target, is_refund, token in claims:
+                if candidate is not None:
+                    candidates.append(cast(PaymentAttempt | Refund, candidate))
+            if not candidates:
+                break
+            row = min(candidates, key=lambda r: (r.next_check_at or now, r.created_at))
+            is_refund = isinstance(row, Refund)
+            target = row.refund_id if isinstance(row, Refund) else row.payment_attempt_id
+            token = new_uuid7()
+            row.claim_token = token
+            row.claim_until = now + timedelta(seconds=policy.lease_seconds)
+            row.next_check_at = row.claim_until
         try:
             await inquire_target(factory, provider, target, refund=is_refund, policy=policy)
         except (PaymentProviderUncertainError, RefundConflictError):
-            pass  # Timeouts, missing references and mismatches remain unresolved.
+            pass  # Unavailable/missing/mismatched provider facts never become failure.
         finally:
-            async with factory() as session, session.begin():
-                model = Refund if is_refund else PaymentAttempt
-                identity = cast(PaymentAttempt | Refund | None, await session.get(model, target))
-                if identity is None:
-                    raise RuntimeError("Claimed financial target disappeared")
-                payment = await session.scalar(
-                    select(Payment)
-                    .where(Payment.payment_id == identity.payment_id)
-                    .with_for_update()
-                )
-                current = cast(
-                    PaymentAttempt | Refund | None,
-                    await session.scalar(
-                        select(model)
-                        .where(
-                            model.refund_id == target
-                            if is_refund
-                            else model.payment_attempt_id == target
-                        )
-                        .execution_options(populate_existing=True)
-                        .with_for_update()
-                    ),
-                )
-                if current is None or current.claim_token != token:
-                    raise RuntimeError("Financial reconciliation lease was superseded")
-                current.check_count += 1
-                current.claim_token = None
-                current.claim_until = None
-                terminal = current.status == "SUCCEEDED" or (
-                    not is_refund and current.status == "FAILED"
-                )
-                delay = min(
-                    policy.max_backoff_seconds,
-                    policy.interval_seconds * 2 ** min(current.check_count, 20),
-                )
-                current.next_check_at = (
-                    None
-                    if terminal
-                    else utc_now()
-                    + timedelta(
-                        seconds=min(policy.max_backoff_seconds, delay * random.uniform(0.8, 1.2))
-                    )
-                )
-                if (
-                    not terminal
-                    and (utc_now() - current.created_at).total_seconds()
-                    >= policy.unresolved_threshold_seconds
-                ):
-                    assert payment is not None
-                    await open_exception(
-                        session,
-                        payment,
-                        "REFUND_UNRESOLVED" if is_refund else "PAYMENT_UNRESOLVED",
-                        refund=current if isinstance(current, Refund) else None,
-                    )
-                    await status_event(
-                        session, payment, f"unresolved:{target}", "FINANCIAL_UNRESOLVED"
-                    )
-    return len(claims)
+            await _release_claim(factory, target, is_refund, token, policy)
+        processed += 1
+    return processed
 
 
 async def _manager_lock(session: AsyncSession, actor: UUID) -> None:

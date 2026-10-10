@@ -2,34 +2,38 @@ locals {
   prefix = "tirodhan-np-${var.suffix}"
   tags   = { application = "tirodhan", environment = "nonprod" }
   workers = {
-    serviceability = { module = "serviceability", cpu = 0.25, memory = "0.5Gi", max = 2 }
-    rider          = { module = "rider_notifications", cpu = 0.25, memory = "0.5Gi", max = 2 }
-    refund         = { module = "refunds", cpu = 0.25, memory = "0.5Gi", max = 1 }
-    planning       = { module = "planning_worker", cpu = 0.5, memory = "1Gi", max = 2 }
+    serviceability    = { module = "serviceability", cpu = 0.25, memory = "0.5Gi", max = 2 }
+    rider             = { module = "rider_notifications", cpu = 0.25, memory = "0.5Gi", max = 2 }
+    refund            = { module = "refunds", cpu = 0.25, memory = "0.5Gi", max = 1 }
+    planning          = { module = "planning_worker", cpu = 0.5, memory = "1Gi", max = 2 }
+    financial_webhook = { module = "financial_webhooks", cpu = 0.25, memory = "0.5Gi", max = 1 }
   }
   worker_resource_names = {
-    serviceability = "svc"
-    rider          = "rider"
-    refund         = "refund"
-    planning       = "planning"
+    serviceability    = "svc"
+    rider             = "rider"
+    refund            = "refund"
+    planning          = "planning"
+    financial_webhook = "finhook"
   }
   queues = {
-    serviceability = "serviceability"
-    rider          = "rider-notification"
-    refund         = "refund"
-    planning       = "planning"
+    serviceability    = "serviceability"
+    rider             = "rider-notification"
+    refund            = "refund"
+    planning          = "planning"
+    financial_webhook = "financial-webhook"
   }
-  jobs = {
+  jobs = merge({
     outbox                 = "outbox_publisher"
     planning_scheduler     = "planning_scheduler"
     fleet_timeout          = "fleet_timeout"
     pending_payment_expiry = "pending_payment_expiry"
-  }
+  }, var.financial_inventory_schedule == null ? {} : { financial_inventory = "financial_inventory" })
   scheduled_job_resource_names = {
     outbox                 = "outbox"
     planning_scheduler     = "plansched"
     fleet_timeout          = "fleet-tmo"
     pending_payment_expiry = "pay-exp"
+    financial_inventory    = "fin-inv"
   }
   # Paths are deployment choices, not domain configuration.
   shared_dir = "/var/log/tirodhan"
@@ -51,6 +55,10 @@ locals {
     TIRODHAN_MEDIA_BLOB_ACCOUNT_URL                 = azurerm_storage_account.application.primary_blob_endpoint
     TIRODHAN_MEDIA_BLOB_CONTAINER_NAME              = "media"
   })
+  # Reserved queue identity/config values cannot be overridden by general runtime_env.
+  financial_webhook_env = {
+    TIRODHAN_FINANCIAL_WEBHOOK_QUEUE_NAME = local.queues.financial_webhook
+  }
   migration_secret_refs = {
     ghcr-pull-pat  = "${azurerm_key_vault.runtime.vault_uri}secrets/ghcr-pull-pat"
     fluent-bit-sas = "${azurerm_key_vault.runtime.vault_uri}secrets/fluent-bit-sas"

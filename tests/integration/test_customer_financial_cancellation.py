@@ -597,6 +597,8 @@ async def test_cancellation_origin_refund_worker_retains_one_native_effect(
         nonlocal calls
         if mode != "overlap":
             assert database_engine.pool.checkedout() == 0
+        if request.method == "GET":
+            return refunds(request)
         calls += 1
         response = refunds(request)
         if mode == "lost_response" and calls == 1:
@@ -612,7 +614,11 @@ async def test_cancellation_origin_refund_worker_retains_one_native_effect(
         return httpx.Response(200, json=data)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as remote:
-        provider = RazorpayProvider(settings(), client=remote)
+        # Synthetic account confirmation permits the original key/body replay;
+        # the separate closure tests prove unconfirmed/aged replay stays closed.
+        provider = RazorpayProvider(
+            settings(razorpay_refund_replay_window_seconds=600), client=remote
+        )
         if mode == "lost_response":
             with pytest.raises(RefundConflictError):
                 await message(factory, provider, refund, delivery)

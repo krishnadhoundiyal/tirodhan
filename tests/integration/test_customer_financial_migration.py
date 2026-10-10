@@ -61,12 +61,14 @@ def test_capture_metadata_migration_roundtrip_retains_existing_event(migrated_da
                                 "WHERE external_event_id='migration-retained'"
                             )
                         )
-                await connection.execute(
-                    text(
-                        "DELETE FROM payment_provider_event "
-                        "WHERE external_event_id='migration-retained'"
-                    )
-                )
+                with pytest.raises(IntegrityError):
+                    async with connection.begin_nested():
+                        await connection.execute(
+                            text(
+                                "DELETE FROM payment_provider_event "
+                                "WHERE external_event_id='migration-retained'"
+                            )
+                        )
         finally:
             await engine.dispose()
 

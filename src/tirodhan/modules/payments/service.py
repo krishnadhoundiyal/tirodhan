@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID
 
@@ -45,6 +46,7 @@ from tirodhan.modules.payments.refunds import RefundConflictError, ensure_cancel
 from tirodhan.modules.planning.locking import acquire_work_unit_advisory_lock
 from tirodhan.modules.planning.models import PlanningBatch
 from tirodhan.modules.planning.policy import planning_cutoff_reached
+from tirodhan.modules.reliability.models import InboxMessage
 from tirodhan.modules.reliability.primitives import (
     append_outbox_event,
     claim_idempotency_record,
@@ -256,9 +258,26 @@ async def process_authenticated_payment_event(
     payload_hash: bytes,
     planning_lead_time_minutes: int | None,
     idempotency_expires_at: datetime | None = None,
+    inbox_message_id: str | None = None,
 ) -> PaymentProviderEvent:
     now = utc_now()
     async with session_factory() as session, session.begin():
+        if inbox_message_id is not None:
+            # Completion is visible only with the financial commit. Any exception rolls
+            # back both. Business event uniqueness remains the economic replay boundary.
+            await session.execute(
+                insert(InboxMessage)
+                .values(
+                    consumer_name="financial-webhooks",
+                    message_id=inbox_message_id,
+                    message_type="FinancialWebhookAuthenticated",
+                    business_key=event.external_event_id,
+                    status="PROCESSED",
+                    first_received_at=now,
+                    processed_at=now,
+                )
+                .on_conflict_do_nothing(index_elements=["consumer_name", "message_id"])
+            )
         event_id = new_uuid7()
         inserted_id = await session.scalar(
             insert(PaymentProviderEvent)
@@ -281,6 +300,11 @@ async def process_authenticated_payment_event(
                 if event.amount_minor and event.amount_minor > 0
                 else None,
                 currency=event.currency,
+                provider_order_id=event.provider_order_id,
+                provider_refund_id=event.provider_refund_id,
+                provider_dispute_id=event.provider_dispute_id,
+                dispute_status=event.dispute_status,
+                amount_deducted_minor=event.amount_deducted_minor,
             )
             .on_conflict_do_nothing(index_elements=["provider", "external_event_id"])
             .returning(PaymentProviderEvent.payment_provider_event_id)
@@ -294,12 +318,79 @@ async def process_authenticated_payment_event(
             )
             if existing is None:
                 raise RuntimeError("provider-event conflict did not resolve to a row")
-            return existing
+            if existing.payload_hash != payload_hash:
+                # Preserve the first observation. A changed payload is independent
+                # contradictory evidence, never an exact replay or a second capture.
+                conflict_key = (
+                    "conflict:"
+                    + hashlib.sha256(event.external_event_id.encode() + payload_hash).hexdigest()
+                )
+                conflict_id = await session.scalar(
+                    insert(PaymentProviderEvent)
+                    .values(
+                        payment_provider_event_id=new_uuid7(),
+                        provider=event.provider,
+                        external_event_id=conflict_key,
+                        event_type="evidence.conflict",
+                        payload_hash=payload_hash,
+                        received_at=now,
+                        processed_at=now,
+                        processing_status=EVENT_RECONCILIATION_REQUIRED,
+                        failure_code="EVENT_PAYLOAD_CONFLICT",
+                        evidence_source=event.evidence_source,
+                        provider_account_key=event.provider_account_key,
+                        observed_outcome=event.outcome.value,
+                        provider_payment_id=event.provider_payment_id,
+                        provider_order_id=event.provider_order_id,
+                        provider_refund_id=event.provider_refund_id,
+                        amount_minor=event.amount_minor,
+                        currency=event.currency,
+                        contradicted_event_id=existing.payment_provider_event_id,
+                    )
+                    .on_conflict_do_nothing(index_elements=["provider", "external_event_id"])
+                    .returning(PaymentProviderEvent.payment_provider_event_id)
+                )
+                conflict = (
+                    await session.get(PaymentProviderEvent, conflict_id)
+                    if conflict_id
+                    else await session.scalar(
+                        select(PaymentProviderEvent).where(
+                            PaymentProviderEvent.provider == event.provider,
+                            PaymentProviderEvent.external_event_id == conflict_key,
+                        )
+                    )
+                )
+                assert conflict is not None
+                await _flag_evidence_charge(
+                    session,
+                    conflict,
+                    replace(
+                        event,
+                        provider_payment_id=existing.provider_payment_id
+                        or event.provider_payment_id,
+                        amount_minor=existing.amount_minor,
+                        currency=existing.currency,
+                        provider_account_key=existing.provider_account_key,
+                    ),
+                    "EVENT_PAYLOAD_CONFLICT",
+                )
+                return conflict
+            if (
+                existing.processing_status != EVENT_UNMATCHED
+                or existing.failure_code == "EVENT_IGNORED"
+            ):
+                return existing
+            # A mapping may become available after authenticated evidence arrived.
+            # Same evidence can then converge without creating a second operation.
+            inserted_id = existing.payment_provider_event_id
 
         provider_event = await session.get(PaymentProviderEvent, inserted_id)
         if provider_event is None:
             raise RuntimeError("inserted provider event could not be loaded")
         record = provider_event
+        if event.outcome == PaymentEventOutcome.DISPUTED:
+            await _flag_evidence_charge(session, record, event, "PAYMENT_DISPUTE")
+            return record
         if event.outcome == PaymentEventOutcome.IGNORED:
             record.processing_status = EVENT_UNMATCHED
             record.failure_code = "EVENT_IGNORED"
@@ -592,12 +683,27 @@ async def process_authenticated_payment_event(
             payment.status = PAYMENT_SUCCEEDED
             payment.successful_attempt_id = attempt.payment_attempt_id
             payment.succeeded_at = attempt.completed_at
-            await ensure_cancellation_refund(
-                session,
-                payment,
-                customer_id=request.customer_id,
-                idempotency_expires_at=idempotency_expires_at,
-            )
+            try:
+                await ensure_cancellation_refund(
+                    session,
+                    payment,
+                    customer_id=request.customer_id,
+                    idempotency_expires_at=idempotency_expires_at,
+                )
+            except RefundConflictError:
+                # Preserve verified money and its investigation hold even when
+                # the cancelled booking's automatic payout is unsafe.
+                await open_exception(
+                    session,
+                    payment,
+                    "REFUND_REVIEW_REQUIRED",
+                    charge=charge,
+                    evidence_id=record.payment_provider_event_id,
+                )
+                record.processing_status = EVENT_RECONCILIATION
+                record.failure_code = "REFUND_REVIEW_REQUIRED"
+                record.processed_at = now
+                return record
             record.processing_status = EVENT_PROCESSED
             record.failure_code = "CANCELLED_CAPTURE_COMPENSATED"
             record.processed_at = utc_now()
@@ -705,6 +811,65 @@ async def process_authenticated_payment_event(
         return provider_event
 
 
+async def _flag_evidence_charge(
+    session: AsyncSession,
+    record: PaymentProviderEvent,
+    event: AuthenticatedPaymentEvent,
+    reason: str,
+) -> None:
+    charge = await session.scalar(
+        select(CapturedCharge).where(
+            CapturedCharge.provider == event.provider,
+            CapturedCharge.provider_payment_id == event.provider_payment_id,
+        )
+    )
+    if charge is None:
+        record.processing_status = EVENT_UNMATCHED
+        record.failure_code = reason
+        record.processed_at = utc_now()
+        return
+    payment = await session.scalar(
+        select(Payment).where(Payment.payment_id == charge.payment_id).with_for_update()
+    )
+    assert payment is not None
+    valid = (
+        event.provider_account_key == charge.provider_account_key
+        and event.currency == charge.currency
+        and event.amount_minor is not None
+        and event.amount_minor <= charge.amount_minor
+    )
+    classified = reason if valid else "PROVIDER_EVIDENCE_MISMATCH"
+    obligation = await session.scalar(
+        select(RefundObligation).where(
+            RefundObligation.captured_charge_id == charge.captured_charge_id
+        )
+    )
+    if obligation:
+        obligation.payout_blocked = True
+    record.payment_attempt_id = charge.payment_attempt_id
+    record.processing_status = EVENT_RECONCILIATION_REQUIRED
+    record.failure_code = classified
+    record.processed_at = utc_now()
+    await open_exception(
+        session, payment, classified, charge=charge, evidence_id=record.payment_provider_event_id
+    )
+    if reason == "PAYMENT_DISPUTE" and await session.scalar(
+        select(Refund.refund_id)
+        .where(
+            Refund.captured_charge_id == charge.captured_charge_id,
+            Refund.status.in_(["PROCESSING", "SUBMITTED", "INITIATION_UNCERTAIN", "SUCCEEDED"]),
+        )
+        .limit(1)
+    ):
+        await open_exception(
+            session,
+            payment,
+            "REFUND_DISPUTE_DOUBLE_CREDIT_RISK",
+            charge=charge,
+            evidence_id=record.payment_provider_event_id,
+        )
+
+
 async def _process_refund_event(
     session: AsyncSession,
     record: PaymentProviderEvent,
@@ -754,12 +919,30 @@ async def _process_refund_event(
         record.processing_status = EVENT_RECONCILIATION_REQUIRED
         record.failure_code = "REFUND_IDENTITY_CONFLICT"
         record.processed_at = now
+        for conflicting in refunds:
+            payment = await session.get(Payment, conflicting.payment_id)
+            assert payment is not None
+            obligation = (
+                await session.get(RefundObligation, conflicting.refund_obligation_id)
+                if conflicting.refund_obligation_id
+                else None
+            )
+            if obligation:
+                obligation.payout_blocked = True
+            await open_exception(
+                session,
+                payment,
+                "REFUND_IDENTITY_CONFLICT",
+                refund=conflicting,
+                evidence_id=record.payment_provider_event_id,
+            )
         return record
     refund = refunds[0] if refunds else None
 
     if not refund:
         record.processing_status = EVENT_UNMATCHED
         record.processed_at = now
+        await _flag_evidence_charge(session, record, event, "EXTERNAL_REFUND_UNMAPPED")
         return record
     if refund.payment_id not in payment_ids:
         raise PaymentNotEligibleError("Refund mapping changed during reconciliation")

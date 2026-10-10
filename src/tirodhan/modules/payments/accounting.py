@@ -16,6 +16,7 @@ from tirodhan.modules.payments.models import (
     PaymentProviderEvent,
     Refund,
     RefundObligation,
+    SettlementEvidence,
 )
 from tirodhan.modules.payments.ports import AuthenticatedPaymentEvent
 from tirodhan.modules.reliability.models import OutboxEvent
@@ -139,6 +140,79 @@ async def record_charge(
             evidence_id=record.payment_provider_event_id,
         )
         return None
+    # Refund/dispute observations can precede the capture webhook. An earlier
+    # unmatched money movement must not disappear when an auto-compensation
+    # obligation is first created. Provider payment identity is the match key.
+    prior = list(
+        await session.scalars(
+            select(PaymentProviderEvent)
+            .where(
+                PaymentProviderEvent.provider == charge.provider,
+                PaymentProviderEvent.provider_payment_id == charge.provider_payment_id,
+                PaymentProviderEvent.processing_status == "UNMATCHED",
+                or_(
+                    PaymentProviderEvent.provider_refund_id.is_not(None),
+                    PaymentProviderEvent.provider_dispute_id.is_not(None),
+                ),
+            )
+            .order_by(PaymentProviderEvent.payment_provider_event_id)
+            .limit(100)
+        )
+    )
+    for evidence in prior:
+        reason = "PAYMENT_DISPUTE" if evidence.provider_dispute_id else "EXTERNAL_REFUND_UNMAPPED"
+        if (
+            evidence.provider_account_key != charge.provider_account_key
+            or evidence.currency != charge.currency
+            or evidence.amount_minor is None
+            or evidence.amount_minor > charge.amount_minor
+        ):
+            reason = "PROVIDER_EVIDENCE_MISMATCH"
+        evidence.payment_attempt_id = charge.payment_attempt_id
+        evidence.processing_status = "RECONCILIATION_REQUIRED"
+        evidence.failure_code = reason
+        await open_exception(
+            session, payment, reason, charge=charge, evidence_id=evidence.payment_provider_event_id
+        )
+        obligation = await session.scalar(
+            select(RefundObligation).where(
+                RefundObligation.captured_charge_id == charge.captured_charge_id
+            )
+        )
+        if obligation:
+            obligation.payout_blocked = True
+    reports = list(
+        await session.scalars(
+            select(SettlementEvidence)
+            .where(
+                SettlementEvidence.provider_payment_id == charge.provider_payment_id,
+                SettlementEvidence.refund_id.is_(None),
+                or_(
+                    SettlementEvidence.movement_type.in_(["refund", "adjustment"]),
+                    SettlementEvidence.provider_dispute_id.is_not(None),
+                ),
+            )
+            .order_by(SettlementEvidence.settlement_evidence_id)
+            .limit(100)
+        )
+    )
+    for report in reports:
+        reason = (
+            "SETTLEMENT_UNKNOWN_REFUND"
+            if report.movement_type == "refund"
+            else "SETTLEMENT_ADJUSTMENT_REVIEW"
+        )
+        if report.provider_account_key != charge.provider_account_key:
+            reason = "PROVIDER_EVIDENCE_MISMATCH"
+        case = await open_exception(session, payment, reason, charge=charge)
+        case.settlement_evidence_id = report.settlement_evidence_id
+        obligation = await session.scalar(
+            select(RefundObligation).where(
+                RefundObligation.captured_charge_id == charge.captured_charge_id
+            )
+        )
+        if obligation:
+            obligation.payout_blocked = True
     return charge
 
 
@@ -172,10 +246,34 @@ async def ensure_obligation(
         )
     )
     if obligation is None:
+        blocked = await session.scalar(
+            select(FinancialException.financial_exception_id)
+            .where(
+                FinancialException.captured_charge_id == charge.captured_charge_id,
+                FinancialException.status == "OPEN",
+                FinancialException.reason_code.in_(
+                    [
+                        "PAYMENT_DISPUTE",
+                        "REFUND_DISPUTE_DOUBLE_CREDIT_RISK",
+                        "EXTERNAL_REFUND_UNMAPPED",
+                        "EVENT_PAYLOAD_CONFLICT",
+                        "PROVIDER_EVIDENCE_MISMATCH",
+                        "SETTLEMENT_MISMATCH",
+                        "SETTLEMENT_UNKNOWN_REFUND",
+                        "SETTLEMENT_DISPUTE_REVIEW",
+                        "SETTLEMENT_EXPECTED_MISSING",
+                        "SETTLEMENT_ADJUSTMENT_REVIEW",
+                        "REFUND_IDENTITY_CONFLICT",
+                    ]
+                ),
+            )
+            .limit(1)
+        )
         obligation = RefundObligation(
             captured_charge_id=charge.captured_charge_id,
             amount_minor=amount_minor or charge.amount_minor,
             reason_code=reason,
+            payout_blocked=blocked is not None,
         )
         session.add(obligation)
         await session.flush([obligation])

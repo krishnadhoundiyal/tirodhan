@@ -1069,3 +1069,39 @@ All new entities use real FKs, integer minor-unit money, UUIDv7 and UTC timestam
 Downgrade removes new accounting/evidence while retaining pre-existing Payment, Attempt,
 Refund and provider-event rows. Export the new accounting and evidence before rollback.
 The extension-owned spatial_ref_sys and two legitimate migration-0007 indexes remain.
+
+## Migration 0021: financial correctness controls
+
+The approved closure requires two narrowly typed artifacts absent from existing reliability
+and transaction tables. Neither Inbox/Outbox nor locally known Attempt/Refund rows represent
+account-wide provider windows/page offsets or independent settlement movements.
+
+| Table/change | Physical protection | Facts and relationships |
+|---|---|---|
+| FinancialScanCheckpoint | UUIDv7 PK; UNIQUE(provider,account,scan_kind); nonnegative offset/window CHECK | Closed window, page offset, rolling/repeated-pass digests, last exhaustion and claim UUID/deadline. Account scans and bounded report day/history progress only |
+| SettlementEvidence | UUIDv7 PK; UNIQUE(account,observation_key); money CHECK; classification/UUID and partial unmapped-payment indexes; UPDATE/DELETE prohibited | Typed payment/refund/transfer/adjustment entity and optional settlement/payment/dispute IDs; gross/currency/debit/credit/fee/tax, settled/hold flags, timestamps, nullable confirmed fee-tax rule; optional real Charge/Refund FKs |
+| PaymentProviderEvent | review and partial unmatched-payment indexes; real self-FK contradicted_event_id; observation facts UPDATE/DELETE prohibited | Nullable provider order/refund/dispute refs, dispute state and deducted amount. Processing status and subsequently verified typed local mapping remain mutable |
+| FinancialException | nullable real SettlementEvidence FK | Verified expected settlement reference/due time; existing Payment and optional Charge/Refund/provider-event relationships retained |
+| Payment/Attempt ownership | UNIQUE(Attempt UUID,Payment UUID); composite Payment-successful-Attempt FK, deferred for the existing cycle | Prevents a canonical Attempt belonging to another Payment |
+| CapturedCharge/Refund ownership | composite Attempt/Payment FKs | Prevents mismatched aggregate ownership while retaining nullable legacy charge/obligation links |
+| CapturedCharge | immutable economic/owner/provider/account/evidence/time facts; delete prohibited | Status is not stored or rewritten on a capture |
+| Refund | submitted UUID/body/key/owner/charge/start facts immutable | Status/outcome evidence may change; submitted first-call time cannot reset |
+| FinancialAudit | UPDATE/DELETE prohibited | Existing actor, command UUID, Payment, optional Refund and provider-event FKs retained |
+
+The direct two-session test proved 0020's early return for null-charge legacy Refund inserts
+could bypass a concurrent known-charge cap. 0021 replaces only that reservation function:
+provable canonical legacy mappings acquire the same charge lock, count mapped and legacy
+payable reservations, and apply the existing obligation/charge caps. Unmapped history is not
+guessed or backfilled. Only FAILED with verified non-payable timestamp releases reservations;
+contradictory provider outcomes are still recorded rather than rejected by a status trigger.
+
+Only provable Razorpay `refund:<exact UUID>` keys normalize to `rf_<same UUID hex>`, matching
+the historical adapter's actual wire identity. Other keys are not guessed. Upgrade validates
+existing composite ownership; an inconsistent production row must be investigated first.
+There is no CASCADE financial FK or universal version/history table.
+
+Downgrade restores 0020's reservation function and drops only 0021 controls/constraints/columns;
+original finance/history rows survive and normalized keys remain wire-compatible. Export
+settlement/checkpoint/conflict facts before any real rollback. Immutable history cleanup
+requires an explicitly approved retention/migration operation, not ordinary application DELETE.
+The three documented raw comparison differences remain unchanged; see the [closure report](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

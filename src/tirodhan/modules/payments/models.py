@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -26,7 +27,17 @@ from tirodhan.db.values import new_uuid7, utc_now
 
 class Payment(Base):
     __tablename__ = "payment"
-    __table_args__ = (UniqueConstraint("request_id", name="uq_payment_request"),)
+    __table_args__ = (
+        UniqueConstraint("request_id", name="uq_payment_request"),
+        ForeignKeyConstraint(
+            ["successful_attempt_id", "payment_id"],
+            ["payment_attempt.payment_attempt_id", "payment_attempt.payment_id"],
+            name="fk_payment_successful_attempt_owner",
+            use_alter=True,
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+    )
 
     payment_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
@@ -54,6 +65,7 @@ class Payment(Base):
 class PaymentAttempt(Base):
     __tablename__ = "payment_attempt"
     __table_args__ = (
+        UniqueConstraint("payment_attempt_id", "payment_id", name="uq_attempt_payment_owner"),
         Index("ix_payment_attempt_payment_created", "payment_id", "created_at"),
         Index("ix_payment_attempt_reconciliation_due", "next_check_at"),
         UniqueConstraint(
@@ -107,6 +119,13 @@ class PaymentProviderEvent(Base):
         CheckConstraint(
             "amount_minor IS NULL OR amount_minor > 0", name="ck_provider_event_amount"
         ),
+        Index("ix_provider_event_review", "processing_status", "payment_provider_event_id"),
+        Index(
+            "ix_provider_event_unmatched_payment",
+            "provider",
+            "provider_payment_id",
+            postgresql_where=text("processing_status = 'UNMATCHED'"),
+        ),
     )
 
     payment_provider_event_id: Mapped[UUID] = mapped_column(
@@ -147,11 +166,24 @@ class PaymentProviderEvent(Base):
     definitive_non_payable: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    provider_order_id: Mapped[str | None] = mapped_column(String(200))
+    provider_refund_id: Mapped[str | None] = mapped_column(String(200))
+    provider_dispute_id: Mapped[str | None] = mapped_column(String(200))
+    dispute_status: Mapped[str | None] = mapped_column(String(24))
+    amount_deducted_minor: Mapped[int | None] = mapped_column(BigInteger)
+    contradicted_event_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("payment_provider_event.payment_provider_event_id")
+    )
 
 
 class Refund(Base):
     __tablename__ = "refund"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["payment_attempt_id", "payment_id"],
+            ["payment_attempt.payment_attempt_id", "payment_attempt.payment_id"],
+            name="fk_refund_attempt_owner",
+        ),
         Index("ix_refund_payment_created", "payment_id", "created_at"),
         Index("ix_refund_reconciliation_due", "next_check_at"),
         UniqueConstraint("provider", "provider_idempotency_key", name="uq_refund_provider_key"),
@@ -216,6 +248,11 @@ class Refund(Base):
 class CapturedCharge(Base):
     __tablename__ = "captured_charge"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["payment_attempt_id", "payment_id"],
+            ["payment_attempt.payment_attempt_id", "payment_attempt.payment_id"],
+            name="fk_capture_attempt_owner",
+        ),
         UniqueConstraint("provider", "provider_payment_id", name="uq_captured_charge_identity"),
         CheckConstraint("amount_minor > 0", name="ck_captured_charge_amount"),
         Index("ix_captured_charge_payment", "payment_id"),
@@ -274,6 +311,11 @@ class FinancialException(Base):
     evidence_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("payment_provider_event.payment_provider_event_id")
     )
+    settlement_evidence_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("settlement_evidence.settlement_evidence_id")
+    )
+    expected_settlement_id: Mapped[str | None] = mapped_column(String(200))
+    expected_settlement_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     case_key: Mapped[str] = mapped_column(String(200))
     reason_code: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(24), default="OPEN")
@@ -298,3 +340,74 @@ class FinancialAudit(Base):
     action: Mapped[str] = mapped_column(String(64))
     result_code: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class FinancialScanCheckpoint(Base):
+    """Account/window progress, not a business transaction or generic history."""
+
+    __tablename__ = "financial_scan_checkpoint"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_account_key", "scan_kind", name="uq_financial_scan"),
+        CheckConstraint(
+            "page_offset >= 0 AND window_end >= window_start", name="ck_financial_scan_bounds"
+        ),
+    )
+    financial_scan_checkpoint_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_account_key: Mapped[str] = mapped_column(String(64))
+    scan_kind: Mapped[str] = mapped_column(String(24))
+    window_start: Mapped[int] = mapped_column(BigInteger)
+    window_end: Mapped[int] = mapped_column(BigInteger)
+    page_offset: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pass_digest: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    previous_digest: Mapped[str | None] = mapped_column(String(64))
+    last_exhausted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_token: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    claim_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SettlementEvidence(Base):
+    """Minimal append-style provider settlement movement observation."""
+
+    __tablename__ = "settlement_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_account_key", "observation_key", name="uq_settlement_observation"
+        ),
+        CheckConstraint(
+            "amount_minor >= 0 AND debit_minor >= 0 AND credit_minor >= 0 "
+            "AND fee_minor >= 0 AND tax_minor >= 0",
+            name="ck_settlement_money",
+        ),
+        Index("ix_settlement_review", "classification", "settlement_evidence_id"),
+        Index(
+            "ix_settlement_unmapped_payment",
+            "provider_payment_id",
+            postgresql_where=text("refund_id IS NULL"),
+        ),
+    )
+    settlement_evidence_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
+    provider_account_key: Mapped[str] = mapped_column(String(64))
+    observation_key: Mapped[str] = mapped_column(String(64))
+    provider_entity_id: Mapped[str] = mapped_column(String(200))
+    movement_type: Mapped[str] = mapped_column(String(24))
+    provider_settlement_id: Mapped[str | None] = mapped_column(String(200))
+    provider_payment_id: Mapped[str | None] = mapped_column(String(200))
+    provider_dispute_id: Mapped[str | None] = mapped_column(String(200))
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(CHAR(3))
+    debit_minor: Mapped[int] = mapped_column(BigInteger)
+    credit_minor: Mapped[int] = mapped_column(BigInteger)
+    fee_minor: Mapped[int] = mapped_column(BigInteger)
+    tax_minor: Mapped[int] = mapped_column(BigInteger)
+    settled: Mapped[bool] = mapped_column(Boolean)
+    on_hold: Mapped[bool] = mapped_column(Boolean)
+    provider_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    provider_settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    classification: Mapped[str] = mapped_column(String(64))
+    fee_includes_tax: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    captured_charge_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("captured_charge.captured_charge_id")
+    )
+    refund_id: Mapped[UUID | None] = mapped_column(ForeignKey("refund.refund_id"))

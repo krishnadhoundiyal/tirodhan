@@ -21,6 +21,7 @@ from tirodhan.modules.payments.models import (
     PaymentProviderEvent,
     Refund,
     RefundObligation,
+    SettlementEvidence,
 )
 from tirodhan.modules.payments.ports import (
     FinancialInquiryProvider,
@@ -81,6 +82,89 @@ def provider(request: Request) -> FinancialInquiryProvider:
     if not callable(getattr(instance, "inquire_payment", None)):
         raise HTTPException(503, "Financial inquiry provider is not configured")
     return cast(FinancialInquiryProvider, instance)
+
+
+@router.get("/provider-events")
+async def provider_evidence_inventory(
+    manager: Manager,
+    session: ReadSession,
+    after: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict[str, Any]:
+    query = select(PaymentProviderEvent).where(
+        PaymentProviderEvent.processing_status.in_(
+            ["UNMATCHED", "RECONCILIATION", "RECONCILIATION_REQUIRED"]
+        )
+    )
+    if after:
+        query = query.where(PaymentProviderEvent.payment_provider_event_id > after)
+    rows = list(
+        await session.scalars(
+            query.order_by(PaymentProviderEvent.payment_provider_event_id).limit(limit + 1)
+        )
+    )
+    return dict(
+        evidence=[
+            dict(
+                evidence_id=r.payment_provider_event_id,
+                provider=r.provider,
+                provider_account_key=r.provider_account_key,
+                external_event_id=r.external_event_id,
+                event_type=r.event_type,
+                evidence_source=r.evidence_source,
+                provider_order_id=r.provider_order_id,
+                provider_payment_id=r.provider_payment_id,
+                provider_refund_id=r.provider_refund_id,
+                provider_dispute_id=r.provider_dispute_id,
+                amount_minor=r.amount_minor,
+                currency=r.currency,
+                decision=r.processing_status,
+                reason=r.failure_code,
+                contradicted_event_id=r.contradicted_event_id,
+                received_at=r.received_at,
+            )
+            for r in rows[:limit]
+        ],
+        next_cursor=rows[limit - 1].payment_provider_event_id if len(rows) > limit else None,
+    )
+
+
+@router.get("/settlement-evidence")
+async def settlement_inventory(
+    manager: Manager,
+    session: ReadSession,
+    after: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict[str, Any]:
+    query = select(SettlementEvidence)
+    if after:
+        query = query.where(SettlementEvidence.settlement_evidence_id > after)
+    rows = list(
+        await session.scalars(
+            query.order_by(SettlementEvidence.settlement_evidence_id).limit(limit + 1)
+        )
+    )
+    return dict(
+        movements=[
+            dict(
+                evidence_id=r.settlement_evidence_id,
+                provider_account_key=r.provider_account_key,
+                provider_entity_id=r.provider_entity_id,
+                movement_type=r.movement_type,
+                provider_settlement_id=r.provider_settlement_id,
+                amount_minor=r.amount_minor,
+                currency=r.currency,
+                credit_minor=r.credit_minor,
+                debit_minor=r.debit_minor,
+                fee_minor=r.fee_minor,
+                tax_minor=r.tax_minor,
+                classification=r.classification,
+                observed_at=r.observed_at,
+            )
+            for r in rows[:limit]
+        ],
+        next_cursor=rows[limit - 1].settlement_evidence_id if len(rows) > limit else None,
+    )
 
 
 @router.get("/payments")
@@ -178,6 +262,9 @@ async def detail(payment_id: UUID, manager: Manager, session: ReadSession) -> di
                 "reason_code",
                 "status",
                 "evidence_id",
+                "settlement_evidence_id",
+                "expected_settlement_id",
+                "expected_settlement_due_at",
             ],
         ),
         (

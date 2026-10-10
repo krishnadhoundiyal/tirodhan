@@ -25,6 +25,7 @@ class PaymentEventOutcome(str, Enum):
     FAILED = "FAILED"
     SUBMITTED = "SUBMITTED"
     IGNORED = "IGNORED"
+    DISPUTED = "DISPUTED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,9 @@ class AuthenticatedPaymentEvent:
     evidence_source: str = "WEBHOOK"
     provider_account_key: str | None = None
     definitive_non_payable: bool = False
+    provider_dispute_id: str | None = None
+    dispute_status: str | None = None
+    amount_deducted_minor: int | None = None
 
 
 class FinancialInquiryProvider(Protocol):

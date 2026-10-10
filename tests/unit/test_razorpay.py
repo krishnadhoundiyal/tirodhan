@@ -159,7 +159,7 @@ async def test_conflicting_created_and_recovered_orders_never_ready(patch, recov
                 payment_attempt_id=attempt_id,
                 amount_minor=500,
                 currency="INR",
-                provider_idempotency_key="stable",
+                provider_idempotency_key="stable_operation",
             )
 
 
@@ -202,7 +202,7 @@ async def test_ambiguous_post_recovers_by_receipt_or_remains_uncertain(failure, 
             payment_attempt_id=attempt_id,
             amount_minor=500,
             currency="INR",
-            provider_idempotency_key="stable",
+            provider_idempotency_key="stable_operation",
         )
         if recoverable:
             assert (await operation).provider_order_id == "order_test"
@@ -227,7 +227,7 @@ async def test_merchant_authentication_not_commercial_failure(status):
                 payment_attempt_id=new_uuid7(),
                 amount_minor=500,
                 currency="INR",
-                provider_idempotency_key="stable",
+                provider_idempotency_key="stable_operation",
             )
 
 
@@ -253,7 +253,7 @@ async def test_definitive_order_validation_rejection_is_failed():
             payment_attempt_id=new_uuid7(),
             amount_minor=500,
             currency="INR",
-            provider_idempotency_key="stable",
+            provider_idempotency_key="stable_operation",
         )
         assert result.outcome == PaymentInitiationOutcome.FAILED
         assert result.failure_code == "RAZORPAY_ORDER_REJECTED"
@@ -348,7 +348,7 @@ async def test_refund_ambiguous_or_conflicting_response_is_uncertain(problem):
                 provider_payment_id="pay_canonical",
                 amount_minor=500,
                 currency="INR",
-                provider_idempotency_key="stable",
+                provider_idempotency_key="stable_operation",
             )
 
 
@@ -414,7 +414,7 @@ async def test_malformed_or_saturated_lookup_never_creates_order(problem):
                 payment_attempt_id=new_uuid7(),
                 amount_minor=500,
                 currency="INR",
-                provider_idempotency_key="stable",
+                provider_idempotency_key="stable_operation",
             )
     assert calls == ["GET"]
 
@@ -436,7 +436,7 @@ async def test_multiple_exact_receipt_matches_fail_closed():
                 payment_attempt_id=attempt_id,
                 amount_minor=500,
                 currency="INR",
-                provider_idempotency_key="stable",
+                provider_idempotency_key="stable_operation",
             )
 
 
@@ -463,7 +463,7 @@ async def test_refund_rejection_and_authentication_are_distinct(status, outcome)
             provider_payment_id="pay_canonical",
             amount_minor=500,
             currency="INR",
-            provider_idempotency_key="stable",
+            provider_idempotency_key="stable_operation",
         )
         if outcome == "unavailable":
             with pytest.raises(PaymentProviderNotConfiguredError):

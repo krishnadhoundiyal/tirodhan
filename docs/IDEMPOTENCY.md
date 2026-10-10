@@ -477,3 +477,21 @@ The five-minute mobile UX timer has no backend financial transition. Booking exp
 EXPIRED on CollectionRequest, while unresolved Payment stays PENDING and its due Attempt is
 retained. Customer projection uses existing CONFIRMING with retry disabled for an unresolved
 expired booking. Late money is SUCCEEDED with a durable manager case, never re-accepted.
+
+## Financial correctness closure: transport and independent controls
+
+| Operation | Business key and DB protection | Boundary, replay, concurrency and external rule |
+|---|---|---|
+| Webhook HTTP ingress | Message SHA256(provider/account/eventID/raw-body-hash); signature over exact bounded bytes | Await dedicated trusted queue send before 2xx; send timeout/failure returns 503; no financial DB work; identical receipt on replay |
+| Webhook consumer | Inbox(consumer,messageID), UNIQUE(provider,eventID), UNIQUE(provider,paymentID) capture | Envelope/account/provenance validation; inbox + immutable observations + shared financial transition + outbox commit before Complete; lost ack/redelivery has one economic effect; changed hash creates linked contradiction |
+| Unmatched/poison delivery | Original identifiers/hash retained; schema capped at 4096 bytes | Valid unmatched event commits reviewable references and may later remap; invalid envelope dead-letters; transient DB failure abandons; DLQ replay preserves original message ID, subject and bytes |
+| Native refund recovery | Original Refund UUID, persisted effective native key, identical body; submitted identity trigger | Query before replay; default unconfirmed or aged retention never POSTs; same-key 409 stays uncertain; no replacement/key reset; external call without DB transaction |
+| Targeted inquiry lease | Due index + fresh per-target token/deadline; oldest-due cross-kind selection | JIT claim commits before GET; expired claim may be taken over; stale token release returns without changing scheduling; evidence still applies through Payment-first processor |
+| Account inventory | UNIQUE(provider,account,kind); persistent closed window/offset/pass digests/token | Bounded GET pages outside DB; observations commit before token-conditional checkpoint; crash replays deterministic account/fact evidence; two matching exhausted passes plus overlap advance; incomplete coverage cannot prove failure |
+| Settlement control | UNIQUE(account,fact-and-assessment fingerprint); immutable typed evidence, deterministic case key | GET/report outside DB; Payment lock and fresh Refund facts before matching; replay repeats no money effect; changed facts/matching/confirmed fee rule append assessment; partial page exhaustion is not universal report completeness |
+| Expected missing settlement | Verified account/entity/membership/due inputs and report coverage; bounded batch <=1000 | No age-based guessed population; deterministic case and payout hold; no provider side effect; operational membership source remains blocked until account contract verified |
+
+Reservations lock the actual charge, including provable canonical legacy null-charge operations;
+two independent SQL sessions cannot over-reserve. Payment-first domain locking, manager audit
+command uniqueness and read-only reconciliation remain authoritative. No generic versions,
+global mutex, Redis or automatic scheduled replacement is introduced.

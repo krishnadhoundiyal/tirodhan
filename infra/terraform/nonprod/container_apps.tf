@@ -7,7 +7,7 @@ resource "azurerm_container_app" "api" {
   revision_mode                = "Single"
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.runtime.id]
+    identity_ids = [azurerm_user_assigned_identity.runtime.id, azurerm_user_assigned_identity.financial_webhook_sender.id]
   }
   registry {
     server               = "ghcr.io"
@@ -45,7 +45,9 @@ resource "azurerm_container_app" "api" {
       cpu    = 0.5
       memory = "1Gi"
       dynamic "env" {
-        for_each = local.common_env
+        for_each = merge(local.common_env, local.financial_webhook_env, {
+          TIRODHAN_FINANCIAL_WEBHOOK_SENDER_IDENTITY_CLIENT_ID = azurerm_user_assigned_identity.financial_webhook_sender.client_id
+        })
         content {
           name  = env.key
           value = env.value
@@ -112,7 +114,7 @@ resource "azurerm_container_app" "api" {
       error_message = "Publish both SHA-tagged images before enabling workloads."
     }
   }
-  depends_on = [azurerm_role_assignment.secrets, azurerm_role_assignment.media, azurerm_role_assignment.delegation]
+  depends_on = [azurerm_role_assignment.secrets, azurerm_role_assignment.media, azurerm_role_assignment.delegation, azurerm_role_assignment.financial_webhook_sender]
   tags       = local.tags
 }
 resource "azurerm_container_app" "worker" {
@@ -124,7 +126,7 @@ resource "azurerm_container_app" "worker" {
   revision_mode                = "Single"
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.runtime.id]
+    identity_ids = each.key == "financial_webhook" ? [azurerm_user_assigned_identity.runtime.id, azurerm_user_assigned_identity.financial_webhook_receiver.id] : [azurerm_user_assigned_identity.runtime.id]
   }
   registry {
     server               = "ghcr.io"
@@ -147,7 +149,7 @@ resource "azurerm_container_app" "worker" {
     custom_scale_rule {
       name             = "service-bus"
       custom_rule_type = "azure-servicebus"
-      identity_id      = azurerm_user_assigned_identity.runtime.id
+      identity_id      = each.key == "financial_webhook" ? azurerm_user_assigned_identity.financial_webhook_receiver.id : azurerm_user_assigned_identity.runtime.id
       metadata = {
         namespace    = azurerm_servicebus_namespace.bus.name
         queueName    = local.queues[each.key]
@@ -162,7 +164,9 @@ resource "azurerm_container_app" "worker" {
       command = ["python", "-m", "tirodhan.deployment.entrypoint"]
       args    = ["python", "-m", "tirodhan.workers.${each.value.module}"]
       dynamic "env" {
-        for_each = local.common_env
+        for_each = each.key == "financial_webhook" ? merge(local.common_env, local.financial_webhook_env, {
+          TIRODHAN_FINANCIAL_WEBHOOK_RECEIVER_IDENTITY_CLIENT_ID = azurerm_user_assigned_identity.financial_webhook_receiver.client_id
+        }) : local.common_env
         content {
           name  = env.key
           value = env.value
@@ -214,6 +218,6 @@ resource "azurerm_container_app" "worker" {
       error_message = "Publish both SHA-tagged images before enabling workloads."
     }
   }
-  depends_on = [azurerm_container_app.api, azurerm_role_assignment.secrets, azurerm_role_assignment.bus_sender, azurerm_role_assignment.bus_receiver]
+  depends_on = [azurerm_container_app.api, azurerm_role_assignment.secrets, azurerm_role_assignment.bus_sender, azurerm_role_assignment.bus_receiver, azurerm_role_assignment.financial_webhook_receiver]
   tags       = local.tags
 }

@@ -627,35 +627,19 @@ async def test_success_duplicate_and_additional_success_preserve_one_canonical_a
     )
     raw_body = b'{"address":"must-not-persist","token":"secret"}'
     first_event = success_event(first, "success-event-one")
-    webhook_provider = FakePaymentProvider()
-    webhook_provider.webhook_event = first_event
-    app = create_app(
-        Settings(
-            _env_file=None,
-            environment="test",
-            database_url=migrated_database_url,
-            planning_lead_time_minutes=30,
-        ),
-        payment_provider=webhook_provider,
+    response = await process_authenticated_payment_event(
+        database_session_factory,
+        first_event,
+        payload_hash=hashlib.sha256(raw_body).digest(),
+        planning_lead_time_minutes=30,
     )
-    async with app.router.lifespan_context(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post(
-                "/v1/payments/provider/webhook",
-                headers={"x-test-signature": "valid"},
-                content=raw_body,
-            )
-            duplicate_response = await client.post(
-                "/v1/payments/provider/webhook",
-                headers={"x-test-signature": "valid"},
-                content=raw_body,
-            )
-    assert response.status_code == 200
-    assert duplicate_response.status_code == 200
-    assert (
-        response.json()["payment_provider_event_id"]
-        == duplicate_response.json()["payment_provider_event_id"]
+    duplicate_response = await process_authenticated_payment_event(
+        database_session_factory,
+        first_event,
+        payload_hash=hashlib.sha256(raw_body).digest(),
+        planning_lead_time_minutes=30,
     )
+    assert response.payment_provider_event_id == duplicate_response.payment_provider_event_id
     additional = await process_authenticated_payment_event(
         database_session_factory,
         success_event(second, "success-event-two"),

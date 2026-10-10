@@ -65,6 +65,10 @@ class Gateway(Orders):
         path = request.url.path.removeprefix("/v1")
         if path == "/orders":
             return super().__call__(request)
+        if path == "/payments":
+            return httpx.Response(
+                200, json=dict(entity="collection", count=len(self.payments), items=self.payments)
+            )
         if path.startswith("/orders/"):
             if path.endswith("/payments"):
                 return httpx.Response(

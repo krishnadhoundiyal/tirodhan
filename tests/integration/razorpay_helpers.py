@@ -93,7 +93,12 @@ class Orders:
                     }
                 },
             )
-        item = {"entity": "order", "id": "order_" + data["receipt"][3:], **data}
+        item = {
+            "entity": "order",
+            "id": "order_" + data["receipt"][3:],
+            "created_at": int(utc_now().timestamp()) - 180,
+            **data,
+        }
         self.orders[data["receipt"]] = item
         return httpx.Response(200, json=item)
 

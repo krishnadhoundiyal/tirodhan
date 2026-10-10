@@ -305,7 +305,11 @@ async def create_refund(
         status="PENDING",
         provider=attempt.provider,
         provider_refund_id=None,
-        provider_idempotency_key=f"refund:{refund_id_var}",
+        provider_idempotency_key=(
+            f"rf_{refund_id_var.hex}"
+            if attempt.provider == "RAZORPAY"
+            else f"refund:{refund_id_var}"
+        ),
         requested_by_user_id=requested_by_user_id,
         created_at=utc_now(),
         captured_charge_id=captured_charge_id,
@@ -399,11 +403,78 @@ async def execute_refund_provider_call(
             amount_minor = refund.amount_minor
             currency = refund.currency
             provider_idempotency_key = refund.provider_idempotency_key
+            if provider.provider_code == "RAZORPAY" and provider_idempotency_key not in {
+                f"rf_{refund_id.hex}",
+                f"refund:{refund_id}",
+            }:
+                # The historical adapter ignored stored keys. Only its exact
+                # deterministic wire identity is provable without account evidence.
+                from tirodhan.modules.payments.accounting import open_exception
+
+                payment = await session.get(Payment, refund.payment_id)
+                assert payment is not None
+                await open_exception(session, payment, "REFUND_LEGACY_KEY_UNPROVEN", refund=refund)
+                if obligation:
+                    obligation.payout_blocked = True
+                return
+            recovery = refund.status != "PENDING" or refund.processing_started_at is not None
+            first_submission = refund.processing_started_at or refund.created_at
 
             refund.status = "PROCESSING"
             refund.processing_started_at = refund.processing_started_at or utc_now()
 
-    # 2. Call provider outside DB transaction
+    # 2. Read-only recovery has priority over native POST replay. A retained key
+    # alone is not proof the provider still retains its deduplication state.
+    import hashlib
+    from typing import cast
+
+    from tirodhan.modules.payments.ports import FinancialInquiryProvider
+    from tirodhan.modules.payments.service import process_authenticated_payment_event
+
+    if recovery and provider.provider_code == "RAZORPAY":
+        inquiry = cast(FinancialInquiryProvider, provider)
+        observations = await inquiry.inquire_refund(
+            refund_id=refund_id,
+            provider_refund_id=identity.provider_refund_id,
+            provider_payment_id=provider_payment_id,
+            amount_minor=amount_minor,
+            currency=currency,
+        )
+        if observations:
+            for observation in observations:
+                await process_authenticated_payment_event(
+                    session_factory,
+                    observation,
+                    payload_hash=hashlib.sha256(observation.external_event_id.encode()).digest(),
+                    planning_lead_time_minutes=None,
+                )
+            return
+        window = getattr(provider, "refund_replay_window_seconds", None)
+        if window is None or (utc_now() - first_submission).total_seconds() >= window:
+            async with session_factory() as session, session.begin():
+                payment = await session.scalar(
+                    select(Payment)
+                    .where(Payment.payment_id == identity.payment_id)
+                    .with_for_update()
+                )
+                assert payment is not None
+                current = await session.scalar(
+                    select(Refund)
+                    .where(Refund.refund_id == refund_id)
+                    .execution_options(populate_existing=True)
+                    .with_for_update()
+                )
+                assert current is not None
+                if current.status in {"PROCESSING", "INITIATION_UNCERTAIN"}:
+                    current.status = "INITIATION_UNCERTAIN"
+                    from tirodhan.modules.payments.accounting import open_exception
+
+                    await open_exception(
+                        session, payment, "REFUND_REPLAY_RETENTION_UNCONFIRMED", refund=current
+                    )
+            raise RefundConflictError("Native refund replay protection is unconfirmed or expired")
+
+    # Call provider outside DB transaction.
     try:
         result = await provider.initiate_refund(
             refund_id=refund_id,

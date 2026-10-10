@@ -448,3 +448,27 @@ ordinary cancellation replay never invents historical compensation.
 FinancialException is an operational case, not a CollectionRequest lifecycle state.
 FinancialAudit is append-only manager provenance. API_INQUIRY is distinct from WEBHOOK
 and PROVIDER_RESPONSE evidence. No new customer-facing enum is introduced.
+
+## Phase 2 financial control evidence — 2026-10-10
+
+Authenticated webhooks are durable ingress receipts, then provider observations applied by
+the existing financial processor. A conflicting payload for one provider event identity is
+retained as a separate contradictory observation linked to the original. Unmatched evidence
+retains provider references and may be retried when its mapping becomes available.
+
+Provider inventory is independent of logical Payment status: a successful Payment can acquire
+another actual charge. A Dashboard refund is external evidence, never a fabricated local
+Refund intent/execution. Unmapped refunds and disputes block unsafe compensation for their
+known charge. Won/closed dispute observations retain history and require manual commercial
+review; they do not automatically authorize a refund or erase an earlier hold.
+
+SettlementEvidence is immutable control evidence, not a ledger, booking state or payout
+instruction. Each typed observation retains merchant binding, financial entity, settlement,
+gross, debit, credit, fees, tax and provider timestamps. Reclassification after verified local
+matching or a confirmed fee rule appends another assessment and preserves the previous one.
+FinancialException links relevant settlement evidence or verified expected membership/due
+facts. Unknown entities remain visible in the manager evidence inventory even without a local
+Payment FK. FinancialScanCheckpoint is bounded account/page progress, not a domain aggregate.
+
+No status is inferred from elapsed time. A missing webhook or unresolved provider response
+cannot release reservations. See [closure evidence](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

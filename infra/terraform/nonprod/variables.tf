@@ -144,3 +144,12 @@ variable "job_schedules" {
     error_message = "Configure the four existing finite schedules, evaluated in UTC."
   }
 }
+variable "financial_inventory_schedule" {
+  description = "Optional reviewed UTC cron for bounded read-only account/report reconciliation; null creates no additional schedule."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.financial_inventory_schedule == null ? true : length(split(" ", var.financial_inventory_schedule)) == 5
+    error_message = "Provide an explicitly reviewed five-field UTC cron or null."
+  }
+}

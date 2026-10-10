@@ -126,3 +126,30 @@ automatic. Historical transactions are not guessed or silently backfilled. Sched
 and account-specific normal-refund failure finality still require operational/provider
 confirmation, not inferred production defaults. See the completion report for implementation,
 compatibility, validation and remaining deployment prerequisites.
+
+## Accepted financial correctness closure — 2026-10-10
+
+The current closure request supersedes the historical Phase 1V exclusions only where needed
+for queued ingress and independent financial controls. Exact-byte HMAC/account validation now
+precedes awaited Service Bus acceptance and HTTP acknowledgement, rather than synchronous
+financial DB mutation. A dedicated queue and separate sender/receiver workload identities feed
+the existing PostgreSQL processor. The consumer transaction commits inbox/evidence/domain/outbox
+before broker completion. Contradictory event-ID/hash observations are retained separately.
+
+Razorpay Refund now persists its actual native `rf_<UUID hex>` key. Provable old neutral keys
+normalize without changing the earlier wire key. Uncertain POST recovery first queries provider
+truth; an absent operation permits same-body/native-key replay only inside an explicitly confirmed
+retention window. Public docs do not establish this window. Default closed replay and failure-
+finality gates prevent an unproved replacement. Manager commands still require current proof,
+complete inventory, correct reservation and audit; no financial override is added.
+
+Bounded finite account inventory/report controls use PostgreSQL checkpoints and typed immutable
+SettlementEvidence, with existing charge/refund/case relationships. Disputes are evidence and
+investigation holds, with no auto-refund/reopening. Missing settlement expectations require
+verified membership, due facts and coverage. No invented `refund.reversed` event is supported.
+No universal history/version architecture, ledger service or new paid provider is introduced.
+
+Service Bus Standard and ACA Consumption remain selected. API minimum replicas stay zero;
+provider five-second acknowledgement versus cold-start performance remains an operational
+gate. Terraform is preparation only; account contracts, report access, live provider behavior
+and real deployment are not verified here. See [closure evidence, provider questions and release classification](../PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

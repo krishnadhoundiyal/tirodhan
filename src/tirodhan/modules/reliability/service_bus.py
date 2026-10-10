@@ -59,6 +59,32 @@ class AzureServiceabilityDelivery:
         )
 
 
+class AzureFinancialWebhookDelivery(AzureServiceabilityDelivery):
+    def __init__(self, receiver: ServiceBusReceiver, message: ServiceBusReceivedMessage) -> None:
+        self._receiver = receiver
+        self._message = message
+        self.message_id = str(message.message_id or "")
+        self.message_type = str(message.subject or "")
+        chunks = bytearray()
+        try:
+            for chunk in message.body:
+                if not isinstance(chunk, bytes):
+                    raise ValueError
+                chunks.extend(chunk[: 4097 - len(chunks)])
+                if len(chunks) > 4096:
+                    break
+        except (TypeError, ValueError):
+            chunks = bytearray(b"invalid")
+        self.body = bytes(chunks)
+
+    async def dead_letter(self) -> None:
+        await self._receiver.dead_letter_message(
+            self._message,
+            reason="INVALID_FINANCIAL_WEBHOOK",
+            error_description="Authenticated envelope validation failed",
+        )
+
+
 class AzureDispatchDelivery(AzureServiceabilityDelivery):
     def __init__(self, receiver: ServiceBusReceiver, message: ServiceBusReceivedMessage) -> None:
         self._receiver = receiver
