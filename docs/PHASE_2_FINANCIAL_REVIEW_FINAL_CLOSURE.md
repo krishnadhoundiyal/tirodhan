@@ -335,3 +335,13 @@ The local corrections can be independently reviewed with the complete findings r
 This report does **not** claim production readiness or external monetary completion from local
 tests alone. Local commit and clean-tree verification will be recorded in the final delivery;
 the commit is not pushed or deployed.
+
+## Merge authorization and owner-approved refund replay clarification — 2026-10-11
+
+The owner accepted merge of the Phase 2 financial implementation **with detailed documentation**, while retaining all enumerated live-money/provider/Operations release gates. See the [Phase 2 financial merge and operations runbook](PHASE_2_FINANCIAL_MERGE_RUNBOOK.md) and [updated failed-refund recovery policy](FAILED_REFUND_RECOVERY_POLICY.md).
+
+**Replay eligibility is dynamic, not irreversible:** the system retains `INITIATION_UNCERTAIN` and its actionable financial exception when safe same-key replay is unavailable. It recomputes eligibility against immutable first `processing_started_at` using the *currently configured* window. Increasing that duration can re-enable the original operation after new read-only verification and all other safety gates; it never creates a replacement refund or resets its key. A permanent `UNRESOLVED_EXPIRED` status is **not** part of the approved design. This is not permission to configure an unverified provider-guaranteed window.
+
+The synthetic provider tests exercise original-key recovery and the HTTP-boundary deadline; a dedicated test of expiry followed by later configuration enlargement was not reported executed and remains a regression recommendation. Existing final reported validation stays **1,040 passed, 1 skipped, 4 warnings**, not a fresh post-documentation test run. Razorpay normal-refund retention/finality and real deployed Operations remain explicitly **unverified/not enabled**.
+
+Merging into `main` is source integration, **not deployment**, not Azure provisioning and not live-money authorization. This addendum is a documentation record, not a replacement for the 54-item closure matrix.
