@@ -111,3 +111,18 @@ See [ADR-005](adr/ADR-005-payments-refunds.md), [domain model](DOMAIN_MODEL.md),
 [schema](SCHEMA_DESIGN.md), and [idempotency](IDEMPOTENCY.md). Proposed polling
 intervals are not production defaults; normal-refund failure finality requires
 provider/account confirmation before replacement can be authorized.
+
+## Owner-approved clarification — dynamic original-refund replay window (2026-10-11)
+
+**This section governs eligibility of retries of the SAME original refund operation. It does not authorize a replacement/new refund.** Detailed implementation and release procedures: [Phase 2 financial merge and recovery runbook](PHASE_2_FINANCIAL_MERGE_RUNBOOK.md).
+
+- Config: `TIRODHAN_RAZORPAY_REFUND_REPLAY_WINDOW_SECONDS` (`razorpay_refund_replay_window_seconds` in Settings) is an optional **seconds** duration. The default is `None`: unverified automatic replay is disabled. This is not a fixed five-day or seven-day setting.
+- On an uncertain claimed original, perform an authenticated read-only GET before any replay. An identified original is reconciled; an ambiguous/incomplete GET fails closed, even if the configured age window has not expired.
+- For an exhaustive, valid GET finding no original, the worker may POST the **identical original body, native key, receipt and financial identity** only if the original `processing_started_at` is within the **CURRENTLY configured** safe window and all present-day holds/account checks pass. The earliest timestamp is immutable. The worker must budget HTTP timeout and the adapter must recheck its deadline at dispatch.
+- A window that is unset or too old blocks POST while keeping `INITIATION_UNCERTAIN`, the outstanding obligation and the actionable `REFUND_REPLAY_RETENTION_UNCONFIRMED` case. **Do not create a permanent `UNRESOLVED_EXPIRED` status.** Blocked replay does not mean definitive provider failure or final financial resolution.
+- **A later change in configuration requires fresh eligibility calculation.** For example, if an original is six days old, an illustrative five-day window blocks POST, but an illustrative eight-day window may later make the **same** operation eligible again after fresh GETs and all safety checks. This does not reset its timestamp or idempotency key, cannot make an already succeeded/failed/submitted operation a new candidate, and cannot override other payout holds.
+- The configured local window cannot grant any Razorpay-side protection. Live replay must remain off until Razorpay confirms the **minimum guaranteed retention duration for normal Payment Gateway refunds**, including origin and scope, and the owner establishes a smaller bounded margin. The RazorpayX payouts seven-day statement is not such confirmation.
+- Authentic late webhook/GET evidence may still establish the original refund as `SUCCEEDED` after replay is blocked. Technical uncertainty can close on verified facts; debt and commercial disputes do not disappear merely because a manager approved an intent.
+- The reviewed tests exercise synthetic confirmed-window recovery and expiry-at-HTTP guards. A separate expiry-then-configuration-increase regression has **not** been claimed as executed; record and verify it at the next authorized code/test change.
+
+**Merge classification:** This clarification documents the already-implemented dynamic calculation. It does not enable replay, establish provider retention/finality, or authorize production financial traffic.
