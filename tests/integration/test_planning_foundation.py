@@ -237,8 +237,8 @@ async def test_payment_success_respects_temporal_planning_cutoff_without_batch(
     assert accepted_payment is not None and accepted_payment.status == "SUCCEEDED"
     assert blocked_event.processing_status == EVENT_RECONCILIATION
     assert blocked_event.failure_code == "PLANNING_CUTOFF_REACHED"
-    assert blocked is not None and blocked.status == REQUEST_PENDING_PAYMENT
-    assert still_pending_payment is not None and still_pending_payment.status == PAYMENT_PENDING
+    assert blocked is not None and blocked.status == "EXPIRED"
+    assert still_pending_payment is not None and still_pending_payment.status == "SUCCEEDED"
     assert blocked_truth is not None and blocked_truth.status == ATTEMPT_SUCCEEDED
     assert acceptance_events == 1
 
@@ -623,8 +623,8 @@ async def test_freeze_lock_wins_and_payment_cannot_leak_into_frozen_population(
 
     assert frozen.transitioned_request_count == 1
     assert frozen_anchor is not None and frozen_anchor.status == REQUEST_PRE_PLANNING
-    assert still_pending is not None and still_pending.status == REQUEST_PENDING_PAYMENT
-    assert logical_payment is not None and logical_payment.status == PAYMENT_PENDING
+    assert still_pending is not None and still_pending.status == "EXPIRED"
+    assert logical_payment is not None and logical_payment.status == "SUCCEEDED"
     assert durable_attempt is not None and durable_attempt.status == ATTEMPT_SUCCEEDED
     assert provider_event.processing_status == EVENT_RECONCILIATION
     assert provider_event.failure_code == "WORK_UNIT_FROZEN"

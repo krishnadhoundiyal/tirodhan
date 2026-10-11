@@ -143,6 +143,34 @@ async def protected_request(
     return result
 
 
+async def confirm_fixture_payment(session: AsyncSession, result: Any, now: datetime) -> None:
+    """Completed/planned fixtures retain the canonical charge required by acceptance."""
+    attempt_id = new_uuid7()
+    session.add(
+        PaymentAttempt(
+            payment_attempt_id=attempt_id,
+            payment_id=result.payment.payment_id,
+            provider="MOCK",
+            provider_payment_id=f"charge-{attempt_id}",
+            provider_idempotency_key=f"attempt-{attempt_id}",
+            status="SUCCEEDED",
+            created_at=result.request.created_at,
+            completed_at=now,
+        )
+    )
+    await session.flush()
+    await session.execute(
+        update(Payment)
+        .where(Payment.payment_id == result.payment.payment_id)
+        .values(status="SUCCEEDED", successful_attempt_id=attempt_id, succeeded_at=now)
+    )
+    await session.execute(
+        update(CollectionRequest)
+        .where(CollectionRequest.request_id == result.request.request_id)
+        .values(accepted_at=now)
+    )
+
+
 async def test_principal_live_roles_revocation_disablement_and_no_customer_requirement(
     database_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -331,6 +359,8 @@ async def test_history_and_recommendations_count_distinct_customer_collections(
             database_session_factory, other.user_id, address_protector
         )
         async with database_session_factory() as session, session.begin():
+            for result in (first, second, foreign):
+                await confirm_fixture_payment(session, result, utc_now())
             await session.execute(
                 update(CollectionRequest)
                 .where(
@@ -515,15 +545,29 @@ async def test_detail_projects_real_recorded_handover_and_survives_master_edits(
                 created_at=row.created_at,
             )
         )
+        payment_id, attempt_id = new_uuid7(), new_uuid7()
         session.add(
             Payment(
-                payment_id=new_uuid7(),
+                payment_id=payment_id,
                 request_id=row.request_id,
                 amount_minor=row.quoted_amount_minor,
                 currency="INR",
                 status="SUCCEEDED",
                 created_at=row.created_at,
                 succeeded_at=row.accepted_at,
+                successful_attempt_id=attempt_id,
+            )
+        )
+        session.add(
+            PaymentAttempt(
+                payment_attempt_id=attempt_id,
+                payment_id=payment_id,
+                provider="test",
+                provider_payment_id=f"pay_{attempt_id.hex}",
+                provider_idempotency_key=str(attempt_id),
+                status="SUCCEEDED",
+                created_at=row.created_at,
+                completed_at=row.accepted_at,
             )
         )
     app = app_for(database_session_factory, owner, address_protector)
@@ -621,6 +665,7 @@ async def test_detail_financial_truth(
                 payment_id=result.payment.payment_id,
                 provider="test",
                 provider_idempotency_key=str(attempt_id),
+                provider_payment_id=f"pay_{attempt_id.hex}",
                 status="SUCCEEDED",
                 created_at=now,
                 completed_at=now,
@@ -660,6 +705,7 @@ async def test_detail_financial_truth(
         assert data["payment"]["status"] == "SUCCEEDED"
         assert data["refunds"][0]["status"] == expected
         assert data["refund_status"] == expected
+        # Failed status without authoritative non-payable proof still reserves money.
         assert data["cancellation"]["refund_expectation"] == "REVIEW_REQUIRED"
 
 
@@ -728,6 +774,7 @@ async def test_preplanning_updated_time_uses_persisted_freeze_timestamp(
     frozen_at = utc_now() + timedelta(seconds=1)
     batch_id = new_uuid7()
     async with database_session_factory() as session, session.begin():
+        await confirm_fixture_payment(session, result, frozen_at - timedelta(seconds=1))
         session.add(
             PlanningBatch(
                 planning_batch_id=batch_id,

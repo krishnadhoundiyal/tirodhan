@@ -92,6 +92,7 @@ def test_all_workloads_have_budgeted_sidecar_and_emptydir() -> None:
         "rider": (0.25, "0.5Gi", 2),
         "refund": (0.25, "0.5Gi", 1),
         "planning": (0.5, "1Gi", 2),
+        "financial_webhook": (0.25, "0.5Gi", 1),
     }
     for name, (cpu, memory, max_) in expected.items():
         assert locals_["workers"][name]["cpu"] == cpu
@@ -109,13 +110,42 @@ def test_all_workloads_have_budgeted_sidecar_and_emptydir() -> None:
     assert api["template"][0]["min_replicas"] == 0
     rule = worker["template"][0]["custom_scale_rule"][0]
     assert rule["custom_rule_type"] == "azure-servicebus"
-    assert rule["identity_id"] == "${azurerm_user_assigned_identity.runtime.id}"
+    assert rule["identity_id"] == (
+        '${each.key == "financial_webhook" ? '
+        "azurerm_user_assigned_identity.financial_webhook_receiver.id : "
+        "azurerm_user_assigned_identity.runtime.id}"
+    )
     assert "authentication" not in rule
     for name in ("migration", "scheduled"):
         job = resource("jobs.tf", "azurerm_container_app_job", name)
         main = job["template"][0]["container"][0]
         assert (main["cpu"], main["memory"]) == (0.25, "0.5Gi")
         assert "tirodhan.deployment.job" in main["args"]
+
+
+def test_financial_webhook_trust_uses_exclusive_queue_scoped_workload_identities() -> None:
+    for role in ("sender", "receiver"):
+        shared = resource("rbac.tf", "azurerm_role_assignment", f"bus_{role}")
+        assert 'key != "financial_webhook"' in shared["for_each"]
+        dedicated = resource("rbac.tf", "azurerm_role_assignment", f"financial_webhook_{role}")
+        assert dedicated["scope"] == '${azurerm_servicebus_queue.work["financial_webhook"].id}'
+        assert dedicated["principal_id"] == (
+            "${azurerm_user_assigned_identity.financial_webhook_" + role + ".principal_id}"
+        )
+        assert dedicated["role_definition_name"] == ("Azure Service Bus Data " + role.title())
+    api = resource("container_apps.tf", "azurerm_container_app", "api")
+    worker = resource("container_apps.tf", "azurerm_container_app", "worker")
+    assert "financial_webhook_sender.id" in repr(api["identity"])
+    assert "financial_webhook_sender.id" not in repr(worker["identity"])
+    assert "financial_webhook_receiver.id" in repr(worker["identity"])
+    assert "financial_webhook_receiver.id" not in repr(api["identity"])
+    variables = hcl("variables.tf")["variable"]
+    schedule = next(
+        item["financial_inventory_schedule"]
+        for item in variables
+        if "financial_inventory_schedule" in item
+    )
+    assert schedule["default"] is None
 
 
 @pytest.mark.parametrize("name, startup_seconds", [("migration", "300"), ("scheduled", "120")])

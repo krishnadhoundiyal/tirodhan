@@ -226,3 +226,19 @@ Separate:
 - provider-event retention.
 
 Physical deletion should occur only after the applicable retention/reconciliation window.
+
+## Financial closure evidence boundary
+
+The authenticated webhook queue carries only typed provider/internal IDs, integer money,
+currency, bounded reason/status codes, source/account fingerprint and original-body SHA256.
+It does not carry raw webhook JSON, customer contact/address/coordinates, arbitrary notes,
+payment instruments or secrets. The consumer trusts only the queue's API-only sender identity
+and validates the bounded envelope, account and deterministic receipt again. Shared runtime
+identities have no data sender/receiver grant on this new queue.
+
+Inventory/report persistence uses the same minimal fact allow-list. Settlement evidence retains
+typed movement/fee/tax facts and provider identifiers; no raw report/customer data. Manager-only
+bounded APIs expose operational evidence using the existing live role checks. Financial/provider
+observations and audit history are immutable through application SQL; approved retention and
+rollback must export needed history and use a controlled maintenance migration. Retention
+periods remain an owner decision. See [closure and enablement gates](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).

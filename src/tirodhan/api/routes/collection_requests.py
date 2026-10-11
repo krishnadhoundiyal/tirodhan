@@ -41,6 +41,7 @@ from tirodhan.modules.collection_requests.service import (
 from tirodhan.modules.customer_reads.errors import CustomerReadError
 from tirodhan.modules.customers.ports import AddressProtectionNotConfiguredError, AddressProtector
 from tirodhan.modules.customers.service import IdempotencyCommandInProgressError
+from tirodhan.modules.planning.policy import PlanningConfigurationError
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
@@ -217,7 +218,9 @@ async def cancel_collection_request(
         except CancellationNotAuthorizedError as error:
             raise HTTPException(status_code=403, detail=str(error)) from error
         except CancellationConflictError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
+            raise CustomerReadError(409, error.code) from error
+        except PlanningConfigurationError as error:
+            raise CustomerReadError(503, "NOT_ELIGIBLE") from error
         except IdempotencyKeyConflictError as error:
             raise HTTPException(status_code=409, detail="Idempotency conflict") from error
 

@@ -4,15 +4,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.modules.collection_requests.models import CollectionRequest
+from tirodhan.modules.payments.accounting import status_event
 from tirodhan.modules.payments.models import Payment
 
 
 async def expire_pending_collection_requests(
-    session: AsyncSession, evaluation_time: datetime
+    session: AsyncSession, evaluation_time: datetime, *, batch_size: int = 100
 ) -> int:
     """
-    Expire collection requests and their associated payments that have passed their
-    payment expiry window. Uses row-level locking to avoid race conditions.
+    Expire booking eligibility after its payment window, preserving financial uncertainty.
+    Uses row-level locking to avoid race conditions and a finite candidate set.
     """
     # Find candidates
     stmt = (
@@ -23,6 +24,8 @@ async def expire_pending_collection_requests(
             Payment.status == "PENDING",
             CollectionRequest.payment_expires_at <= evaluation_time,
         )
+        .order_by(Payment.payment_id)
+        .limit(batch_size)
     )
     result = await session.execute(stmt)
     candidates = result.all()
@@ -53,8 +56,11 @@ async def expire_pending_collection_requests(
         ):
             request.status = "EXPIRED"
             request.expired_at = evaluation_time
-            payment.status = "EXPIRED"
-            payment.expired_at = evaluation_time
+            await status_event(
+                session, payment, f"collection-expired:{req_id}", "COLLECTION_EXPIRED"
+            )
+            # This expires booking eligibility, never an unresolved provider payment.
+            # Payment remains PENDING so its existing attempt can be reconciled.
             expired_count += 1
 
     return expired_count

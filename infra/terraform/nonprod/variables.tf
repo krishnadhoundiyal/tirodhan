@@ -80,16 +80,17 @@ variable "runtime_secret_names" {
   description = "Environment variable -> Key Vault secret name, never secret values."
   type        = map(string)
   default = {
-    TIRODHAN_GOOGLE_MAPS_API_KEY      = "google-maps-api-key"
-    TIRODHAN_KALEYRA_API_KEY          = "kaleyra-api-key"
-    TIRODHAN_RAZORPAY_KEY_SECRET      = "razorpay-key-secret"
-    TIRODHAN_RAZORPAY_WEBHOOK_SECRET  = "razorpay-webhook-secret"
-    TIRODHAN_FCM_CREDENTIALS_JSON     = "fcm-credentials-json"
-    TIRODHAN_AUTH_JWT_PRIVATE_KEY_PEM = "auth-jwt-private-key-pem"
-    TIRODHAN_AUTH_JWT_PUBLIC_KEY_PEM  = "auth-jwt-public-key-pem"
-    TIRODHAN_PHONE_ENCRYPTION_KEYS    = "phone-encryption-keys"
-    TIRODHAN_PHONE_LOOKUP_HMAC_KEY    = "phone-lookup-hmac-key"
-    TIRODHAN_ADDRESS_ENCRYPTION_KEYS  = "address-encryption-keys"
+    TIRODHAN_GOOGLE_MAPS_API_KEY              = "google-maps-api-key"
+    TIRODHAN_KALEYRA_API_KEY                  = "kaleyra-api-key"
+    TIRODHAN_RAZORPAY_KEY_SECRET              = "razorpay-key-secret"
+    TIRODHAN_RAZORPAY_WEBHOOK_SECRET          = "razorpay-webhook-secret"
+    TIRODHAN_RAZORPAY_WEBHOOK_PREVIOUS_SECRET = "razorpay-webhook-previous-secret"
+    TIRODHAN_FCM_CREDENTIALS_JSON             = "fcm-credentials-json"
+    TIRODHAN_AUTH_JWT_PRIVATE_KEY_PEM         = "auth-jwt-private-key-pem"
+    TIRODHAN_AUTH_JWT_PUBLIC_KEY_PEM          = "auth-jwt-public-key-pem"
+    TIRODHAN_PHONE_ENCRYPTION_KEYS            = "phone-encryption-keys"
+    TIRODHAN_PHONE_LOOKUP_HMAC_KEY            = "phone-lookup-hmac-key"
+    TIRODHAN_ADDRESS_ENCRYPTION_KEYS          = "address-encryption-keys"
   }
 }
 variable "enabled_runtime_secret_names" {
@@ -142,5 +143,14 @@ variable "job_schedules" {
   validation {
     condition     = toset(keys(var.job_schedules)) == toset(["outbox", "planning_scheduler", "fleet_timeout", "pending_payment_expiry"])
     error_message = "Configure the four existing finite schedules, evaluated in UTC."
+  }
+}
+variable "financial_inventory_schedule" {
+  description = "Optional reviewed UTC cron for bounded read-only account/report reconciliation; null creates no additional schedule."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.financial_inventory_schedule == null ? true : length(split(" ", var.financial_inventory_schedule)) == 5
+    error_message = "Provide an explicitly reviewed five-field UTC cron or null."
   }
 }

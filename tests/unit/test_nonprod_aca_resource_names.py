@@ -23,7 +23,12 @@ def test_aca_resource_aliases_cover_every_worker_and_scheduled_job() -> None:
     values = _locals()
 
     assert set(values["worker_resource_names"]) == set(values["workers"])
-    assert set(values["scheduled_job_resource_names"]) == set(values["jobs"])
+    # hcl2 preserves merge/conditional expressions rather than evaluating Terraform.
+    jobs_expression = values["jobs"]
+    assert isinstance(jobs_expression, str)
+    job_names = set(re.findall(r"""["'](\w+)["']\s*:\s*["']\w+["']""", jobs_expression))
+    assert set(values["scheduled_job_resource_names"]) == job_names
+    assert "var.financial_inventory_schedule == null ? {}" in jobs_expression
 
 
 def test_all_generated_aca_names_fit_azure_rules_at_maximum_suffix_length() -> None:

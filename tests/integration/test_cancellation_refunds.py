@@ -180,6 +180,7 @@ async def create_successful_payment(session, request: CollectionRequest, amount_
 async def test_cancellation_own_accepted_request(database_session_factory):
     async with database_session_factory() as session, session.begin():
         request = await create_dummy_request(session)
+        await create_successful_payment(session, request)
         result = await cancel_collection_request_by_customer(
             session,
             request_id=request.request_id,
@@ -210,6 +211,7 @@ async def test_cancellation_foreign_customer_forbidden(database_session_factory)
 async def test_cancellation_concurrent_race(database_session_factory):
     async with database_session_factory() as session, session.begin():
         request = await create_dummy_request(session)
+        await create_successful_payment(session, request)
         request_id = request.request_id
         customer_id = request.customer_id
         work_unit = PlanningWorkUnit(
@@ -298,9 +300,9 @@ async def test_expiry_exact_evaluation_time(database_session_factory):
         assert request_check is not None
         assert payment_check is not None
         assert request_check.status == "EXPIRED"
-        assert payment_check.status == "EXPIRED"
+        assert payment_check.status == "PENDING"
         assert request_check.expired_at == evaluation_time
-        assert payment_check.expired_at == evaluation_time
+        assert payment_check.expired_at is None
 
 
 async def test_expiry_vs_provider_success_concurrency(database_session_factory):
@@ -371,7 +373,7 @@ async def test_expiry_vs_provider_success_concurrency(database_session_factory):
             assert event_check.processing_status == EVENT_PROCESSED
         else:
             assert request_check.status == "EXPIRED"
-            assert payment_check.status == "EXPIRED"
+            assert payment_check.status == "SUCCEEDED"
             assert event_check.processing_status == EVENT_RECONCILIATION_REQUIRED
 
     async with database_session_factory() as session, session.begin():
@@ -481,7 +483,7 @@ async def test_concurrent_refunds_that_fit_both_succeed(database_session_factory
         assert reserved == 1000
 
 
-async def test_failed_refund_releases_balance_but_uncertain_reserves(database_session_factory):
+async def test_failed_refund_without_non_payable_proof_reserves_balance(database_session_factory):
     async with database_session_factory() as session, session.begin():
         request = await create_dummy_request(session)
         payment, attempt = await create_successful_payment(session, request)
@@ -499,28 +501,19 @@ async def test_failed_refund_releases_balance_but_uncertain_reserves(database_se
         attempt_id = attempt.payment_attempt_id
 
     async with database_session_factory() as session, session.begin():
-        replacement = await create_refund(
-            session,
-            payment_id=payment_id,
-            payment_attempt_id=attempt_id,
-            amount_minor=700,
-            reason_code="OPERATIONS_ADJUSTMENT",
-            idempotency_key="replacement-after-failed",
-            idempotency_expires_at=utc_now() + timedelta(days=1),
-        )
-        replacement.status = "INITIATION_UNCERTAIN"
-
-    async with database_session_factory() as session, session.begin():
         with pytest.raises(RefundConflictError):
             await create_refund(
                 session,
                 payment_id=payment_id,
                 payment_attempt_id=attempt_id,
-                amount_minor=400,
+                amount_minor=700,
                 reason_code="OPERATIONS_ADJUSTMENT",
-                idempotency_key="blocked-by-uncertain",
+                idempotency_key="replacement-before-proof",
                 idempotency_expires_at=utc_now() + timedelta(days=1),
             )
+    async with database_session_factory() as session, session.begin():
+        assert (await session.get(Refund, failed_refund.refund_id)).status == "FAILED"
+        assert await session.scalar(select(func.count()).select_from(Refund)) == 1
 
 
 async def test_refund_webhook_correlation_by_refund_id(database_session_factory):

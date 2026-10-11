@@ -104,7 +104,7 @@ resource "azurerm_container_app_job" "scheduled" {
   replica_timeout_in_seconds   = 300
   replica_retry_limit          = 0
   schedule_trigger_config {
-    cron_expression          = var.job_schedules[each.key]
+    cron_expression          = each.key == "financial_inventory" ? var.financial_inventory_schedule : var.job_schedules[each.key]
     parallelism              = 1
     replica_completion_count = 1
   }

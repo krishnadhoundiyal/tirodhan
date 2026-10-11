@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+import asyncio
 from datetime import timedelta
 from typing import Annotated, cast
 from uuid import UUID
@@ -28,10 +28,10 @@ from tirodhan.modules.payments.service import (
     InitiatePaymentAttemptCommand,
     PaymentNotEligibleError,
     initiate_payment_attempt,
-    process_authenticated_payment_event,
 )
-from tirodhan.modules.planning.policy import PlanningConfigurationError
+from tirodhan.modules.payments.webhook_queue import MAX_WEBHOOK_BYTES, webhook_message
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
+from tirodhan.modules.reliability.publisher import MessagePublisher
 
 router = APIRouter(prefix="/v1/payments", tags=["payments"])
 
@@ -46,7 +46,7 @@ class PaymentAttemptResponse(BaseModel):
 
 
 class ProviderEventResponse(BaseModel):
-    payment_provider_event_id: UUID
+    receipt_id: str
     processing_status: str
 
 
@@ -104,10 +104,14 @@ async def post_payment_attempt(
 @router.post("/provider/webhook", response_model=ProviderEventResponse)
 async def post_provider_webhook(
     request: Request,
-    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     provider: Annotated[PaymentProvider, Depends(get_payment_provider)],
 ) -> ProviderEventResponse:
-    raw_body = await request.body()
+    chunks = bytearray()
+    async for chunk in request.stream():
+        if len(chunks) + len(chunk) > MAX_WEBHOOK_BYTES:
+            raise HTTPException(status_code=413, detail="Provider webhook is too large")
+        chunks.extend(chunk)
+    raw_body = bytes(chunks)
     try:
         event = await provider.authenticate_webhook(
             raw_body=raw_body,
@@ -123,16 +127,21 @@ async def post_provider_webhook(
         raise HTTPException(status_code=503, detail=str(error)) from error
 
     settings = cast(Settings, request.app.state.settings)
+    publisher = cast(MessagePublisher, request.app.state.financial_webhook_publisher)
+    if not settings.financial_webhook_queue_name:
+        raise HTTPException(status_code=503, detail="Financial webhook queue is not configured")
     try:
-        persisted = await process_authenticated_payment_event(
-            session_factory,
-            event,
-            payload_hash=hashlib.sha256(raw_body).digest(),
-            planning_lead_time_minutes=settings.planning_lead_time_minutes,
+        message = webhook_message(event, raw_body)
+        await asyncio.wait_for(
+            publisher.send(settings.financial_webhook_queue_name, message),
+            timeout=settings.financial_webhook_send_timeout_seconds or 4,
         )
-    except PlanningConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception:
+        # Ambiguous send is not acknowledged. Provider replay is safe downstream.
+        raise HTTPException(
+            status_code=503, detail="Financial webhook delivery unavailable"
+        ) from None
     return ProviderEventResponse(
-        payment_provider_event_id=persisted.payment_provider_event_id,
-        processing_status=persisted.processing_status,
+        receipt_id=message.message_id,
+        processing_status="QUEUED",
     )
