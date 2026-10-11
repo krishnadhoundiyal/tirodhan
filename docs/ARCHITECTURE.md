@@ -210,7 +210,8 @@ A frontend/provider-return timeout is not payment failure.
 
 Each CollectionRequest has one logical Payment obligation.
 
-Gateway retries/interactions are PaymentAttempts:
+Provider Orders are PaymentAttempts; instrument retries within an established Razorpay Order
+retain its original attempt identity and append provider observations:
 
 ```text
 CollectionRequest
@@ -220,7 +221,11 @@ CollectionRequest
           └── PaymentAttempt N
 ```
 
-A failed PaymentAttempt does not make the logical Payment terminally failed while customer retry is still allowed.
+An instrument failure cannot terminalize a Razorpay Order-level PaymentAttempt. Unchanged
+retry uses the same Order; only a positively rejected initial creation without exposure can
+permit a fresh attempt. Items and quotation freeze when initiation begins. Changes require
+explicit cancellation and a new booking, independently paid while cancelled-booking financial
+exposure remains reconcilable (ADR-005).
 
 Provider order/payment/event identifiers are persisted for deduplication and reconciliation.
 

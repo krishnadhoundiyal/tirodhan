@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -15,6 +15,7 @@ from tirodhan.core.config import Settings
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.payments.ports import (
     AuthenticatedPaymentEvent,
+    OrderPreparation,
     PaymentEventOutcome,
     PaymentInitiationOutcome,
     PaymentInitiationResult,
@@ -103,6 +104,9 @@ class RazorpayProvider:
         self._account_id = settings.razorpay_account_id
         self._refund_finality = settings.razorpay_normal_refund_failure_finality_confirmed
         self.refund_replay_window_seconds = settings.razorpay_refund_replay_window_seconds
+        self.checkout_readiness_seconds = settings.payment_checkout_readiness_seconds
+        # Bound the entire customer preparation, including receipt pagination.
+        self.preparation_timeout_seconds = float(settings.razorpay_http_timeout_seconds or 0) * 3
         self._page_budget = settings.financial_inventory_page_budget or 20
         if not 1 <= self._page_budget <= 100:
             raise ValueError("Provider page budget must be within 1..100")
@@ -213,10 +217,60 @@ class RazorpayProvider:
             for o in observations
         ):
             raise PaymentProviderUncertainError("INQUIRY_OWNERSHIP_MISMATCH")
-        # A failed instrument does not close an order with another unresolved instrument.
-        if any(o.outcome == PaymentEventOutcome.SUBMITTED for o in observations):
-            observations = [o for o in observations if o.outcome != PaymentEventOutcome.FAILED]
+        # Retain each instrument observation; none establishes Order finality.
         return sorted(observations, key=lambda o: o.outcome == PaymentEventOutcome.FAILED)
+
+    async def prepare_order(
+        self, *, attempt_id: UUID, order_id: str | None, amount_minor: int, currency: str
+    ) -> OrderPreparation:
+        """Read-only recovery/readiness. Missing or incomplete facts grant no handoff."""
+        receipt = f"pa_{attempt_id.hex}"
+        if order_id is None:
+            order_id = await self._find_order(receipt, amount_minor, currency)
+            if order_id is None:
+                return OrderPreparation(None, False)
+        order = await self._request("GET", f"/orders/{order_id}")
+        assert order is not None
+        if self._order(order, receipt, amount_minor, currency) != order_id:
+            raise PaymentProviderUncertainError("INQUIRY_ORDER_MISMATCH")
+        collection = await self._request("GET", f"/orders/{order_id}/payments")
+        assert collection is not None
+        items = self._collection(collection)
+        # This endpoint has no documented pagination. A saturated collection is
+        # not sufficient permission to reopen Checkout.
+        if len(items) >= 100:
+            return OrderPreparation(order_id, False)
+        observations = tuple(self._observation(item, attempt_id=attempt_id) for item in items)
+        if any(
+            o.provider_order_id != order_id
+            or o.amount_minor != amount_minor
+            or o.currency != currency
+            for o in observations
+        ):
+            raise PaymentProviderUncertainError("INQUIRY_OWNERSHIP_MISMATCH")
+        count = order.get("attempts")
+        paid, due = order.get("amount_paid"), order.get("amount_due")
+        consistent = (
+            type(count) is int
+            and count == len(items)
+            and len({o.provider_payment_id for o in observations}) == len(items)
+            and type(paid) is int
+            and paid == 0
+            and type(due) is int
+            and due == amount_minor
+            # GET /orders/:id does not document returning this creation option.
+            # Our receipt-bound Orders are created with partial_payment=false;
+            # reject an explicitly contradictory flag when present.
+            and order.get("partial_payment", False) is False
+            and (
+                (order.get("status") == "created" and count == 0)
+                or (order.get("status") == "attempted" and count > 0)
+            )
+        )
+        # Failed instruments remain exposed to late authorization. A snapshot
+        # can allow the same Order, never a fresh receipt or financial finality.
+        ready = consistent and all(o.outcome == PaymentEventOutcome.FAILED for o in observations)
+        return OrderPreparation(order_id, ready, observations)
 
     @staticmethod
     def _collection(value: dict[str, Any]) -> list[dict[str, Any]]:
@@ -555,10 +609,13 @@ class RazorpayProvider:
         amount_minor: int,
         currency: str,
         provider_idempotency_key: str,
+        authorize_create: Callable[[], Awaitable[bool]] | None = None,
     ) -> PaymentInitiationResult:
         receipt = f"pa_{payment_attempt_id.hex}"
         order_id = await self._find_order(receipt, amount_minor, currency)
         if order_id is None:
+            if authorize_create is not None and not await authorize_create():
+                raise PaymentProviderUncertainError("BOOKING_NO_LONGER_ELIGIBLE")
             try:
                 data = await self._request(
                     "POST",

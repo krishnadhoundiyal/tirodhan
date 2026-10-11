@@ -45,7 +45,6 @@ from tirodhan.modules.payments.reconciliation import (
     reconcile_batch,
 )
 from tirodhan.modules.payments.refunds import RefundConflictError, execute_refund_provider_call
-from tirodhan.modules.payments.service import PaymentNotEligibleError
 from tirodhan.modules.payments.settlement import (
     ExpectedSettlement,
     check_expected_settlement,
@@ -67,8 +66,9 @@ async def test_failed_webhook_is_not_order_finality(harness):
         current = await session.get(PaymentAttempt, attempt.payment_attempt_id)
         assert current.status == "PENDING"
         assert current.next_check_at is not None
-    with pytest.raises(PaymentNotEligibleError):
-        await initiate(factory, user, result, provider, key="still-unresolved")
+    resumed = await initiate(factory, user, result, provider, key="still-unresolved")
+    assert resumed.payment_attempt_id == attempt.payment_attempt_id
+    assert resumed.checkout_ready_until is None
     await process(
         factory,
         provider,

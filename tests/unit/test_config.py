@@ -4,6 +4,22 @@ from pydantic import ValidationError
 from tirodhan.core.config import Settings
 
 
+@pytest.mark.parametrize("seconds", [0, -1, 61, 86400])
+def test_checkout_readiness_is_bounded_permission(seconds: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, payment_checkout_readiness_seconds=seconds)
+
+
+@pytest.mark.parametrize("seconds", [None, 1, 30, 60])
+def test_checkout_readiness_configuration_is_explicit(seconds: int | None) -> None:
+    assert (
+        Settings(
+            _env_file=None, payment_checkout_readiness_seconds=seconds
+        ).payment_checkout_readiness_seconds
+        == seconds
+    )
+
+
 def test_settings_accept_postgresql_asyncpg_url() -> None:
     settings = Settings(
         _env_file=None,

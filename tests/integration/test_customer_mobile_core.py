@@ -359,6 +359,15 @@ async def test_history_and_recommendations_count_distinct_customer_collections(
             database_session_factory, other.user_id, address_protector
         )
         async with database_session_factory() as session, session.begin():
+            # Establish historical fixture declarations before payment initiation.
+            await session.execute(
+                update(CollectionRequestItem)
+                .where(
+                    CollectionRequestItem.request_id == second.request.request_id,
+                    CollectionRequestItem.item_category_code == "TEST_B",
+                )
+                .values(item_category_code="TEST_A")
+            )
             for result in (first, second, foreign):
                 await confirm_fixture_payment(session, result, utc_now())
             await session.execute(
@@ -373,14 +382,6 @@ async def test_history_and_recommendations_count_distinct_customer_collections(
                     )
                 )
                 .values(status="COMPLETED", completed_at=utc_now())
-            )
-            await session.execute(
-                update(CollectionRequestItem)
-                .where(
-                    CollectionRequestItem.request_id == second.request.request_id,
-                    CollectionRequestItem.item_category_code == "TEST_B",
-                )
-                .values(item_category_code="TEST_A")
             )
         data = (await client.get(path)).json()["recommendations"]
         assert data == [

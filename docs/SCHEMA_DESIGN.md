@@ -1125,3 +1125,26 @@ original finance/history rows survive and normalized keys remain wire-compatible
 settlement/checkpoint/conflict facts before any real rollback. Immutable history cleanup
 requires an explicitly approved retention/migration operation, not ordinary application DELETE.
 The three documented raw comparison differences remain unchanged; see the [closure report](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).
+
+
+## Migration 0023: initiation freeze and bounded Checkout permission
+
+PaymentAttempt gains nullable checkout_ready_until, non-null observation_version DEFAULT 0,
+and non-null order_creation_pending DEFAULT false. The first two persist bounded provider
+readiness and fence concurrent observations. A newly created local intent explicitly sets the
+third true; immediately before its permitted first Orders POST it commits false. Existing rows
+are not assigned first-POST permission or invented merchant identity. No status data repair is
+performed by migration.
+
+PostgreSQL triggers freeze Payment amount/currency, CollectionRequest quotation/currency and
+the entire CollectionRequestItem set once an attempt exists. This preserves immutable Order
+money through provider I/O, handoff and late-capture reconciliation. All application mutations
+continue to use Payment-first arbitration. Maintenance updates, if ever authorized before
+initiation, must take the Payment lock before changing the request/items; there is no customer
+edit API after initiation. Current status/expiry/reconciliation fields remain lifecycle fields.
+
+Known old FAILED Order-level attempts are recovered by bounded recurring inquiry, not migration
+updates. Schema downgrade removes permissions/guards only; it discards no capture/refund/evidence
+rows. Downgrading the runtime also restores the old P1-1 defect, so production recovery should
+prefer forward fixes. Coordinate deployment to avoid serving old Checkout code against new
+customer preparation semantics. See [validation report](PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).

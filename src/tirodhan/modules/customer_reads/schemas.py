@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from tirodhan.modules.payments.preparation import PaymentAction, PaymentActionReason
+
 
 class MediaDto(BaseModel):
     url: str
@@ -111,6 +113,10 @@ class PaymentDto(MoneyDto):
         "PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "CONFIRMING", "CANCELLED", "EXPIRED"
     ]
     retry_allowed: bool
+    action: PaymentAction
+    action_reason: PaymentActionReason
+    verification_pending: bool
+    checkout_ready_until: datetime | None
     expires_at: datetime | None
     succeeded_at: datetime | None
     current_attempt: PaymentAttemptDto | None

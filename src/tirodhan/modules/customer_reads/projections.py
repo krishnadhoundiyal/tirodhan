@@ -13,6 +13,11 @@ from tirodhan.modules.customer_reads.schemas import (
 )
 from tirodhan.modules.handovers.models import HandoverEvent
 from tirodhan.modules.payments.models import Payment, PaymentAttempt, Refund
+from tirodhan.modules.payments.preparation import (
+    PaymentAction,
+    initial_order_rejected,
+    payment_action,
+)
 from tirodhan.modules.payments.refunds import RefundConflictError, cancellation_refund_amount
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.planning.policy import PlanningConfigurationError, planning_cutoff_time
@@ -26,8 +31,16 @@ def payment_projection(
     now: datetime,
     reconciliation: bool = False,
     retry_blocked: bool = False,
+    account_key: str | None = None,
 ) -> PaymentDto:
     latest = attempts[-1] if attempts else None
+    exposed = [a for a in attempts if not initial_order_rejected(a)]
+    if len(exposed) == 1:
+        latest = exposed[0]
+    if payment.successful_attempt_id is not None:
+        latest = next(
+            (a for a in attempts if a.payment_attempt_id == payment.successful_attempt_id), latest
+        )
     statuses = {
         "CREATED": "PROCESSING",
         "PENDING": "PENDING",
@@ -35,11 +48,22 @@ def payment_projection(
         "FAILED": "FAILED",
         "INITIATION_UNCERTAIN": "CONFIRMING",
     }
+    unresolved_order = bool(
+        latest is not None
+        and latest.provider == "RAZORPAY"
+        and latest.provider_order_id is not None
+        and latest.status in {"FAILED", "PENDING"}
+        and (
+            latest.status == "FAILED"
+            or latest.checkout_ready_until is None
+            or latest.checkout_ready_until <= now
+        )
+    )
     current = (
         PaymentAttemptDto.model_validate(
             {
                 "payment_attempt_id": latest.payment_attempt_id,
-                "status": statuses[latest.status],
+                "status": "CONFIRMING" if unresolved_order else statuses[latest.status],
             }
         )
         if latest is not None
@@ -49,7 +73,7 @@ def payment_projection(
     if status == "PENDING":
         if reconciliation or (
             (request.status == "EXPIRED" or request.payment_expires_at <= now)
-            and any(a.status in {"CREATED", "PENDING", "INITIATION_UNCERTAIN"} for a in attempts)
+            and any(not initial_order_rejected(a) and a.status != "SUCCEEDED" for a in attempts)
         ):
             status = "CONFIRMING"
         elif request.status == "EXPIRED" or request.payment_expires_at <= now:
@@ -60,15 +84,18 @@ def payment_projection(
             status = current.status
     if payment.status == "SUCCEEDED" and payment.succeeded_at is None:
         raise CustomerReadError(503, "NOT_ELIGIBLE")
-    # A second charge in reconciliation cannot downgrade canonical success. An
-    # unresolved attempt makes launching another charge unsafe for this read model.
-    retry = (
-        payment.status == "PENDING"
-        and request.status == "PENDING_PAYMENT"
-        and request.payment_expires_at > now
-        and not reconciliation
-        and not retry_blocked
-        and all(a.status == "FAILED" for a in attempts)
+    action, reason = payment_action(
+        request,
+        payment,
+        attempts,
+        now=now,
+        booking_blocked=retry_blocked,
+        reconciliation=reconciliation,
+        account_key=account_key,
+    )
+    retry = action in {PaymentAction.START, PaymentAction.RESUME}
+    verifying = not retry and any(
+        a.status != "SUCCEEDED" and not initial_order_rejected(a) for a in attempts
     )
     return PaymentDto.model_validate(
         {
@@ -78,6 +105,10 @@ def payment_projection(
             "currency": payment.currency,
             "status": status,
             "retry_allowed": retry,
+            "action": action,
+            "action_reason": reason,
+            "verification_pending": verifying,
+            "checkout_ready_until": latest.checkout_ready_until if latest and retry else None,
             "expires_at": request.payment_expires_at if payment.status == "PENDING" else None,
             "succeeded_at": payment.succeeded_at,
             "current_attempt": current,

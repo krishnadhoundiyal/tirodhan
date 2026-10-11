@@ -69,6 +69,7 @@ async def get_payment(
         finance.attempts,
         now=now,
         reconciliation=finance.reconciliation,
+        account_key=getattr(request.app.state.payment_provider, "account_key", None),
         retry_blocked=await retry_blocked(
             session, row, request.app.state.settings.planning_lead_time_minutes, now
         ),

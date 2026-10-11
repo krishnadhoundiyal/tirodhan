@@ -218,6 +218,7 @@ async def create_ready_attempt(
             idempotency_key=key,
         ),
         provider,
+        planning_lead_time_minutes=30,
         idempotency_expires_at=utc_now() + timedelta(hours=1),
     )
     return attempt, provider
@@ -460,6 +461,7 @@ async def test_payment_attempt_api_replay_commits_before_provider_call(
             environment="test",
             database_url=migrated_database_url,
             command_idempotency_ttl_seconds=3600,
+            planning_lead_time_minutes=30,
         ),
         payment_provider=provider,
     )
@@ -504,6 +506,7 @@ async def test_known_failure_and_uncertain_retry_are_durable(
             idempotency_key="known-failure-attempt",
         ),
         failed_provider,
+        planning_lead_time_minutes=30,
         idempotency_expires_at=utc_now() + timedelta(hours=1),
     )
     assert failed.status == ATTEMPT_FAILED
@@ -534,12 +537,14 @@ async def test_known_failure_and_uncertain_retry_are_durable(
         database_session_factory,
         command,
         uncertain_provider,
+        planning_lead_time_minutes=30,
         idempotency_expires_at=utc_now() + timedelta(hours=1),
     )
     retried = await initiate_payment_attempt(
         database_session_factory,
         command,
         uncertain_provider,
+        planning_lead_time_minutes=30,
         idempotency_expires_at=utc_now() + timedelta(hours=1),
     )
     assert uncertain.status == ATTEMPT_UNCERTAIN

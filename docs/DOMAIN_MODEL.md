@@ -343,10 +343,13 @@ balances require review. No new collection, attempt or refund status is introduc
 
 ```text
 Payment = PENDING
-  Attempt 1 FAILED
-  Attempt 2 FAILED
-  Attempt 3 SUCCEEDED
+  PaymentAttempt = one Razorpay Order
+    Instrument 1 FAILED -> retain evidence, verify same-Order readiness
+    Instrument 2 AUTHORIZED -> WAIT, no new Order
+    Instrument 2 CAPTURED -> PaymentAttempt SUCCEEDED
 Payment = SUCCEEDED
+  eligible booking -> ACCEPTED
+  authorized cancelled booking -> remains CANCELLED; per-charge refund obligation
 ```
 
 ### Planning
@@ -472,3 +475,31 @@ Payment FK. FinancialScanCheckpoint is bounded account/page progress, not a doma
 
 No status is inferred from elapsed time. A missing webhook or unresolved provider response
 cannot release reservations. See [closure evidence](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).
+
+
+### P1-1 initiation freeze, same-Order retry and replacement
+
+Once any durable PaymentAttempt exists, PostgreSQL rejects changes to the declared item set,
+line quotations, request quotation/currency and logical payment amount/currency. No item editing
+API or QuoteRevision exists. A customer changes items by explicitly cancelling A, then creating
+B with a new stable clientRequestId and a fresh serviceability context. Existing unique context
+ownership and creation fingerprinting prevent reusing A's context or rewriting a replay. Quote
+and slot eligibility are recomputed for B; no original-slot reservation is promised.
+
+Each Razorpay attempt UUID owns receipt pa_<UUID hex> and the verified merchant binding.
+Multiple instrument IDs live in provider-event evidence; provider_payment_id on a successful
+attempt remains its canonical captured reference. Instrument failures keep PENDING and inquiry
+scheduling. Legacy FAILED established Orders are verification-pending, not permission for a
+second Order. Initial creation rejection without an Order is a separate narrowly supported state.
+
+checkout_ready_until is an expiring provider-verified handoff permission, observation_version
+fences concurrent observations, and order_creation_pending authorizes only the first Orders
+POST from a new durable local intent. Legacy rows start with no such permission. Neither field
+nor any UI/lease timer establishes financial finality. Booking cancellation/expiry does not delete
+attempts or stop read-only financial discovery.
+
+Cancelled A and replacement B have independent identities, charges and liabilities. B may become
+ACCEPTED while A remains unresolved. Verified captures on A record financial SUCCEEDED without
+accepting A, then create full eligible per-charge compensation. Refund status remains separate
+until verified payout. Existing holds, dispute controls and audited legacy recovery are retained.
+See [preparation API](PAYMENT_PREPARATION_API.md).

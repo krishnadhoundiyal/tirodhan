@@ -127,7 +127,7 @@ not distributed exactly-once execution.
 | Create serviceability context | user + client command | idempotency record | same context returned |
 | Resolve serviceability | context + input snapshot/version | conditional terminal update | worker/API race produces one authoritative result |
 | Create collection request | `(customer_id, client_request_id)` | unique constraint + request fingerprint | retry returns same booking |
-| Initiate payment attempt | payment-attempt ID | unique attempt + provider idempotency | retry does not create another provider order |
+| Prepare/resume payment | logical Payment + original attempt/receipt; command scope per booking | Payment-first serialization, command fingerprint/resource result, unique provider references, bounded preparation lease | same/fresh keys reuse original exposed Order; fresh eligibility/readiness govern handoff |
 | Payment webhook | `(provider, external_event_id)` | unique provider event | replay acknowledged without duplicate business effect |
 | Confirm payment | payment ID | conditional state transition | request accepted once |
 | Late success from another attempt | provider payment ID | unique external reference + reconciliation | record truth; do not accept request again; reconcile/refund duplicate charge |
@@ -331,7 +331,9 @@ Phase 1V payment order establishment first looks up `pa_<attempt_uuid_hex>` rece
 only if absent. A duplicate/ambiguous POST is followed by a bounded recovery read of that exact
 receipt. All recovered/created orders must match entity, ID, receipt, amount and currency. An
 unrecoverable outcome stays INITIATION_UNCERTAIN; command replay uses the same attempt/receipt,
-never another random provider identity. Concurrent calls may repeat transport, not logical orders.
+never another random provider identity. Current P1-1 preparation leases suppress simultaneous
+customer provider work. A durable one-time POST intent is committed immediately before the
+first remote creation; subsequent uncertainty uses receipt GET recovery, never another POST.
 
 Razorpay normal refunds use `X-Refund-Idempotency: rf_<refund_uuid_hex>` with a deterministic
 integer amount, normal speed, same receipt and internal-ID-only notes. The stored neutral key
@@ -533,3 +535,47 @@ cannot permanently retire later captures. Historical settlement day traversal al
 Two exhausted equal passes are local coverage evidence, not a provider snapshot guarantee.
 Settlement A-to-B-to-A transitions append a new current assessment; a per-movement advisory
 lock serializes assessment identity, without provider I/O or a global financial mutex.
+
+
+## Payment P1-1 preparation and replacement idempotency
+
+- Business key: one logical Payment per booking; one established Razorpay Order-level attempt
+  and receipt. Instrument failures do not release this identity. New client keys bind to the same
+  original exposed attempt under the Payment row lock. Multiple historical exposed Orders fail
+  closed for customer preparation; all remain financially discoverable.
+- DB protection: command scope payment-attempt.create:<request UUID> plus customer/request/
+  provider fingerprint; unique provider receipt key and Order reference; Payment-first row lock,
+  then work-unit advisory lock and fresh request lock. Existing lease UUID/deadline limits provider
+  work. observation_version fences a snapshot against concurrent committed provider observations.
+- Transactions: claim/resource/first-attempt commit precedes HTTP. The one permitted initial POST
+  intent commits after fresh eligibility/account checks and before POST. No DB session is held for
+  provider I/O. Actual results are persisted under Payment-first locks even after cancellation.
+  Provider observations use the existing inbox/evidence/domain/outbox atomic processor.
+- Replay: exact commands retain their recorded resource identity but never replay stale Checkout
+  permission. Fresh keys resume the original exposed Order. A command for a genuinely rejected
+  initial attempt stays that historical result; after another attempt exists its action is
+  UNAVAILABLE/SUPERSEDED_ATTEMPT. No new remote exposure after cancellation, expiry, cutoff/freeze.
+- External rule: only new durable intents with order_creation_pending=true may authorize their
+  first POST. It flips false durably before POST. A crash before authorization can resume; a crash
+  after authorization, ambiguous response or missing receipt can only recover by GET. Neither
+  empty lookup nor elapsed time permits another POST/receipt. Legacy flags default false.
+- Genuine initial rejection: only recognized Razorpay input-validation rejection of the initial
+  Order creation, without an established Order or earlier ambiguous POST, permits a fresh key/new
+  attempt. Unknown failures and failed instruments cannot do so.
+- Historical discovery: existing bounded SKIP LOCKED reconciliation includes FAILED established
+  Orders with null next_check_at. Their persisted Order identity warrants inquiry, not a blind
+  status rewrite. Missing/mismatched merchant binding produces bounded rescheduling/Operations
+  attention without cross-account GET or inferred ownership. Token-conditional release and
+  backoff survive restarts; no financial state is inferred from lease expiry.
+- Replacement: cancellation's existing command result, original exposure and compensation
+  authorization commit together. B creation uses (customer,new clientRequestId), fresh unique
+  context and quote/slot evaluation. Exact cancellation/B creation response-loss replays do not
+  duplicate A cancellation or B. There is no cross-booking credit or financial blocking scan.
+  Distinct B client IDs are distinct commands, not a guarantee of at-most-one replacement across
+  devices; clients must persist their stable replacement ID before submission.
+
+All declared items/quotes/payment amounts are frozen once any attempt exists, including a
+rejected initial attempt. DB triggers cover direct changes as well as supported application
+commands. Any maintenance writer must follow Payment-first lock ordering; ordinary API retry
+cannot rewrite terms. Client countdown/dismissal/callback has no mutating financial authority.
+See [API/Operations contract](PAYMENT_PREPARATION_API.md) and [tests/evidence](PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).

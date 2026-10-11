@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, false, or_, select, update
@@ -40,6 +41,7 @@ from tirodhan.modules.payments.ports import (
     PaymentEventOutcome,
     PaymentInitiationOutcome,
     PaymentProvider,
+    PaymentProviderNotConfiguredError,
     PaymentProviderUncertainError,
 )
 from tirodhan.modules.payments.refunds import RefundConflictError, ensure_cancellation_refund
@@ -89,14 +91,81 @@ async def _load_attempt(session: AsyncSession, attempt_id: UUID) -> PaymentAttem
     return attempt
 
 
+async def _locked_payment_booking(
+    session: AsyncSession, command: InitiatePaymentAttemptCommand
+) -> tuple[Payment, CollectionRequest]:
+    row = (
+        await session.execute(
+            select(Payment, CollectionRequest)
+            .join(CollectionRequest, CollectionRequest.request_id == Payment.request_id)
+            .where(
+                CollectionRequest.request_id == command.request_id,
+                CollectionRequest.customer_id == command.customer_id,
+            )
+            .with_for_update(of=Payment)
+        )
+    ).one_or_none()
+    if row is None:
+        raise PaymentNotEligibleError("owned collection request payment not found")
+    payment, request = row
+    await acquire_work_unit_advisory_lock(
+        session, cell_id=request.cell_id, slot_start=request.slot_start, slot_end=request.slot_end
+    )
+    request = await session.scalar(
+        select(CollectionRequest)
+        .where(CollectionRequest.request_id == command.request_id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    assert request is not None
+    return payment, request
+
+
+async def preparation_eligible(
+    session: AsyncSession, payment: Payment, request: CollectionRequest, lead: int | None
+) -> bool:
+    # Configuration must be checked even for exact command replays.
+    now = utc_now()
+    cutoff = planning_cutoff_reached(request.slot_start, lead, now=now)
+    frozen = await session.scalar(
+        select(PlanningBatch.planning_batch_id).where(
+            PlanningBatch.cell_id == request.cell_id,
+            PlanningBatch.slot_start == request.slot_start,
+            PlanningBatch.slot_end == request.slot_end,
+        )
+    )
+    return (
+        payment.status == PAYMENT_PENDING
+        and request.status == REQUEST_PENDING_PAYMENT
+        and request.payment_expires_at > now
+        and request.planning_batch_id is None
+        and not cutoff
+        and frozen is None
+        and payment.amount_minor == request.quoted_amount_minor
+        and payment.currency == request.currency
+        and payment.amount_minor > 0
+    )
+
+
 async def initiate_payment_attempt(
     session_factory: async_sessionmaker[AsyncSession],
     command: InitiatePaymentAttemptCommand,
     provider: PaymentProvider,
     *,
     idempotency_expires_at: datetime,
+    planning_lead_time_minutes: int | None = None,
 ) -> PaymentAttempt:
+    """Prepare the original Order; each command key refers to a durable identity.
+
+    The lease bounds concurrent external work, not financial truth. Payment locks
+    arbitrate domain transitions. No database session is held during HTTP.
+    """
+    from tirodhan.modules.payments.razorpay import RazorpayProvider
+
+    razorpay = provider if isinstance(provider, RazorpayProvider) else None
     provider_code = provider.provider_code
+    if razorpay is not None and razorpay.checkout_readiness_seconds is None:
+        raise PaymentProviderNotConfiguredError("Checkout readiness retention is not configured")
     fingerprint = command_fingerprint(
         {
             "customer_id": command.customer_id,
@@ -104,8 +173,6 @@ async def initiate_payment_attempt(
             "provider": provider_code,
         }
     )
-
-    # Transaction 1: establish the durable attempt and its stable provider key.
     async with session_factory() as session, session.begin():
         claim = await claim_idempotency_record(
             session,
@@ -114,140 +181,269 @@ async def initiate_payment_attempt(
             request_fingerprint=fingerprint,
             expires_at=idempotency_expires_at,
         )
+        payment, request = await _locked_payment_booking(session, command)
+        eligible = await preparation_eligible(session, payment, request, planning_lead_time_minutes)
         if not claim.created:
             replay = get_completed_idempotency_result(claim.record)
             if replay is None or replay.resource_id is None:
                 raise IdempotencyCommandInProgressError(
-                    "payment attempt creation is already in progress"
+                    "payment preparation is already in progress"
                 )
             attempt = await _load_attempt(session, replay.resource_id)
         else:
-            row = (
-                await session.execute(
-                    select(Payment, CollectionRequest)
-                    .join(CollectionRequest, CollectionRequest.request_id == Payment.request_id)
-                    .where(
-                        CollectionRequest.request_id == command.request_id,
-                        CollectionRequest.customer_id == command.customer_id,
+            attempts = list(
+                await session.scalars(
+                    select(PaymentAttempt)
+                    .where(PaymentAttempt.payment_id == payment.payment_id)
+                    .order_by(PaymentAttempt.created_at, PaymentAttempt.payment_attempt_id)
+                )
+            )
+            # Only a positively rejected first creation with no established Order
+            # can release Razorpay identity. Legacy FAILED is not that proof.
+            exposed = [
+                a
+                for a in attempts
+                if not (
+                    a.status == ATTEMPT_FAILED
+                    and (
+                        razorpay is None
+                        or (
+                            a.provider == provider_code
+                            and a.provider_order_id is None
+                            and a.failure_code == "RAZORPAY_ORDER_REJECTED"
+                        )
                     )
-                    .with_for_update(of=Payment)
                 )
-            ).one_or_none()
-            if row is None:
-                raise PaymentNotEligibleError("owned collection request payment not found")
-            payment, request = row
-            now = utc_now()
-            if (
-                payment.status != PAYMENT_PENDING
-                or request.status != REQUEST_PENDING_PAYMENT
-                or request.payment_expires_at <= now
-            ):
-                raise PaymentNotEligibleError("payment is not eligible for another attempt")
-            unsettled = await session.scalar(
-                select(PaymentAttempt.payment_attempt_id)
-                .where(
-                    PaymentAttempt.payment_id == payment.payment_id,
-                    PaymentAttempt.status != ATTEMPT_FAILED,
+            ]
+            if exposed:
+                if razorpay is None or len(exposed) != 1 or exposed[0].provider != provider_code:
+                    raise PaymentNotEligibleError("Payment requires reconciliation")
+                attempt = exposed[0]
+            else:
+                if not eligible:
+                    raise PaymentNotEligibleError("payment preparation is unavailable")
+                attempt_id = new_uuid7()
+                attempt = PaymentAttempt(
+                    payment_attempt_id=attempt_id,
+                    payment_id=payment.payment_id,
+                    provider=provider_code,
+                    provider_idempotency_key=f"payment-attempt:{attempt_id}",
+                    status=ATTEMPT_CREATED,
+                    provider_account_key=getattr(provider, "account_key", None),
+                    created_at=utc_now(),
+                    order_creation_pending=razorpay is not None,
                 )
-                .limit(1)
-            )
-            reconciliation = await session.scalar(
-                select(PaymentProviderEvent.payment_provider_event_id)
-                .join(
-                    PaymentAttempt,
-                    PaymentAttempt.payment_attempt_id == PaymentProviderEvent.payment_attempt_id,
-                )
-                .where(
-                    PaymentAttempt.payment_id == payment.payment_id,
-                    PaymentProviderEvent.processing_status == EVENT_RECONCILIATION,
-                )
-                .limit(1)
-            )
-            if unsettled is not None or reconciliation is not None:
-                raise PaymentNotEligibleError(
-                    "Payment is already processing or requires reconciliation"
-                )
-            attempt_id = new_uuid7()
-            attempt = PaymentAttempt(
-                payment_attempt_id=attempt_id,
-                payment_id=payment.payment_id,
-                provider=provider_code,
-                provider_idempotency_key=f"payment-attempt:{attempt_id}",
-                status=ATTEMPT_CREATED,
-                provider_account_key=getattr(provider, "account_key", None),
-                created_at=now,
-            )
-            session.add(attempt)
-            await session.flush([attempt])
+                session.add(attempt)
+                await session.flush([attempt])
             await complete_idempotency_record(
                 session,
                 claim.record,
                 result_resource_id=attempt.payment_attempt_id,
                 result_status_code=201,
             )
-
-        payment_id = attempt.payment_id
-        attempt_id = attempt.payment_attempt_id
-        stable_key = attempt.provider_idempotency_key
-        attempt_status = attempt.status
-
-    if attempt_status not in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN}:
-        return attempt
-
-    async with session_factory() as session:
-        payment = await session.get(Payment, payment_id)
-        if payment is None:
-            raise RuntimeError("payment attempt references a missing payment")
-        amount_minor = payment.amount_minor
-        currency = payment.currency
-
-    # No database session or transaction exists while the provider is called.
-    try:
-        result = await provider.initiate_payment(
-            payment_attempt_id=attempt_id,
-            amount_minor=amount_minor,
-            currency=currency,
-            provider_idempotency_key=stable_key,
-        )
-    except PaymentProviderUncertainError as error:
-        async with session_factory() as session, session.begin():
-            durable: PaymentAttempt | None = await session.scalar(
-                select(PaymentAttempt)
-                .where(PaymentAttempt.payment_attempt_id == attempt_id)
-                .with_for_update()
+        if not eligible:
+            attempt.checkout_ready_until = None
+            return attempt
+        if razorpay is not None:
+            if attempt.provider_account_key != razorpay.account_key:
+                attempt.checkout_ready_until = None
+                return attempt
+            if razorpay.checkout_readiness_seconds is None:
+                attempt.checkout_ready_until = None
+                return attempt
+            if attempt.status == ATTEMPT_SUCCEEDED or (
+                attempt.status == ATTEMPT_FAILED
+                and attempt.provider_order_id is None
+                and attempt.failure_code == "RAZORPAY_ORDER_REJECTED"
+            ):
+                return attempt
+            now = utc_now()
+            if (
+                attempt.status == ATTEMPT_PENDING
+                and attempt.checkout_ready_until
+                and attempt.checkout_ready_until > now
+            ):
+                return attempt
+            if attempt.claim_until and attempt.claim_until > now:
+                return attempt
+            token = new_uuid7()
+            attempt.claim_token = token
+            attempt.claim_until = now + timedelta(
+                seconds=razorpay.preparation_timeout_seconds * 2 + 5
             )
-            if durable is None:
-                raise RuntimeError("durable payment attempt disappeared") from error
-            if durable.status in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN}:
-                durable.status = ATTEMPT_UNCERTAIN
-                durable.failure_code = error.failure_code
-            return durable
+            version = attempt.observation_version
+        elif attempt.status not in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN}:
+            return attempt
+        attempt_id = attempt.payment_attempt_id
+        amount_minor, currency = payment.amount_minor, payment.currency
+        stable_key, order_id = attempt.provider_idempotency_key, attempt.provider_order_id
+        can_create = razorpay is not None and attempt.order_creation_pending
 
-    async with session_factory() as session, session.begin():
-        durable = await session.scalar(
-            select(PaymentAttempt)
-            .where(PaymentAttempt.payment_attempt_id == attempt_id)
-            .with_for_update()
+    async def authorize_create() -> bool:
+        assert razorpay is not None
+        async with session_factory() as session, session.begin():
+            current_payment, current_request = await _locked_payment_booking(session, command)
+            current = await _load_attempt(session, attempt_id)
+            allowed = (
+                current.claim_token == token
+                and current.provider_account_key == razorpay.account_key
+                and current.order_creation_pending
+                and await preparation_eligible(
+                    session, current_payment, current_request, planning_lead_time_minutes
+                )
+            )
+            if allowed:
+                # Commit the one permitted POST intent before external I/O.
+                current.order_creation_pending = False
+                current.status = ATTEMPT_UNCERTAIN
+            return allowed
+
+    # Generic providers retain their established stable-key initiation contract.
+    # Razorpay instrument retries NEVER invoke Orders POST again for this attempt.
+    try:
+        if razorpay is None or can_create:
+            if razorpay is not None:
+                result = await asyncio.wait_for(
+                    razorpay.initiate_payment(
+                        payment_attempt_id=attempt_id,
+                        amount_minor=amount_minor,
+                        currency=currency,
+                        provider_idempotency_key=stable_key,
+                        authorize_create=authorize_create,
+                    ),
+                    timeout=razorpay.preparation_timeout_seconds,
+                )
+            else:
+                result = await provider.initiate_payment(
+                    payment_attempt_id=attempt_id,
+                    amount_minor=amount_minor,
+                    currency=currency,
+                    provider_idempotency_key=stable_key,
+                )
+            async with session_factory() as session, session.begin():
+                await _locked_payment_booking(session, command)
+                durable = await _load_attempt(session, attempt_id)
+                if durable.status != ATTEMPT_SUCCEEDED:
+                    durable.order_creation_pending = False
+                    durable.provider_order_id = (
+                        result.provider_order_id or durable.provider_order_id
+                    )
+                    durable.provider_payment_id = (
+                        result.provider_payment_id or durable.provider_payment_id
+                    )
+                    if result.outcome == PaymentInitiationOutcome.FAILED:
+                        durable.status = ATTEMPT_FAILED
+                        durable.failure_code = result.failure_code
+                        durable.completed_at = utc_now()
+                        durable.next_check_at = None
+                    else:
+                        if not result.provider_order_id:
+                            raise ValueError("ready provider result requires a provider order ID")
+                        durable.status = ATTEMPT_PENDING
+                        durable.failure_code = None
+                        durable.next_check_at = utc_now()
+                order_id = durable.provider_order_id
+                if razorpay is None or durable.status in {ATTEMPT_FAILED, ATTEMPT_SUCCEEDED}:
+                    if razorpay is not None and durable.claim_token == token:
+                        durable.claim_token = None
+                        durable.claim_until = None
+                    return durable
+        assert razorpay is not None
+        prepared = await asyncio.wait_for(
+            razorpay.prepare_order(
+                attempt_id=attempt_id,
+                order_id=order_id,
+                amount_minor=amount_minor,
+                currency=currency,
+            ),
+            timeout=razorpay.preparation_timeout_seconds,
         )
-        if durable is None:
-            raise RuntimeError("durable payment attempt disappeared")
-        if durable.status not in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN}:
+        verified_at = utc_now()
+        valid_evidence = True
+        for observation in prepared.observations:
+            record = await process_authenticated_payment_event(
+                session_factory,
+                observation,
+                payload_hash=hashlib.sha256(observation.external_event_id.encode()).digest(),
+                planning_lead_time_minutes=planning_lead_time_minutes,
+                idempotency_expires_at=idempotency_expires_at,
+            )
+            valid_evidence = valid_evidence and record.processing_status == EVENT_PROCESSED
+        async with session_factory() as session, session.begin():
+            payment, request = await _locked_payment_booking(session, command)
+            durable = await _load_attempt(session, attempt_id)
+            if durable.claim_token != token:
+                return durable
+            durable.claim_token = None
+            durable.claim_until = None
+            if prepared.order_id is not None:
+                durable.order_creation_pending = False
+                durable.provider_order_id = prepared.order_id
+                if durable.status != ATTEMPT_SUCCEEDED:
+                    durable.status = ATTEMPT_PENDING
+                    durable.completed_at = None
+                    durable.failure_code = None
+                    durable.next_check_at = utc_now()
+            unsafe_event = await session.scalar(
+                select(PaymentProviderEvent.payment_provider_event_id)
+                .where(
+                    PaymentProviderEvent.provider == provider_code,
+                    or_(
+                        PaymentProviderEvent.payment_attempt_id == attempt_id,
+                        PaymentProviderEvent.provider_order_id == durable.provider_order_id
+                        if durable.provider_order_id
+                        else false(),
+                    ),
+                    PaymentProviderEvent.processing_status.in_(
+                        {EVENT_RECONCILIATION, EVENT_UNMATCHED}
+                    ),
+                )
+                .limit(1)
+            )
+            eligible = await preparation_eligible(
+                session, payment, request, planning_lead_time_minutes
+            )
+            if (
+                prepared.checkout_ready
+                and valid_evidence
+                and eligible
+                and unsafe_event is None
+                and durable.status == ATTEMPT_PENDING
+                and durable.provider_account_key == razorpay.account_key
+                and durable.observation_version == version + len(prepared.observations)
+            ):
+                assert razorpay.checkout_readiness_seconds is not None
+                durable.checkout_ready_until = min(
+                    request.payment_expires_at,
+                    verified_at + timedelta(seconds=razorpay.checkout_readiness_seconds),
+                )
+            else:
+                durable.checkout_ready_until = None
             return durable
-        durable.provider_order_id = result.provider_order_id
-        durable.provider_payment_id = result.provider_payment_id
-        if result.outcome == PaymentInitiationOutcome.READY:
-            if result.provider_order_id is None:
-                raise ValueError("ready provider result requires a provider order ID")
-            durable.status = ATTEMPT_PENDING
-            durable.failure_code = None
-        elif result.outcome == PaymentInitiationOutcome.FAILED:
-            if not result.failure_code:
-                raise ValueError("failed provider result requires a failure code")
-            durable.status = ATTEMPT_FAILED
-            durable.failure_code = result.failure_code
-            durable.completed_at = utc_now()
-        else:
-            raise ValueError("unknown payment initiation outcome")
+    except (
+        PaymentProviderUncertainError,
+        PaymentProviderNotConfiguredError,
+        TimeoutError,
+    ) as error:
+        async with session_factory() as session, session.begin():
+            await _locked_payment_booking(session, command)
+            durable = await _load_attempt(session, attempt_id)
+            if razorpay is None or durable.claim_token == token:
+                if razorpay is not None:
+                    durable.claim_token = None
+                    durable.claim_until = None
+                durable.checkout_ready_until = None
+                if durable.status in {ATTEMPT_CREATED, ATTEMPT_UNCERTAIN} and not (
+                    razorpay is not None and durable.order_creation_pending
+                ):
+                    durable.status = ATTEMPT_UNCERTAIN
+                    durable.failure_code = getattr(
+                        error, "failure_code", "PROVIDER_OUTCOME_UNCERTAIN"
+                    )
+                if durable.status != ATTEMPT_SUCCEEDED:
+                    durable.next_check_at = utc_now()
+        if isinstance(error, PaymentProviderNotConfiguredError):
+            raise
         return durable
 
 
@@ -480,6 +676,8 @@ async def process_authenticated_payment_event(
             # resolve it in Payment-first order; never take Payment after Attempt.
             raise PaymentNotEligibleError("Payment mapping changed during reconciliation")
         provider_event.payment_attempt_id = attempt.payment_attempt_id
+        attempt.checkout_ready_until = None
+        attempt.observation_version += 1
 
         payment = await session.scalar(
             select(Payment).where(Payment.payment_id == attempt.payment_id).with_for_update()
@@ -522,6 +720,10 @@ async def process_authenticated_payment_event(
                 session, payment, failure, evidence_id=record.payment_provider_event_id
             )
             return record
+        if event.provider == "RAZORPAY" and event.provider_order_id is not None:
+            # Inquiry can recover an Order whose POST response was lost.
+            attempt.provider_order_id = event.provider_order_id
+            attempt.order_creation_pending = False
         if event.outcome == PaymentEventOutcome.SUBMITTED:
             if attempt.status != ATTEMPT_SUCCEEDED:
                 # Current provider inquiry showing an unresolved instrument revokes a
@@ -529,6 +731,7 @@ async def process_authenticated_payment_event(
                 attempt.status = ATTEMPT_PENDING
                 attempt.failure_code = None
                 attempt.next_check_at = now
+                attempt.completed_at = None
             record.processing_status = EVENT_PROCESSED
             record.processed_at = now
             return record
@@ -537,13 +740,14 @@ async def process_authenticated_payment_event(
             record.processed_at = now
             return record
         if event.outcome == PaymentEventOutcome.FAILED:
-            # A webhook/account item describes one instrument, not an exhausted
-            # order. Only the validated order inquiry can establish retry safety.
-            if event.provider == "RAZORPAY" and event.evidence_source != "API_INQUIRY":
+            # A failed instrument cannot establish Order finality, including
+            # authenticated API inquiry. Preserve its evidence and scheduling.
+            if event.provider == "RAZORPAY":
                 if attempt.status != ATTEMPT_SUCCEEDED:
                     attempt.status = "PENDING"
                     attempt.next_check_at = now
                     attempt.completed_at = None
+                    attempt.failure_code = None
                 provider_event.processing_status = EVENT_PROCESSED
                 provider_event.processed_at = now
                 return provider_event

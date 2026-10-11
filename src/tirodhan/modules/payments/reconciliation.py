@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import TypedDict, cast
 from uuid import UUID
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -189,9 +189,7 @@ async def inquire_target(
                 currency=payment.currency,
                 reported_payment_id=reported_reference,
             )
-    if provider_code != provider.provider_code or (
-        account_key and account_key != provider.account_key
-    ):
+    if provider_code != provider.provider_code or (account_key != provider.account_key):
         raise RefundConflictError("Provider account does not match financial target")
     observations = (
         await provider.inquire_refund(**refund_arguments)
@@ -269,7 +267,19 @@ async def _release_claim(
                 )
             )
         terminal = (
-            current.status == "SUCCEEDED" or (not is_refund and current.status == "FAILED")
+            current.status == "SUCCEEDED"
+            or (
+                not is_refund
+                and current.status == "FAILED"
+                and (
+                    current.provider != "RAZORPAY"
+                    or (
+                        isinstance(current, PaymentAttempt)
+                        and current.provider_order_id is None
+                        and current.failure_code == "RAZORPAY_ORDER_REJECTED"
+                    )
+                )
+            )
         ) and not unmatched
         delay = min(
             policy.max_backoff_seconds,
@@ -319,6 +329,11 @@ async def reconcile_batch(
                     # existing fresh provider GET as any known unresolved order.
                     due = or_(
                         due,
+                        # Positive persisted Order/account identity warrants a GET,
+                        # never a blind status rewrite or another provider POST.
+                        (PaymentAttempt.status == "FAILED")
+                        & PaymentAttempt.next_check_at.is_(None)
+                        & PaymentAttempt.provider_order_id.is_not(None),
                         PaymentAttempt.next_check_at.is_(None)
                         & exists().where(
                             PaymentProviderEvent.provider == provider.provider_code,
@@ -338,7 +353,9 @@ async def reconcile_batch(
                         due,
                         or_(model.claim_until.is_(None), model.claim_until <= now),
                     )
-                    .order_by(model.next_check_at, model.created_at)
+                    .order_by(
+                        func.coalesce(model.next_check_at, model.created_at), model.created_at
+                    )
                     .limit(1)
                     .with_for_update(skip_locked=True)
                 )
@@ -346,7 +363,7 @@ async def reconcile_batch(
                     candidates.append(cast(PaymentAttempt | Refund, candidate))
             if not candidates:
                 break
-            row = min(candidates, key=lambda r: (r.next_check_at or now, r.created_at))
+            row = min(candidates, key=lambda r: (r.next_check_at or r.created_at, r.created_at))
             is_refund = isinstance(row, Refund)
             target = row.refund_id if isinstance(row, Refund) else row.payment_attempt_id
             token = new_uuid7()

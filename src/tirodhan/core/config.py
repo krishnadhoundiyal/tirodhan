@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     razorpay_webhook_previous_secret_until: datetime | None = None
     razorpay_http_timeout_seconds: float | None = None
     razorpay_account_id: str | None = None
+    payment_checkout_readiness_seconds: int | None = None
     razorpay_normal_refund_failure_finality_confirmed: bool = False
     financial_reconciliation_batch_size: int | None = None
     financial_reconciliation_interval_seconds: int | None = None
@@ -131,9 +132,17 @@ class Settings(BaseSettings):
             raise ValueError("database_url must use the postgresql+asyncpg driver")
         return value
 
+    @field_validator("payment_checkout_readiness_seconds")
+    @classmethod
+    def checkout_permission_must_be_short(cls, value: int | None) -> int | None:
+        if value is not None and not 1 <= value <= 60:
+            raise ValueError("Checkout readiness permission must be within 1..60 seconds")
+        return value
+
     @field_validator(
         "financial_webhook_lock_renewal_seconds",
         "razorpay_refund_replay_window_seconds",
+        "payment_checkout_readiness_seconds",
         "financial_inventory_start_epoch",
         "financial_inventory_window_seconds",
         "financial_inventory_overlap_seconds",
