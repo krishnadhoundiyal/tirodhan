@@ -28,6 +28,9 @@ def upgrade() -> None:
       IF TG_TABLE_NAME='payment' THEN
         IF ROW(NEW.amount_minor,NEW.currency) IS NOT DISTINCT FROM
            ROW(OLD.amount_minor,OLD.currency) THEN RETURN NEW; END IF;
+        -- Non-key UPDATE only takes NO KEY UPDATE, compatible with the first
+        -- attempt's FK KEY SHARE. Upgrade before checking committed attempts.
+        PERFORM 1 FROM payment WHERE payment_id=OLD.payment_id FOR UPDATE;
         IF EXISTS(SELECT 1 FROM payment_attempt WHERE payment_id=OLD.payment_id) THEN
           RAISE EXCEPTION 'Initiated payment terms are immutable' USING ERRCODE='23514';
         END IF;

@@ -312,3 +312,62 @@ replay/finality guarantees. Mock HTTP/PostgreSQL proof is not live-provider proo
 - `tests/integration/test_payment_preparation.py`
 - `tests/integration/test_razorpay_payments.py`
 - `tests/unit/test_config.py`
+
+
+## Follow-up: Payment term freeze versus first-attempt FK concurrency
+
+Review baseline: `b04fad8964c705430c7b3a2c5c757d6d57015caf`; same dedicated branch.
+The original A16 proof covered already-established attempts and application Payment-first
+initiation, but missed a direct database two-writer race. The existing application initiation
+already explicitly locks Payment FOR UPDATE; the gap was the trigger's standalone DB protection.
+
+**Reproduced vulnerability:** a non-key Payment amount/currency UPDATE takes FOR NO KEY UPDATE,
+compatible with the first PaymentAttempt INSERT's real FK FOR KEY SHARE. The trigger's EXISTS
+check cannot see an uncommitted concurrent attempt. With two distinct PostgreSQL sessions at
+READ COMMITTED, both transaction orderings allowed the attempt to commit and then the changed
+terms transaction to commit. Before correction, all four commit cases failed the new regression:
+amount became 600 or currency USD, with one durable first attempt. No provider calls were made.
+
+**Smallest correction:** the Payment branch of enforce_initiated_booking_terms upgrades the
+same Payment row to FOR UPDATE before checking attempts. This conflicts with FK KEY SHARE and
+uses the existing Payment-first ancestor lock; no Attempt row lock, status/refund change or new
+trigger/table is introduced. Identical-value updates retain their original early return.
+Under the application's READ COMMITTED write isolation, a waiting update rechecks newly committed
+attempts and is rejected. An update that wins finishes before the first attempt can commit.
+
+[Regression test](../tests/integration/test_initiated_payment_terms_concurrency.py):
+`test_first_attempt_and_terms_update_serialize` uses two real backend PIDs, raw non-key UPDATE
+and raw INSERT/FK enforcement without API pre-locks. It observes pg_blocking_pids to prove waits
+rather than assuming a sleep means blocking. Eight variants cover amount/currency, each writer
+first, and first-writer commit/rollback; final committed values/counts, identical-value replay and
+later changed-value rejection are asserted. The tests explicitly use READ COMMITTED, matching
+application writes; repeatable-read customer projections remain read-only and untouched.
+
+Executed before correction:
+`python -m pytest -q tests/integration/test_initiated_payment_terms_concurrency.py -k True --tb=short`
+→ **4 failed, 4 deselected in 13.85s**, each proving both transactions committed unsafely.
+Executed after correction:
+`python -m pytest -q tests/integration/test_initiated_payment_terms_concurrency.py --tb=short`
+→ **8 passed in 13.68s**.
+Broader focused command:
+`python -m pytest -q tests/integration/test_initiated_payment_terms_concurrency.py tests/integration/test_payment_preparation.py tests/integration/test_customer_financial_cancellation.py --tb=short`
+→ **104 passed in 133.13s**, including populated migration roundtrip/schema alignment,
+preparation, cancellation, term freezes and all eight concurrency variants.
+`python -m ruff check .` passed; `python -m ruff format --check .` reported **305 files already
+formatted**; `python -m mypy` passed **152 source files**; diff checks passed.
+The earlier 1094-test full-suite result above belongs to the baseline delivery; the complete
+full suite was not repeated for this three-line migration correction. All commands used the
+same explicitly configured disposable local PostgreSQL database and repository virtualenv.
+
+Corrective scope: only `migrations/versions/0023_payment_checkout_readiness.py`,
+`tests/integration/test_initiated_payment_terms_concurrency.py`, and this report appendix.
+
+This remains an unmerged/unreleased migration correction in place. The already-applied disposable
+0023 was downgraded to 0022 and upgraded to reinstall the corrected function; both succeeded.
+Changing a migration file does not update a database already stamped 0023. No production/nonprod
+migration or data repair was performed, and this disposable reinstall is not rollout advice.
+No unrelated payment/refund functionality, PR, merge or deployment is part of the correction.
+
+PostgreSQL's [row-lock conflict rules](https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-ROWS)
+confirm the compatible weaker locks and the stronger FOR UPDATE conflict; the executable test
+establishes their consequence in this repository, including the post-wait trigger recheck.
