@@ -29,6 +29,13 @@ requires cargo/order QR or barcode, photographic evidence, trustworthy timestamp
 identifiable receiving point; geofencing alone is insufficient. Existing V1 evidence and
 media-upload independence remain compatible. See [increment boundary](../V2_ROUTING_INCREMENT_1.md).
 
+Increment 2's real-engine adapters preserve classification, hard eligibility, ownership,
+protected prefixes and quantitative cargo without any dispatch mutation. A returned
+feasible route is an optimization recommendation; it is neither committed-shift authority
+nor flexible acceptance. No V1 IDLE or handover transition changes. Live operating shift,
+position/cargo projection and transactional revision/authority fencing remain prerequisites
+to assignment integration. See [implemented adapters](../V2_ROUTING_INCREMENT_2.md).
+
 ## Decision
 
 Assignment is by planned collection group/work, while per-household PickupExecution remains the stable fulfilment object.

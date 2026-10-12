@@ -930,6 +930,18 @@ session-linked ownership, a customer delivery consumer/route, FCM/APNs credentia
 mobile receipt-triggered API refresh are separate dependencies; no end-to-end push claim is
 made by this backend-only implementation.
 
+## V2 routing engineering boundary — increment 2
+
+The versioned pure routing contract and independent validator now have real OSRM Table
+acquisition and finite pinned VROOM/OR-Tools proposal adapters. Native execution is isolated
+in bounded child processes, with protected-prefix residual solving, hard cargo/eligibility
+constraints and independent validation/objective checks. They are not registered in an
+API, scheduler or production worker. Default installation excludes the optional solver.
+No database, migration or production infrastructure changes. V1 remains operational.
+Durable resources/snapshots and transactional authority/revision fencing are required before
+dispatch integration; IDLE is not evidence of empty cargo. OSRM hosting/cost remains an
+explicit later decision. See [implementation and evidence](V2_ROUTING_INCREMENT_2.md).
+
 ## Phase 2 financial correctness closure — accepted 2026-10-10
 
 The closure implementation request approves authenticated queued webhook ingress. The API

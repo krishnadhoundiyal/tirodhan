@@ -158,6 +158,9 @@ was requested for this increment.
 
 ## Next independently reviewable increment
 
+Implemented subsequently in [Increment 2](V2_ROUTING_INCREMENT_2.md); the following text
+records the original Increment 1 handoff.
+
 Implement finite OSRM matrix acquisition plus pinned VROOM and OR-Tools proposal adapters,
 using these explicit inputs and independent assessments, with real-engine integration
 tests and timeout/invalid-result handling in isolated local execution. Keep production

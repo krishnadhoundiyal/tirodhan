@@ -29,6 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+routing = [
+    "ortools==9.14.6206",
+]
 dev = [
     "mypy>=1.14,<2",
     "pytest>=8.3,<9",
@@ -46,6 +49,7 @@ addopts = "-ra --strict-markers"
 testpaths = ["tests"]
 markers = [
     "integration: requires a disposable PostgreSQL/PostGIS database",
+    "routing_engine: requires pinned local OSRM/VROOM/OR-Tools execution; opt-in",
 ]
 
 [tool.ruff]
@@ -62,4 +66,8 @@ packages = ["tirodhan"]
 
 [[tool.mypy.overrides]]
 module = "asyncpg"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "ortools.*"
 ignore_missing_imports = true

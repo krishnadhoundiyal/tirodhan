@@ -18,11 +18,21 @@ are hard service-start promises. Preserve immutable source batch/booking facts a
 PickupExecution history when later adding route revisions. Optimization failure cannot
 silently drop work or erase an incumbent commitment.
 
-Increment 1 implements only the pure proposal contract and validator, including capacity,
+Increment 1 implements the pure proposal contract and validator, including capacity,
 initial cargo, protected stops and specified whole/partial authorized discharge. V1's
 scheduler, freeze, grouping and singleton fallback are unchanged. No routing runtime or
 new infrastructure is enabled. See [implementation boundary](../V2_ROUTING_INCREMENT_1.md)
 for contract limits, integration prerequisites and remaining operational configuration.
+
+Increment 2 adds bounded OSRM Table acquisition and pinned VROOM/OR-Tools child-process
+adapters under that unchanged contract/gate. Prefixes are advanced before suffix solving
+and checked again in full; native outputs/costs cannot establish mandatory feasibility.
+Both engines support whole new pickups and specified partial discharge of existing cargo;
+OR-Tools additionally supports specified split discharge of new pickups. VROOM rejects
+that unsupported projection explicitly. The engineering duration/optional-coverage
+objective is not a production economic policy. No normal batch or worker invokes V2,
+and no production graph hosting/resource is selected. See [increment 2](../V2_ROUTING_INCREMENT_2.md)
+for capabilities, measured validation, finite recovery and hosting tradeoffs.
 
 ## Decision
 
