@@ -96,3 +96,13 @@ The following are not yet fixed:
 - frontend/mobile technology;
 - exact production payment gateway;
 - final CI/CD provider selection between Azure DevOps Pipelines and GitHub Actions.
+
+## V2 engineering implementation status
+
+Increment 1's contract/gate is merged. Increment 2 implements finite OSRM road matrix
+acquisition and both approved pinned native engines behind that unchanged gate, with
+isolated real-engine tests. No authoritative V2 assignment or production routing runtime
+is enabled. The approved architecture is OSRM + VROOM + OR-Tools with committed operating
+capacity first and flexible voluntary supplementary capacity; detailed economic objectives,
+physical inputs/profile calibration and production graph hosting remain decisions for
+subsequent increments. See [increment 2](V2_ROUTING_INCREMENT_2.md), ADR-004 and ADR-006.

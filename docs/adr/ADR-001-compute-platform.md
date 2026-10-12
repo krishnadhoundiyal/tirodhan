@@ -22,3 +22,12 @@ The project is highly cost-sensitive and initially low/variable traffic. Contain
 - workers remain separate where scaling/failure characteristics differ;
 - application code must not assume Container Apps-specific business semantics;
 - platform choice may be revisited if scale/cost changes.
+
+## V2 routing increment 2 boundary
+
+Pinned native solvers execute as finite child processes in isolated local test containers.
+OSRM local tests generate an ephemeral graph. No ACA resource, always-on road service,
+database, cache or recurring cloud cost is introduced. Future finite optimization Jobs
+remain consistent with this platform, but production road-graph hosting is undecided:
+graph loading/cold starts versus a retained replica must be measured and recurring costs
+approved separately. See [implementation and alternatives](../V2_ROUTING_INCREMENT_2.md).

@@ -1,0 +1,9 @@
+**
+!pyproject.toml
+!src
+!src/**
+!tests
+!tests/routing
+!tests/routing/**
+**/__pycache__
+**/*.pyc
