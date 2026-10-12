@@ -1,6 +1,6 @@
 # Tirodhan — Payment Reconciliation, Payment Uncertainty, and Event-Driven Customer Updates
 
-**Status:** Architecture decisions agreed in discussion; implementation remains subject to source review and explicit PR approval.
+**Status:** Accepted policies with P1-1 backend implementation authorized on 2026-10-11; independent review precedes PR/merge. Frontend and operational enablement remain separate.
 
 **Scope:** Customer Mobile, Operations Web, FastAPI financial domain, payment provider integration, existing transactional outbox, notification delivery.
 
@@ -11,7 +11,7 @@
 ## 1. Product principles and boundaries
 
 1. **Payment evidence, not checkout time, determines success or failure.** A five-minute frontend countdown is a UX boundary. It is not evidence of failed collection or an unsuccessful charge.
-2. **Do not permit online repayment while an earlier charge remains unresolved.** An explicit, authoritative failure may enable a new payment attempt, subject to current booking eligibility.
+2. **Unchanged bookings reuse their original Razorpay Order.** Failed instruments never release it; verified readiness permits same-Order continuation. Authorized/unknown instruments return WAIT. Explicit cancellation of A permits a fresh, independently serviceable B to pay while cancelled A remains unresolved; this is the narrow owner-approved exception.
 3. **Do not introduce Cash on Delivery or Pay at Pickup** as a fallback for delayed provider confirmation. Payment-before-acceptance remains authoritative.
 4. **An unresolved booking remains `PENDING_PAYMENT`, not `ACCEPTED`.** It must not enter planning, dispatch or fulfillment as a paid booking.
 5. **Every verified financial event remains auditable**, including events arriving after a customer's screen has closed, after booking expiry, or after a later transition.
@@ -24,7 +24,7 @@
 | Concept | Meaning | Consequence |
 |---|---|---|
 | Checkout UX countdown | Example: five minutes to remain on provider checkout/status UI | Exit provider screen or show Activity; **does not** imply failure |
-| Payment attempt state | Definitive failure, awaiting provider outcome, or authenticated successful capture | Governs whether online retry is allowed |
+| Order-level PaymentAttempt | Original Order identity, instrument evidence and authenticated capture | Current preparation readiness governs same-Order continuation |
 | Collection payment state | Whether the logical booking's financial obligation is satisfied | Governs acceptance eligibility |
 | Pickup-slot cutoff / freeze | Existing scheduling policy | A late capture must not force acceptance into an unserviceable slot |
 | Reconciliation schedule | Frequency at which the backend consults provider APIs | Independent of mobile countdown and webhook timing |
@@ -37,7 +37,10 @@ No finite timeout, including five minutes, can itself distinguish a delayed capt
 | Verified backend outcome | Collection status | Activity presentation | Allowed action |
 |---|---|---|---|
 | Attempt pending/uncertain; provider outcome not verified | `PENDING_PAYMENT` | **Pending payment**; explanatory text that verification is ongoing | Refresh/status details; **no additional online payment** |
-| Provider confirms definitive failure and booking remains eligible | `PENDING_PAYMENT` | **Payment failed** | Retry payment |
+| Failed instruments; original Order verified eligible | `PENDING_PAYMENT` | **Retry payment** | Prepare/resume identical Order |
+| Authorized instrument or incomplete inquiry | `PENDING_PAYMENT` | **Payment verification pending** | WAIT; no new Order |
+| Cancellation committed with original payment unresolved | `CANCELLED` | **Booking cancelled; earlier payment still being verified** | Create B with fresh context/quote/slot; B may pay independently |
+| Cancelled A receives verified capture | `CANCELLED` | **Payment received; refund processing** | Track separate full eligible charge-specific compensation |
 | Provider verifies capture; booking still eligible | `ACCEPTED` | **Payment received** (avoid ambiguous “Received”) | View booking; no second charge |
 | Provider verifies capture but slot expired/frozen or booking otherwise ineligible | Do not force `ACCEPTED` | **Payment received — pickup requires resolution** or equivalent distinct state derived from backend | Operations resolution / refund or approved rebooking |
 | Booking expires with earlier payment attempt still unresolved | No automatic false `FAILED` from elapsed time | **Payment verification pending** with booking expiry/assistance messaging, per explicitly approved state model | No immediate repay until financially safe |
@@ -52,7 +55,7 @@ Customer-facing wording and DTO changes require frontend contract alignment. The
 3. Razorpay checkout callback is **not** authoritative evidence of capture; it only triggers status refresh or navigation.
 4. Razorpay webhook, automated status inquiry or manager-triggered status inquiry verifies outcome and enters the shared canonical reconciliation service.
 5. A verified eligible capture changes financial state and collection state atomically according to existing acceptance rules; all required domain/outbox events are recorded.
-6. A verified failed attempt enables another online attempt only after backend eligibility, active cutoff/horizon and unsettled-attempt checks.
+6. Failed Razorpay instruments permit only same-Order continuation after bounded readiness and current booking/merchant/planning checks. Only a positively rejected initial creation without exposure may permit a new attempt.
 7. If the checkout UI times out, closes, or the customer navigates back without verified outcome, Activity shows **Pending payment**, and retry stays blocked.
 8. If a payment subsequently arrives, the backend reconciles it regardless of app state; the next notification-triggered or lifecycle-triggered read shows the authoritative outcome.
 
@@ -108,7 +111,7 @@ The manager action is **verify-and-reconcile**, never “set payment successful.
 1. A late verified capture must never be discarded solely because the user navigated away or a checkout timer elapsed.
 2. If the collection remains eligible, process the canonical capture and acceptance using established invariants.
 3. If the slot is expired/frozen/cancelled, record the money as captured without falsely accepting the collection. Preserve and surface a refund/rebooking/operations obligation under separately approved policy.
-4. While an attempt is unresolved, **do not offer a second online payment**. After an authoritative, definitive failure, allow a new attempt only if booking eligibility still holds.
+4. An unresolved instrument prevents Checkout reopening for its booking; failed instruments never permit a new Razorpay Order. Explicitly cancelled A does not block independently eligible B, whose own payment still requires preparation.
 5. Should multiple distinct captures nevertheless occur (provider retries, race, historical events, or anomalies), every charge requires **per-charge accounting and reconciliation**. The current canonical-only refund cap is not a complete solution; automatic additional-charge refund is a separately tracked implementation gap. Do not conflate repeat webhook delivery for the same charge with a second actual charge.
 6. The existing payment-expiry job must be reviewed before deployment: it must not turn an unresolved provider charge into a falsely definitive failure or prevent recording/reconciling a late payment. Preserve separation between booking lifecycle and financial uncertainty.
 
@@ -167,8 +170,8 @@ Push is **best effort**, not an exact-once realtime guarantee. A notification ma
 
 - Provider-authenticated webhook or server-side Razorpay inquiry = evidence source; client-side callback/user submission is not.
 - Only one canonical successful charge satisfies one logical booking; each additional successful charge remains separately accountable.
-- No repayment while unresolved, regardless of how long the frontend countdown has elapsed.
-- Definitive provider failure permits a retry only if booking remains eligible; a *timeout* never implies definitive failure.
+- No new Order for an unchanged exposed booking, regardless of countdown; retain the cancelled-A/new-B exception.
+- Failed instruments permit verified same-Order continuation; positive initial creation rejection is distinct. Timeout never establishes financial finality.
 - Do not authorize collection acceptance after planning cutoff/freeze via manager override.
 - Use Payment -> work-unit -> request lock discipline and existing idempotent event mechanisms.
 - No COD/deferred-payment exception.
@@ -178,9 +181,9 @@ Push is **best effort**, not an exact-once realtime guarantee. A notification ma
 
 ## 10. Backend and frontend contracts requiring review
 
-The existing backend Batch B branch reportedly provides `GET /v1/customer/collection-requests/{request_id}/payment`, `GET /v1/customer/collection-requests/{request_id}/refunds`, and customer detail. Its current `Payment`/Attempt and Collection states need an explicit projection rule to distinguish *attempt outcome unresolved* from *booking expired*, plus retry eligibility tied to definitive failure.
+The existing backend Batch B branch reportedly provides `GET /v1/customer/collection-requests/{request_id}/payment`, `GET /v1/customer/collection-requests/{request_id}/refunds`, and customer detail. Its current `Payment`/Attempt and Collection states need an explicit projection rule to distinguish *attempt outcome unresolved* from *booking expired*, plus explicit START/RESUME/WAIT/UNAVAILABLE actions tied to readiness.
 
-New manager reconciliation command/view and scheduled Razorpay status-inquiry port should reuse the financial application service. No new endpoint path, event schema, database column or new frontend enum is approved in this document; implementation must inventory existing contracts and propose minimum changes before editing. Activity must distinguish **Pending payment**, **Payment failed**, **Payment received**, and **Payment received — pickup requires resolution** without asserting statuses not yet supported by backend.
+Manager reconciliation and scheduled inquiry reuse the existing financial application service. The 2026-10-11 authorization approves minimal P1-1 readiness/first-POST fields and typed actions/reasons in [Payment Preparation API](PAYMENT_PREPARATION_API.md). Activity must distinguish **Pending payment**, **Payment failed**, **Payment received**, and **Payment received — pickup requires resolution** without asserting statuses not yet supported by backend.
 
 ## 11. Tests and acceptance
 
@@ -188,21 +191,21 @@ New manager reconciliation command/view and scheduled Razorpay status-inquiry po
 - Same captured payment found by webhook and automated inquiry → one business effect.
 - Manager inquiry finds captured payment before webhook → one effect, audited manager action.
 - Unknown/still-pending inquiry → retain unresolved state, no retry, no acceptance.
-- Definitive provider failure → eligible retry, no fabricated capture.
+- Failed instruments → verified same-Order retry; positive initial creation rejection remains distinct; no fabricated capture.
 - Five-minute checkout timeout → Activity pending; no HTTP request held open and no charge-state mutation solely from timer.
 - App closed/backgrounded → notification-tap navigation and subsequent authoritative refetch.
 - Duplicate/out-of-order/missing push → UI remains correct after lifecycle/refetch.
 - Cancelled/expired/frozen late capture → durable financial truth without invalid booking acceptance.
 - Wrong merchant/amount/currency/reference → reconciliation exception, never accepted.
-- Multiple genuine captures → separate accounting required; record as outstanding blocker until implemented.
+- Multiple genuine captures → existing per-charge CapturedCharge/RefundObligation accounting and compensation; never duplicate fulfilment acceptance.
 - PostgreSQL lock-order, concurrent webhook/inquiry/manager invocation and crash-redelivery tests.
 - Nonprod Razorpay sandbox tests and actual device push acceptance tests prior to production enablement.
 
 ## 12. Decisions and outstanding questions
 
-**Agreed:** no COD, no online retry while provider state unknown, no acceptance while payment unresolved, definitive failure allows eligible retry, manager can trigger provider-verified reconciliation, automated scheduled reconciliation is preferred, push-triggered refetch + lifecycle refresh replaces routine polling, Expo Go is temporary.
+**Agreed:** no COD; unchanged retries keep the same Order; authorized/unknown instruments WAIT; no acceptance while payment is unresolved; cancelled-A/new-B payment independence; provider-verified manager inquiry and bounded scheduled reconciliation; push/lifecycle refetch preferred; Expo Go temporary.
 
-**To approve before code:** reconciliation cadence/provider limits, booking expiry policy during unresolved payment, customer-visible statuses and support messaging, manager audit/access details, exceptional financial resolution for paid-but-unserviceable slots, separate additional-charge accounting, failed-refund operational recovery, legacy cancellation remediation, push worker/runtime readiness.
+**Operational/provider gates:** production cadence/rates, receipt/instrument visibility, merchant binding/rotation, refund replay/finality guarantees, cold-start/webhook performance, push/job/DLQ readiness and response ownership. Existing per-charge, failed-refund and historical policies remain authoritative; unapproved commercial outcomes retain holds.
 
 ## 13. Documentation placement and change control
 
@@ -223,3 +226,22 @@ See [ADR-005](adr/ADR-005-payments-refunds.md), [domain model](DOMAIN_MODEL.md),
 [schema](SCHEMA_DESIGN.md), and [idempotency](IDEMPOTENCY.md). Proposed polling
 intervals are not production defaults; normal-refund failure finality requires
 provider/account confirmation before replacement can be authorized.
+
+
+## 13. P1-1 current backend contract
+
+[Payment Preparation API](PAYMENT_PREPARATION_API.md) specifies the exact backend/mobile contract.
+The existing attempts POST prepares/resumes; Checkout GET stays non-mutating and reads a short
+persisted permission. Actions/reasons, not all-attempts-FAILED, govern retry_allowed. Standalone
+payment and embedded detail share rules. Cancelled booking and payment/refund statuses remain
+independent. The short mobile countdown is configurable and never changes financial truth.
+
+Use callback/focus/resume/push refetch and only a bounded, jittered foreground status-refresh
+window (approximately three minutes is illustrative). Stop automatic polling at the window
+boundary, retain verification-pending state and offer refresh/details or eligible cancellation.
+No mobile implementation or push deployment is claimed by this backend branch.
+
+Before paying B, explain A remains financially reconcilable, temporary double debit can occur and
+eligible captures are subject to refund processing. Do not promise fixed bank-credit timing.
+Normal eligible cancellation compensation needs no routine manager approval. Existing holds,
+ambiguous/legacy evidence and exceptional commercial decisions remain in Operations.

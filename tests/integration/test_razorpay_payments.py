@@ -41,7 +41,11 @@ async def test_payment_command_replay_and_http_io_have_no_checked_out_connection
         assert database_engine.pool.checkedout() == 0
         async with factory() as session:
             attempt = await session.scalar(select(PaymentAttempt))
-            assert attempt is not None and attempt.status == "CREATED"
+            assert attempt is not None and attempt.status in {
+                "CREATED",
+                "INITIATION_UNCERTAIN",
+                "PENDING",
+            }
         return orders(request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
@@ -79,39 +83,38 @@ async def test_timeout_after_remote_order_commit_recovery_and_concurrent_replay_
         release.set()
         first = await first
         assert first.payment_attempt_id == second.payment_attempt_id
-        assert first.provider_order_id == second.provider_order_id
+        assert second.checkout_ready_until is None
+        resumed = await initiate(factory, user, result, provider)
+        assert first.provider_order_id == resumed.provider_order_id
     assert len(orders.posts) == 1
     async with factory() as session:
         assert await session.scalar(select(func.count()).select_from(PaymentAttempt)) == 1
 
 
-async def test_concurrent_initial_lookups_duplicate_receipt_recovery(database_session_factory):
+async def test_concurrent_initial_lookups_share_one_preparation(database_session_factory):
     factory = database_session_factory
     user, result = await booking(factory)
     orders = Orders()
-    reads = 0
-    both = asyncio.Event()
+    entered, release = asyncio.Event(), asyncio.Event()
 
     async def transport(request):
-        nonlocal reads
-        if request.method == "GET" and reads < 2:
-            reads += 1
-            if reads == 2:
-                both.set()
-            await asyncio.wait_for(both.wait(), 5)
-            return httpx.Response(200, json={"entity": "collection", "count": 0, "items": []})
+        if request.method == "GET" and request.url.path == "/v1/orders":
+            entered.set()
+            await release.wait()
         return orders(request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         provider = RazorpayProvider(settings(), client=client)
-        a, b = await asyncio.gather(
-            initiate(factory, user, result, provider), initiate(factory, user, result, provider)
-        )
-    assert (
-        a.payment_attempt_id == b.payment_attempt_id and a.provider_order_id == b.provider_order_id
-    )
-    assert len(orders.orders) == 1 and len(orders.posts) == 2
-    assert orders.posts[0] == orders.posts[1]
+        first = asyncio.create_task(initiate(factory, user, result, provider))
+        await asyncio.wait_for(entered.wait(), 5)
+        second = await initiate(factory, user, result, provider)
+        assert second.checkout_ready_until is None
+        release.set()
+        first = await first
+        resumed = await initiate(factory, user, result, provider)
+        assert first.payment_attempt_id == second.payment_attempt_id == resumed.payment_attempt_id
+        assert first.provider_order_id == resumed.provider_order_id
+    assert len(orders.orders) == len(orders.posts) == 1
 
 
 async def test_uncertain_attempt_replay_recovers_same_receipt(database_session_factory):
@@ -122,7 +125,10 @@ async def test_uncertain_attempt_replay_recovers_same_receipt(database_session_f
 
     def transport(request):
         if request.method == "POST" and failing:
+            orders(request)
             raise httpx.ReadTimeout("lost", request=request)
+        if request.method == "GET" and failing:
+            return httpx.Response(200, json={"entity": "collection", "count": 0, "items": []})
         return orders(request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
@@ -255,9 +261,19 @@ async def test_conflicting_order_payment_mapping_and_distinct_successful_attempt
     async with httpx.AsyncClient(transport=httpx.MockTransport(Orders())) as client:
         provider = RazorpayProvider(settings(), client=client)
         a = await initiate(factory, user, result, provider, "a")
+        # Retained pre-fix history can contain two Orders. New preparation must
+        # never create this situation, but accounting must still preserve truth.
         async with factory() as session, session.begin():
-            (await session.get(PaymentAttempt, a.payment_attempt_id)).status = "FAILED"
-        b = await initiate(factory, user, result, provider, "b")
+            b = PaymentAttempt(
+                payment_id=a.payment_id,
+                provider="RAZORPAY",
+                status="PENDING",
+                provider_order_id="order_legacy",
+                provider_idempotency_key="legacy-b",
+                provider_account_key=provider.account_key,
+            )
+            session.add(b)
+            await session.flush([b])
         async with factory() as session, session.begin():
             (await session.get(PaymentAttempt, b.payment_attempt_id)).provider_payment_id = "pay_b"
         conflict = await process(

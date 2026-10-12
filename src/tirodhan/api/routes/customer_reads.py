@@ -231,6 +231,7 @@ async def get_detail(
             now=utc_now(),
             lead_time_minutes=settings.planning_lead_time_minutes,
             protector=protector,
+            account_key=getattr(request.app.state.payment_provider, "account_key", None),
         )
     )[0]
     assert isinstance(result, CollectionDetailDto)

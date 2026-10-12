@@ -101,3 +101,33 @@ Merging this branch into `main` records reviewed implementation and documentatio
 - Transaction/transport/replay constraints: [Idempotency](IDEMPOTENCY.md).
 - Refund runtime: `src/tirodhan/modules/payments/refunds.py`, provider: `razorpay.py`, manager recovery: `manager_recovery.py`, web routes: `src/tirodhan/api/routes/manager_finance.py`.
 - Focused tests: `tests/integration/test_financial_review_closure.py`, `test_razorpay_refunds.py`, `test_financial_correctness_closure.py`.
+
+
+## P1-1 preparation and historical Order recovery
+
+The authorized P1-1 branch requires independent review before PR/merge. See [API/Operations
+contract](PAYMENT_PREPARATION_API.md) and [implementation evidence](PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).
+No rollout or live financial operation occurs in the implementation task.
+
+Migration 0023 adds short Checkout permission, observation fencing, first-POST permission and
+initiated-term guards. It rewrites no financial outcomes. Configure PAYMENT_CHECKOUT_READINESS_SECONDS
+explicitly (1..60, no default) and planning lead. Neither value establishes financial finality.
+Verify merchant account identity before key rotation. Deploy a compatible API/worker runtime;
+do not serve old Checkout logic with the new preparation contract.
+
+Bounded recurring reconciliation includes FAILED established Orders with null next_check_at.
+Null due times use creation time for fairness. Fresh provider inquiry establishes current evidence;
+empty/unavailable inquiry changes no financial truth. Missing/mismatched merchant bindings are
+rescheduled and receive configured aged-case attention without cross-account GET. Operations
+must verify ownership through existing audited recovery. Never bulk FAILED->PENDING, rotate
+receipts, delete cancelled attempts or disable financial discovery after cancellation.
+
+Explicit cancellation of A permits independently eligible B to pay while A remains unresolved.
+Eligible actual A charges receive automatic full per-charge compensation; held/contradictory
+cases stay in Operations. Refund submission is not bank payout. A's slot is not reserved for B.
+Mobile retains one stable new clientRequestId; different IDs are distinct booking commands.
+
+Normal-refund replay retention and definitive non-payability gates remain unset/false by default.
+No new paid infrastructure is introduced. Monitor bounded provider GET traffic, rates/cadence,
+account rotation and response visibility in nonprod. Independently scheduled P1-2 already-refunded
+money acceptance and P2-6 manager throttling remain outside this closure.

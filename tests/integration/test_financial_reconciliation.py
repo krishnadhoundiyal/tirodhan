@@ -40,7 +40,6 @@ from tirodhan.modules.payments.reconciliation import (
     reconcile_batch,
 )
 from tirodhan.modules.payments.refunds import RefundConflictError, execute_refund_provider_call
-from tirodhan.modules.payments.service import PaymentNotEligibleError
 from tirodhan.modules.reliability.models import OutboxEvent
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 
@@ -71,12 +70,23 @@ class Gateway(Orders):
             )
         if path.startswith("/orders/"):
             if path.endswith("/payments"):
+                matched = [p for p in self.payments if p["order_id"] == path.split("/")[-2]]
                 return httpx.Response(
                     200,
-                    json=dict(entity="collection", count=len(self.payments), items=self.payments),
+                    json=dict(entity="collection", count=len(matched), items=matched),
                 )
+            order = next(o for o in self.orders.values() if o["id"] == path.split("/")[-1])
+            matched = [p for p in self.payments if p["order_id"] == order["id"]]
+            paid = any(p["status"] in {"captured", "refunded"} for p in matched)
             return httpx.Response(
-                200, json=next(o for o in self.orders.values() if o["id"] == path.split("/")[-1])
+                200,
+                json={
+                    **order,
+                    "status": "paid" if paid else "attempted" if matched else "created",
+                    "attempts": len(matched),
+                    "amount_paid": order["amount"] if paid else 0,
+                    "amount_due": 0 if paid else order["amount"],
+                },
             )
         if path.startswith("/refunds/"):
             item = self.refunds[path.split("/")[-1]]
@@ -242,17 +252,15 @@ async def test_expiry_releases_booking_keeps_money_unresolved_then_manager_refun
 @pytest.mark.parametrize(
     "state,allowed", [("failed", True), ("authorized", False), ("created", False)]
 )
-async def test_definitive_failure_permits_retry_uncertainty_blocks(harness, state, allowed):
-    h = harness
-    factory, user, result, _, provider, gateway = h
+async def test_instrument_failure_resumes_same_order_uncertainty_waits(harness, state, allowed):
+    factory, user, result, attempt, provider, gateway = harness
     gateway.payments[0].update(status=state, captured=False)
-    await inquiry(h)
-    if allowed:
-        retry = await initiate(factory, user, result, provider, key="new-attempt")
-        assert retry.status == "PENDING"
-    else:
-        with pytest.raises(PaymentNotEligibleError):
-            await initiate(factory, user, result, provider, key="new-attempt")
+    await inquiry(harness)
+    resumed = await initiate(factory, user, result, provider, key="new-command")
+    assert resumed.payment_attempt_id == attempt.payment_attempt_id
+    assert resumed.provider_order_id == attempt.provider_order_id
+    assert bool(resumed.checkout_ready_until) == allowed
+    assert len(gateway.posts) == 1
 
 
 async def test_failed_instrument_does_not_close_unresolved_order(harness):

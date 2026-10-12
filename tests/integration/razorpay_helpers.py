@@ -22,6 +22,7 @@ def settings(**extra):
         razorpay_key_secret="test-secret",
         razorpay_webhook_secret="webhook-secret",
         razorpay_http_timeout_seconds=5,
+        payment_checkout_readiness_seconds=30,
         **extra,
     )
 
@@ -72,6 +73,13 @@ class Orders:
         self.posts = []
 
     def __call__(self, request):
+        if request.method == "GET" and "/payments" in request.url.path:
+            return httpx.Response(200, json={"entity": "collection", "count": 0, "items": []})
+        if request.method == "GET" and request.url.path != "/v1/orders":
+            item = next(
+                item for item in self.orders.values() if request.url.path.endswith(item["id"])
+            )
+            return httpx.Response(200, json=item)
         if request.method == "GET":
             item = self.orders.get(request.url.params["receipt"])
             return httpx.Response(
@@ -95,6 +103,10 @@ class Orders:
             )
         item = {
             "entity": "order",
+            "status": "created",
+            "attempts": 0,
+            "amount_paid": 0,
+            "amount_due": data["amount"],
             "id": "order_" + data["receipt"][3:],
             "created_at": int(utc_now().timestamp()) - 180,
             **data,
@@ -115,5 +127,6 @@ async def initiate(factory, user, result, provider, key="attempt"):
         factory,
         InitiatePaymentAttemptCommand(user.user_id, result.request.request_id, key),
         provider,
+        planning_lead_time_minutes=30,
         idempotency_expires_at=utc_now() + timedelta(days=1),
     )

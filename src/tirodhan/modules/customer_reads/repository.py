@@ -45,6 +45,7 @@ async def projections(
     now: datetime,
     lead_time_minutes: int | None,
     protector: AddressProtector | None = None,
+    account_key: str | None = None,
 ) -> list[CollectionSummaryDto]:
     if not requests:
         return []
@@ -184,6 +185,7 @@ async def projections(
                     finance.attempts,
                     now=now,
                     reconciliation=finance.reconciliation,
+                    account_key=account_key,
                     retry_blocked=cutoff
                     or (request.cell_id, request.slot_start, request.slot_end) in frozen,
                 ),

@@ -108,6 +108,14 @@ class PaymentAttempt(Base):
     check_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     claim_token: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
     claim_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A provider snapshot grants a bounded handoff, never financial finality.
+    checkout_ready_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observation_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Only new local intents can authorize their first Orders POST. Legacy rows
+    # default closed; an ambiguous POST must recover through the original receipt.
+    order_creation_pending: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 class PaymentProviderEvent(Base):

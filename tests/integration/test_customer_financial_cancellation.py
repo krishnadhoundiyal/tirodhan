@@ -394,7 +394,7 @@ async def test_cancellation_crash_before_commit_rolls_back_all_then_retry_conver
         ("PENDING", "PENDING"),
         ("CREATED", "PROCESSING"),
         ("INITIATION_UNCERTAIN", "CONFIRMING"),
-        ("FAILED", "FAILED"),
+        ("FAILED", "CONFIRMING"),
         ("EXPIRED", "CONFIRMING"),
         ("RECONCILIATION", "CONFIRMING"),
     ],
@@ -435,7 +435,7 @@ async def test_payment_read_lifecycle_and_retry(database_session_factory, state,
         )
         assert response.status_code == 200, response.text
         value = response.json()
-        assert value["status"] == expected and value["retry_allowed"] == (state == "FAILED")
+        assert value["status"] == expected and value["retry_allowed"] is False
         assert value["current_attempt"]["payment_attempt_id"] == str(attempt.payment_attempt_id)
 
 
@@ -540,6 +540,15 @@ async def test_financial_corruption_or_unmapped_reason_is_sanitized(database_ses
             provider = RazorpayProvider(settings(), client=remote)
             await capture(factory, provider, await initiate(factory, user, result, provider))
         await cancel(factory, result.request)
+    if case in {"amount", "currency"}:
+        with pytest.raises(IntegrityError):
+            async with factory() as session, session.begin():
+                payment = await session.get(Payment, result.payment.payment_id)
+                if case == "amount":
+                    payment.amount_minor = 501
+                else:
+                    payment.currency = "USD"
+        return
     if case == "refund_currency":
         with pytest.raises(IntegrityError):
             async with factory() as session, session.begin():
@@ -781,7 +790,7 @@ async def test_compensation_failure_rolls_back_late_capture_and_retries_once(
     assert len((await records(factory))[0]) == len((await records(factory))[1]) == 1
 
 
-async def test_different_attempt_keys_serialize_and_only_failed_attempt_can_retry(
+async def test_different_attempt_keys_converge_and_legacy_failed_order_is_reused(
     database_session_factory,
 ):
     factory = database_session_factory
@@ -798,16 +807,18 @@ async def test_different_attempt_keys_serialize_and_only_failed_attempt_can_retr
             10,
         )
         attempts = [r for r in results if isinstance(r, PaymentAttempt)]
-        assert len(attempts) == 1
-        assert sum(isinstance(r, service.PaymentNotEligibleError) for r in results) == 1
+        assert len(attempts) == 2
+        assert attempts[0].payment_attempt_id == attempts[1].payment_attempt_id
         async with factory() as session, session.begin():
-            (await session.get(PaymentAttempt, attempts[0].payment_attempt_id)).status = "FAILED"
+            old = await session.get(PaymentAttempt, attempts[0].payment_attempt_id)
+            old.status = "FAILED"
+            old.checkout_ready_until = None
         retry = await initiate(factory, user, result, provider, "retry")
-        assert retry.payment_attempt_id != attempts[0].payment_attempt_id
+        assert retry.payment_attempt_id == attempts[0].payment_attempt_id
         replay = await initiate(factory, user, result, provider, "retry")
         assert replay.payment_attempt_id == retry.payment_attempt_id
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(PaymentAttempt)) == 2
+        assert await session.scalar(select(func.count()).select_from(PaymentAttempt)) == 1
 
 
 async def test_historical_refunds_are_ordered_and_financial_reads_are_bounded_and_read_only(

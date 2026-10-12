@@ -52,6 +52,13 @@ class AuthenticatedPaymentEvent:
     amount_deducted_minor: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class OrderPreparation:
+    order_id: str | None
+    checkout_ready: bool
+    observations: tuple[AuthenticatedPaymentEvent, ...] = ()
+
+
 class FinancialInquiryProvider(Protocol):
     provider_code: str
     account_key: str

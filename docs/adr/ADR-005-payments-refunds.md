@@ -10,7 +10,9 @@ Serviceability must be resolved before initiating payment.
 
 Each CollectionRequest has one logical Payment obligation.
 
-Gateway/provider retries are separate append/history PaymentAttempts under that logical Payment.
+A PaymentAttempt owns one provider Order. Razorpay instrument retries reuse that Order and
+retain separate PaymentProviderEvent observations; they are not new PaymentAttempts. A new
+attempt is permitted only after a positively rejected initial creation with no remote exposure.
 
 Payment initiation is synchronous/customer-driven; the provider-hosted flow may redirect the user.
 
@@ -153,3 +155,36 @@ Service Bus Standard and ACA Consumption remain selected. API minimum replicas s
 provider five-second acknowledgement versus cold-start performance remains an operational
 gate. Terraform is preparation only; account contracts, report access, live provider behavior
 and real deployment are not verified here. See [closure evidence, provider questions and release classification](../PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).
+
+
+## Accepted P1-1 customer journey — 2026-10-11
+
+The owner-approved V1 journey is: freeze items/quote/financial terms at the first durable
+PaymentAttempt; prepare/resume the same Razorpay Order; explicitly cancel and create a new
+booking to change items. PostgreSQL guards enforce the financial-term freeze. No QuoteRevision,
+credit transfer, amount adjustment or editable-after-initiation model is introduced.
+
+A failed instrument is evidence about that instrument. It never closes an established Order or
+releases its receipt. Authorized/processing instruments and incomplete provider inquiry return
+WAIT. First Checkout of a normally created Order is allowed after verified readiness even when
+there are no instruments. Readiness is a bounded permission, not provider finality. The mutating
+preparation boundary and the non-mutating handoff recheck merchant, money, booking expiry,
+planning cutoff/freeze and ownership. Missing planning/readiness configuration fails closed.
+
+Cancellation does not cancel the remote Order. Explicit cancellation of A permits paying a new,
+independently serviceable booking B while A remains financially uncertain. This narrow exception
+supersedes the earlier blanket prohibition on repayment across these cancelled/replacement
+bookings only. B uses a new client request/context, quote, Payment, attempt and receipt. Its slot
+is evaluated anew. No implicit association moves money or fulfilment between A and B.
+
+A verified late capture on authorized cancelled A retains real charge ownership and leaves A
+CANCELLED. Normal eligible full compensation is automatic per distinct CapturedCharge, with
+obligation, Refund and outbox atomic; existing holds and exceptional Operations policies remain.
+Refund intent/submission is distinct from provider-confirmed payout. Temporary double debit
+across A/B is an accepted product risk and must be explained before B payment.
+
+[Orders lifecycle](https://razorpay.com/docs/payments/orders/) documents why an authorized
+instrument blocks reopening and why paid Orders remain closed after refund. Public documentation
+is not proof of merchant-specific API visibility, rates, refund replay retention or refund failure
+finality. Existing closed refund gates remain closed. See the [API contract](../PAYMENT_PREPARATION_API.md)
+and [implementation evidence](../PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).

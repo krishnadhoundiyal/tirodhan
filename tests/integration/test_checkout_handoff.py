@@ -4,6 +4,7 @@ import httpx
 import pytest
 from razorpay_helpers import Orders, booking, initiate, payment_body, process, settings
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from tirodhan.api.dependencies import get_current_customer_id
 from tirodhan.db.values import new_uuid7, utc_now
@@ -71,6 +72,9 @@ async def test_checkout_proposal_is_owned_persisted_read_only_and_capture_author
                 "amount_minor": 500,
                 "currency": "INR",
                 "expires_at": result.request.payment_expires_at.isoformat().replace("+00:00", "Z"),
+                "checkout_ready_until": attempt.checkout_ready_until.isoformat().replace(
+                    "+00:00", "Z"
+                ),
             }
             assert "test-secret" not in response.text and "webhook-secret" not in response.text
             assert (await api.get(path)).json() == response.json()
@@ -133,6 +137,11 @@ async def test_checkout_fails_closed_without_side_effects(
             app.state.payment_provider = UnconfiguredPaymentProvider()
         elif gate == "planning_config":
             config.planning_lead_time_minutes = None
+        if gate == "amount":
+            with pytest.raises(IntegrityError):
+                async with factory() as session, session.begin():
+                    (await session.get(Payment, attempt.payment_id)).amount_minor = 501
+            return
         async with factory() as session, session.begin():
             if gate == "expired":
                 await session.execute(
