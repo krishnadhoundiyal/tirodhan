@@ -1,5 +1,11 @@
 # Domain Model
 
+The approved V2 amendments in ADR-004/006/015 supersede V1 planning/dispatch policy
+only for future V2 execution. Increment 1's `planning.routing` dataclasses are immutable
+optimizer projections, not persistent domain entities or replacements for the relational
+models below. Vehicle/shift/cargo persistence and transactional V2 dispatch remain separate
+increments. See [contract and integration boundary](V2_ROUTING_INCREMENT_1.md).
+
 ## Purpose
 
 This document defines the human-approved domain boundaries for Tirodhan before ORM models, migrations, APIs, or worker implementations are generated.

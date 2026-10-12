@@ -2,6 +2,33 @@
 
 **Status:** Accepted for MVP
 
+## V2 amendment — approved 12 October 2026
+
+For V2, optimized authoritative dispatch prioritizes committed operating capacity,
+including continuously collecting vehicles. During an agreed active operating shift,
+an eligible committed rider may receive system-authorized assignments without accepting
+each pickup. Fleet membership alone establishes neither commitment nor dispatch authority.
+Flexible riders remain supplementary capacity through voluntary offers/acceptance,
+activated proactively when committed resources cannot reliably satisfy commitments.
+Future bookings do not require a currently available or assigned rider.
+
+V2 eligibility uses actual vehicle capacity, onboard cargo, current position, shift,
+existing ownership, protected stops, customer windows and authorized receiving points.
+IDLE does not imply empty cargo; BUSY alone does not exclude feasible additions. Pickup
+completion and cargo custody remain separate. Multiple pickup groups may share a feasible
+continuous vehicle route without discarding stable per-household execution or assignment
+history. Specified partial discharge must conserve quantitative cargo, not reset capacity.
+
+The hierarchy and locking rules below remain the implemented V1 compatibility path.
+Increment 1 adds no dispatch mutation or replacement locking order. It implements pure
+proposal feasibility and retains COMMITTED/FLEXIBLE classification. Later transactional
+dispatch must recheck live authority, resource revisions, ownership, cargo and facility
+facts in PostgreSQL; an optimizer assessment alone never wins an assignment. Operations
+and recovery preserve collected work and historical custody. Unmanned-kiosk V2 discharge
+requires cargo/order QR or barcode, photographic evidence, trustworthy timestamps and
+identifiable receiving point; geofencing alone is insufficient. Existing V1 evidence and
+media-upload independence remain compatible. See [increment boundary](../V2_ROUTING_INCREMENT_1.md).
+
 ## Decision
 
 Assignment is by planned collection group/work, while per-household PickupExecution remains the stable fulfilment object.

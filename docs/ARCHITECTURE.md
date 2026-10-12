@@ -1,5 +1,21 @@
 # Architecture
 
+## Approved V2 direction and current implementation
+
+The 12 October 2026 engineering authorization approves dynamic cross-cell/compatible-slot
+collection routing with OSRM, VROOM and OR-Tools, prioritizing system-authorized committed
+shift capacity and continuous vehicles, with voluntary flexible-rider fallback. This
+supersedes the V1 dispatch policy **for V2** (ADR-004/006/015 amendments). Advance provisional
+planning does not change cancellation/financial rights; accepted slots promise service start.
+Vehicle load/custody, not IDLE alone, determines feasibility. V2 kiosk discharge requires
+barcode/QR, photographic evidence, trustworthy timestamps and receiving-point identity.
+
+The implemented first increment is a versioned pure routing contract and independent
+feasibility validator. No production route solver, shift/cargo persistence, V2 dispatch,
+handover change or infrastructure is enabled. The V1 sections below remain the current
+execution behavior. See [V2 implementation boundary](V2_ROUTING_INCREMENT_1.md) for the
+implemented checks, compatibility, required future transaction guards and enablement gates.
+
 ## 1. Architectural principles
 
 1. Azure is the reference MVP cloud, not a hard domain dependency.

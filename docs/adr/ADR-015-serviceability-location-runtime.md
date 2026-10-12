@@ -21,8 +21,12 @@ Descriptors are optional supplemental data, never stored or used as pickup point
 
 H3 is independent of Google. MVP resolution is exactly **7**, an architecture/code
 constant, not an environment option. `cell_id` stores the canonical raw H3 string.
-Changing resolution requires an explicit architecture/data transition. Planning
-continues to operate on one upstream cell without cross-cell compaction.
+Changing resolution requires an explicit architecture/data transition. V1 planning
+continues to operate on one upstream cell without cross-cell compaction. The approved
+12 October 2026 V2 amendment to ADR-004 permits cross-cell/compatible-slot routes;
+H3 remains serviceability/indexing authority rather than a hard economic routing boundary.
+Increment 1 adds a pure routing contract/validator and does not change this geocoding,
+serviceability or V1 planning runtime.
 
 The primary path is PENDING context + transactional ServiceabilityRequested outbox
 -> outbox publisher runtime -> Azure Service Bus **Standard**
