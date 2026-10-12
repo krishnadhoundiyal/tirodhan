@@ -12,7 +12,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from razorpay_helpers import booking, initiate, payment_body, process, settings
-from sqlalchemy import func, select, text
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from test_collection_payment import create_context, create_request, freeze_work_unit
 from test_customer_financial_cancellation import cancel
@@ -973,42 +973,118 @@ async def test_readiness_migration_preserves_populated_financial_history_and_sch
         )
         assert triggers == 3
     async with database_engine.connect() as connection:
+        await connection.run_sync(assert_readiness_schema)
 
-        def check_schema(sync):
-            differences = compare_metadata(
-                MigrationContext.configure(
-                    sync,
-                    opts={
-                        "compare_type": True,
-                    },
-                ),
-                Base.metadata,
-            )
-            # Existing migration 0007 indexes and PostGIS extension-owned table are
-            # known baseline omissions from ORM metadata, not new schema drift.
-            assert len(differences) == 3, differences
-            assert {(entry[0], entry[1].name) for entry in differences} == {
-                ("remove_table", "spatial_ref_sys"),
-                ("remove_index", "ix_collection_request_pickup_location_gist"),
-                ("remove_index", "ix_collection_request_planning_batch_id"),
-            }, differences
 
-            def include_attempt(obj, name, kind, reflected, compare_to):
-                return kind != "table" or name == "payment_attempt"
+def assert_readiness_schema(sync):
+    extension_tables = set()
+    for schema, name, visible in sync.execute(
+        text(
+            "SELECT n.nspname, c.relname, pg_table_is_visible(c.oid) "
+            "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "JOIN pg_depend d ON d.classid = 'pg_class'::regclass AND d.objid = c.oid "
+            "WHERE d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e' "
+            "AND c.relkind IN ('r', 'p')"
+        )
+    ):
+        extension_tables.add((schema, name))
+        # Reflection without a schema follows search_path, which the CI image
+        # extends to tiger/topology. Only the actually visible relation matches.
+        if visible:
+            extension_tables.add((None, name))
 
-            assert (
-                compare_metadata(
-                    MigrationContext.configure(
-                        sync,
-                        opts={
-                            "include_object": include_attempt,
-                            "compare_type": True,
-                            "compare_server_default": True,
-                        },
-                    ),
-                    Base.metadata,
-                )
-                == []
-            )
+    def include_application(obj, name, kind, reflected, compare_to):
+        # Skipping an unmapped extension table also skips its index removals.
+        # Never filter ORM tables, their columns/constraints/indexes, or unknown
+        # application tables merely because they share a schema/name prefix.
+        return not (
+            kind == "table"
+            and reflected
+            and compare_to is None
+            and (obj.schema, name) in extension_tables
+        )
 
-        await connection.run_sync(check_schema)
+    differences = compare_metadata(
+        MigrationContext.configure(
+            sync, opts={"include_object": include_application, "compare_type": True}
+        ),
+        Base.metadata,
+    )
+    # The only application omissions remain the two migration 0007 indexes.
+    assert len(differences) == 2, differences
+    assert {(entry[0], entry[1].table.name, entry[1].name) for entry in differences} == {
+        ("remove_index", "collection_request", "ix_collection_request_pickup_location_gist"),
+        ("remove_index", "collection_request", "ix_collection_request_planning_batch_id"),
+    }, differences
+    indexes = {index["name"]: index for index in inspect(sync).get_indexes("collection_request")}
+    for name, column, method in (
+        ("ix_collection_request_pickup_location_gist", "pickup_location", "gist"),
+        ("ix_collection_request_planning_batch_id", "planning_batch_id", "btree"),
+    ):
+        index = indexes[name]
+        assert index["column_names"] == [column] and not index["unique"], index
+        options = index.get("dialect_options", {})
+        assert options.get("postgresql_using", "btree") == method, index
+        assert options.get("postgresql_where") is None, index
+        assert not options.get("postgresql_include"), index
+
+    def include_attempt(obj, name, kind, reflected, compare_to):
+        return kind != "table" or name == "payment_attempt"
+
+    assert (
+        compare_metadata(
+            MigrationContext.configure(
+                sync,
+                opts={
+                    "include_object": include_attempt,
+                    "compare_type": True,
+                    "compare_server_default": True,
+                },
+            ),
+            Base.metadata,
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "ddl",
+    [
+        "CREATE TABLE public.street_type_lookup (id integer)",
+        "CREATE INDEX ix_schema_drift ON payment (currency)",
+        "DROP INDEX ix_payment_attempt_payment_created",
+        "DROP INDEX ix_collection_request_pickup_location_gist",
+        "DROP INDEX ix_collection_request_planning_batch_id",
+        "DROP INDEX ix_collection_request_planning_batch_id; "
+        "CREATE INDEX ix_collection_request_planning_batch_id "
+        "ON collection_request USING hash (planning_batch_id)",
+        "ALTER TABLE payment ADD COLUMN schema_drift integer",
+        "ALTER TABLE payment_attempt DROP COLUMN checkout_ready_until",
+        "ALTER TABLE payment ALTER COLUMN status TYPE varchar(25)",
+        "ALTER TABLE payment DROP CONSTRAINT fk_payment_request",
+        "ALTER TABLE payment ADD CONSTRAINT uq_schema_drift UNIQUE (currency)",
+        "ALTER TABLE payment_attempt ALTER COLUMN observation_version SET DEFAULT 1",
+    ],
+    ids=[
+        "application-table-shadowing-extension-name",
+        "unexpected-index",
+        "missing-model-index",
+        "missing-baseline-gist-index",
+        "missing-baseline-planning-index",
+        "changed-baseline-index-method",
+        "unexpected-column",
+        "missing-column",
+        "changed-type",
+        "missing-foreign-key",
+        "unexpected-unique-constraint",
+        "changed-attempt-default",
+    ],
+)
+async def test_readiness_schema_comparison_rejects_application_drift(database_engine, ddl):
+    async with database_engine.connect() as connection:
+        await connection.run_sync(assert_readiness_schema)
+        for statement in ddl.split("; "):
+            await connection.execute(text(statement))
+        with pytest.raises(AssertionError):
+            await connection.run_sync(assert_readiness_schema)
+        # Every deliberately introduced schema defect is rolled back on exit.
