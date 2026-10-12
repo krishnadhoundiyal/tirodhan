@@ -1,5 +1,15 @@
 # Project Context
 
+The approved 12 October 2026 V2 direction extends the V1 operating model below with
+cross-cell/compatible-slot routing, continuous collection vehicles and authoritative
+dispatch during committed operating shifts; flexible riders use voluntary acceptance.
+OSRM + VROOM + OR-Tools is the approved technology combination. Future bookings require
+no current rider, and advance provisional planning must preserve cancellation/financial
+rights. Increment 1 implements only a pure routing contract and feasibility validator;
+V1 execution remains active. See [implementation boundary](V2_ROUTING_INCREMENT_1.md)
+and the V2 amendments to ADR-004/006/015. Routing technology and V2 dispatch authority are
+no longer open decisions; operational calibration and configuration remain open.
+
 ## Purpose
 
 Tirodhan is a Delhi-first platform for arranging respectful household pickup of broken, damaged, or no-longer-required religious idols/sacred material and transporting them to designated government or government-authorized receiving locations.

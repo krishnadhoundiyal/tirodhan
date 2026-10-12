@@ -2,6 +2,28 @@
 
 **Status:** Accepted
 
+## V2 amendment — approved 12 October 2026
+
+The cell/slot compaction decision below describes V1 execution and remains authoritative
+for V1 batches. V2 dynamic collection optimization is approved with OSRM road matrices,
+VROOM new-work construction and OR-Tools committed-route suffix optimization behind one
+versioned contract and independent feasibility gate. PostgreSQL/domain state remains
+authoritative; a solver result is a proposal, not assignment or custody permission.
+
+V2 may plan across H3 cells and compatible pickup slots. H3 remains the resolution-7
+serviceability index, not an economic route boundary. Advance provisional planning has
+operational lead time independent of cancellation cutoff; projecting future accepted
+bookings must not freeze them or change financial/cancellation rights. Accepted windows
+are hard service-start promises. Preserve immutable source batch/booking facts and stable
+PickupExecution history when later adding route revisions. Optimization failure cannot
+silently drop work or erase an incumbent commitment.
+
+Increment 1 implements only the pure proposal contract and validator, including capacity,
+initial cargo, protected stops and specified whole/partial authorized discharge. V1's
+scheduler, freeze, grouping and singleton fallback are unchanged. No routing runtime or
+new infrastructure is enabled. See [implementation boundary](../V2_ROUTING_INCREMENT_1.md)
+for contract limits, integration prerequisites and remaining operational configuration.
+
 ## Decision
 
 Customers book 30-minute pickup slots.
