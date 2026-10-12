@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     app_name: str = "Tirodhan API"
     environment: Literal["local", "nonprod", "prod", "test"] = "local"
     debug: bool = False
+    routing_shadow_review_enabled: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file_path: Path | None = None
     database_url: SecretStr = SecretStr(

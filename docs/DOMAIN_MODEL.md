@@ -1,10 +1,35 @@
 # Domain Model
 
 The approved V2 amendments in ADR-004/006/015 supersede V1 planning/dispatch policy
-only for future V2 execution. Increment 1's `planning.routing` dataclasses are immutable
+as the target workflow; retained V1 execution drains at an approved cutover. `planning.routing` dataclasses are immutable
 optimizer projections, not persistent domain entities or replacements for the relational
-models below. Vehicle/shift/cargo persistence and transactional V2 dispatch remain separate
-increments. See [contract and integration boundary](V2_ROUTING_INCREMENT_1.md).
+models below. Increment 3 adds durable operational input entities and real-booking/custody
+projection, while transactional V2 dispatch/execution remains the next increment.
+See [implemented operational boundary](V2_ROUTING_INCREMENT_3.md).
+
+### V2 operational inputs and evaluation (increment 3)
+
+OperatingVehicle records explicit physical mass/volume capacity, road-profile version,
+end receiving point and revision. OperatingShift binds a rider and vehicle to an explicit
+period and COMMITTED/FLEXIBLE input classification, with manager attestation/reference;
+one open shift per rider/vehicle is enforced. This records inputs, not assignment authority.
+VehiclePosition records monotonically timestamped PostGIS observations and revisions.
+RoutingManifest declares one indivisible household physical reservation, service times,
+discharge deadline and explicitly selected authorized receiving point. ReceivingWindow
+records explicit dated opening intervals; no 24-hour opening is inferred.
+
+CargoVehicleObservation ties an explicit legacy vehicle observation to the successful
+PickupAttempt and request, preserving its historical rider. It cannot transfer custody.
+Onboard projection remains until a validated whole-household handover, regardless of IDLE
+or assignment completion. Existing uncollected ownership is hard-bound in the projection;
+groups/cells do not constrain route construction. Quantitative partial transfer/discharge,
+protected V2 route prefixes and V2 kiosk proof remain execution integration dependencies.
+
+RoutingShadowRun holds a unique manager/client evaluation command, finite recoverable
+lease, versioned immutable problem and independent results from both engines. JSONB here
+is a contract/audit document, not core operational state. Even SUCCEEDED has no assignment,
+financial or custody authority. Default review activation is false; actual new-work V2
+execution still requires the next transactional route/assignment increment and review.
 
 ## Purpose
 

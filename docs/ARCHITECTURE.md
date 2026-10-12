@@ -1,5 +1,21 @@
 # Architecture
 
+## V2 operational replacement — increment 3
+
+The approved destination is one road-network/capacity-based V2 operational workflow:
+authoritative committed-shift dispatch first, voluntary flexible supplementary capacity,
+cross-cell/cross-slot routes and continuous collection with explicit cargo obligations.
+V1 planning/group/offer rules below describe retained execution and historical drain,
+not a permanent parallel target. Customer cancellation cutoff and provisional operational
+planning cadence are independent in V2; this increment does not alter existing rights.
+
+Increment 3 implements durable operating inputs, consistent snapshots of actual bookings/
+ownership/custody, recoverable dual-engine evaluation and opt-in manager review APIs/finite
+execution. Default activation is false. It creates no operational assignment or custody
+transition. Transactional route revision/execution integration and single-owner admission
+cutover remain necessary before V2 can become authoritative. See
+[actual implementation and retirement sequence](V2_ROUTING_INCREMENT_3.md), ADR-004 and ADR-006.
+
 ## Approved V2 direction and current implementation
 
 The 12 October 2026 engineering authorization approves dynamic cross-cell/compatible-slot

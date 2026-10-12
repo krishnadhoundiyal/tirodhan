@@ -1,5 +1,19 @@
 # Reproducing native routing tests
 
+Increment 3 operational reproduction (disposable PostgreSQL/PostGIS, the same pinned
+road/solver engines, and actual booking/ownership/custody projections):
+
+```powershell
+powershell -NoProfile -File tests/routing/run-operational.ps1
+```
+
+Use `-SkipBuild` only when the operational test image is already built with the current
+dependency manifest. The runner mounts the current source read-only, validates the public
+road fixture hash, creates its own database/server/volume with no host ports, and removes
+them in `finally`. Default native tests still require no database, using the `routing-tests`
+Dockerfile target; operational tests use `operational-tests`. The optional image resolves
+the complete routing/development dependency set; it is not a production API image.
+
 From the repository root on PowerShell with local Docker:
 
 ```powershell

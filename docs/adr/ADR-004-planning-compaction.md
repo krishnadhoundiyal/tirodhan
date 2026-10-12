@@ -4,8 +4,8 @@
 
 ## V2 amendment — approved 12 October 2026
 
-The cell/slot compaction decision below describes V1 execution and remains authoritative
-for V1 batches. V2 dynamic collection optimization is approved with OSRM road matrices,
+The cell/slot compaction decision below describes retained V1 execution for its transition
+and historical batches. V2 supersedes it as the target workflow, with OSRM road matrices,
 VROOM new-work construction and OR-Tools committed-route suffix optimization behind one
 versioned contract and independent feasibility gate. PostgreSQL/domain state remains
 authoritative; a solver result is a proposal, not assignment or custody permission.
@@ -34,7 +34,23 @@ objective is not a production economic policy. No normal batch or worker invokes
 and no production graph hosting/resource is selected. See [increment 2](../V2_ROUTING_INCREMENT_2.md)
 for capabilities, measured validation, finite recovery and hosting tradeoffs.
 
-## Decision
+## Increment 3 — operational inputs and shadow execution
+
+Durable shifts, physical capacity/load reservations, timestamped PostGIS positions and
+legacy cargo observations now feed one consistent PostgreSQL snapshot of actual bookings,
+incumbent ownership and custody. The same cross-cell/cross-slot problem is persisted and
+evaluated by both real engines behind the independent gate. Known source drift invalidates
+the advisory result. No booking freezes, group construction or dispatch occur. Missing
+physical facts fail readiness with visible scope IDs; accepted work remains pending.
+
+This is a prerequisite to a **single V2 operational workflow**. The next integration must
+commit route revisions, bind execution/vehicle custody and arbitrate cancellation under
+live locks. At approved cutover, new V1 batch discovery/greedy grouping and group-bound
+dispatch must retire; historical batches drain without rewriting accepted facts. Operational
+projection cadence remains independent of customer cancellation rights. No production
+activation/road-graph hosting is selected. See [implemented boundary and cutover](../V2_ROUTING_INCREMENT_3.md).
+
+## Decision (retained V1 execution; retire new admission at V2 cutover)
 
 Customers book 30-minute pickup slots.
 

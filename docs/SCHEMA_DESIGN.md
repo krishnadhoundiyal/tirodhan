@@ -6,6 +6,33 @@ This document defines the approved PostgreSQL/PostGIS physical-schema convention
 
 Coding agents must treat these as architecture constraints rather than suggestions.
 
+## V2 increment 3 operational inputs (migration 0024)
+
+Seven relational tables are implemented: `operating_vehicle`, `operating_shift`,
+`vehicle_position`, `routing_manifest`, `routing_receiving_window`,
+`cargo_vehicle_observation`, and `routing_shadow_run`. See
+[column meanings and implementation boundary](V2_ROUTING_INCREMENT_3.md).
+
+Physical capacities/reservations use positive integer grams and milliliters; service times
+use nonnegative integer seconds. Shifts/opening periods use ordered timestamptz windows.
+Positions use canonical PostGIS geography(Point,4326). Recorder identity, rider, vehicle,
+request, successful pickup attempt and receiving point use real FKs. The externally supplied
+shift commitment reference is an attestation identifier, not an unmodelled internal FK.
+
+Partial unique open-shift indexes protect both rider and vehicle. Vehicle locks arbitrate
+position revision/observation order; unique vehicle/revision preserves append history.
+Request PKs prevent duplicate manifest/cargo observations. Commands do not edit historical
+reservations/observations. Future correction/transfer commands require explicit history.
+
+Shadow runs enforce unique manager/client command, nonnegative attempt and complete leases
+only in RUNNING. JSONB configuration/problem/results are versioned immutable evaluation
+documents; they are not assignment, physical custody or generic relational substitutes.
+Short lease transactions bracket external work; token/expiry predicates fence writes.
+REPEATABLE READ captures actual sources consistently. Fingerprints detect observed source
+drift, but **do not** provide transactional dispatch authority. No existing table or financial
+trigger is changed. Downgrade drops the new operational inputs/results, preserving existing
+booking/assignment/execution/custody/financial history; export needed input history first.
+
 ## Global conventions
 
 ```text
