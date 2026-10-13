@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     environment: Literal["local", "nonprod", "prod", "test"] = "local"
     debug: bool = False
     routing_shadow_review_enabled: bool = False
+    routing_dispatch_enabled: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file_path: Path | None = None
     database_url: SecretStr = SecretStr(

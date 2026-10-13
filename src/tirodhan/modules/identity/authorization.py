@@ -14,9 +14,12 @@ async def lock_active_user_role(
     *,
     user_id: UUID,
     role_code: str,
+    no_key_update: bool = False,
 ) -> bool:
     """Lock current user/role eligibility for a fresh-work transaction."""
-    user = await session.scalar(select(AppUser).where(AppUser.user_id == user_id).with_for_update())
+    user = await session.scalar(
+        select(AppUser).where(AppUser.user_id == user_id).with_for_update(key_share=no_key_update)
+    )
     if user is None or user.status != APP_USER_ACTIVE:
         return False
     role = await session.scalar(
@@ -26,6 +29,6 @@ async def lock_active_user_role(
             UserRole.role_code == role_code,
             UserRole.revoked_at.is_(None),
         )
-        .with_for_update()
+        .with_for_update(key_share=no_key_update)
     )
     return role is not None

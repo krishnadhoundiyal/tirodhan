@@ -17,7 +17,7 @@ function Invoke-Docker {
 Push-Location $repo
 try {
     if (-not $SkipBuild) {
-        Invoke-Docker build --target operational-tests -f tests/routing/Dockerfile -t tirodhan-routing-tests:increment-3 .
+        Invoke-Docker build --target operational-tests -f tests/routing/Dockerfile -t tirodhan-routing-tests:increment-4 .
     }
     Invoke-Docker volume create $volume
     Invoke-Docker run --rm --cpus 2 --memory 2g -v "${volume}:/data" -v "${fixture}:/input/map.osm.pbf:ro" $osrmImage sh -ec 'cp /input/map.osm.pbf /data/map.osm.pbf && osrm-extract -t 2 -p /opt/car.lua /data/map.osm.pbf && osrm-partition -t 2 /data/map.osrm && osrm-customize -t 2 /data/map.osrm'
@@ -30,9 +30,9 @@ try {
     }
     if (-not $ready) { throw 'Disposable PostgreSQL did not become ready' }
     Invoke-Docker run -d --name $server --network "container:$database" --cpus 2 --memory 2g -v "${volume}:/data:ro" $osrmImage osrm-routed -t 2 --algorithm mld /data/map.osrm
-    Invoke-Docker run --rm --network "container:$database" --entrypoint python tirodhan-routing-tests:increment-3 tests/routing/wait_osrm.py
+    Invoke-Docker run --rm --network "container:$database" --entrypoint python tirodhan-routing-tests:increment-4 tests/routing/wait_osrm.py
     # Mount the exact reviewed source read-only; native processes write no repository files.
-    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e TIRODHAN_OSRM_TEST_URL=http://localhost:5000 -e "TIRODHAN_OSRM_GRAPH_VERSION=fixture-$hash" -e TIRODHAN_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-3
+    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e TIRODHAN_OSRM_TEST_URL=http://localhost:5000 -e "TIRODHAN_OSRM_GRAPH_VERSION=fixture-$hash" -e TIRODHAN_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-4 python -m pytest -q -s tests/routing tests/integration/test_routing_operations.py tests/integration/test_routing_dispatch.py -p no:cacheprovider
 } finally {
     $cleanupPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'

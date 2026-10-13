@@ -259,11 +259,12 @@ class RiderAssignment(Base):
             name="ck_rider_assignment_status",
         ),
         CheckConstraint(
-            "source IN ('RIDER_OFFER_ACCEPTED', 'MANAGER_ASSIGNED')",
+            "source IN ('RIDER_OFFER_ACCEPTED', 'MANAGER_ASSIGNED', 'COMMITTED_DISPATCH')",
             name="ck_rider_assignment_source",
         ),
         CheckConstraint(
-            "(source = 'MANAGER_ASSIGNED' AND assigned_by_user_id IS NOT NULL) OR "
+            "(source IN ('MANAGER_ASSIGNED', 'COMMITTED_DISPATCH') "
+            "AND assigned_by_user_id IS NOT NULL) OR "
             "(source = 'RIDER_OFFER_ACCEPTED' AND assigned_by_user_id IS NULL)",
             name="ck_rider_assignment_source_audit",
         ),
@@ -273,15 +274,20 @@ class RiderAssignment(Base):
             unique=True,
             postgresql_where=text("status = 'ACTIVE'"),
         ),
+        CheckConstraint(
+            "(source = 'COMMITTED_DISPATCH' AND collection_group_id IS NULL) OR "
+            "(source <> 'COMMITTED_DISPATCH' AND collection_group_id IS NOT NULL)",
+            name="ck_rider_assignment_group_source",
+        ),
     )
 
     assignment_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), primary_key=True, default=new_uuid7
     )
-    collection_group_id: Mapped[UUID] = mapped_column(
+    collection_group_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         ForeignKey("collection_group.collection_group_id"),
-        nullable=False,
+        nullable=True,
     )
     rider_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), ForeignKey("rider_profile.rider_id"), nullable=False
@@ -305,7 +311,7 @@ class RiderAssignmentItem(Base):
     __tablename__ = "rider_assignment_item"
     __table_args__ = (
         CheckConstraint(
-            "release_reason_code IS NULL OR release_reason_code = 'REASSIGNED'",
+            "release_reason_code IS NULL OR release_reason_code IN ('REASSIGNED', 'CANCELLED')",
             name="ck_rider_assignment_item_release_reason",
         ),
         CheckConstraint(

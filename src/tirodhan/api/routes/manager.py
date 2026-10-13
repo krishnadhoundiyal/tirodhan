@@ -90,7 +90,7 @@ class ManualAssignmentRequest(ManagerCommandModel):
 
 class AssignmentSummaryResponse(BaseModel):
     assignment_id: UUID
-    collection_group_id: UUID
+    collection_group_id: UUID | None
     rider_id: UUID
     source: str
     status: str

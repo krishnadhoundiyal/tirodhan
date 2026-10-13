@@ -163,6 +163,10 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = application_settings
+    if application_settings.routing_dispatch_enabled:
+        from tirodhan.api.routes.routing_dispatch import router as routing_dispatch_router
+
+        application.include_router(routing_dispatch_router)
     if application_settings.routing_shadow_review_enabled:
         from tirodhan.api.routes.routing_operations import router as routing_review_router
 

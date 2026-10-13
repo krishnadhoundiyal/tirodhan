@@ -1,6 +1,6 @@
 # Architecture
 
-## V2 operational replacement — increment 3
+## V2 operational replacement — increment 4
 
 The approved destination is one road-network/capacity-based V2 operational workflow:
 authoritative committed-shift dispatch first, voluntary flexible supplementary capacity,
@@ -9,12 +9,16 @@ V1 planning/group/offer rules below describe retained execution and historical d
 not a permanent parallel target. Customer cancellation cutoff and provisional operational
 planning cadence are independent in V2; this increment does not alter existing rights.
 
-Increment 3 implements durable operating inputs, consistent snapshots of actual bookings/
-ownership/custody, recoverable dual-engine evaluation and opt-in manager review APIs/finite
-execution. Default activation is false. It creates no operational assignment or custody
-transition. Transactional route revision/execution integration and single-owner admission
-cutover remain necessary before V2 can become authoritative. See
-[actual implementation and retirement sequence](V2_ROUTING_INCREMENT_3.md), ADR-004 and ADR-006.
+Increment 4 joins the durable inputs/evaluation to actual committed assignments, immutable
+route revisions, vehicle-bound ordered pickup and whole-lot discharge. SERIALIZABLE
+activation, Payment-first cancellation arbitration, independent validation and common
+resource locks establish operational authority. Cargo survives pickup completion and
+recovery. Default dispatch activation is false; no production workflow is activated.
+Single-owner rolling orchestration, flexible supplementary acceptance, notification
+delivery and global V1 new-work retirement remain the next integration. V2-admitted
+work already cannot return to legacy grouping/dispatch. See
+[actual authority, execution and retirement boundary](V2_ROUTING_INCREMENT_4.md),
+ADR-004 and ADR-006.
 
 ## Approved V2 direction and current implementation
 
@@ -26,11 +30,11 @@ planning does not change cancellation/financial rights; accepted slots promise s
 Vehicle load/custody, not IDLE alone, determines feasibility. V2 kiosk discharge requires
 barcode/QR, photographic evidence, trustworthy timestamps and receiving-point identity.
 
-The implemented first increment is a versioned pure routing contract and independent
-feasibility validator. No production route solver, shift/cargo persistence, V2 dispatch,
-handover change or infrastructure is enabled. The V1 sections below remain the current
-execution behavior. See [V2 implementation boundary](V2_ROUTING_INCREMENT_1.md) for the
-implemented checks, compatibility, required future transaction guards and enablement gates.
+The historical first increment introduced a versioned pure routing contract and independent
+feasibility validator. Later operational persistence, authority and execution are described
+above; production activation and hosting remain disabled/unselected. The V1 sections below
+describe retained execution/drain. See [historical V2 boundary](V2_ROUTING_INCREMENT_1.md)
+and [current implementation](V2_ROUTING_INCREMENT_4.md) for checks and enablement gates.
 
 ## 1. Architectural principles
 

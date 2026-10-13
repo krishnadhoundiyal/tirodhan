@@ -55,6 +55,29 @@ yet arbitrate dispatch races against it. New V1 offers/assignments retire at the
 single-owner V2 cutover; stable PickupExecution, collected work, custody and historical
 assignments remain. See [implementation and transition](../V2_ROUTING_INCREMENT_3.md).
 
+## Increment 4 — committed dispatch and vehicle custody
+
+COMMITTED_DISPATCH is now a conventional audited assignment source bound to a currently
+active manager-attested shift and vehicle through VehicleRoute. It requires no per-pickup
+offer acceptance or AVAILABLE/IDLE intent. One route assignment can gain additional
+independently feasible work while BUSY; current ownership and cargo remain hard constraints.
+The source evaluation alone still has no authority: only the live activation transaction
+may establish it. Flexible voluntary supplementary acceptance remains a separate next stage.
+
+Ordered rider commands bind actual collection to its vehicle and performing assignment.
+Final pickup does not return a routed rider to IDLE; pending discharge keeps its route/
+cargo obligation. Whole-lot V2 discharge requires cargo/receiving identifiers, PHOTO capture
+business facts, server-timestamp bounds, authorized opening/deadline and PostGIS geofence.
+Rejected geofences remain durable without releasing cargo; upload remains independent.
+Partial discharge, custody transfer and physical return-arrival are not implemented here.
+
+Recovery releases only uncollected ownership and retains original collected attribution.
+New revision commands protect started work; legacy pickup/handover/group reassignment paths
+cannot bypass route authority. Released V2 work stays out of V1. Role revocation does not
+prevent customer cancellation or manager recovery. Default API activation is false; mobile
+task/label/photo integration and global operational cutover still require review.
+See [transactions, compatibility and remaining gaps](../V2_ROUTING_INCREMENT_4.md).
+
 ## Decision (retained V1 execution; retire group dispatch at V2 cutover)
 
 Assignment is by planned collection group/work, while per-household PickupExecution remains the stable fulfilment object.

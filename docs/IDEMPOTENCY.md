@@ -188,6 +188,36 @@ dispatch requires its own current resource/route/ownership fencing, coordinated 
 locks, cancellation arbitration and transactional outbox. See
 [implemented guarantees and limits](V2_ROUTING_INCREMENT_3.md).
 
+### V2 authoritative activation, execution and recovery (increment 4)
+
+| Operation | Logical key / protection | Replay and transaction |
+|---|---|---|
+| Activate validated proposal | routing.activate:manager + client UUID/hash; unique activated run; SERIALIZABLE sources; Payment-first, work-unit/request, rider availability/authority, vehicle locks; current ownership/open-route uniqueness | assignment/revision/tasks/schedules/events and result commit together; exact replay returns original activation; known rollback permits same-key retry; source/time drift needs new evaluation |
+| Start/record pickup/discharge task | routing.execute:rider + client UUID/hash; current revision/next task; common availability/vehicle locks; pickup additionally Payment/work-unit/request first; conventional attempt/handover uniqueness | immutable result replay precedes current state checks; collection, vehicle cargo and task progress atomic; rejected geofence remains durable without discharge; no external provider calls |
+| Recover vehicle route | routing.recover:manager + client UUID/hash; expected revision; common resources; immutable recovery fact | releases uncollected ownership only, retains collected attempts/cargo; exact replay never repeats release; corrected resume needs a new validated activation |
+| Cancel admitted booking | existing cancellation key/Payment-first boundary plus routed ownership detachment | cancellation, existing compensation, task invalidation and identifier-only recovery event are one transaction; rider revocation cannot block commercial rights |
+
+Dispatch uses profile -> availability -> identity/role -> vehicle resource order, with
+FOR NO KEY UPDATE authority/profile/request locks compatible with recorder FK KEY SHARE.
+Eligibility writes remain blocked; vehicle-first position/shift commands can complete
+their FK checks without waiting on an authority lock held by a dispatch waiting for them.
+Existing identity-helper callers retain their original lock mode.
+
+SERIALIZABLE or deadlock aborts return RETRYABLE_TRANSACTION_CONFLICT after complete
+rollback. Sorted locks and DB constraints arbitrate concurrent activation/V1 assignment.
+Cancellation and pickup share ancestors, so collected and cancelled cannot both win.
+Vehicle/input updates, revision and task progress fence stale proposals. SQL append-history
+and binding guards prevent history rewrite. Old revision commands may replay an established
+result, but fresh mutation requires current revision. Actor authorization still applies.
+STARTED next work is a hard protected prefix; NOT_COLLECTED retains it until explicit recovery.
+Released work cannot return to the same old assignment item or legacy V1 group dispatch.
+
+No new broker command consumer exists; API/internal redelivery uses the same domain command
+identity. New route events commit in the outbox but are not registered for publication yet.
+There is no held transaction during OSRM/solving; those read-only operations remain in
+Increment 3 evaluation. Physical facts never depend on media upload. See
+[implemented constraints and remaining delivery](V2_ROUTING_INCREMENT_4.md).
+
 ### Existing concurrency scenarios
 
 ### Identity creation and session commands

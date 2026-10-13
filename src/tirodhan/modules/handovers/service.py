@@ -115,100 +115,25 @@ async def record_handover(
                 )
             return event
 
-        _validate_command_inputs(
-            pickup_execution_ids=pickup_execution_ids,
-            observed_location=observed_location,
-        )
-        assert observed_location is not None
+        from tirodhan.modules.routing_operations.dispatch_models import RouteTask
 
-        receiving_point = await session.scalar(
-            select(ReceivingPoint)
-            .where(ReceivingPoint.receiving_point_id == receiving_point_id)
-            .with_for_update()
+        routed = await session.scalar(
+            select(RouteTask.task_id)
+            .where(RouteTask.pickup_execution_id.in_(canonical_pickup_ids))
+            .limit(1)
         )
-        if receiving_point is None:
-            raise ReceivingPointNotFoundError("receiving point not found")
-        if receiving_point.status != RECEIVING_POINT_ACTIVE:
-            raise ReceivingPointInactiveError("receiving point is not ACTIVE")
-
-        pickups = list(
-            await session.scalars(
-                select(PickupExecution)
-                .where(PickupExecution.pickup_execution_id.in_(canonical_pickup_ids))
-                .order_by(PickupExecution.pickup_execution_id)
-                .with_for_update()
-            )
-        )
-        if len(pickups) != len(canonical_pickup_ids):
-            raise HandoverPickupNotFoundError("one or more pickup executions were not found")
-        if any(pickup.status != PICKUP_COLLECTED for pickup in pickups):
-            raise HandoverPickupNotCollectedError("every pickup must be COLLECTED")
-
-        attributed_pickup_ids = set(
-            await session.scalars(
-                select(RiderAssignmentItem.pickup_execution_id)
-                .join(
-                    RiderAssignment,
-                    RiderAssignment.assignment_id == RiderAssignmentItem.assignment_id,
-                )
-                .where(
-                    RiderAssignmentItem.pickup_execution_id.in_(canonical_pickup_ids),
-                    RiderAssignmentItem.released_at.is_(None),
-                    RiderAssignment.rider_id == rider_id,
-                )
-            )
-        )
-        if attributed_pickup_ids != set(canonical_pickup_ids):
-            raise HandoverRiderAttributionError(
-                "every pickup must retain unreleased assignment attribution to the rider"
-            )
-
-        already_validated = await session.scalar(
-            select(HandoverEventItem.pickup_execution_id).where(
-                HandoverEventItem.pickup_execution_id.in_(canonical_pickup_ids),
-                HandoverEventItem.status == HANDOVER_VALIDATED,
-            )
-        )
-        if already_validated is not None:
-            raise PickupAlreadyHandedOverError("a pickup already has a validated handover")
-
-        within_radius, distance_m = await _evaluate_geofence(
+        if routed is not None:
+            raise HandoverStateInconsistentError("vehicle-bound cargo requires route discharge")
+        event = await record_handover_in_session(
             session,
-            observed_location=observed_location,
-            receiving_point_location=receiving_point.location,
-            allowed_radius_m=receiving_point.allowed_radius_m,
-        )
-        event_status = HANDOVER_VALIDATED if within_radius else HANDOVER_REJECTED
-        validation_code = WITHIN_ALLOWED_RADIUS if within_radius else OUTSIDE_ALLOWED_RADIUS
-        evaluated_at = now or utc_now()
-        event = HandoverEvent(
-            handover_event_id=new_uuid7(),
             client_handover_id=client_handover_id,
             rider_id=rider_id,
-            receiving_point_id=receiving_point.receiving_point_id,
-            occurred_at=evaluated_at,
-            observed_location=geography_point(observed_location),
-            receiving_point_location_snapshot=receiving_point.location,
-            allowed_radius_m_snapshot=receiving_point.allowed_radius_m,
-            distance_m=distance_m,
-            status=event_status,
-            validation_code=validation_code,
-            created_at=evaluated_at,
-            evaluated_at=evaluated_at,
+            receiving_point_id=receiving_point_id,
+            pickup_execution_ids=canonical_pickup_ids,
+            observed_location=observed_location,
+            now=now or utc_now(),
         )
-        items = [
-            HandoverEventItem(
-                handover_event_id=event.handover_event_id,
-                pickup_execution_id=pickup_id,
-                status=event_status,
-                created_at=evaluated_at,
-                evaluated_at=evaluated_at,
-            )
-            for pickup_id in canonical_pickup_ids
-        ]
-        session.add(event)
-        session.add_all(items)
-        await session.flush([event, *items])
+        evaluated_at = event.evaluated_at
         await complete_idempotency_record(
             session,
             claim.record,
@@ -217,6 +142,115 @@ async def record_handover(
             completed_at=evaluated_at,
         )
         return event
+
+
+async def record_handover_in_session(
+    session: AsyncSession,
+    *,
+    client_handover_id: UUID,
+    rider_id: UUID,
+    receiving_point_id: UUID,
+    pickup_execution_ids: Sequence[UUID],
+    observed_location: GeoPoint | None,
+    now: datetime,
+) -> HandoverEvent:
+    """Shared physical fact writer in a caller-owned transaction; caller owns idempotency."""
+    canonical_pickup_ids = tuple(sorted(pickup_execution_ids, key=lambda value: value.int))
+    _validate_command_inputs(
+        pickup_execution_ids=pickup_execution_ids,
+        observed_location=observed_location,
+    )
+    assert observed_location is not None
+
+    receiving_point = await session.scalar(
+        select(ReceivingPoint)
+        .where(ReceivingPoint.receiving_point_id == receiving_point_id)
+        .with_for_update()
+    )
+    if receiving_point is None:
+        raise ReceivingPointNotFoundError("receiving point not found")
+    if receiving_point.status != RECEIVING_POINT_ACTIVE:
+        raise ReceivingPointInactiveError("receiving point is not ACTIVE")
+
+    pickups = list(
+        await session.scalars(
+            select(PickupExecution)
+            .where(PickupExecution.pickup_execution_id.in_(canonical_pickup_ids))
+            .order_by(PickupExecution.pickup_execution_id)
+            .with_for_update()
+        )
+    )
+    if len(pickups) != len(canonical_pickup_ids):
+        raise HandoverPickupNotFoundError("one or more pickup executions were not found")
+    if any(pickup.status != PICKUP_COLLECTED for pickup in pickups):
+        raise HandoverPickupNotCollectedError("every pickup must be COLLECTED")
+
+    attributed_pickup_ids = set(
+        await session.scalars(
+            select(RiderAssignmentItem.pickup_execution_id)
+            .join(
+                RiderAssignment,
+                RiderAssignment.assignment_id == RiderAssignmentItem.assignment_id,
+            )
+            .where(
+                RiderAssignmentItem.pickup_execution_id.in_(canonical_pickup_ids),
+                RiderAssignmentItem.released_at.is_(None),
+                RiderAssignment.rider_id == rider_id,
+            )
+        )
+    )
+    if attributed_pickup_ids != set(canonical_pickup_ids):
+        raise HandoverRiderAttributionError(
+            "every pickup must retain unreleased assignment attribution to the rider"
+        )
+
+    already_validated = await session.scalar(
+        select(HandoverEventItem.pickup_execution_id).where(
+            HandoverEventItem.pickup_execution_id.in_(canonical_pickup_ids),
+            HandoverEventItem.status == HANDOVER_VALIDATED,
+        )
+    )
+    if already_validated is not None:
+        raise PickupAlreadyHandedOverError("a pickup already has a validated handover")
+
+    within_radius, distance_m = await _evaluate_geofence(
+        session,
+        observed_location=observed_location,
+        receiving_point_location=receiving_point.location,
+        allowed_radius_m=receiving_point.allowed_radius_m,
+    )
+    event_status = HANDOVER_VALIDATED if within_radius else HANDOVER_REJECTED
+    validation_code = WITHIN_ALLOWED_RADIUS if within_radius else OUTSIDE_ALLOWED_RADIUS
+    evaluated_at = now or utc_now()
+    event = HandoverEvent(
+        handover_event_id=new_uuid7(),
+        client_handover_id=client_handover_id,
+        rider_id=rider_id,
+        receiving_point_id=receiving_point.receiving_point_id,
+        occurred_at=evaluated_at,
+        observed_location=geography_point(observed_location),
+        receiving_point_location_snapshot=receiving_point.location,
+        allowed_radius_m_snapshot=receiving_point.allowed_radius_m,
+        distance_m=distance_m,
+        status=event_status,
+        validation_code=validation_code,
+        created_at=evaluated_at,
+        evaluated_at=evaluated_at,
+    )
+    items = [
+        HandoverEventItem(
+            handover_event_id=event.handover_event_id,
+            pickup_execution_id=pickup_id,
+            status=event_status,
+            created_at=evaluated_at,
+            evaluated_at=evaluated_at,
+        )
+        for pickup_id in canonical_pickup_ids
+    ]
+    session.add(event)
+    session.add_all(items)
+    await session.flush([event, *items])
+    return event
 
 
 def _validate_command_inputs(

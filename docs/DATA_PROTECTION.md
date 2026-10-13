@@ -21,6 +21,22 @@ messages. Matrix calls inherit Increment 2's logging/HTTPS/response safeguards.
 Shadow-run/position retention must be operationally defined before sustained production
 use. Default review activation is false and no new production external processor is selected.
 
+### V2 operational authority (increment 4)
+
+Route authority/tasks/schedules/recovery and outbox events use internal IDs/control fields,
+not household addresses, coordinates, phone numbers or raw solver payloads. New manager
+route views expose operational references only. Rider route views are scoped to the live
+authenticated rider; household details remain in the existing current unreleased-assignment
+read path, with encrypted immutable booking snapshots and released-work exclusion.
+
+Discharge observed locations remain restricted PostGIS facts. Scanned official receiving
+identifier snapshots and PHOTO capture links are immutable operational proof metadata,
+not uploaded bytes or a claim of semantic image/hardware verification. Client capture time
+is constrained by server task/registration times. Command idempotency stores hashes/results,
+never observed coordinates or capture request bodies. Upload independence and existing
+private media authorization remain unchanged. Production mobile/label flow and retention
+must be reviewed before activating the default-disabled surface.
+
 ### Direct PII requiring application-level protection
 
 Examples:

@@ -50,3 +50,13 @@ The real-road tests print per-engine process/search elapsed seconds and independ
 reconstructed travel seconds/distance. They use synthetic demand, facility hours and
 capacities on a clipped car-profile graph. Results prove the acquisition-to-solver-to-
 validator path, not loaded-vehicle calibration, production performance or route optimality.
+# Increment 4 operational authority coverage
+
+The operational runner now also executes tests/integration/test_routing_dispatch.py,
+using image tag tirodhan-routing-tests:increment-4. Both real engines activate committed
+routes, collect into a vehicle, revise the loaded BUSY vehicle for an additional booking,
+discharge with cargo/receiving/photo proof and complete the requests through existing
+evidence rules. Disposable PostgreSQL migrations, concurrent activation/cancellation,
+historical recovery and downgrade guards run alongside the existing native suite.
+The exact reviewed source is mounted read-only even with -SkipBuild; that option reuses
+only a dependency image with the unchanged dependency manifest.
