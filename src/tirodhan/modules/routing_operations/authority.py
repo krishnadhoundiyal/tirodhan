@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -45,7 +46,7 @@ from .dispatch_models import (
 )
 from .models import OperatingVehicle, RoutingShadowRun
 from .service import PROBLEM_CODEC, PROPOSAL_CODEC
-from .snapshot import ShadowConfiguration, _read_sources
+from .snapshot import ShadowConfiguration, _read_sources, source_digest
 
 
 class RouteAuthorityError(OperationalInputError):
@@ -58,6 +59,7 @@ class ActivationCommand(BaseModel):
     run_id: UUID
     engine: OptimizerEngine
     resume_recovery: bool = False
+    fleet_cycle_id: UUID | None = None
 
 
 async def lock_booking_population(
@@ -173,12 +175,20 @@ async def activate_proposal(
     command: ActivationCommand,
     expires_at: datetime,
     now: datetime | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     """No external I/O. SERIALIZABLE covers source/predicate drift; locks arbitrate ownership."""
     try:
         async with factory() as session:
             await session.connection(execution_options={"isolation_level": "SERIALIZABLE"})
-            result = await _activate(session, manager_id, command, expires_at, now or utc_now())
+            result = await _activate(
+                session,
+                manager_id,
+                command,
+                expires_at,
+                now or utc_now(),
+                clock or (utc_now if now is None else None),
+            )
             await session.commit()
             return result
     except DBAPIError as error:
@@ -193,6 +203,7 @@ async def _activate(
     command: ActivationCommand,
     expires_at: datetime,
     now: datetime,
+    clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     await require_live_role(session, actor, "MANAGER")
     claim = await claim_idempotency_record(
@@ -230,18 +241,44 @@ async def _activate(
     await lock_resources(
         session, [v.rider_id for v in problem.vehicles], [v.vehicle_id for v in problem.vehicles]
     )
+    from tirodhan.modules.receiving_points.models import ReceivingPoint
+
+    await session.execute(
+        select(ReceivingPoint)
+        .where(
+            ReceivingPoint.receiving_point_id.in_(
+                [p.receiving_point_id for p in problem.receiving_points]
+            )
+        )
+        .order_by(ReceivingPoint.receiving_point_id)
+        .with_for_update(key_share=True)
+    )
     current = await _read_sources(session, config)
+    if clock is not None:
+        now = clock()  # Lock waits never authorize departure using an old captured instant.
     import json
 
     digest = hashlib.sha256(
         json.dumps(current, sort_keys=True, default=str, separators=(",", ":")).encode()
     ).digest()
+    if config.fleet_mode:
+        digest = source_digest(
+            current, position_vehicle_ids={v.vehicle_id for v in problem.vehicles}
+        )
     if digest != run.source_fingerprint:
         raise RouteAuthorityError("SOURCE_CHANGED")
+    if config.fleet_mode and command.fleet_cycle_id is None:
+        raise RouteAuthorityError("FLEET_OWNER_REQUIRED")
     if now >= config.horizon_end:
         raise RouteAuthorityError("HORIZON_EXPIRED")
     used_vehicles = {route.vehicle_id for route in proposal.routes if route.stop_ids}
     for v in current["vehicles"]:
+        if config.fleet_mode and v["vehicle_id"] not in {
+            item.vehicle_id for item in problem.vehicles
+        }:
+            continue
+        if v["vehicle_id"] in used_vehicles and v["blocked_reason"] is not None:
+            raise RouteAuthorityError("VEHICLE_OPERATION_BLOCKED")
         if v["vehicle_id"] in used_vehicles and (
             v["resource_kind"] != "COMMITTED" or not v["starts_at"] <= now < v["ends_at"]
         ):
@@ -272,6 +309,53 @@ async def _activate(
         raise RouteAuthorityError("LEGACY_ASSIGNMENT_MUST_DRAIN")
     if any(r.status == "PRE_PLANNING" for r in requests.values()):
         raise RouteAuthorityError("LEGACY_BATCH_MUST_DRAIN")
+    if command.fleet_cycle_id is not None:
+        from .fleet_models import FleetControl, FleetCycle
+
+        cycle = await session.get(FleetCycle, command.fleet_cycle_id)
+        control = await session.scalar(
+            select(FleetControl).where(FleetControl.scope == "COMMITTED_FLEET").with_for_update()
+        )
+        if (
+            cycle is None
+            or control is None
+            or cycle.run_id != run.run_id
+            or cycle.status != "RUNNING"
+            or cycle.requested_by != actor
+            or cycle.selected_engine != command.engine.value
+            or control.manager_id != actor
+            or control.version != cycle.control_version
+            or control.lease_token != cycle.lease_token
+            or control.lease_until is None
+            or control.lease_until <= now
+        ):
+            raise RouteAuthorityError("FLEET_LEASE_LOST")
+        from tirodhan.modules.planning.routing.validation import RoutingValidationError
+
+        from .economics import EconomicPolicy, measure
+        from .rolling import incumbent_orders
+        from .snapshot import OperationalSnapshot
+
+        assert cycle.measurements is not None
+        economics = EconomicPolicy.model_validate(cycle.measurements["policy"]["economics"])
+        orders = incumbent_orders(OperationalSnapshot(current, digest))
+        ranked = []
+        for engine, candidate_result in run.results.items():
+            if "proposal" not in candidate_result or "failure_code" in candidate_result:
+                continue
+            candidate = PROPOSAL_CODEC.validate_python(candidate_result["proposal"])
+            if (
+                candidate.engine.value != engine
+                or candidate.engine_version != versions[candidate.engine]
+            ):
+                raise RouteAuthorityError("ENGINE_IDENTITY_MISMATCH")
+            try:
+                cost = measure(live_problem, candidate, economics, orders)
+                ranked.append((cost.rank, engine))
+            except RoutingValidationError:
+                continue
+        if not ranked or min(ranked)[1] != command.engine.value:
+            raise RouteAuthorityError("FLEET_SELECTION_CHANGED_REBASE_REQUIRED")
     activation = RouteActivation(
         run_id=run.run_id, engine=command.engine.value, activated_by=actor, created_at=now
     )
@@ -280,6 +364,65 @@ async def _activate(
     by_stop = {s.stop_id: s for s in problem.stops}
     by_vehicle = {v.vehicle_id: v for v in problem.vehicles}
     schedules = {r.vehicle_id: r for r in assessment.routes}
+    if config.fleet_mode:
+        # Transfer future work before inserting successor ownership, regardless of UUID order.
+        # Started/committed legs and collected custody were bound by the validator above.
+        destination = {
+            by_stop[s].lot_id: route.vehicle_id
+            for route in proposal.routes
+            for s in route.stop_ids
+            if by_stop[s].kind.value == "PICKUP"
+        }
+        for request_id, vehicle_id in destination.items():
+            pickup = await session.scalar(
+                select(PickupExecution).where(PickupExecution.request_id == request_id)
+            )
+            if pickup is None:
+                continue
+            old = await session.scalar(
+                select(RiderAssignmentItem).where(
+                    RiderAssignmentItem.pickup_execution_id == pickup.pickup_execution_id,
+                    RiderAssignmentItem.released_at.is_(None),
+                )
+            )
+            if old is None:
+                continue
+            old_root = await session.scalar(
+                select(VehicleRoute).where(
+                    VehicleRoute.assignment_id == old.assignment_id, VehicleRoute.status != "CLOSED"
+                )
+            )
+            if old_root is None or old_root.vehicle_id == vehicle_id:
+                continue
+            tasks = list(
+                await session.scalars(
+                    select(RouteTask).where(
+                        RouteTask.route_id == old_root.route_id,
+                        RouteTask.pickup_execution_id == pickup.pickup_execution_id,
+                        RouteTask.state.in_(("PENDING", "STARTED")),
+                    )
+                )
+            )
+            if pickup.status == "COLLECTED" or any(
+                t.state != "PENDING" or t.committed_at for t in tasks
+            ):
+                raise RouteAuthorityError("PROTECTED_OWNERSHIP_TRANSFER")
+            old.released_at, old.release_reason_code = now, "REASSIGNED"
+            for old_task in tasks:
+                old_task.state = "CANCELLED"
+        await session.flush()
+        # Empty donor routes close conventionally; custody routes can never disappear here.
+        from .execution import finish_if_empty
+
+        for route_data in current["routes"]:
+            if route_data["vehicle_id"] not in by_vehicle:
+                continue
+            if not any(
+                r.vehicle_id == route_data["vehicle_id"] and r.stop_ids for r in proposal.routes
+            ):
+                old_root = await session.get(VehicleRoute, route_data["route_id"])
+                assert old_root is not None
+                await finish_if_empty(session, old_root, now)
     for proposed in sorted(proposal.routes, key=lambda r: str(r.vehicle_id)):
         if not proposed.stop_ids:
             continue
@@ -299,6 +442,14 @@ async def _activate(
                 raise RouteAuthorityError("EXPLICIT_RECOVERY_RESUME_REQUIRED")
             assignment = await session.get(RiderAssignment, root.assignment_id)
             assert assignment is not None
+            if config.fleet_mode:
+                from .execution import current_tasks
+
+                if (
+                    tuple(t.stop_id for t in await current_tasks(session, root))
+                    == proposed.stop_ids
+                ):
+                    continue  # Unchanged routes retain their revision and in-flight command fence.
             previous = await session.scalar(
                 select(RouteRevision.revision_id).where(
                     RouteRevision.route_id == root.route_id,
@@ -443,4 +594,9 @@ async def _activate(
         result_status_code=200,
         completed_at=now,
     )
+    if command.fleet_cycle_id is not None:
+        assert cycle is not None
+        cycle.activation_id = activation.activation_id
+        cycle.selected_engine = command.engine.value
+        cycle.status, cycle.completed_at = "ACTIVATED", now
     return activation.activation_id

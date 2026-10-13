@@ -111,3 +111,15 @@ Runtime generative AI is not used for clustering.
 
 - values of `N` and `P`.
 - production compaction-distance and maximum group-request values.
+
+## Approved V2 implementation progression: Increment 5
+
+The preceding cell/batch algorithm describes retained V1 history and compatibility.
+V2 replacement planning jointly considers bounded city-wide pending demand across
+cells/slots with current committed resources and cargo. It uses pinned OSRM, VROOM
+and OR-Tools, independent feasibility and explicitly calibrated measured economic
+selection. Optional debt is retained with durable exceptions/retry; native total failure
+does not drop bookings or dispatch an unreviewed heuristic. This supersedes cell-local
+optimization for newly admitted V2 work when approved cutover occurs. Permanent
+parallel dispatch is not the target. Production activation and global V1 retirement
+remain separate release gates. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).

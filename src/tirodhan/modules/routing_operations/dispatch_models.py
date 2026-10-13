@@ -98,10 +98,15 @@ class RouteTask(Base):
         ForeignKey("receiving_point.receiving_point_id")
     )
     state: Mapped[str] = mapped_column(String(16))
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint("kind IN ('PICKUP', 'DISCHARGE')", name="ck_route_task_kind"),
+        CheckConstraint(
+            "committed_at IS NULL OR started_at IS NULL OR committed_at <= started_at",
+            name="ck_task_commitment_time",
+        ),
         CheckConstraint(
             "state IN ('PENDING', 'STARTED', 'COMPLETED', 'CANCELLED')", name="ck_route_task_state"
         ),

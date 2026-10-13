@@ -4,9 +4,10 @@ The approved V2 amendments in ADR-004/006/015 supersede V1 planning/dispatch pol
 as the target workflow; retained V1 execution drains at an approved cutover. `planning.routing` dataclasses are immutable
 optimizer projections, not persistent domain entities or replacements for the relational
 models below. Increment 3 adds durable operational input entities and real-booking/custody
-projection. Increment 4 adds transactional V2 authority/execution; global admission
+projection. Increment 4 adds transactional V2 authority/execution and Increment 5 adds
+continuous committed-fleet control, economic selection and protected movement; global admission
 cutover and flexible supplementary acceptance remain separate integration work.
-See [implemented operational boundary](V2_ROUTING_INCREMENT_4.md).
+See [implemented operational boundary](V2_ROUTING_INCREMENT_5.md).
 
 ### V2 route authority and execution (increment 4)
 
@@ -14,7 +15,8 @@ RouteActivation authorizes one validated run/engine under live transaction guard
 VehicleRoute binds one operating vehicle, attested committed shift and conventional
 RiderAssignment. RouteRevision and ordered RouteRevisionStop are immutable history.
 RouteTask is a stable pickup/discharge execution intent with PENDING, STARTED,
-COMPLETED or CANCELLED state. STARTED next work forms the protected optimizer prefix.
+COMPLETED or CANCELLED state. DEPART commitment or STARTED next work forms the protected
+optimizer prefix. DEPART does not assert arrival or pickup.
 New V2 PickupExecution and COMMITTED_DISPATCH assignments have no synthetic group;
 historical V1 group facts remain. One route assignment can receive additional feasible
 household work while BUSY. CargoVehicleObservation is written atomically with successful
@@ -30,7 +32,8 @@ capacity or returns the rider to IDLE. Actual return-arrival is not a new persis
 Advance route allocation leaves ACCEPTED booking rights intact until actual pickup start.
 Cancellation detaches uncollected routed work with existing compensation in one transaction.
 Admitted/released V2 work cannot return to cell/group dispatch. Default runtime registration
-is disabled; single-owner global adoption and flexible offers are still required.
+is disabled; production orchestration scheduling, global cutover and flexible offers
+are still required.
 
 ### V2 operational inputs and evaluation (increment 3)
 
@@ -559,3 +562,18 @@ ACCEPTED while A remains unresolved. Verified captures on A record financial SUC
 accepting A, then create full eligible per-charge compensation. Refund status remains separate
 until verified payout. Existing holds, dispute controls and audited legacy recovery are retained.
 See [preparation API](PAYMENT_PREPARATION_API.md).
+
+## Increment 5 fleet lifecycle
+
+FleetControl holds explicit versioned scheduling/economic/telemetry policy and one
+leased scope. FleetCycle records RUNNING -> ACTIVATED / UNCHANGED / FAILED / STALE
+with requester, run, selected engine and independent measurements. FleetException
+records append-only attention/household holds; FacilityRestriction records dated
+authorized receiving unavailability. FleetPositionAnchor references actual history.
+VehiclePosition adds authenticated session and accuracy provenance. RouteTask DEPART
+sets a write-once committed destination; START also commits. Uncommitted future work
+may change owners atomically; committed/started work and collected cargo may not.
+BUSY persists through cargo discharge. Blocked vehicles enter controlled recovery.
+LOAD_UNCERTAIN survives assignment release and cannot be cleared with an old manifest;
+audited correction remains a later workflow. Manager recovery accepts ACTIVE or held
+routes, releasing only uncollected work. See [Increment 5](V2_ROUTING_INCREMENT_5.md).

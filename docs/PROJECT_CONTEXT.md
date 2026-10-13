@@ -5,8 +5,10 @@ cross-cell/compatible-slot routing, continuous collection vehicles and authorita
 dispatch during committed operating shifts; flexible riders use voluntary acceptance.
 OSRM + VROOM + OR-Tools is the approved technology combination. Future bookings require
 no current rider, and advance provisional planning must preserve cancellation/financial
-rights. Increment 1 implements only a pure routing contract and feasibility validator;
-V1 execution remains active. See [implementation boundary](V2_ROUTING_INCREMENT_1.md)
+rights. Increments 1–5 implement the independent contract/gate, pinned road/solver
+adapters, operational inputs, vehicle-bound authority/execution and opt-in continuous
+committed-fleet orchestration. Production activation remains disabled and V1 execution
+remains active until approved cutover. See [current boundary](V2_ROUTING_INCREMENT_5.md)
 and the V2 amendments to ADR-004/006/015. Routing technology and V2 dispatch authority are
 no longer open decisions; operational calibration and configuration remain open.
 
@@ -114,3 +116,11 @@ is enabled. The approved architecture is OSRM + VROOM + OR-Tools with committed 
 capacity first and flexible voluntary supplementary capacity; detailed economic objectives,
 physical inputs/profile calibration and production graph hosting remain decisions for
 subsequent increments. See [increment 2](V2_ROUTING_INCREMENT_2.md), ADR-004 and ADR-006.
+
+## Increment 5 committed fleet implementation
+
+The opt-in finite fleet worker now jointly evaluates idle, BUSY and loaded committed
+resources across cells/slots, compares both pinned engines on a measured objective,
+rebases on current positions and activates through existing transactional authority.
+Production fleet/dispatch flags remain false. Increment 5 does not provision a schedule
+or road-service hosting. See [implementation, validation and gaps](V2_ROUTING_INCREMENT_5.md).

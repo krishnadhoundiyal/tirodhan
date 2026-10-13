@@ -60,3 +60,20 @@ evidence rules. Disposable PostgreSQL migrations, concurrent activation/cancella
 historical recovery and downgrade guards run alongside the existing native suite.
 The exact reviewed source is mounted read-only even with -SkipBuild; that option reuses
 only a dependency image with the unchanged dependency manifest.
+
+## Increment 5 continuous fleet coverage
+
+The operational runner uses `tirodhan-routing-tests:increment-5` and also executes
+`test_routing_fleet.py` and `test_routing_fleet_reliability.py`. The dependency pins above
+are unchanged. It retains Increment 4's complete collect/revise/discharge tests.
+New real-road tests execute both native engines, append positions while they solve,
+rebase/activate, collect and revise with actual vehicle cargo and additional demand.
+They also exercise either native engine unavailable, using the other's validated result.
+Deterministic directed-matrix regressions cover economic baselines, whole-block
+ownership transfer, protected departure, expired owners, crash boundaries, concurrent
+cycles, publication rebase, device authorization, unsafe-resource holds and backlog
+progress. Migration tests check populated prior-history round trips, catalog-filtered
+application drift, immutable history and downgrade refusal after adoption.
+The tests use synthetic capacity, coefficients and demand; road measurements are
+reproducible fixture observations, not production cost or scale claims. See
+[Increment 5 report](../../docs/V2_ROUTING_INCREMENT_5.md).

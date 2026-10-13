@@ -73,3 +73,11 @@ infrastructure is provisioned. The next delivery increment must explicitly wire 
 events and preserve inbox/send-before-publish recovery. V2 route authority is in PostgreSQL,
 not a notification or per-cell Service Bus session. The cell-session preference above
 describes retained V1 planning/drain, not a V2 optimization partition.
+
+## Increment 5 fleet events
+
+Route revision, recovery and fleet attention are identifier-only transactional outbox
+facts. Their new production notification delivery consumer is not yet connected. Rider
+polling and proven committed-task compatibility permit execution under delayed delivery.
+No new broker or paid notification infrastructure is provisioned. See
+[Increment 5](../V2_ROUTING_INCREMENT_5.md) for the remaining release integration.

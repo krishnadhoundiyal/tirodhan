@@ -281,6 +281,23 @@ class ProposalAssessment:
 
 def validate_proposal(problem: RoutingProblem, proposal: RouteProposal) -> ProposalAssessment:
     validate_problem(problem)
+    return _validate_routes(problem, proposal)
+
+
+@dataclass(frozen=True, slots=True)
+class FeasibilityGate:
+    """Validate immutable matrix/problem once when assessing many local-search proposals."""
+
+    problem: RoutingProblem
+
+    def __post_init__(self) -> None:
+        validate_problem(self.problem)
+
+    def assess(self, proposal: RouteProposal) -> ProposalAssessment:
+        return _validate_routes(self.problem, proposal)
+
+
+def _validate_routes(problem: RoutingProblem, proposal: RouteProposal) -> ProposalAssessment:
     _require(
         proposal.contract_version == problem.contract_version
         and proposal.policy_version == problem.policy_version

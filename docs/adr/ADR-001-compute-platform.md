@@ -31,3 +31,11 @@ database, cache or recurring cloud cost is introduced. Future finite optimizatio
 remain consistent with this platform, but production road-graph hosting is undecided:
 graph loading/cold starts versus a retained replica must be measured and recurring costs
 approved separately. See [implementation and alternatives](../V2_ROUTING_INCREMENT_2.md).
+
+## Increment 5 finite fleet worker
+
+The modular monolith now includes a finite routing_fleet worker CLI, not an API loop
+or independently deployed service. No production schedule/hosting is selected or
+provisioned. Approved ACA compute and cost gates remain unchanged; road graph hosting,
+solver worker packaging and schedule frequency require a measured release decision.
+See [Increment 5](../V2_ROUTING_INCREMENT_5.md).

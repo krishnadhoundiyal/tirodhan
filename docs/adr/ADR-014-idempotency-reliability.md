@@ -111,3 +111,14 @@ Every relevant mutating use case must test:
 - crash/retry around external side effects.
 
 See `docs/IDEMPOTENCY.md` for the operation matrix.
+
+## Increment 5 fleet ownership
+
+Use the PostgreSQL singleton version/token/expiry lease for one bounded fleet owner,
+with unique cycle identity and immutable terminal audit. Position ingestion and policy/
+issue commands use existing fingerprinted client idempotency and live authorization.
+Current-matrix rebase never weakens publication compare-and-swap or Payment-first
+activation. Authority and terminal cycle commit atomically; an expired worker cannot
+publish after takeover. No Redis/distributed-lock service is added. New outbox event
+facts are implemented; notification consumer delivery remains an explicit release gap.
+See [Increment 5](../V2_ROUTING_INCREMENT_5.md).

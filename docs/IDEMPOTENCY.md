@@ -635,3 +635,16 @@ rejected initial attempt. DB triggers cover direct changes as well as supported 
 commands. Any maintenance writer must follow Payment-first lock ordering; ordinary API retry
 cannot rewrite terms. Client countdown/dismissal/callback has no mutating financial authority.
 See [API/Operations contract](PAYMENT_PREPARATION_API.md) and [tests/evidence](PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).
+
+## Increment 5 fleet commands and cycles
+
+Policy uses manager/client UUID + fingerprint + expected control version; position and
+issue use rider/client UUID + fingerprint and live shift/session authorization. Each
+command's facts and durable replay result commit together. Changed replay payloads
+conflict. Fleet worker cycles use one scope/version, unique lease token and expiry;
+successor takeover marks abandoned RUNNING cycles stale. Activation, command result
+and ACTIVATED cycle commit in one SERIALIZABLE Payment-first transaction. Crashes before
+commit roll back; after commit they replay one activation. Old tokens cannot finish or
+activate a successor. Solver/road calls have no operational side effects and run outside
+locks. Events use identifier-only transactional outbox records; new event delivery
+consumer integration remains outstanding. See [Increment 5](V2_ROUTING_INCREMENT_5.md).

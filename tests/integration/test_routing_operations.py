@@ -64,7 +64,6 @@ from tirodhan.modules.routing_operations.models import (
     OperatingShift,
     OperatingVehicle,
     RoutingShadowRun,
-    VehiclePosition,
 )
 from tirodhan.modules.routing_operations.service import (
     PROBLEM_CODEC,
@@ -127,7 +126,14 @@ def engines():
     return {e: FeasibleEngine(e) for e in OptimizerEngine}
 
 
-async def setup(factory, *, manifests=True, resource_kind="COMMITTED"):
+async def setup(
+    factory,
+    *,
+    manifests=True,
+    resource_kind="COMMITTED",
+    position=(77.2090, 28.6139),
+    position_age_seconds=0,
+):
     fixture = await create_fixture(factory, group_count=2, pickups_per_group=1)
     now = utc_now().replace(microsecond=0)
     await _token_for(factory, fixture.manager_id, roles=("MANAGER",))
@@ -166,9 +172,9 @@ async def setup(factory, *, manifests=True, resource_kind="COMMITTED"):
         PositionReport(
             client_command_id=new_uuid7(),
             vehicle_id=vehicle_id,
-            longitude=77.2090,
-            latitude=28.6139,
-            observed_at=now,
+            longitude=position[0],
+            latitude=position[1],
+            observed_at=now - timedelta(seconds=position_age_seconds),
         )
     )
     await execute(
@@ -307,13 +313,11 @@ async def test_missing_physical_data_is_a_durable_readiness_failure_and_new_comm
 )
 async def test_unsafe_or_incomplete_scope_fails_closed(database_session_factory, change, expected):
     factory = database_session_factory
-    fixture, vehicle, _, _, _, config, _ = await setup(factory)
+    fixture, vehicle, _, _, _, config, _ = await setup(
+        factory, position_age_seconds=600 if change == "position" else 0
+    )
     async with factory() as session, session.begin():
-        if change == "position":
-            await session.execute(
-                update(VehiclePosition).values(observed_at=config.epoch - timedelta(minutes=10))
-            )
-        elif change == "role":
+        if change == "role":
             await session.execute(
                 update(UserRole)
                 .where(UserRole.user_id == fixture.rider_ids[0])
@@ -789,14 +793,11 @@ async def test_real_road_and_both_engines_from_durable_operational_facts(
     if os.getenv("TIRODHAN_ROUTING_ENGINE_TESTS") != "1":
         pytest.skip("pinned native execution is opt-in")
     factory = database_session_factory
-    fixture, vehicle, _, point, ids, config, execute = await setup(factory)
+    fixture, vehicle, _, point, ids, config, execute = await setup(
+        factory, position=(77.207, 28.632)
+    )
     # Public Delhi road nodes, synthetic household/capacity facts, disposable database only.
     async with factory() as session, session.begin():
-        await session.execute(
-            update(VehiclePosition)
-            .where(VehiclePosition.vehicle_id == vehicle)
-            .values(location=WKTElement("POINT(77.207 28.632)", srid=4326))
-        )
         await session.execute(
             update(ReceivingPoint)
             .where(ReceivingPoint.receiving_point_id == point.receiving_point_id)

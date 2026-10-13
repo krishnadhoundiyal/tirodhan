@@ -1194,3 +1194,17 @@ updates. Schema downgrade removes permissions/guards only; it discards no captur
 rows. Downgrading the runtime also restores the old P1-1 defect, so production recovery should
 prefer forward fixes. Coordinate deployment to avoid serving old Checkout code against new
 customer preparation semantics. See [validation report](PAYMENT_P1_1_IMPLEMENTATION_REPORT.md).
+
+## Increment 5 schema extension (0026)
+
+FleetControl, FleetCycle, FleetPositionAnchor, FleetException and FacilityRestriction
+are relational tables with actual resource/actor/run/activation/position FKs. Typed
+versioned configuration and measurements use JSONB only for policy/audit. Cycle identity
+and terminal outcomes, GPS, physical manifests, restrictions and exceptions are SQL
+protected history. OperatingVehicle.blocked_reason controls operational admission;
+VehiclePosition records nullable accuracy/session for historical compatibility;
+RouteTask.committed_at is write-once and precedes start. RoutingShadowRun separates
+business and exact publication fingerprints. Downgrade refuses new operational history
+before dropping anything; empty adoption retains populated prior financial/V1 facts.
+Catalog-based extension exclusions retain strict application-schema drift checks.
+See [Increment 5](V2_ROUTING_INCREMENT_5.md).

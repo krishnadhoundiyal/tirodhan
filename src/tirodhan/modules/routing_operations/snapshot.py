@@ -45,6 +45,7 @@ from tirodhan.modules.receiving_points.models import ReceivingPoint
 
 from .commands import OperationalInputError, Positive
 from .dispatch_models import RouteRevision, RouteRevisionStop, RouteTask, VehicleRoute
+from .fleet_models import FacilityRestriction, FleetException
 from .models import (
     CargoVehicleObservation,
     OperatingShift,
@@ -67,6 +68,7 @@ class ShadowConfiguration(BaseModel):
     max_profiles: int = Field(strict=True, ge=1, le=8)
     search_seconds: int = Field(strict=True, ge=1, le=30)
     lease_seconds: int = Field(strict=True, ge=60, le=3600)
+    fleet_mode: bool = False
 
     @model_validator(mode="after")
     def ordered(self) -> ShadowConfiguration:
@@ -86,6 +88,38 @@ class MatrixSource(Protocol):
 class OperationalSnapshot:
     sources: dict[str, Any]
     fingerprint: bytes
+
+
+def source_digest(
+    sources: dict[str, Any],
+    *,
+    business_only: bool = False,
+    position_vehicle_ids: set[UUID] | None = None,
+) -> bytes:
+    data = dict(sources)
+    data["vehicles"] = [
+        {
+            k: value
+            for k, value in v.items()
+            if k
+            not in (
+                {"version", "position_id", "observed_at"}
+                | (
+                    {"longitude", "latitude"}
+                    if business_only
+                    or (
+                        position_vehicle_ids is not None
+                        and v["vehicle_id"] not in position_vehicle_ids
+                    )
+                    else set()
+                )
+            )
+        }
+        for v in sources["vehicles"]
+    ]
+    return hashlib.sha256(
+        json.dumps(data, sort_keys=True, default=str, separators=(",", ":")).encode()
+    ).digest()
 
 
 def _coordinates(column: Any) -> tuple[Any, Any]:
@@ -133,14 +167,19 @@ async def capture_snapshot(
     digest = hashlib.sha256(
         json.dumps(sources, sort_keys=True, default=str, separators=(",", ":")).encode()
     ).digest()
+    if config.fleet_mode:
+        digest = source_digest(sources)
     return OperationalSnapshot(sources, digest)
 
 
 async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> dict[str, Any]:
     latest = (
-        select(VehiclePosition.vehicle_id, func.max(VehiclePosition.revision).label("revision"))
-        .group_by(VehiclePosition.vehicle_id)
-        .subquery()
+        select(VehiclePosition.position_id)
+        .where(VehiclePosition.vehicle_id == OperatingVehicle.vehicle_id)
+        .order_by(VehiclePosition.revision.desc())
+        .limit(1)
+        .correlate(OperatingVehicle)
+        .scalar_subquery()
     )
     role = exists().where(
         UserRole.user_id == OperatingShift.rider_id,
@@ -158,17 +197,26 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     OperatingVehicle.profile_version,
                     OperatingVehicle.end_receiving_point_id,
                     OperatingVehicle.version,
+                    OperatingVehicle.blocked_reason,
                     OperatingShift.shift_id,
                     OperatingShift.resource_kind,
                     OperatingShift.rider_id,
                     OperatingShift.starts_at,
                     OperatingShift.ends_at,
+                    OperatingShift.commitment_id,
                     VehiclePosition.position_id,
                     VehiclePosition.observed_at,
                     *_coordinates(VehiclePosition.location),
                     RiderProfile.status.label("rider_status"),
                     AppUser.status.label("user_status"),
                     role.label("has_role"),
+                    exists()
+                    .where(
+                        RiderAssignment.rider_id == OperatingShift.rider_id,
+                        RiderAssignment.status == "ACTIVE",
+                        RiderAssignment.source != "COMMITTED_DISPATCH",
+                    )
+                    .label("legacy_assignment"),
                     RiderAvailability.work_state,
                     RiderAvailability.availability_intent,
                 )
@@ -176,13 +224,9 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 .join(RiderProfile, RiderProfile.rider_id == OperatingShift.rider_id)
                 .join(AppUser, AppUser.user_id == OperatingShift.rider_id)
                 .outerjoin(RiderAvailability, RiderAvailability.rider_id == OperatingShift.rider_id)
-                .outerjoin(latest, latest.c.vehicle_id == OperatingVehicle.vehicle_id)
                 .outerjoin(
                     VehiclePosition,
-                    and_(
-                        VehiclePosition.vehicle_id == latest.c.vehicle_id,
-                        VehiclePosition.revision == latest.c.revision,
-                    ),
+                    VehiclePosition.position_id == latest,
                 )
                 .where(
                     OperatingShift.closed_at.is_(None),
@@ -224,6 +268,12 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     CollectionRequest.status,
                     CollectionRequest.slot_start,
                     CollectionRequest.slot_end,
+                    exists()
+                    .where(
+                        FleetException.request_id == CollectionRequest.request_id,
+                        FleetException.reason == "LOAD_UNCERTAIN",
+                    )
+                    .label("load_uncertain"),
                     *_coordinates(CollectionRequest.pickup_location),
                     PickupExecution.pickup_execution_id,
                     PickupExecution.status.label("pickup_status"),
@@ -313,6 +363,8 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     ReceivingPoint.receiving_point_id,
                     ReceivingPoint.status,
                     ReceivingPoint.version,
+                    ReceivingPoint.official_identifier,
+                    ReceivingPoint.allowed_radius_m,
                     *_coordinates(ReceivingPoint.location),
                 )
                 .where(ReceivingPoint.receiving_point_id.in_(point_ids))
@@ -377,6 +429,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     RouteTask.state,
                     RouteTask.kind,
                     RouteTask.started_at,
+                    RouteTask.committed_at,
                     RouteRevisionStop.ordinal,
                 )
                 .join(RouteRevisionStop, RouteRevisionStop.task_id == RouteTask.task_id)
@@ -413,6 +466,51 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
             )
         ).mappings()
     ]
+    restrictions = [
+        dict(row)
+        for row in (
+            await session.execute(
+                select(
+                    FacilityRestriction.restriction_id,
+                    FacilityRestriction.receiving_point_id,
+                    FacilityRestriction.starts_at,
+                    FacilityRestriction.ends_at,
+                    FacilityRestriction.reason,
+                )
+                .where(
+                    FacilityRestriction.receiving_point_id.in_(point_ids),
+                    FacilityRestriction.ends_at >= config.epoch,
+                    FacilityRestriction.starts_at <= config.horizon_end,
+                )
+                .order_by(FacilityRestriction.restriction_id)
+            )
+        ).mappings()
+    ]
+    orphaned = [
+        dict(row)
+        for row in (
+            await session.execute(
+                select(
+                    VehicleRoute.route_id,
+                    VehicleRoute.vehicle_id,
+                    VehicleRoute.version,
+                    VehicleRoute.status,
+                )
+                .join(OperatingShift, OperatingShift.shift_id == VehicleRoute.shift_id)
+                .where(
+                    VehicleRoute.status != "CLOSED",
+                    or_(
+                        OperatingShift.ends_at <= config.epoch,
+                        OperatingShift.closed_at.is_not(None),
+                    ),
+                )
+                .order_by(VehicleRoute.route_id)
+                .limit(config.max_vehicles + 1)
+            )
+        ).mappings()
+    ]
+    if len(orphaned) > config.max_vehicles:
+        raise OperationalInputError("RECOVERY_SCOPE_LIMIT")
     return {
         "vehicles": vehicles,
         "requests": requests,
@@ -421,6 +519,8 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
         "routes": routes,
         "tasks": tasks,
         "released": released,
+        "restrictions": restrictions,
+        "orphaned_routes": orphaned,
     }
 
 
@@ -460,8 +560,18 @@ async def build_problem(
     lots: list[CargoLot] = []
     stops: list[RoutingStop] = []
     cargo: dict[UUID, list[CargoBalance]] = {v["vehicle_id"]: [] for v in vehicles}
-    eligible = tuple(cargo)
+    eligible = tuple(
+        v["vehicle_id"]
+        for v in vehicles
+        if v["blocked_reason"] is None
+        and not any(
+            route["vehicle_id"] == v["vehicle_id"] and route["status"] == "RECOVERY_REQUIRED"
+            for route in data["routes"]
+        )
+    )
     for r in requests:
+        if r["load_uncertain"]:
+            raise OperationalInputError("AUDITED_LOAD_CORRECTION_REQUIRED")
         if r["mass_g"] is None:
             raise OperationalInputError("MANIFEST_REQUIRED")
         request_id = r["request_id"]
@@ -483,9 +593,20 @@ async def build_problem(
             cargo[bound].append(CargoBalance(request_id, 1))
         elif r["owner_id"] is not None and bound is None:
             raise OperationalInputError("INCUMBENT_RESOURCE_OUTSIDE_SCOPE")
+        protected_lot = any(
+            t["stop_id"] in (discharge_id, uuid5(NAMESPACE_URL, f"tirodhan:pickup:{request_id}"))
+            and (t["state"] == "STARTED" or t["committed_at"] is not None)
+            for t in data["tasks"]
+        )
+        if config.fleet_mode and not collected and not protected_lot:
+            bound = None  # Future uncommitted ownership may move only in activation's transaction.
         pickup_id = None if collected else uuid5(NAMESPACE_URL, f"tirodhan:pickup:{request_id}")
         deadline = _seconds(r["discharge_deadline"], epoch)
-        if deadline < 0 or (not collected and r["slot_end"] < epoch):
+        started = next(
+            (t for t in data["tasks"] if t["stop_id"] == pickup_id and t["state"] == "STARTED"),
+            None,
+        )
+        if deadline < 0 or (not collected and r["slot_end"] < epoch and started is None):
             raise OperationalInputError("COMMITMENT_WINDOW_EXPIRED")
         lots.append(
             CargoLot(
@@ -521,11 +642,13 @@ async def build_problem(
                     request_id,
                     1,
                     r["pickup_seconds"],
-                    TimeWindow(
+                    TimeWindow(0, _seconds(config.horizon_end, epoch))
+                    if started
+                    else TimeWindow(
                         max(0, _seconds(r["slot_start"], epoch, start=True)),
                         _seconds(r["slot_end"], epoch),
                     ),
-                    True,
+                    not config.fleet_mode or r["owner_id"] is not None,
                     allowed,
                     bound,
                     None,
@@ -540,7 +663,7 @@ async def build_problem(
                 1,
                 r["discharge_seconds"],
                 TimeWindow(0, deadline),
-                True,
+                not config.fleet_mode or collected or r["owner_id"] is not None,
                 allowed,
                 bound,
                 r["receiving_point_id"],
@@ -574,15 +697,30 @@ async def build_problem(
                 merged[-1] = TimeWindow(merged[-1].start, max(end, merged[-1].end))
             else:
                 merged.append(TimeWindow(start, end))
-        if not merged:
+        for restriction in data["restrictions"]:
+            if restriction["receiving_point_id"] != p["receiving_point_id"]:
+                continue
+            blocked_start = _seconds(restriction["starts_at"], epoch)
+            blocked_end = _seconds(restriction["ends_at"], epoch, start=True)
+            intervals: list[TimeWindow] = []
+            for window in merged:
+                if blocked_end <= window.start or blocked_start >= window.end:
+                    intervals.append(window)
+                else:
+                    if window.start < blocked_start:
+                        intervals.append(TimeWindow(window.start, blocked_start))
+                    if blocked_end < window.end:
+                        intervals.append(TimeWindow(blocked_end, window.end))
+            merged = intervals
+        if not merged and not data["restrictions"]:
             raise OperationalInputError("RECEIVING_WINDOWS_REQUIRED")
         facility_snapshots.append(
             ReceivingPointSnapshot(
                 p["receiving_point_id"],
                 p["receiving_point_id"],
                 p["version"],
-                p["status"] == "ACTIVE",
-                tuple(merged),
+                p["status"] == "ACTIVE" and bool(merged),
+                tuple(merged) if merged else (TimeWindow(0, 0),),
             )
         )
     vehicle_snapshots = []
@@ -610,7 +748,7 @@ async def build_problem(
                 tuple(
                     t["stop_id"]
                     for t in data["tasks"]
-                    if t["state"] == "STARTED"
+                    if (t["state"] == "STARTED" or t["committed_at"] is not None)
                     and t["route_id"]
                     in {r["route_id"] for r in data["routes"] if r["vehicle_id"] == v["vehicle_id"]}
                 ),
