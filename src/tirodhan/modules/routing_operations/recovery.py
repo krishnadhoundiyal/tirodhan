@@ -71,7 +71,7 @@ async def recover_route(
             or revision.version != root.version
         ):
             raise RouteAuthorityError("ROUTE_REVISION_STALE")
-        if root.status != "ACTIVE":
+        if root.status not in ("ACTIVE", "RECOVERY_REQUIRED"):
             raise RouteAuthorityError("ROUTE_NOT_ACTIVE")
         items = list(
             await session.scalars(

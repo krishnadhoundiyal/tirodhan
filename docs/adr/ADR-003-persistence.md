@@ -33,3 +33,11 @@ production component. See [schema and downgrade implications](../V2_ROUTING_INCR
 - exact lat/long remains queryable for PostGIS;
 - database and object-store access are protected independently;
 - physical storage SKUs remain subject to cost sizing.
+
+## Increment 5 fleet facts
+
+Migration 0026 uses relational fleet control/cycles/anchors/exceptions/restrictions,
+actual FKs and SQL immutable-history guards. Typed policy/measurement JSON is not a
+replacement for core entities. GPS and physical manifests are append-only; disputed
+manifest holds survive ownership release. Downgrade refuses adopted history rather
+than manufacturing legacy groups. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).

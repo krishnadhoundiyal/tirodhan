@@ -176,3 +176,16 @@ Active-pickup exceptions may use a dedicated WhatsApp Business support channel. 
 
 There is no fleet scoring/selection algorithm in Phase 1U: every currently eligible cell member
 receives an offer. Future capacity/vehicle/slot policies are not invented by this implementation.
+
+## Approved V2 implementation progression: Increment 5
+
+Cell fan-out remains V1/flexible compatibility, not committed-fleet selection. The
+finite fleet owner compares both engines and validated refinements across idle/BUSY/
+loaded COMMITTED shifts; PostgreSQL activation establishes authoritative assignment.
+Future uncollected/uncommitted work may transfer atomically around stable household
+pickup identity. DEPART/START protects the current destination. Collected cargo retains
+vehicle/assignment custody and BUSY until actual discharge. Reported issues hold routes;
+manager recovery may release outstanding work from an already held route but cannot
+transfer collected cargo implicitly. Old-revision execution is permitted only for the
+same committed next task. Flexible acceptance and final V1 retirement remain later
+integration. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).

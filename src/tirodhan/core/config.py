@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     debug: bool = False
     routing_shadow_review_enabled: bool = False
     routing_dispatch_enabled: bool = False
+    routing_fleet_enabled: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file_path: Path | None = None
     database_url: SecretStr = SecretStr(

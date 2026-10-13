@@ -106,6 +106,25 @@ class WindowDeclare(Command):
         return self
 
 
+class RestrictFacility(Command):
+    operation: Literal["FACILITY_RESTRICT"] = "FACILITY_RESTRICT"
+    receiving_point_id: UUID
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    reason: Literal["CLOSED", "FULL", "UNAVAILABLE"]
+
+    @model_validator(mode="after")
+    def ordered(self) -> RestrictFacility:
+        if self.ends_at <= self.starts_at:
+            raise ValueError("invalid restriction window")
+        return self
+
+
+class ClearVehicle(Command):
+    operation: Literal["VEHICLE_CLEAR"] = "VEHICLE_CLEAR"
+    vehicle_id: UUID
+
+
 ResourceCommand = Annotated[
     VehicleCreate
     | ShiftOpen
@@ -113,7 +132,9 @@ ResourceCommand = Annotated[
     | PositionReport
     | CargoObserve
     | ManifestDeclare
-    | WindowDeclare,
+    | WindowDeclare
+    | RestrictFacility
+    | ClearVehicle,
     Field(discriminator="operation"),
 ]
 COMMAND_CODEC: TypeAdapter[ResourceCommand] = TypeAdapter(ResourceCommand)
@@ -178,6 +199,24 @@ async def _apply(
 ) -> UUID:
     shift: OperatingShift | None
     audit = {"recorded_by": actor, "created_at": now}
+    if isinstance(command, RestrictFacility):
+        from tirodhan.modules.receiving_points.models import ReceivingPoint
+
+        from .fleet_models import FacilityRestriction
+
+        point = await session.scalar(
+            select(ReceivingPoint)
+            .where(ReceivingPoint.receiving_point_id == command.receiving_point_id)
+            .with_for_update()
+        )
+        if point is None:
+            raise OperationalInputError("RECEIVING_POINT_REQUIRED")
+        restriction = FacilityRestriction(
+            **command.model_dump(exclude={"operation", "client_command_id"}), **audit
+        )
+        session.add(restriction)
+        await session.flush([restriction])
+        return restriction.restriction_id
     if isinstance(command, VehicleCreate):
         created_vehicle = OperatingVehicle(
             **command.model_dump(exclude={"operation", "client_command_id"}), **audit
@@ -215,6 +254,12 @@ async def _apply(
     )
     if vehicle is None:
         raise OperationalInputError("VEHICLE_NOT_FOUND")
+    if isinstance(command, ClearVehicle):
+        if vehicle.blocked_reason == "LOAD_UNCERTAIN":
+            raise OperationalInputError("AUDITED_LOAD_CORRECTION_REQUIRED")
+        vehicle.blocked_reason = None
+        vehicle.version += 1
+        return vehicle_id  # Clearing the resource never resumes a held route implicitly.
     if isinstance(command, CargoObserve):
         from tirodhan.modules.pickups.models import PickupAttempt
         from tirodhan.modules.planning.models import PickupExecution

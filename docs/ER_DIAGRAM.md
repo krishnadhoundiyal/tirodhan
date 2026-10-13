@@ -217,3 +217,28 @@ All nullable endpoints above denote optional real FKs, including unmatched exter
 observations. FinancialScanCheckpoint is standalone account/window control progress, unique by
 provider/account/kind, without a polymorphic entity reference. Inbox, Outbox and IdempotencyRecord
 remain cross-cutting infrastructure. No relationship uses cascading financial deletion.
+
+## Increment 5 continuous fleet relationships
+
+```mermaid
+erDiagram
+    APP_USER ||--o{ FLEET_CONTROL : configures
+    FLEET_CONTROL ||--o{ FLEET_CYCLE : owns
+    APP_USER ||--o{ FLEET_CYCLE : requests
+    ROUTING_SHADOW_RUN o|--o{ FLEET_CYCLE : evaluates
+    ROUTE_ACTIVATION o|--o| FLEET_CYCLE : commits
+    FLEET_CONTROL ||--o{ FLEET_POSITION_ANCHOR : tracks
+    OPERATING_VEHICLE ||--o| FLEET_POSITION_ANCHOR : anchors
+    VEHICLE_POSITION ||--o{ FLEET_POSITION_ANCHOR : references
+    REFRESH_SESSION o|--o{ VEHICLE_POSITION : device_session
+    FLEET_CYCLE o|--o{ FLEET_EXCEPTION : observes
+    COLLECTION_REQUEST o|--o{ FLEET_EXCEPTION : holds
+    VEHICLE_ROUTE o|--o{ FLEET_EXCEPTION : concerns
+    APP_USER ||--o{ FLEET_EXCEPTION : records
+    RECEIVING_POINT ||--o{ FACILITY_RESTRICTION : restricts
+    APP_USER ||--o{ FACILITY_RESTRICTION : records
+```
+
+Nullable exception endpoints are real FKs with at least one target required.
+Policy JSON and measured cost JSON do not replace these relationships. Task commitment
+and resource blocks extend existing entities; they do not change custody-ledger edges.

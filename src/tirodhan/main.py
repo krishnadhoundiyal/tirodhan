@@ -167,7 +167,16 @@ def create_app(
         from tirodhan.api.routes.routing_dispatch import router as routing_dispatch_router
 
         application.include_router(routing_dispatch_router)
-    if application_settings.routing_shadow_review_enabled:
+    if application_settings.routing_fleet_enabled:
+        from tirodhan.api.routes.routing_fleet import router as routing_fleet_router
+
+        if not application_settings.routing_dispatch_enabled:
+            raise ValueError("Fleet operation requires route execution registration")
+        application.include_router(routing_fleet_router)
+    if (
+        application_settings.routing_shadow_review_enabled
+        or application_settings.routing_fleet_enabled
+    ):
         from tirodhan.api.routes.routing_operations import router as routing_review_router
 
         application.include_router(routing_review_router)

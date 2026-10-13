@@ -181,6 +181,7 @@ async def _route_view(session: AsyncSession, root: VehicleRoute) -> dict[str, An
                 "pickup_execution_id": task.pickup_execution_id,
                 "kind": task.kind,
                 "state": task.state,
+                "committed_at": task.committed_at,
                 "receiving_point_id": task.receiving_point_id,
                 "planned_start": schedule.planned_start,
                 "planned_end": schedule.planned_end,

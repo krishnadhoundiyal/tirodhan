@@ -7,6 +7,7 @@ import httpx
 import pytest
 from alembic import command as migrations
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from test_payment_preparation import assert_readiness_schema
@@ -72,8 +73,8 @@ from tirodhan.modules.routing_operations.snapshot import build_problem, capture_
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
-async def prepared(factory, *, advance=False, unplanned=False):
-    fixture, vehicle, shift, point, ids, config, execute = await setup(factory)
+async def prepared(factory, *, advance=False, unplanned=False, position=(77.2090, 28.6139)):
+    fixture, vehicle, shift, point, ids, config, execute = await setup(factory, position=position)
     now = config.epoch
     config = config.model_copy(update={"max_position_age_seconds": 20000})
     async with factory() as session, session.begin():
@@ -527,7 +528,7 @@ async def test_revision_preserves_started_prefix_and_history(database_session_fa
             fixture.rider_ids[0],
             PickupTask(
                 client_command_id=new_uuid7(),
-                task_id=tasks[0].task_id,
+                task_id=tasks[1].task_id,
                 revision_id=revision.revision_id,
                 outcome="COLLECTED",
             ),
@@ -647,7 +648,7 @@ async def test_history_is_immutable_and_downgrade_refuses_loss(database_session_
         assert await session.scalar(select(func.count()).select_from(RouteActivation)) == 1
         assert (
             await session.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0025_vehicle_route_authority"
+            == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
         )
 
 
@@ -1103,16 +1104,12 @@ async def test_native_authoritative_revision_and_complete_custody(database_sessi
         PositionReport,
         execute_resource_command,
     )
-    from tirodhan.modules.routing_operations.models import VehiclePosition
 
     f = database_session_factory
     fixture, vehicle, point, ids, config, _, command = await prepared(
-        f, advance=True, unplanned=True
+        f, advance=True, unplanned=True, position=(77.207, 28.632)
     )
     async with f() as session, session.begin():
-        await session.execute(
-            update(VehiclePosition).values(location=WKTElement("POINT(77.207 28.632)", srid=4326))
-        )
         await session.execute(
             update(ReceivingPoint).values(location=WKTElement("POINT(77.211 28.630)", srid=4326))
         )

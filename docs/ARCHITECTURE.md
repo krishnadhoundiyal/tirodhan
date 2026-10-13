@@ -1,6 +1,6 @@
 # Architecture
 
-## V2 operational replacement — increment 4
+## V2 operational replacement — increment 5
 
 The approved destination is one road-network/capacity-based V2 operational workflow:
 authoritative committed-shift dispatch first, voluntary flexible supplementary capacity,
@@ -14,10 +14,12 @@ route revisions, vehicle-bound ordered pickup and whole-lot discharge. SERIALIZA
 activation, Payment-first cancellation arbitration, independent validation and common
 resource locks establish operational authority. Cargo survives pickup completion and
 recovery. Default dispatch activation is false; no production workflow is activated.
-Single-owner rolling orchestration, flexible supplementary acceptance, notification
-delivery and global V1 new-work retirement remain the next integration. V2-admitted
+Increment 5 adds single-owner rolling orchestration, collective economic selection,
+authenticated telemetry, live-position rebase, protected departure and controlled
+resource/facility exceptions. Flexible supplementary acceptance, notification
+delivery and global V1 new-work retirement remain later integration. V2-admitted
 work already cannot return to legacy grouping/dispatch. See
-[actual authority, execution and retirement boundary](V2_ROUTING_INCREMENT_4.md),
+[current fleet, recovery and retirement boundary](V2_ROUTING_INCREMENT_5.md),
 ADR-004 and ADR-006.
 
 ## Approved V2 direction and current implementation
@@ -34,7 +36,7 @@ The historical first increment introduced a versioned pure routing contract and 
 feasibility validator. Later operational persistence, authority and execution are described
 above; production activation and hosting remain disabled/unselected. The V1 sections below
 describe retained execution/drain. See [historical V2 boundary](V2_ROUTING_INCREMENT_1.md)
-and [current implementation](V2_ROUTING_INCREMENT_4.md) for checks and enablement gates.
+and [current implementation](V2_ROUTING_INCREMENT_5.md) for checks and enablement gates.
 
 ## 1. Architectural principles
 
@@ -989,3 +991,16 @@ remain investigation cases. Payment-first transaction locking and per-charge cap
 The API stays at minimum zero replicas; its cold-start response against Razorpay's five-second
 acknowledgement requirement is an unverified operational release gate. No deployment or paid
 transaction is part of this closure. See [the evidence and release report](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).
+
+## Continuous committed fleet (Increment 5)
+
+A finite routing_fleet worker owns one bounded COMMITTED_FLEET scope through PostgreSQL
+version/token/expiry fencing. Native road/solver work occurs outside assignment locks.
+Business facts invalidate stale proposals; position-only changes permit current-matrix
+rebase and bounded publication retries. Both engines remain independently validated.
+Economic selection and activation are separate boundaries; the latter retains
+SERIALIZABLE Payment-first locking and atomically records the selected terminal cycle.
+The default-disabled API exposes authenticated telemetry, policy, status and backlog.
+No scheduler, always-on service or production hosting commitment was introduced.
+See [Increment 5](V2_ROUTING_INCREMENT_5.md) for bounds, release gates and remaining
+notification/physical-recovery/V1 retirement work.

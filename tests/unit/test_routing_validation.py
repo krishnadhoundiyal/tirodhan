@@ -524,3 +524,54 @@ def test_demand_without_supply_is_explicitly_infeasible(problem: RoutingProblem)
     )
     candidate = replace(proposal(problem), routes=(), unserved_stop_ids=(uid(51), uid(53)))
     expect_failure(problem, candidate, "REQUIRED_STOP_UNSERVED")
+
+
+def test_fleet_cost_counts_waiting_empty_return_and_existing_cargo(problem):
+    from tirodhan.modules.routing_operations.economics import EconomicPolicy, measure
+
+    candidate = RouteProposal(
+        problem.problem_id,
+        problem.snapshot_id,
+        problem.contract_version,
+        problem.policy_version,
+        OptimizerEngine.VROOM,
+        "1.15.0",
+        (ProposedRoute(uid(30), (uid(50), uid(51), uid(52), uid(53))),),
+        (),
+    )
+    policy = EconomicPolicy(
+        version="synthetic-1",
+        additional_vehicle_seconds=300,
+        disruption_seconds=20,
+        waiting_weight=2,
+        window_risk_buffer_seconds=0,
+        window_risk_weight=0,
+        max_candidate_evaluations=10,
+    )
+    result = measure(problem, candidate, policy, {})
+    assert result.travel_seconds == 40 and result.distance_m == 40
+    assert result.waiting_seconds == 75 and result.empty_travel_seconds == 10
+    assert result.additional_vehicles == 0 and result.generalized_seconds == 190
+    assert result.minimum_window_slack_seconds == 10
+
+
+def test_cached_feasibility_gate_keeps_all_route_and_problem_constraints(problem):
+    from tirodhan.modules.planning.routing.validation import FeasibilityGate
+
+    gate = FeasibilityGate(problem)
+    candidate = RouteProposal(
+        problem.problem_id,
+        problem.snapshot_id,
+        problem.contract_version,
+        problem.policy_version,
+        OptimizerEngine.OR_TOOLS,
+        "9.14.6206",
+        (ProposedRoute(uid(30), (uid(51), uid(50), uid(52), uid(53))),),
+        (),
+    )
+    with pytest.raises(RoutingValidationError, match="PROTECTED_PREFIX_CHANGED"):
+        gate.assess(candidate)
+    with pytest.raises(RoutingValidationError, match="CAPACITY_EXCEEDED"):
+        FeasibilityGate(replace(problem, vehicles=(replace(problem.vehicles[0], capacity=(1, 1)),)))
+    with pytest.raises(FrozenInstanceError):
+        gate.problem = replace(problem, policy_version="changed")

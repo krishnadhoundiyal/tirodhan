@@ -58,6 +58,10 @@ class StartTask(TaskCommand):
     operation: Literal["START"] = "START"
 
 
+class DepartTask(TaskCommand):
+    operation: Literal["DEPART"] = "DEPART"
+
+
 class PickupTask(TaskCommand):
     operation: Literal["PICKUP"] = "PICKUP"
     outcome: Literal["COLLECTED", "NOT_COLLECTED"]
@@ -74,7 +78,7 @@ class DischargeTask(TaskCommand):
 
 
 ExecutionCommand = Annotated[
-    StartTask | PickupTask | DischargeTask, Field(discriminator="operation")
+    DepartTask | StartTask | PickupTask | DischargeTask, Field(discriminator="operation")
 ]
 EXECUTION_CODEC: TypeAdapter[ExecutionCommand] = TypeAdapter(ExecutionCommand)
 
@@ -145,12 +149,23 @@ async def execute_task(
         if (
             revision is None
             or revision.route_id != root.route_id
-            or revision.version != root.version
+            or (revision.version != root.version and task.committed_at is None)
         ):
             raise RouteAuthorityError("ROUTE_REVISION_STALE")
         tasks = await current_tasks(session, root)
         if not tasks or tasks[0].task_id != task.task_id:
             raise RouteAuthorityError("TASK_NOT_NEXT")
+        if (
+            revision.version != root.version
+            and await session.scalar(
+                select(RouteRevisionStop.task_id).where(
+                    RouteRevisionStop.revision_id == revision.revision_id,
+                    RouteRevisionStop.task_id == task.task_id,
+                )
+            )
+            is None
+        ):
+            raise RouteAuthorityError("ROUTE_REVISION_STALE")
         shift = await session.get(OperatingShift, root.shift_id)
         assert shift is not None
         if shift.closed_at is not None or not shift.starts_at <= now < shift.ends_at:
@@ -178,7 +193,18 @@ async def execute_task(
             raise RouteAuthorityError("FRESH_POSITION_REQUIRED")
         manifest = await session.get(RoutingManifest, pickup.request_id)
         assert manifest is not None
-        if isinstance(command, StartTask):
+        vehicle = await session.get(OperatingVehicle, root.vehicle_id)
+        assert vehicle is not None
+        if vehicle.blocked_reason is not None and task.kind == "PICKUP":
+            raise RouteAuthorityError("VEHICLE_OPERATION_BLOCKED")
+        if isinstance(command, DepartTask):
+            if task.state not in ("PENDING", "STARTED"):
+                raise RouteAuthorityError("TASK_NOT_EXECUTABLE")
+            if task.kind == "DISCHARGE":
+                await _require_discharge_ready(session, root, task, pickup, manifest, now)
+            task.committed_at = task.committed_at or now
+            result = task.task_id
+        elif isinstance(command, StartTask):
             if task.state == "PENDING":
                 if task.kind == "PICKUP":
                     request = await session.get(CollectionRequest, pickup.request_id)
@@ -192,6 +218,7 @@ async def execute_task(
                 else:
                     await _require_discharge_ready(session, root, task, pickup, manifest, now)
                 task.state, task.started_at = "STARTED", now
+                task.committed_at = task.committed_at or now
             result = task.task_id
         elif isinstance(command, PickupTask):
             if task.kind != "PICKUP" or task.state != "STARTED" or pickup.status != "ASSIGNED":
@@ -325,6 +352,25 @@ async def _require_discharge_ready(
     manifest: RoutingManifest,
     now: datetime,
 ) -> None:
+    from .fleet_models import FacilityRestriction
+
+    point = await session.scalar(
+        select(ReceivingPoint)
+        .where(ReceivingPoint.receiving_point_id == manifest.receiving_point_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    blocked = await session.scalar(
+        select(FacilityRestriction.restriction_id)
+        .where(
+            FacilityRestriction.receiving_point_id == manifest.receiving_point_id,
+            FacilityRestriction.starts_at <= now,
+            FacilityRestriction.ends_at > now,
+        )
+        .limit(1)
+    )
+    if point is None or point.status != "ACTIVE" or blocked is not None:
+        raise RouteAuthorityError("RECEIVING_POINT_UNAVAILABLE")
     observation = await session.get(CargoVehicleObservation, pickup.request_id)
     if (
         pickup.status != "COLLECTED"

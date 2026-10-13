@@ -271,3 +271,14 @@ bounded APIs expose operational evidence using the existing live role checks. Fi
 observations and audit history are immutable through application SQL; approved retention and
 rollback must export needed history and use a controlled maintenance migration. Retention
 periods remain an owner decision. See [closure and enablement gates](PHASE_2_FINANCIAL_CORRECTNESS_CLOSURE.md).
+
+## Increment 5 vehicle telemetry
+
+Exact GPS remains PostGIS operational history/snapshots behind rider ownership or live
+manager authority. Device-session observations record session FK, actor, accuracy and
+server timestamps; freshness/monotonicity/speed checks do not establish hardware
+attestation. Do not log coordinates, route matrices, raw telemetry or tokens. Fleet
+attention/recovery/route outbox payloads contain identifiers only. Manager status and
+backlog are bounded and omit addresses/coordinates. No GPS retention duration or
+external notification provider was silently chosen; approved retention/cleanup and
+mobile capture remain release work.
