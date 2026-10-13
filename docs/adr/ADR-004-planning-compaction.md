@@ -123,3 +123,12 @@ does not drop bookings or dispatch an unreviewed heuristic. This supersedes cell
 optimization for newly admitted V2 work when approved cutover occurs. Permanent
 parallel dispatch is not the target. Production activation and global V1 retirement
 remain separate release gates. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).
+
+## Increment 6 verification correction
+
+An independently shrunk example showed that a single refinement sweep could retain
+an unnecessary second vehicle after adding later work. Feasible consolidation/insertion
+now repeats to a strict local fixed point or the existing total candidate limit. Both
+engines, independent feasibility, objective calibration, authority and infrastructure
+remain as approved. No global-optimum guarantee is implied. Test-only generated
+verification/evidence is documented in [Increment 6](../V2_ROUTING_INCREMENT_6.md).

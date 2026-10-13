@@ -77,3 +77,21 @@ application drift, immutable history and downgrade refusal after adoption.
 The tests use synthetic capacity, coefficients and demand; road measurements are
 reproducible fixture observations, not production cost or scale claims. See
 [Increment 5 report](../../docs/V2_ROUTING_INCREMENT_5.md).
+
+## Increment 6 generated verification
+
+The operational image/runner is now `tirodhan-routing-tests:increment-6`, with pinned
+test-only Hypothesis 6.168.5. Build this dependency image before using `-SkipBuild`.
+The runner includes the independent exhaustive oracle, native differential cases,
+database-backed rule machine and all 14 PostgreSQL race families with seed 61010.
+The parent OSRM/VROOM/OR-Tools pins and public road fixture remain unchanged.
+
+Ordinary repository CI includes bounded generation and skips the four native-only
+generated/regression tests. Set `TIRODHAN_HYPOTHESIS_PROFILE=fleet-extended` for longer
+campaigns; history/race suites reset application data and must run serially on one
+disposable database. Separate databases permit parallel invocations. Use
+`--hypothesis-seed=<integer>` and `--hypothesis-show-statistics` for replay/evidence.
+On read-only mounts, set `TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis`.
+No business-infeasible inputs are filtered away; expected rejection is tested.
+See [Increment 6](../../docs/V2_ROUTING_INCREMENT_6.md) for concrete commands, scope,
+measured economic counterexample, production correction and verification limits.

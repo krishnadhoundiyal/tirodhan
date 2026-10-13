@@ -1,0 +1,358 @@
+{
+  "classification": "STRICT_LOCAL_SEARCH_QUALITY_LIMIT",
+  "hypothesis": "6.168.5",
+  "problem": {
+    "problem_id": "00000000-0000-0000-0000-000000000001",
+    "snapshot_id": "00000000-0000-0000-0000-000000000002",
+    "contract_version": "DYNAMIC_COLLECTION_ROUTING_V1",
+    "policy_version": "GENERATED_TEST_POLICY",
+    "epoch": "2030-01-01T00:00:00Z",
+    "load_dimensions": [
+      "MASS",
+      "VOLUME"
+    ],
+    "limits": {
+      "max_nodes": 16,
+      "max_stops": 10,
+      "max_vehicles": 2,
+      "max_matrices": 1
+    },
+    "matrices": [
+      {
+        "matrix_id": "00000000-0000-0000-0000-0000000001f4",
+        "graph_version": "generated-directed-graph",
+        "profile_version": "test-only",
+        "node_ids": [
+          "00000000-0000-0000-0000-0000000000c8",
+          "00000000-0000-0000-0000-00000000012c",
+          "00000000-0000-0000-0000-00000000012d",
+          "00000000-0000-0000-0000-00000000012e",
+          "00000000-0000-0000-0000-000000000190"
+        ],
+        "travel_seconds": [
+          [
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            0
+          ]
+        ],
+        "distance_m": [
+          [
+            0,
+            3,
+            3,
+            3,
+            3
+          ],
+          [
+            3,
+            0,
+            3,
+            3,
+            6
+          ],
+          [
+            3,
+            3,
+            0,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            3,
+            0,
+            3
+          ],
+          [
+            3,
+            3,
+            3,
+            3,
+            0
+          ]
+        ]
+      }
+    ],
+    "vehicles": [
+      {
+        "vehicle_id": "00000000-0000-0000-0000-000000000064",
+        "rider_id": "00000000-0000-0000-0000-0000000003e8",
+        "state_version": 1,
+        "resource_kind": "COMMITTED",
+        "operating_shift_id": "00000000-0000-0000-0000-00000000044c",
+        "matrix_id": "00000000-0000-0000-0000-0000000001f4",
+        "start_node_id": "00000000-0000-0000-0000-0000000000c8",
+        "end_node_id": "00000000-0000-0000-0000-000000000190",
+        "available_at": 0,
+        "shift": {
+          "start": 0,
+          "end": 200
+        },
+        "capacity": [
+          2,
+          2
+        ],
+        "initial_cargo": [],
+        "protected_prefix": []
+      }
+    ],
+    "receiving_points": [
+      {
+        "receiving_point_id": "00000000-0000-0000-0000-000000000190",
+        "node_id": "00000000-0000-0000-0000-000000000190",
+        "state_version": 1,
+        "available": true,
+        "opening_windows": [
+          {
+            "start": 10,
+            "end": 1000
+          }
+        ]
+      }
+    ],
+    "lots": [
+      {
+        "lot_id": "00000000-0000-0000-0000-0000000002bc",
+        "collection_request_id": "00000000-0000-0000-0000-0000000002bc",
+        "quantity": 1,
+        "quantity_unit": "HOUSEHOLD",
+        "unit_load": [
+          1,
+          1
+        ],
+        "authorized_receiving_point_ids": [
+          "00000000-0000-0000-0000-000000000190"
+        ],
+        "discharge_deadline": 900,
+        "pickup_stop_id": "00000000-0000-0000-0000-000000000320"
+      },
+      {
+        "lot_id": "00000000-0000-0000-0000-0000000002bd",
+        "collection_request_id": "00000000-0000-0000-0000-0000000002bd",
+        "quantity": 1,
+        "quantity_unit": "HOUSEHOLD",
+        "unit_load": [
+          1,
+          1
+        ],
+        "authorized_receiving_point_ids": [
+          "00000000-0000-0000-0000-000000000190"
+        ],
+        "discharge_deadline": 900,
+        "pickup_stop_id": "00000000-0000-0000-0000-000000000321"
+      },
+      {
+        "lot_id": "00000000-0000-0000-0000-0000000002be",
+        "collection_request_id": "00000000-0000-0000-0000-0000000002be",
+        "quantity": 1,
+        "quantity_unit": "HOUSEHOLD",
+        "unit_load": [
+          1,
+          1
+        ],
+        "authorized_receiving_point_ids": [
+          "00000000-0000-0000-0000-000000000190"
+        ],
+        "discharge_deadline": 900,
+        "pickup_stop_id": "00000000-0000-0000-0000-000000000322"
+      }
+    ],
+    "stops": [
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000320",
+        "node_id": "00000000-0000-0000-0000-00000000012c",
+        "kind": "PICKUP",
+        "lot_id": "00000000-0000-0000-0000-0000000002bc",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 12
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": null
+      },
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000384",
+        "node_id": "00000000-0000-0000-0000-000000000190",
+        "kind": "DISCHARGE",
+        "lot_id": "00000000-0000-0000-0000-0000000002bc",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 900
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": "00000000-0000-0000-0000-000000000190"
+      },
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000321",
+        "node_id": "00000000-0000-0000-0000-00000000012d",
+        "kind": "PICKUP",
+        "lot_id": "00000000-0000-0000-0000-0000000002bd",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 10
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": null
+      },
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000385",
+        "node_id": "00000000-0000-0000-0000-000000000190",
+        "kind": "DISCHARGE",
+        "lot_id": "00000000-0000-0000-0000-0000000002bd",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 900
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": "00000000-0000-0000-0000-000000000190"
+      },
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000322",
+        "node_id": "00000000-0000-0000-0000-00000000012e",
+        "kind": "PICKUP",
+        "lot_id": "00000000-0000-0000-0000-0000000002be",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 11
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": null
+      },
+      {
+        "stop_id": "00000000-0000-0000-0000-000000000386",
+        "node_id": "00000000-0000-0000-0000-000000000190",
+        "kind": "DISCHARGE",
+        "lot_id": "00000000-0000-0000-0000-0000000002be",
+        "quantity": 1,
+        "service_seconds": 0,
+        "service_start_window": {
+          "start": 0,
+          "end": 900
+        },
+        "required": false,
+        "eligible_vehicle_ids": [
+          "00000000-0000-0000-0000-000000000064"
+        ],
+        "bound_vehicle_id": null,
+        "receiving_point_id": "00000000-0000-0000-0000-000000000190"
+      }
+    ]
+  },
+  "weights": {
+    "activation": 0,
+    "waiting": 0,
+    "disruption": 0,
+    "buffer": 0,
+    "risk": 0
+  },
+  "incumbent": {},
+  "seed": {},
+  "optimum_orders": {
+    "00000000-0000-0000-0000-000000000064": [
+      "00000000-0000-0000-0000-000000000320",
+      "00000000-0000-0000-0000-000000000321",
+      "00000000-0000-0000-0000-000000000384",
+      "00000000-0000-0000-0000-000000000385",
+      "00000000-0000-0000-0000-000000000322",
+      "00000000-0000-0000-0000-000000000386"
+    ]
+  },
+  "refined": {
+    "00000000-0000-0000-0000-000000000064": [
+      "00000000-0000-0000-0000-000000000322",
+      "00000000-0000-0000-0000-000000000321",
+      "00000000-0000-0000-0000-000000000386",
+      "00000000-0000-0000-0000-000000000320",
+      "00000000-0000-0000-0000-000000000384",
+      "00000000-0000-0000-0000-000000000385"
+    ]
+  },
+  "optimum": {
+    "unserved_lots": 0,
+    "deadline_risk": [],
+    "travel_seconds": 5,
+    "distance_m": 15,
+    "waiting_seconds": 7,
+    "empty_travel_seconds": 2,
+    "additional_vehicles": 1,
+    "disruptions": 0,
+    "minimum_window_slack_seconds": 0,
+    "window_risk_seconds": 0,
+    "generalized_seconds": 5
+  },
+  "actual": {
+    "unserved_lots": 0,
+    "deadline_risk": [],
+    "travel_seconds": 6,
+    "distance_m": 18,
+    "waiting_seconds": 7,
+    "empty_travel_seconds": 1,
+    "additional_vehicles": 1,
+    "disruptions": 0,
+    "minimum_window_slack_seconds": 1,
+    "window_risk_seconds": 0,
+    "generalized_seconds": 6
+  }
+}

@@ -33,6 +33,7 @@ routing = [
     "ortools==9.14.6206",
 ]
 dev = [
+    "hypothesis==6.168.5",
     "mypy>=1.14,<2",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.25,<1",

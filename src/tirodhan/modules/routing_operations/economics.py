@@ -167,7 +167,8 @@ def insertion_search(
 ) -> tuple[RouteProposal, FleetCost, int]:
     """Whole-household relocate/insertion; every fleet candidate passes the independent gate.
 
-    One pass considers lots in deadline order, across all vehicles and all suffix positions.
+    Repeated sweeps consider lots in deadline order across vehicles and suffix positions.
+    Consolidation also runs after newly inserted work; the same total work budget applies.
     Bounds are technical work limits, never permission to drop required commitments.
     """
     best = seed
@@ -179,73 +180,41 @@ def insertion_search(
     protected = {s for v in problem.vehicles for s in v.protected_prefix}
     for stop in problem.stops:
         by_lot.setdefault(stop.lot_id, []).append(stop.stop_id)
-    # A one-lot move may cost more while moving several future lots together saves a
-    # complete vehicle journey. Evaluate blocks before individual insertions to escape
-    # that fleet-wide local minimum, without moving a protected/custodied household.
-    vehicle_map = {v.vehicle_id: v for v in problem.vehicles}
-    for donor in problem.vehicles:
-        orders = {r.vehicle_id: r.stop_ids for r in best.routes}
-        old = orders.get(donor.vehicle_id, ())
-        movable_lots = {
-            lot
-            for lot, pair in by_lot.items()
-            if len(pair) == 2
-            and all(s in old for s in pair)
-            and not protected.intersection(pair)
-            and any(stops[s].kind == StopKind.PICKUP for s in pair)
-        }
-        block = tuple(s for s in old if stops[s].lot_id in movable_lots)
-        if not block:
-            continue
-        for recipient in problem.vehicles:
-            if recipient.vehicle_id == donor.vehicle_id or any(
-                recipient.vehicle_id not in stops[s].eligible_vehicle_ids for s in block
-            ):
+    while evaluations < policy.max_candidate_evaluations:
+        before = cost.rank
+        # A one-lot move may cost more while moving several future lots together saves a
+        # complete vehicle journey. Evaluate blocks before individual insertions to escape
+        # that fleet-wide local minimum, without moving a protected/custodied household.
+        vehicle_map = {v.vehicle_id: v for v in problem.vehicles}
+        for donor in problem.vehicles:
+            orders = {r.vehicle_id: r.stop_ids for r in best.routes}
+            old = orders.get(donor.vehicle_id, ())
+            movable_lots = {
+                lot
+                for lot, pair in by_lot.items()
+                if len(pair) == 2
+                and all(s in old for s in pair)
+                and not protected.intersection(pair)
+                and any(stops[s].kind == StopKind.PICKUP for s in pair)
+            }
+            block = tuple(s for s in old if stops[s].lot_id in movable_lots)
+            if not block:
                 continue
-            target = orders.get(recipient.vehicle_id, ())
-            for i in range(
-                len(vehicle_map[recipient.vehicle_id].protected_prefix), len(target) + 1
-            ):
-                if evaluations >= policy.max_candidate_evaluations:
-                    return best, cost, evaluations
-                evaluations += 1
-                changed = dict(orders)
-                changed[donor.vehicle_id] = tuple(s for s in old if s not in block)
-                changed[recipient.vehicle_id] = target[:i] + block + target[i:]
-                candidate = make_candidate(best, problem, changed)
-                try:
-                    measured = measure(problem, candidate, policy, incumbent, gate)
-                except RoutingValidationError:
+            for recipient in problem.vehicles:
+                if recipient.vehicle_id == donor.vehicle_id or any(
+                    recipient.vehicle_id not in stops[s].eligible_vehicle_ids for s in block
+                ):
                     continue
-                if measured.rank < cost.rank:
-                    best, cost = candidate, measured
-    lots = sorted(
-        by_lot,
-        key=lambda lot: (min(stops[s].service_start_window.end for s in by_lot[lot]), str(lot)),
-    )
-    for lot in lots:
-        pair = by_lot[lot]
-        pickup = next((s for s in pair if stops[s].kind == StopKind.PICKUP), None)
-        if pickup is None or len(pair) != 2 or protected.intersection(pair):
-            continue
-        discharge = next(s for s in pair if s != pickup)
-        orders = {r.vehicle_id: r.stop_ids for r in best.routes}
-        residual = {
-            v.vehicle_id: tuple(s for s in orders.get(v.vehicle_id, ()) if s not in pair)
-            for v in problem.vehicles
-        }
-        for vehicle in problem.vehicles:
-            if vehicle.vehicle_id not in stops[pickup].eligible_vehicle_ids:
-                continue
-            suffix = residual[vehicle.vehicle_id]
-            for i in range(len(vehicle.protected_prefix), len(suffix) + 1):
-                with_pickup = suffix[:i] + (pickup,) + suffix[i:]
-                for j in range(i + 1, len(with_pickup) + 1):
+                target = orders.get(recipient.vehicle_id, ())
+                for i in range(
+                    len(vehicle_map[recipient.vehicle_id].protected_prefix), len(target) + 1
+                ):
                     if evaluations >= policy.max_candidate_evaluations:
                         return best, cost, evaluations
                     evaluations += 1
-                    changed = dict(residual)
-                    changed[vehicle.vehicle_id] = with_pickup[:j] + (discharge,) + with_pickup[j:]
+                    changed = dict(orders)
+                    changed[donor.vehicle_id] = tuple(s for s in old if s not in block)
+                    changed[recipient.vehicle_id] = target[:i] + block + target[i:]
                     candidate = make_candidate(best, problem, changed)
                     try:
                         measured = measure(problem, candidate, policy, incumbent, gate)
@@ -253,6 +222,44 @@ def insertion_search(
                         continue
                     if measured.rank < cost.rank:
                         best, cost = candidate, measured
+        lots = sorted(
+            by_lot,
+            key=lambda lot: (min(stops[s].service_start_window.end for s in by_lot[lot]), str(lot)),
+        )
+        for lot in lots:
+            pair = by_lot[lot]
+            pickup = next((s for s in pair if stops[s].kind == StopKind.PICKUP), None)
+            if pickup is None or len(pair) != 2 or protected.intersection(pair):
+                continue
+            discharge = next(s for s in pair if s != pickup)
+            orders = {r.vehicle_id: r.stop_ids for r in best.routes}
+            residual = {
+                v.vehicle_id: tuple(s for s in orders.get(v.vehicle_id, ()) if s not in pair)
+                for v in problem.vehicles
+            }
+            for vehicle in problem.vehicles:
+                if vehicle.vehicle_id not in stops[pickup].eligible_vehicle_ids:
+                    continue
+                suffix = residual[vehicle.vehicle_id]
+                for i in range(len(vehicle.protected_prefix), len(suffix) + 1):
+                    with_pickup = suffix[:i] + (pickup,) + suffix[i:]
+                    for j in range(i + 1, len(with_pickup) + 1):
+                        if evaluations >= policy.max_candidate_evaluations:
+                            return best, cost, evaluations
+                        evaluations += 1
+                        changed = dict(residual)
+                        changed[vehicle.vehicle_id] = (
+                            with_pickup[:j] + (discharge,) + with_pickup[j:]
+                        )
+                        candidate = make_candidate(best, problem, changed)
+                        try:
+                            measured = measure(problem, candidate, policy, incumbent, gate)
+                        except RoutingValidationError:
+                            continue
+                        if measured.rank < cost.rank:
+                            best, cost = candidate, measured
+        if cost.rank == before:
+            break
     return best, cost, evaluations
 
 

@@ -1004,3 +1004,12 @@ The default-disabled API exposes authenticated telemetry, policy, status and bac
 No scheduler, always-on service or production hosting commitment was introduced.
 See [Increment 5](V2_ROUTING_INCREMENT_5.md) for bounds, release gates and remaining
 notification/physical-recovery/V1 retirement work.
+
+## Increment 6 verification and focused refinement
+
+Test-only Hypothesis verification now exercises committed-fleet histories, independently
+enumerated routing comparisons and real synchronized PostgreSQL races. A shrunk
+unnecessary-vehicle counterexample corrected refinement from one sweep to repeated
+strictly improving sweeps within the same total candidate bound. The independent gate,
+authority transaction and business policy remain unchanged. This does not establish
+global optimality or activate production. See [evidence and limits](V2_ROUTING_INCREMENT_6.md).
