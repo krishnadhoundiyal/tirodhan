@@ -82,6 +82,12 @@ async def start_assignment(
     rider_id: UUID,
     now: datetime | None = None,
 ) -> RiderAssignment:
+    async with session_factory() as preliminary:
+        source = await preliminary.scalar(
+            select(RiderAssignment.source).where(RiderAssignment.assignment_id == assignment_id)
+        )
+    if source == "COMMITTED_DISPATCH":
+        raise AssignmentNotStartableError("vehicle-bound work requires route task commands")
     async with session_factory() as session, session.begin():
         assignment = await _lock_assignment(session, assignment_id)
         if assignment.rider_id != rider_id:
@@ -159,6 +165,12 @@ async def record_pickup_attempt(
         pickup_execution_id=pickup_execution_id,
         client_attempt_id=client_attempt_id,
     )
+    async with session_factory() as preliminary:
+        source = await preliminary.scalar(
+            select(RiderAssignment.source).where(RiderAssignment.assignment_id == assignment_id)
+        )
+    if source == "COMMITTED_DISPATCH":
+        raise PickupNotAttemptableError("vehicle-bound work requires route task commands")
 
     async with session_factory() as session, session.begin():
         assignment = await _lock_assignment(session, assignment_id)

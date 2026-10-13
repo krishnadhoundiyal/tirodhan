@@ -44,6 +44,7 @@ from tirodhan.modules.planning.routing.validation import validate_problem
 from tirodhan.modules.receiving_points.models import ReceivingPoint
 
 from .commands import OperationalInputError, Positive
+from .dispatch_models import RouteRevision, RouteRevisionStop, RouteTask, VehicleRoute
 from .models import (
     CargoVehicleObservation,
     OperatingShift,
@@ -158,6 +159,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     OperatingVehicle.end_receiving_point_id,
                     OperatingVehicle.version,
                     OperatingShift.shift_id,
+                    OperatingShift.resource_kind,
                     OperatingShift.rider_id,
                     OperatingShift.starts_at,
                     OperatingShift.ends_at,
@@ -344,7 +346,82 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
     ]
     if len(windows) > config.max_nodes * 16:
         raise OperationalInputError("RECEIVING_WINDOW_SCOPE_LIMIT")
-    return {"vehicles": vehicles, "requests": requests, "points": points, "windows": windows}
+    routes = [
+        dict(row)
+        for row in (
+            await session.execute(
+                select(
+                    VehicleRoute.route_id,
+                    VehicleRoute.vehicle_id,
+                    VehicleRoute.shift_id,
+                    VehicleRoute.assignment_id,
+                    VehicleRoute.version,
+                    VehicleRoute.status,
+                )
+                .where(
+                    VehicleRoute.vehicle_id.in_([v["vehicle_id"] for v in vehicles]),
+                    VehicleRoute.status != "CLOSED",
+                )
+                .order_by(VehicleRoute.vehicle_id)
+            )
+        ).mappings()
+    ]
+    tasks = [
+        dict(row)
+        for row in (
+            await session.execute(
+                select(
+                    RouteTask.task_id,
+                    RouteTask.route_id,
+                    RouteTask.stop_id,
+                    RouteTask.state,
+                    RouteTask.kind,
+                    RouteTask.started_at,
+                    RouteRevisionStop.ordinal,
+                )
+                .join(RouteRevisionStop, RouteRevisionStop.task_id == RouteTask.task_id)
+                .join(RouteRevision, RouteRevision.revision_id == RouteRevisionStop.revision_id)
+                .join(VehicleRoute, VehicleRoute.route_id == RouteRevision.route_id)
+                .where(
+                    VehicleRoute.route_id.in_([r["route_id"] for r in routes]),
+                    RouteRevision.version == VehicleRoute.version,
+                    RouteTask.state.in_(("PENDING", "STARTED")),
+                )
+                .order_by(RouteTask.route_id, RouteRevisionStop.ordinal)
+            )
+        ).mappings()
+    ]
+    released = [
+        dict(row)
+        for row in (
+            await session.execute(
+                select(VehicleRoute.vehicle_id, PickupExecution.request_id)
+                .join(
+                    RiderAssignmentItem,
+                    RiderAssignmentItem.assignment_id == VehicleRoute.assignment_id,
+                )
+                .join(
+                    PickupExecution,
+                    PickupExecution.pickup_execution_id == RiderAssignmentItem.pickup_execution_id,
+                )
+                .where(
+                    VehicleRoute.route_id.in_([r["route_id"] for r in routes]),
+                    RiderAssignmentItem.released_at.is_not(None),
+                    PickupExecution.request_id.in_([r["request_id"] for r in requests]),
+                )
+                .order_by(VehicleRoute.vehicle_id, PickupExecution.request_id)
+            )
+        ).mappings()
+    ]
+    return {
+        "vehicles": vehicles,
+        "requests": requests,
+        "points": points,
+        "windows": windows,
+        "routes": routes,
+        "tasks": tasks,
+        "released": released,
+    }
 
 
 async def build_problem(
@@ -422,7 +499,18 @@ async def build_problem(
                 pickup_id,
             )
         )
-        allowed = (bound,) if bound else eligible
+        allowed = (
+            (bound,)
+            if bound
+            else tuple(
+                vehicle
+                for vehicle in eligible
+                if not any(
+                    r["vehicle_id"] == vehicle and r["request_id"] == request_id
+                    for r in data["released"]
+                )
+            )
+        )
         if pickup_id:
             nodes[request_id] = RoadNode(request_id, r["longitude"], r["latitude"])
             stops.append(
@@ -519,7 +607,13 @@ async def build_problem(
                 TimeWindow(start, end),
                 (v["mass_capacity_g"], v["volume_capacity_ml"]),
                 tuple(cargo[v["vehicle_id"]]),
-                (),
+                tuple(
+                    t["stop_id"]
+                    for t in data["tasks"]
+                    if t["state"] == "STARTED"
+                    and t["route_id"]
+                    in {r["route_id"] for r in data["routes"] if r["vehicle_id"] == v["vehicle_id"]}
+                ),
             )
         )
     problem = RoutingProblem(

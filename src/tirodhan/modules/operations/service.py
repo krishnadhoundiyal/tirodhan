@@ -142,6 +142,11 @@ async def open_pickup_incident(
                 raise PickupIncidentNotFoundError("pickup execution not found")
             raise PickupIncidentStateError("pickup has no current assignment ownership")
 
+        source = await session.scalar(
+            select(RiderAssignment.source).where(RiderAssignment.assignment_id == assignment_id)
+        )
+        if source == "COMMITTED_DISPATCH":
+            raise PickupIncidentStateError("vehicle-bound work requires route recovery")
         assignment = await _lock_assignment(session, assignment_id)
         existing = await _incident_by_client_id(session, client_incident_id)
         if existing is not None:

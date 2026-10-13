@@ -105,6 +105,32 @@ bindings. RoutingShadowRun embeds versioned problem/result documents, with no as
 or custody FK authority. Its source projection spans existing group/cell/slot boundaries.
 See [implemented boundary](V2_ROUTING_INCREMENT_3.md).
 
+## V2 operational authority — migration 0025
+
+~~~mermaid
+erDiagram
+    ROUTING_SHADOW_RUN ||--o| ROUTE_ACTIVATION : authorizes_once
+    APP_USER ||--o{ ROUTE_ACTIVATION : activates
+    OPERATING_VEHICLE ||--o{ VEHICLE_ROUTE : operates
+    OPERATING_SHIFT ||--o{ VEHICLE_ROUTE : binds
+    RIDER_ASSIGNMENT ||--o| VEHICLE_ROUTE : performs
+    VEHICLE_ROUTE ||--|{ ROUTE_REVISION : revises
+    ROUTE_ACTIVATION ||--o{ ROUTE_REVISION : commits
+    VEHICLE_ROUTE ||--o{ ROUTE_TASK : executes
+    ROUTE_REVISION ||--|{ ROUTE_REVISION_STOP : orders
+    ROUTE_TASK ||--o{ ROUTE_REVISION_STOP : retains
+    PICKUP_EXECUTION ||--o{ ROUTE_TASK : fulfils
+    RECEIVING_POINT o|--o{ ROUTE_TASK : discharges_at
+    VEHICLE_ROUTE ||--o{ ROUTE_RECOVERY : recovers
+    HANDOVER_EVENT ||--o| ROUTE_DISCHARGE_PROOF : substantiates
+    ROUTE_TASK ||--o{ ROUTE_DISCHARGE_PROOF : attempts
+    EVIDENCE_CAPTURE ||--o| ROUTE_DISCHARGE_PROOF : photo_capture
+~~~
+
+New V2 pickups/assignments need no CollectionGroup; retained V1 rows keep that relationship.
+Completed pickup/assignment attribution survives revision and recovery. Rejected discharge
+proofs can precede one validated whole-lot handover. See [authority](V2_ROUTING_INCREMENT_4.md).
+
 ## Cross-cutting reliability tables
 
 Phase 1R `AUTHENTICATION_CHALLENGE` is a standalone authentication-intent root before user

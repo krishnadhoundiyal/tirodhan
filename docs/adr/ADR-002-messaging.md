@@ -63,3 +63,13 @@ PostgreSQL owns assignment truth and synchronous HTTP acceptance still establish
 Service Bus transports notification work, with no saga/orchestrator/queued acceptance.
 Workload identity remains the Azure-access contract. Runtime entry points do not freeze deployment
 hosting/scheduling topology; no Terraform is introduced here.
+
+## V2 route authority — increment 4
+
+VehicleRouteRevised, VehicleRouteProgressed and VehicleRouteRecoveryRequired append
+identifier-only outbox records with authoritative transactions. They are not registered
+with the existing publisher/notification consumer and remain PENDING; no new queue or
+infrastructure is provisioned. The next delivery increment must explicitly wire these
+events and preserve inbox/send-before-publish recovery. V2 route authority is in PostgreSQL,
+not a notification or per-cell Service Bus session. The cell-session preference above
+describes retained V1 planning/drain, not a V2 optimization partition.

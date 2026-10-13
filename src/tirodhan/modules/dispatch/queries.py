@@ -22,6 +22,7 @@ from tirodhan.modules.dispatch.models import (
 from tirodhan.modules.identity.models import AppUser, UserRole
 from tirodhan.modules.identity.service import APP_USER_ACTIVE, ROLE_RIDER
 from tirodhan.modules.planning.models import CollectionGroup, PickupExecution, PlanningBatch
+from tirodhan.modules.routing_operations.dispatch_models import RouteTask
 
 
 class OperationalReadStateError(RuntimeError):
@@ -230,6 +231,12 @@ async def list_pending_assignment_groups(
         RiderAssignment.status == "ACTIVE",
     )
     pickup_count = func.count(PickupExecution.pickup_execution_id)
+    routed_pickup = PickupExecution.__table__.alias("routed_pickup")
+    routed_group = exists(
+        select(RouteTask.task_id)
+        .join(routed_pickup, routed_pickup.c.pickup_execution_id == RouteTask.pickup_execution_id)
+        .where(routed_pickup.c.collection_group_id == CollectionGroup.collection_group_id)
+    )
     rows = (
         await session.execute(
             select(
@@ -250,7 +257,7 @@ async def list_pending_assignment_groups(
                 PickupExecution,
                 PickupExecution.collection_group_id == CollectionGroup.collection_group_id,
             )
-            .where(~active_assignment_exists)
+            .where(~active_assignment_exists, ~routed_group)
             .group_by(
                 CollectionGroup.collection_group_id,
                 PlanningBatch.planning_batch_id,

@@ -33,6 +33,25 @@ drift, but **do not** provide transactional dispatch authority. No existing tabl
 trigger is changed. Downgrade drops the new operational inputs/results, preserving existing
 booking/assignment/execution/custody/financial history; export needed input history first.
 
+## V2 route authority and execution (migration 0025)
+
+Seven new tables hold relational authority: route_activation, vehicle_route, route_revision,
+route_task, route_revision_stop, route_recovery and route_discharge_proof. See
+[column semantics, locking and rollback](V2_ROUTING_INCREMENT_4.md).
+Run activation, open vehicle/shift route, route/version and live route/stop have unique
+protection. FK bindings connect shifts, vehicles, assignments, stable pickup execution,
+receiving points, handover and evidence. SQL triggers reject historical revision/proof
+rewrites, route rebinding, shift identity changes and invalid/terminal task changes.
+Lifecycle timestamps are checked; core state is not JSONB.
+
+PickupExecution.collection_group_id becomes nullable for new ungrouped V2 execution.
+RiderAssignment.collection_group_id is nullable only for COMMITTED_DISPATCH, with mandatory
+manager audit; legacy sources retain non-null historical groups. Assignment item release
+provenance adds CANCELLED. Existing financial columns/FKs/triggers are unchanged.
+Downgrade preserves populated V1 history before adoption; it refuses any activated V2
+history before dropping data or attempting non-null legacy conversion. Feature disablement
+does not undo assignments/custody and cannot replace recovery/drain.
+
 ## Global conventions
 
 ```text

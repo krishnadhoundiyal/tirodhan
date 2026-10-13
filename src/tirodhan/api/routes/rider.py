@@ -159,7 +159,7 @@ class AssignmentOfferResponse(BaseModel):
 
 class AssignmentSummaryResponse(BaseModel):
     assignment_id: UUID
-    collection_group_id: UUID
+    collection_group_id: UUID | None
     rider_id: UUID
     source: str
     status: str
@@ -188,7 +188,7 @@ class AssignmentPickupResponse(BaseModel):
 
 class ActiveAssignmentResponse(BaseModel):
     assignment_id: UUID
-    collection_group_id: UUID
+    collection_group_id: UUID | None
     source: str
     status: str
     assigned_at: datetime

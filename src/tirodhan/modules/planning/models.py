@@ -131,10 +131,10 @@ class PickupExecution(Base):
         nullable=False,
         unique=True,
     )
-    collection_group_id: Mapped[UUID] = mapped_column(
+    collection_group_id: Mapped[UUID | None] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         ForeignKey("collection_group.collection_group_id"),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

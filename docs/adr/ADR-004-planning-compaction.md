@@ -50,6 +50,22 @@ dispatch must retire; historical batches drain without rewriting accepted facts.
 projection cadence remains independent of customer cancellation rights. No production
 activation/road-graph hosting is selected. See [implemented boundary and cutover](../V2_ROUTING_INCREMENT_3.md).
 
+## Increment 4 — transactional route activation
+
+The separate activation transaction now revalidates either pinned engine against current
+bounded PostgreSQL sources and elapsed time under SERIALIZABLE isolation and resource/
+ownership locks. It commits actual committed assignments and immutable route revisions.
+V2 execution uses stable household pickups without synthetic cell batches/groups, preserves
+STARTED prefixes and permits feasible additions to loaded BUSY vehicles. Advance allocation
+does not freeze ACCEPTED booking rights. H3/work-unit advisory locking remains only the
+transition arbitration boundary with cancellation/V1 freeze, not a route construction limit.
+
+V2-admitted work is excluded from V1 freeze and fresh group dispatch, including after
+recovery release. Active V1 assignments and PRE_PLANNING batches drain before import.
+Global single-owner rolling admission, flexible supplementation and notification delivery
+remain the next increment; this is no permanent V1 fallback. Default activation is false,
+with no production hosting selected. See [implemented authority](../V2_ROUTING_INCREMENT_4.md).
+
 ## Decision (retained V1 execution; retire new admission at V2 cutover)
 
 Customers book 30-minute pickup slots.

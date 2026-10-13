@@ -18,4 +18,4 @@ COPY README.md alembic.ini /repo/
 COPY migrations /repo/migrations
 COPY tests /repo/tests
 RUN pip install --no-cache-dir '.[dev,routing]'
-CMD ["python", "-m", "pytest", "-q", "-s", "tests/routing", "tests/integration/test_routing_operations.py", "-p", "no:cacheprovider"]
+CMD ["python", "-m", "pytest", "-q", "-s", "tests/routing", "tests/integration/test_routing_operations.py", "tests/integration/test_routing_dispatch.py", "-p", "no:cacheprovider"]

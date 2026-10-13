@@ -18,6 +18,12 @@ Object storage is the correct cost/operational model for media.
 
 ## Consequences
 
+Increment 4 adds relational route authority, immutable revisions/schedules, execution and
+discharge/recovery proof, with SQL identity/history guards in the same database. Optional
+group links permit new V2 work without fabricated V1 groups. Activated history blocks
+lossy downgrade. No database/cache or production deployment is added. See
+[implemented schema and rollback boundary](../V2_ROUTING_INCREMENT_4.md).
+
 Increment 3 adds relational operating inputs and PostGIS positions in the existing database.
 JSONB is limited to versioned shadow configuration/contract/result documents, with no
 assignment authority or core relational substitute. It introduces no database/cache or

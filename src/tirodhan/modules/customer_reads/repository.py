@@ -33,6 +33,7 @@ from tirodhan.modules.customers.ports import AddressProtector
 from tirodhan.modules.handovers.models import HandoverEvent, HandoverEventItem
 from tirodhan.modules.planning.models import PickupExecution, PlanningBatch
 from tirodhan.modules.planning.policy import PlanningConfigurationError, planning_cutoff_reached
+from tirodhan.modules.routing_operations.dispatch_models import RouteTask
 
 ACTIVE = ("PENDING_PAYMENT", "ACCEPTED", "PRE_PLANNING", "PLANNED")
 HISTORY = ("CANCELLED", "COMPLETED", "EXPIRED")
@@ -88,6 +89,14 @@ async def projections(
         )
     )
     frozen = {(batch.cell_id, batch.slot_start, batch.slot_end) for batch in batches}
+    routed = set(
+        await session.scalars(
+            select(PickupExecution.request_id)
+            .join(RouteTask, RouteTask.pickup_execution_id == PickupExecution.pickup_execution_id)
+            .where(PickupExecution.request_id.in_([r.request_id for r in requests]))
+            .distinct()
+        )
+    )
     batch_by_id = {batch.planning_batch_id: batch for batch in batches}
     results: list[CollectionSummaryDto] = []
     for request in requests:
@@ -194,7 +203,8 @@ async def projections(
                     payment,
                     now=now,
                     lead_time_minutes=lead_time_minutes,
-                    frozen=(request.cell_id, request.slot_start, request.slot_end) in frozen,
+                    frozen=(request.cell_id, request.slot_start, request.slot_end) in frozen
+                    and request.request_id not in routed,
                     refunds=finance.refunds,
                 ),
                 journey=journey,

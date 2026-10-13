@@ -99,6 +99,14 @@ The following are not yet fixed:
 
 ## V2 engineering implementation status
 
+Increment 4 now implements transactional committed-route activation, revision fencing,
+vehicle-bound pickup and whole-lot discharge/recovery using the merged engines/gate and
+operating inputs. Default dispatch activation remains false. Admitted V2 work cannot
+re-enter legacy grouping/dispatch; rolling single-owner admission, flexible supplementary
+acceptance, delivery and global V1 retirement remain the next integration. No production
+hosting/cost commitment is made. See [current implementation](V2_ROUTING_INCREMENT_4.md).
+The earlier increment descriptions below are historical implementation boundaries.
+
 Increment 1's contract/gate is merged. Increment 2 implements finite OSRM road matrix
 acquisition and both approved pinned native engines behind that unchanged gate, with
 isolated real-engine tests. No authoritative V2 assignment or production routing runtime

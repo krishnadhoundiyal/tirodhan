@@ -77,6 +77,21 @@ Tirodhan targets:
 
 It does not claim magical distributed exactly-once network execution.
 
+## Increment 4 authority and execution
+
+Actor/client UUID fingerprints now cover activation, ordered route execution and manager
+recovery. Mutation, immutable result and identifier-only outbox events are one transaction.
+Payment-first cancellation/pickup locks and SERIALIZABLE activation arbitrate real ownership,
+source drift and elapsed feasibility; rollback has no partial route/assignment/cargo effects.
+Historical replay precedes fresh revision/state checks. Rejected discharge replay preserves
+its failed fact without releasing material. Started prefixes, stable pickup attempts and
+SQL history/binding guards protect recovery. No external I/O occurs in those transactions.
+
+New route events remain PENDING until an explicit publisher/consumer integration is reviewed.
+No broker command consumer or queue is introduced in this increment; duplicate invocation
+uses the same domain command identity. See [operation matrix](../IDEMPOTENCY.md) and
+[actual implementation](../V2_ROUTING_INCREMENT_4.md).
+
 ## Testing consequence
 
 Increment 3 applies this pattern to manager resource commands and durable shadow run

@@ -4,8 +4,33 @@ The approved V2 amendments in ADR-004/006/015 supersede V1 planning/dispatch pol
 as the target workflow; retained V1 execution drains at an approved cutover. `planning.routing` dataclasses are immutable
 optimizer projections, not persistent domain entities or replacements for the relational
 models below. Increment 3 adds durable operational input entities and real-booking/custody
-projection, while transactional V2 dispatch/execution remains the next increment.
-See [implemented operational boundary](V2_ROUTING_INCREMENT_3.md).
+projection. Increment 4 adds transactional V2 authority/execution; global admission
+cutover and flexible supplementary acceptance remain separate integration work.
+See [implemented operational boundary](V2_ROUTING_INCREMENT_4.md).
+
+### V2 route authority and execution (increment 4)
+
+RouteActivation authorizes one validated run/engine under live transaction guards.
+VehicleRoute binds one operating vehicle, attested committed shift and conventional
+RiderAssignment. RouteRevision and ordered RouteRevisionStop are immutable history.
+RouteTask is a stable pickup/discharge execution intent with PENDING, STARTED,
+COMPLETED or CANCELLED state. STARTED next work forms the protected optimizer prefix.
+New V2 PickupExecution and COMMITTED_DISPATCH assignments have no synthetic group;
+historical V1 group facts remain. One route assignment can receive additional feasible
+household work while BUSY. CargoVehicleObservation is written atomically with successful
+V2 collection and remains until validated discharge.
+
+RouteRecovery releases only uncollected ownership, preserving physical cargo and
+performing assignment. RouteDischargeProof links scanned cargo/receiving identity and
+in-app PHOTO capture to immutable handover facts; rejected geofences remain history
+without releasing cargo. Media upload stays independent. Routed assignment completion
+requires terminal route tasks, including discharge; final pickup alone never resets
+capacity or returns the rider to IDLE. Actual return-arrival is not a new persisted fact.
+
+Advance route allocation leaves ACCEPTED booking rights intact until actual pickup start.
+Cancellation detaches uncollected routed work with existing compensation in one transaction.
+Admitted/released V2 work cannot return to cell/group dispatch. Default runtime registration
+is disabled; single-owner global adoption and flexible offers are still required.
 
 ### V2 operational inputs and evaluation (increment 3)
 
@@ -22,14 +47,14 @@ CargoVehicleObservation ties an explicit legacy vehicle observation to the succe
 PickupAttempt and request, preserving its historical rider. It cannot transfer custody.
 Onboard projection remains until a validated whole-household handover, regardless of IDLE
 or assignment completion. Existing uncollected ownership is hard-bound in the projection;
-groups/cells do not constrain route construction. Quantitative partial transfer/discharge,
-protected V2 route prefixes and V2 kiosk proof remain execution integration dependencies.
+groups/cells do not constrain route construction. Increment 4 adds protected STARTED work
+and whole-lot kiosk proof; quantitative partial transfer/discharge remain dependencies.
 
 RoutingShadowRun holds a unique manager/client evaluation command, finite recoverable
 lease, versioned immutable problem and independent results from both engines. JSONB here
 is a contract/audit document, not core operational state. Even SUCCEEDED has no assignment,
 financial or custody authority. Default review activation is false; actual new-work V2
-execution still requires the next transactional route/assignment increment and review.
+execution requires the separate Increment 4 activation transaction and runtime review.
 
 ## Purpose
 

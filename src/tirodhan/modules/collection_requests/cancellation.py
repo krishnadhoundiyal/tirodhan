@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tirodhan.db.values import utc_now
@@ -157,7 +157,18 @@ async def cancel_collection_request_by_customer(
             PlanningBatch.slot_end == request.slot_end,
         )
     )
-    if request.planning_batch_id is not None or frozen is not None:
+    from tirodhan.modules.planning.models import PickupExecution
+    from tirodhan.modules.routing_operations.dispatch_models import RouteTask
+
+    routed = await session.scalar(
+        select(
+            exists().where(
+                PickupExecution.request_id == request_id,
+                RouteTask.pickup_execution_id == PickupExecution.pickup_execution_id,
+            )
+        )
+    )
+    if request.planning_batch_id is not None or (frozen is not None and not routed):
         raise CancellationConflictError("Planning has started", "PLANNING_STARTED")
     if request.status not in {"ACCEPTED", "PENDING_PAYMENT"}:
         raise CancellationConflictError("Request cannot be cancelled in its current state")
@@ -180,6 +191,9 @@ async def cancel_collection_request_by_customer(
     # concurrent planning winner.
     request.status = "CANCELLED"
     request.cancelled_at = time_now
+    from tirodhan.modules.routing_operations.recovery import detach_cancelled_booking
+
+    await detach_cancelled_booking(session, request.request_id, time_now)
     payment.cancellation_compensation_authorized = True
     await status_event(
         session, payment, f"collection-cancelled:{request_id}", "COLLECTION_CANCELLED"

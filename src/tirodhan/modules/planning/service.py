@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -36,6 +36,7 @@ from tirodhan.modules.reliability.primitives import (
     claim_inbox_message,
     complete_inbox_message,
 )
+from tirodhan.modules.routing_operations.dispatch_models import RouteTask
 
 PLANNING_BATCH_READY = "READY"
 PLANNING_BATCH_COMPLETED = "COMPLETED"
@@ -258,6 +259,10 @@ async def freeze_planning_batch(
                 CollectionRequest.slot_end == work_unit.slot_end,
                 CollectionRequest.status == REQUEST_ACCEPTED,
                 CollectionRequest.planning_batch_id.is_(None),
+                ~exists().where(
+                    PickupExecution.request_id == CollectionRequest.request_id,
+                    RouteTask.pickup_execution_id == PickupExecution.pickup_execution_id,
+                ),
             )
             .values(status=REQUEST_PRE_PLANNING, planning_batch_id=batch.planning_batch_id)
         )

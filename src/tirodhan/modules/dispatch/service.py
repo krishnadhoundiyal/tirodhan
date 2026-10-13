@@ -309,6 +309,7 @@ async def _assign_group_to_rider(
             )
         ).all()
     )
+    await _require_no_route_admission(session, collection_group_id)
     if not pickups or any(pickup.status != PICKUP_PENDING_ASSIGNMENT for pickup in pickups):
         raise PickupGroupNotAssignableError(
             "collection group must have only PENDING_ASSIGNMENT pickups"
@@ -449,6 +450,7 @@ async def _lock_assignment(session: AsyncSession, assignment_id: UUID) -> RiderA
 async def _require_initial_dispatch_population(
     session: AsyncSession, collection_group_id: UUID
 ) -> None:
+    await _require_no_route_admission(session, collection_group_id)
     statuses = tuple(
         await session.scalars(
             select(PickupExecution.status).where(
@@ -460,6 +462,19 @@ async def _require_initial_dispatch_population(
         raise PickupGroupNotAssignableError(
             "new offers require an entirely PENDING_ASSIGNMENT group"
         )
+
+
+async def _require_no_route_admission(session: AsyncSession, group_id: UUID) -> None:
+    from tirodhan.modules.routing_operations.dispatch_models import RouteTask
+
+    routed = await session.scalar(
+        select(RouteTask.task_id)
+        .join(PickupExecution, PickupExecution.pickup_execution_id == RouteTask.pickup_execution_id)
+        .where(PickupExecution.collection_group_id == group_id)
+        .limit(1)
+    )
+    if routed is not None:
+        raise PickupGroupNotAssignableError("V2-admitted work cannot return to group dispatch")
 
 
 async def _active_assignment(
