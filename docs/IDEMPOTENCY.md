@@ -164,6 +164,32 @@ not distributed exactly-once execution.
 
 ## Critical concurrency scenarios
 
+### V2 operational review commands and finite evaluation (increment 3)
+
+Resource commands use scope `routing.resources:<manager>` plus client command UUID and
+the complete typed fingerprint. Command claim, domain mutation and result are one DB
+transaction; exact concurrent replay returns the same resource. Changed fingerprint
+conflicts, and rollback before commit permits retry. Real FKs/PKs, open-shift partial
+uniqueness and vehicle-row locks protect independent command races and position revisions.
+
+Shadow run business identity is `(requested_by, client_command_id)`, protected by a unique
+constraint and configuration fingerprint. PENDING/RUNNING can resume; terminal replay
+returns recorded success/failure/staleness without external calls. A new input/failure
+evaluation uses a new command. Workers lock/claim the run and commit a finite token/lease
+before consistent snapshot reading, matrix acquisition and native execution outside locks.
+Saved immutable problems resume after crash/lease expiry. Every save/finalization requires
+the current unexpired token; expired owners cannot overwrite successor results.
+
+The independent validator gates each engine. Source drift/freshness failures do not replace
+incumbent work or create assignments. OSRM reads and native solving may repeat after a
+crash before persistence; neither is a physical/financial external side effect. No broker
+consumer/outbox is introduced for this explicitly invoked finite review worker. Future
+dispatch requires its own current resource/route/ownership fencing, coordinated execution
+locks, cancellation arbitration and transactional outbox. See
+[implemented guarantees and limits](V2_ROUTING_INCREMENT_3.md).
+
+### Existing concurrency scenarios
+
 ### Identity creation and session commands
 
 Phase 1R start claims `(auth.start, client_request_id)` in a short transaction with a fingerprint

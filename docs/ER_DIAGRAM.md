@@ -82,6 +82,29 @@ grant/revocation history with active uniqueness per role. `refresh_session` perm
 expiry, independently revocable sessions per user and stores only a unique SHA-256 credential
 verifier.
 
+## V2 operational inputs — migration 0024
+
+```mermaid
+erDiagram
+    APP_USER ||--o{ ROUTING_SHADOW_RUN : requests_review
+    APP_USER ||--o{ OPERATING_VEHICLE : records
+    OPERATING_VEHICLE ||--o{ OPERATING_SHIFT : operates_in
+    RIDER_PROFILE ||--o{ OPERATING_SHIFT : participates
+    OPERATING_VEHICLE ||--o{ VEHICLE_POSITION : observed_at
+    RECEIVING_POINT ||--o{ OPERATING_VEHICLE : shift_end
+    RECEIVING_POINT ||--o{ ROUTING_RECEIVING_WINDOW : opens_during
+    COLLECTION_REQUEST ||--o| ROUTING_MANIFEST : physical_reservation
+    RECEIVING_POINT ||--o{ ROUTING_MANIFEST : authorized_destination
+    COLLECTION_REQUEST ||--o| CARGO_VEHICLE_OBSERVATION : legacy_cargo
+    PICKUP_ATTEMPT ||--o{ CARGO_VEHICLE_OBSERVATION : successful_attribution
+    OPERATING_VEHICLE ||--o{ CARGO_VEHICLE_OBSERVATION : observed_in
+```
+
+Each input also records its AppUser recorder. OperatingShift has unique open rider/vehicle
+bindings. RoutingShadowRun embeds versioned problem/result documents, with no assignment
+or custody FK authority. Its source projection spans existing group/cell/slot boundaries.
+See [implemented boundary](V2_ROUTING_INCREMENT_3.md).
+
 ## Cross-cutting reliability tables
 
 Phase 1R `AUTHENTICATION_CHALLENGE` is a standalone authentication-intent root before user

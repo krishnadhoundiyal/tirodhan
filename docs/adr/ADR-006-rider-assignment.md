@@ -19,7 +19,8 @@ completion and cargo custody remain separate. Multiple pickup groups may share a
 continuous vehicle route without discarding stable per-household execution or assignment
 history. Specified partial discharge must conserve quantitative cargo, not reset capacity.
 
-The hierarchy and locking rules below remain the implemented V1 compatibility path.
+The hierarchy and locking rules below describe retained V1 execution until cutover;
+fleet-first voluntary group assignment is superseded as the V2 target.
 Increment 1 adds no dispatch mutation or replacement locking order. It implements pure
 proposal feasibility and retains COMMITTED/FLEXIBLE classification. Later transactional
 dispatch must recheck live authority, resource revisions, ownership, cargo and facility
@@ -36,7 +37,25 @@ nor flexible acceptance. No V1 IDLE or handover transition changes. Live operati
 position/cargo projection and transactional revision/authority fencing remain prerequisites
 to assignment integration. See [implemented adapters](../V2_ROUTING_INCREMENT_2.md).
 
-## Decision
+## Increment 3 — operational resource and custody projection
+
+Manager-recorded shifts/attestation references distinguish committed and flexible inputs;
+fleet membership is not shift authority. Only committed inputs enter the first shadow
+evaluation stage. Current BUSY/IDLE/intent does not remove their obligations. Live rider
+identity/role, explicit capacities, fresh positions and physical reservations are required.
+Uncollected assignment ownership becomes hard vehicle binding. Successful PickupAttempt
+attribution plus explicit legacy vehicle observation preserves unhanded cargo after IDLE.
+Only validated historical whole-lot handover releases that projection. It is not new V2
+kiosk/partial-discharge permission, and input registration does not authorize assignment.
+
+Transactional route revisions, protected execution prefixes, coordinated resource locks,
+committed dispatch and supplementary flexible acceptance remain the next increment.
+V1 execution does not take the new resource lock, so the input checks/fingerprints cannot
+yet arbitrate dispatch races against it. New V1 offers/assignments retire at the approved
+single-owner V2 cutover; stable PickupExecution, collected work, custody and historical
+assignments remain. See [implementation and transition](../V2_ROUTING_INCREMENT_3.md).
+
+## Decision (retained V1 execution; retire group dispatch at V2 cutover)
 
 Assignment is by planned collection group/work, while per-household PickupExecution remains the stable fulfilment object.
 

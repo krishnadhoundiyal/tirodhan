@@ -1,9 +1,15 @@
 **
 !pyproject.toml
+!README.md
+!alembic.ini
+!migrations
+!migrations/**
 !src
 !src/**
 !tests
 !tests/routing
 !tests/routing/**
+!tests/integration
+!tests/integration/**
 **/__pycache__
 **/*.pyc

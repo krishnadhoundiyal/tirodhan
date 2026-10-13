@@ -79,6 +79,13 @@ It does not claim magical distributed exactly-once network execution.
 
 ## Testing consequence
 
+Increment 3 applies this pattern to manager resource commands and durable shadow run
+identities. Finite token/expiry-fenced leases resume saved immutable problems after crashes;
+terminal replay does not call providers or solvers. Source comparison/validation establishes
+advisory feasibility only, never assignment ownership. No broker/outbox is introduced for
+the explicitly invoked read-only external evaluation. See
+[operation matrix and recovery](../IDEMPOTENCY.md#v2-operational-review-commands-and-finite-evaluation-increment-3).
+
 Every relevant mutating use case must test:
 
 - success;

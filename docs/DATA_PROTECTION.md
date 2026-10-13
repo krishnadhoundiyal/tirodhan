@@ -8,6 +8,19 @@ The goal is data minimization, least privilege, secure storage/transit, safe aut
 
 ## 2. Data classification
 
+### V2 operational review (increment 3)
+
+Vehicle positions remain restricted PostGIS geography, subject to the same exact-coordinate
+requirements below. Shadow problem documents contain node IDs and road matrices, not
+coordinates, addresses or phones. Source comparisons store opaque hashes. Readiness metadata
+contains internal request/vehicle IDs and controlled codes only. Manager review responses
+omit problem/raw matrix/input payloads; distances, route IDs and schedules remain restricted
+operational data. No coordinate/solver payload enters logs, reliability stores or broker
+messages. Matrix calls inherit Increment 2's logging/HTTPS/response safeguards.
+
+Shadow-run/position retention must be operationally defined before sustained production
+use. Default review activation is false and no new production external processor is selected.
+
 ### Direct PII requiring application-level protection
 
 Examples:

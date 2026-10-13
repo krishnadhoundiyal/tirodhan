@@ -14,7 +14,7 @@ function Invoke-Docker {
 }
 Push-Location $repo
 try {
-    Invoke-Docker build -f tests/routing/Dockerfile -t tirodhan-routing-tests:increment-2 .
+    Invoke-Docker build --target routing-tests -f tests/routing/Dockerfile -t tirodhan-routing-tests:increment-2 .
     Invoke-Docker volume create $volume
     Invoke-Docker run --rm --cpus 2 --memory 2g -v "${volume}:/data" -v "${fixture}:/input/map.osm.pbf:ro" $osrm sh -ec 'cp /input/map.osm.pbf /data/map.osm.pbf && osrm-extract -t 2 -p /opt/car.lua /data/map.osm.pbf && osrm-partition -t 2 /data/map.osrm && osrm-customize -t 2 /data/map.osrm'
     Invoke-Docker run -d --name $server --cpus 2 --memory 2g -v "${volume}:/data:ro" $osrm osrm-routed -t 2 --algorithm mld /data/map.osrm

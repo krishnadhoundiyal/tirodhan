@@ -163,6 +163,10 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = application_settings
+    if application_settings.routing_shadow_review_enabled:
+        from tirodhan.api.routes.routing_operations import router as routing_review_router
+
+        application.include_router(routing_review_router)
     application.state.address_protector = configured_address_protector
     application.state.location_resolver = location_resolver or UnconfiguredLocationResolver()
     application.state.cell_id_deriver = cell_id_deriver or H3CellIdDeriver()
