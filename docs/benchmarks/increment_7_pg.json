@@ -1,0 +1,78 @@
+{
+  "fixture_only": true,
+  "concurrent_repository_validation": true,
+  "results": [
+    {
+      "vehicles": 4,
+      "demand": 8,
+      "snapshot_seconds": [
+        0.07949946797452867,
+        0.0535133290104568,
+        0.06223156792111695,
+        0.05458009196445346,
+        0.06251882505603135,
+        0.05030245508532971,
+        0.05012857192195952
+      ],
+      "snapshot_queries": 210,
+      "cycle_seconds": 2.5597234369488433,
+      "cycle_queries": 296,
+      "admission_seconds": 1.7898659619968385,
+      "admission_queries": 105
+    },
+    {
+      "vehicles": 8,
+      "demand": 32,
+      "snapshot_seconds": [
+        0.10868849395774305,
+        0.06861189310438931,
+        0.06168945296667516,
+        0.06045030592940748,
+        0.060779207036830485,
+        0.060308131971396506,
+        0.05056245403829962
+      ],
+      "snapshot_queries": 210,
+      "cycle_seconds": 3.352721330942586,
+      "cycle_queries": 736,
+      "admission_seconds": 1.9859835510142148,
+      "admission_queries": 105
+    },
+    {
+      "vehicles": 16,
+      "demand": 64,
+      "snapshot_seconds": [
+        0.08627575496211648,
+        0.06741748098284006,
+        0.05639158398844302,
+        0.06196543702390045,
+        0.05151346302591264,
+        0.055498123983852565,
+        0.05784617899917066
+      ],
+      "snapshot_queries": 210,
+      "cycle_seconds": 8.095681759994477,
+      "cycle_queries": 1356,
+      "admission_seconds": 3.8499526570085436,
+      "admission_queries": 105
+    },
+    {
+      "vehicles": 32,
+      "demand": 127,
+      "snapshot_seconds": [
+        0.1153886680258438,
+        0.072188412072137,
+        0.07177727401722223,
+        0.1172372599830851,
+        0.1867572630289942,
+        0.21179445006418973,
+        0.25620970700401813
+      ],
+      "snapshot_queries": 210,
+      "cycle_seconds": 59.211166861932725,
+      "cycle_queries": 2536,
+      "admission_seconds": 50.76428770693019,
+      "admission_queries": 105
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from typing import Protocol
 from uuid import UUID
 
 ROUTING_CONTRACT_V1 = "DYNAMIC_COLLECTION_ROUTING_V1"
+ROUTING_CONTRACT_V2 = "DYNAMIC_COLLECTION_ROUTING_V2"
 
 
 class OptimizerEngine(str, Enum):
@@ -85,6 +86,7 @@ class VehicleSnapshot:
     capacity: tuple[int, ...]
     initial_cargo: tuple[CargoBalance, ...]
     protected_prefix: tuple[UUID, ...]
+    breaks: tuple[TimeWindow, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -35,6 +35,7 @@ class Score:
     disruptions: int
     minimum_window_slack_seconds: int | None
     window_risk_seconds: int
+    supplementary_lots: int
     generalized_seconds: int
 
     @property
@@ -42,6 +43,7 @@ class Score:
         return (
             self.unserved_lots,
             self.deadline_risk,
+            self.supplementary_lots,
             self.generalized_seconds,
             self.distance_m,
             self.disruptions,
@@ -186,6 +188,15 @@ def evaluate(problem, orders, weights, incumbent):
         disruption,
         min(slacks) if slacks else None,
         risk,
+        len(
+            {
+                stops[stop_id].lot_id
+                for vehicle_id, route in orders.items()
+                if vehicles[vehicle_id].resource_kind == "FLEXIBLE"
+                for stop_id in route
+                if stops[stop_id].kind == "PICKUP" and stops[stop_id].bound_vehicle_id is None
+            }
+        ),
         travel
         + weights.activation * deployed
         + weights.waiting * waiting

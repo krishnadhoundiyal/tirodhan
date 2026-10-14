@@ -473,7 +473,15 @@ async def _require_no_route_admission(session: AsyncSession, group_id: UUID) -> 
         .where(PickupExecution.collection_group_id == group_id)
         .limit(1)
     )
-    if routed is not None:
+    from tirodhan.modules.routing_operations.orchestration_models import CapacityReservation
+
+    reserved = await session.scalar(
+        select(CapacityReservation.reservation_id)
+        .join(PickupExecution, PickupExecution.request_id == CapacityReservation.request_id)
+        .where(PickupExecution.collection_group_id == group_id)
+        .limit(1)
+    )
+    if routed is not None or reserved is not None:
         raise PickupGroupNotAssignableError("V2-admitted work cannot return to group dispatch")
 
 

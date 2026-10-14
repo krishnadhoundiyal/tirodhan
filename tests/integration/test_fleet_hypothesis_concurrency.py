@@ -193,7 +193,7 @@ async def scenario(factory, kind, loaded, delta, reverse):
             factory,
             FleetControl,
             "COMMITTED_FLEET",
-            [crashed if kind == "crash-takeover" else plan, plan],
+            [crashed, crashed] if kind == "crash-takeover" else [plan, plan],
         )
         if kind == "workers":
             assert (
@@ -204,7 +204,10 @@ async def scenario(factory, kind, loaded, delta, reverse):
                 == 1
             )
         else:
-            assert any(isinstance(r, asyncio.CancelledError) for r in results)
+            # Lock acquisition order is not a worker identity guarantee. Whichever
+            # contender owns the lease crashes; the other must observe that owner.
+            assert sum(isinstance(r, asyncio.CancelledError) for r in results) == 1
+            assert sum(r is None for r in results) == 1
             clock[0] += timedelta(seconds=121)
             assert (await tick(factory, clock)).status == "ACTIVATED"
             async with factory() as session:

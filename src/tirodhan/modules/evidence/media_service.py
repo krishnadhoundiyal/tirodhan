@@ -132,6 +132,37 @@ async def register_media_asset(
         if evidence.captured_by_user_id != requesting_user_id:
             raise MediaActorAttributionError("evidence capture belongs to another user")
 
+        from tirodhan.modules.routing_operations.orchestration_models import (
+            CargoTransferIntent,
+            CargoTransferReceipt,
+            PhysicalLoadObservation,
+            PickupReattempt,
+        )
+
+        if media_type != "PHOTO" and (
+            await session.scalar(
+                select(CargoTransferIntent.intent_id).where(
+                    CargoTransferIntent.resolution_evidence_id == evidence_capture_id
+                )
+            )
+            or await session.scalar(
+                select(CargoTransferReceipt.capture_id).where(
+                    CargoTransferReceipt.capture_id == evidence_capture_id
+                )
+            )
+            or await session.scalar(
+                select(PhysicalLoadObservation.capture_id).where(
+                    PhysicalLoadObservation.capture_id == evidence_capture_id
+                )
+            )
+            or await session.scalar(
+                select(PickupReattempt.evidence_capture_id).where(
+                    PickupReattempt.evidence_capture_id == evidence_capture_id
+                )
+            )
+        ):
+            raise MediaRegistrationStateInconsistentError("operational evidence requires PHOTO")
+
         created_at = now or utc_now()
         media_asset_id = new_uuid7()
         asset = await session.scalar(

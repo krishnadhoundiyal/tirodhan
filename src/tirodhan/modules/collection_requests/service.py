@@ -121,6 +121,7 @@ class CreateCollectionRequestCommand:
     slot_end: datetime
     items: tuple[DeclaredRequestItem, ...]
     payment_expires_at: datetime
+    capacity_reservation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +257,7 @@ async def create_collection_request(
     cell_id_deriver: CellIdDeriver | None = None,
     slot_availability: SlotAvailabilityPort | None = None,
     planning_lead_time_minutes: int | None = None,
+    require_capacity_reservation: bool = False,
 ) -> CollectionRequestResult:
     if not command.items:
         raise CollectionRequestInputError("at least one declared item is required")
@@ -269,6 +271,11 @@ async def create_collection_request(
             "customer_id": command.customer_id,
             "client_request_id": command.client_request_id,
             "serviceability_context_id": command.serviceability_context_id,
+            **(
+                {"capacity_reservation_id": command.capacity_reservation_id}
+                if command.capacity_reservation_id is not None
+                else {}
+            ),
             "slot_start": command.slot_start,
             "slot_end": command.slot_end,
             "items": command.items,
@@ -474,6 +481,10 @@ async def create_collection_request(
         )
         session.add_all([*request_items, payment])
         await session.flush()
+        if require_capacity_reservation:
+            from tirodhan.modules.routing_operations.admission import bind_reservation
+
+            await bind_reservation(session, request, command.capacity_reservation_id)
         await complete_idempotency_record(
             session,
             claim.record,

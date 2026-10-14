@@ -45,6 +45,7 @@ class OperatingVehicle(Base):
         ForeignKey("receiving_point.receiving_point_id")
     )
     version: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1")
+    safety_version: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
     blocked_reason: Mapped[str | None] = mapped_column(String(24))
     recorded_by: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -191,3 +192,7 @@ class RoutingShadowRun(Base):
     failure_code: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# Register the increment 7 relational extension wherever operational metadata is loaded.
+from . import orchestration_models as orchestration_models  # noqa: E402,F401

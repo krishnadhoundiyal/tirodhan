@@ -43,6 +43,7 @@ from tirodhan.modules.customers.ports import AddressProtectionNotConfiguredError
 from tirodhan.modules.customers.service import IdempotencyCommandInProgressError
 from tirodhan.modules.planning.policy import PlanningConfigurationError
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
+from tirodhan.modules.routing_operations.commands import OperationalInputError
 from tirodhan.modules.serviceability.ports import (
     CellIdDeriver,
     LocationResolver,
@@ -61,6 +62,7 @@ class CollectionRequestItemInput(BaseModel):
 class CollectionRequestCreate(BaseModel):
     client_request_id: UUID
     serviceability_context_id: UUID
+    capacity_reservation_id: UUID | None = None
     slot_start: datetime
     slot_end: datetime
     items: list[CollectionRequestItemInput] = Field(min_length=1)
@@ -143,6 +145,7 @@ async def post_collection_request(
         result = await create_collection_request(
             session_factory,
             CreateCollectionRequestCommand(
+                capacity_reservation_id=body.capacity_reservation_id,
                 customer_id=customer_id,
                 client_request_id=body.client_request_id,
                 serviceability_context_id=body.serviceability_context_id,
@@ -164,6 +167,7 @@ async def post_collection_request(
             location_resolver=location_resolver,
             cell_id_deriver=cells,
             slot_availability=cast(SlotAvailabilityPort, request.app.state.slot_availability),
+            require_capacity_reservation=request.app.state.settings.routing_orchestration_enabled,
             planning_lead_time_minutes=cast(
                 Settings, request.app.state.settings
             ).planning_lead_time_minutes,
@@ -175,6 +179,8 @@ async def post_collection_request(
         ServiceabilityResolverNotConfiguredError,
     ) as error:
         raise HTTPException(status_code=503, detail="Required runtime is not configured") from error
+    except OperationalInputError as error:
+        raise HTTPException(status_code=409, detail={"code": str(error)}) from None
     except ServiceabilityContextIneligibleError as error:
         raise CustomerReadError(error.status, error.code) from error
     except SlotConflictError as error:

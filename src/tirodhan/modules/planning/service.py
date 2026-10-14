@@ -37,6 +37,7 @@ from tirodhan.modules.reliability.primitives import (
     complete_inbox_message,
 )
 from tirodhan.modules.routing_operations.dispatch_models import RouteTask
+from tirodhan.modules.routing_operations.orchestration_models import CapacityReservation
 
 PLANNING_BATCH_READY = "READY"
 PLANNING_BATCH_COMPLETED = "COMPLETED"
@@ -176,6 +177,7 @@ async def discover_due_planning_work_units(
                 .where(
                     CollectionRequest.status == REQUEST_ACCEPTED,
                     CollectionRequest.planning_batch_id.is_(None),
+                    ~exists().where(CapacityReservation.request_id == CollectionRequest.request_id),
                     CollectionRequest.slot_start <= latest_due,
                 )
                 .distinct()
@@ -259,6 +261,7 @@ async def freeze_planning_batch(
                 CollectionRequest.slot_end == work_unit.slot_end,
                 CollectionRequest.status == REQUEST_ACCEPTED,
                 CollectionRequest.planning_batch_id.is_(None),
+                ~exists().where(CapacityReservation.request_id == CollectionRequest.request_id),
                 ~exists().where(
                     PickupExecution.request_id == CollectionRequest.request_id,
                     RouteTask.pickup_execution_id == PickupExecution.pickup_execution_id,

@@ -45,32 +45,11 @@ def migrated_database_url(monkeypatch: pytest.MonkeyPatch) -> str:
 @pytest_asyncio.fixture
 async def database_engine(migrated_database_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(migrated_database_url)
-    table_names = (
-        "fleet_exception, fleet_cycle, fleet_position_anchor, fleet_control, "
-        "routing_facility_restriction, "
-        "route_discharge_proof, route_recovery, route_revision_stop, route_task, "
-        "route_revision, vehicle_route, route_activation, "
-        "routing_shadow_run, cargo_vehicle_observation, routing_receiving_window, "
-        "routing_manifest, "
-        "vehicle_position, operating_shift, operating_vehicle, "
-        "catalogue_artwork, catalogue_category, catalogue_group, catalogue_media, "
-        "offer_notification_delivery, push_registration, rider_service_cell, "
-        "fleet_service_cell, fleet_membership, fleet, "
-        "authentication_challenge, refresh_session, user_role, user_phone, "
-        "media_asset, "
-        "pickup_evidence_link, handover_evidence_link, evidence_capture, "
-        "handover_event_item, handover_event, receiving_point, pickup_incident, pickup_attempt, "
-        "rider_assignment_item, rider_assignment, "
-        "assignment_offer, "
-        "rider_availability, "
-        "rider_profile, pickup_execution, collection_group_member, collection_group, "
-        "planning_batch_attempt, financial_audit, financial_exception, settlement_evidence, "
-        "financial_scan_checkpoint, refund_obligation, "
-        "captured_charge, payment_provider_event, refund, payment_attempt, payment, "
-        "collection_request_item, "
-        "collection_request, planning_batch, serviceability_context, user_address, "
-        "outbox_event, inbox_message, idempotency_record, app_user"
-    )
+    from tirodhan.db.base import Base
+
+    # The migration imports all application metadata; extension tables are not ORM entities.
+    table_names = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+
     async with engine.begin() as connection:
         await connection.execute(text(f"TRUNCATE TABLE {table_names}"))
 

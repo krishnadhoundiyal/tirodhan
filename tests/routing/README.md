@@ -1,5 +1,22 @@
 # Reproducing native routing tests
 
+Increment 7 extends `run-operational.ps1` with regional admission, custody/reattempt,
+preflight and migration coverage. `-Benchmark` explicitly adds the real native/PostgreSQL
+and synthetic-route batching measurements; `-Extended` selects the expensive Hypothesis
+profile. `-Seed` overrides the reproducible default 61010. Both modes are opt-in and use
+only the same disposable resources. OSRM permits 512-node tables and suppresses request
+URL logging. Keep `-Extended` out of regular CI.
+
+```powershell
+powershell -NoProfile -File tests/routing/run-operational.ps1 -SkipBuild -Benchmark -Seed 71015
+```
+
+Use `-SkipBuild` only with the current dependency image already available. Benchmark output
+is labelled `INC7_PG_BENCHMARK`/`INC7_BATCH_BENCHMARK`; the latter deliberately uses synthetic
+routing to isolate PostgreSQL command/batching costs. Full repository validation uses the
+default dependency environment and a separate disposable PostGIS database. Recorded results
+and actual solver/road limitations are in `docs/V2_ROUTING_INCREMENT_7.md`.
+
 Increment 3 operational reproduction (disposable PostgreSQL/PostGIS, the same pinned
 road/solver engines, and actual booking/ownership/custody projections):
 

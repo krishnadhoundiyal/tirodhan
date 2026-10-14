@@ -1,0 +1,1595 @@
+{
+  "fixture_only": true,
+  "search_seconds": 1,
+  "results": [
+    {
+      "vehicles": 4,
+      "requests": 8,
+      "samples": [
+        {
+          "wall_seconds": 1.7974220719188452,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.038698503049090505,
+              "refinement_seconds": 0.08380496897734702,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.043345,
+              "cumulative_child_max_rss_kib": 91224
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6010042889975011,
+              "refinement_seconds": 0.07033638306893408,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.257036,
+              "cumulative_child_max_rss_kib": 91352
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.822181130060926,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.029879460926167667,
+              "refinement_seconds": 0.0811430549947545,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.03448599999999974,
+              "cumulative_child_max_rss_kib": 91352
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6377098381053656,
+              "refinement_seconds": 0.07093772094231099,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.2918040000000002,
+              "cumulative_child_max_rss_kib": 91352
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.840910026920028,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.03586743399500847,
+              "refinement_seconds": 0.11887414800003171,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.04153199999999971,
+              "cumulative_child_max_rss_kib": 91352
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6123242289759219,
+              "refinement_seconds": 0.0699827530188486,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.2591060000000003,
+              "cumulative_child_max_rss_kib": 91480
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.8640827540075406,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.03336042200680822,
+              "refinement_seconds": 0.08018730895128101,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.03889899999999985,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6732028679689392,
+              "refinement_seconds": 0.0749017340131104,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.27489,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.8290955040138215,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.02969957294408232,
+              "refinement_seconds": 0.09272842609789222,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.0336480000000004,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6349474440794438,
+              "refinement_seconds": 0.06911163497716188,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.271487,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.7968177510192618,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.031328434008173645,
+              "refinement_seconds": 0.08042721298988909,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.03748900000000027,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6105121589498594,
+              "refinement_seconds": 0.07171104697044939,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.2515549999999995,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.781243309029378,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.02929155295714736,
+              "refinement_seconds": 0.07591227104421705,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.030670999999999615,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.60186826903373,
+              "refinement_seconds": 0.07189284695778042,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.2569510000000004,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.8254720070399344,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.030354161048308015,
+              "refinement_seconds": 0.07348279899451882,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.036674999999999236,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.621782977017574,
+              "refinement_seconds": 0.09654005104675889,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.262924000000001,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.8165337559767067,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.03306889196392149,
+              "refinement_seconds": 0.08428545505739748,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.03866400000000103,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6185451069613919,
+              "refinement_seconds": 0.07689598598517478,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.267098999999999,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        },
+        {
+          "wall_seconds": 1.836864653043449,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.029388497001491487,
+              "refinement_seconds": 0.07824034104123712,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 601,
+                "distance_m": 3229,
+                "waiting_seconds": 5713,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 901
+              },
+              "child_cpu_seconds": 0.034233000000000846,
+              "cumulative_child_max_rss_kib": 91608
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.648410082096234,
+              "refinement_seconds": 0.07833205396309495,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 453,
+                "distance_m": 2378,
+                "waiting_seconds": 6850,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1546,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1053
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 660,
+                "distance_m": 3830,
+                "waiting_seconds": 5953,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 1503,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 960
+              },
+              "child_cpu_seconds": 1.281305,
+              "cumulative_child_max_rss_kib": 91608
+            }
+          ]
+        }
+      ],
+      "matrix_seconds": 0.10360150202177465,
+      "cache_seconds": 1.2443051673471928e-05,
+      "matrix_hits": 1,
+      "matrix_misses": 1
+    },
+    {
+      "vehicles": 8,
+      "requests": 32,
+      "samples": [
+        {
+          "wall_seconds": 2.4452473449055105,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.20962008310016245,
+              "refinement_seconds": 0.2618804230587557,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 3109,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1464
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 2690,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1164
+              },
+              "child_cpu_seconds": 0.16484599999999983,
+              "cumulative_child_max_rss_kib": 91864
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6418975989799947,
+              "refinement_seconds": 0.3129576169885695,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 959,
+                "distance_m": 5238,
+                "waiting_seconds": 14737,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 601,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1859
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1342,
+                "distance_m": 7889,
+                "waiting_seconds": 5128,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 304,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1342
+              },
+              "child_cpu_seconds": 1.2647400000000002,
+              "cumulative_child_max_rss_kib": 91992
+            }
+          ]
+        },
+        {
+          "wall_seconds": 2.6287701089167967,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.2596949889557436,
+              "refinement_seconds": 0.3342533439863473,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 3109,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1464
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 2690,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1164
+              },
+              "child_cpu_seconds": 0.22762999999999922,
+              "cumulative_child_max_rss_kib": 92120
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.655692592030391,
+              "refinement_seconds": 0.35607493994757533,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 959,
+                "distance_m": 5238,
+                "waiting_seconds": 14737,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 601,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1859
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1342,
+                "distance_m": 7889,
+                "waiting_seconds": 5128,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 304,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1342
+              },
+              "child_cpu_seconds": 1.274775999999999,
+              "cumulative_child_max_rss_kib": 92120
+            }
+          ]
+        },
+        {
+          "wall_seconds": 2.4228018970461562,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.2778591060778126,
+              "refinement_seconds": 0.23922508000396192,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 3109,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1464
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 2690,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1164
+              },
+              "child_cpu_seconds": 0.2435120000000004,
+              "cumulative_child_max_rss_kib": 92120
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.5782519179629162,
+              "refinement_seconds": 0.3113912330009043,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 959,
+                "distance_m": 5238,
+                "waiting_seconds": 14737,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 601,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1859
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1342,
+                "distance_m": 7889,
+                "waiting_seconds": 5128,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 304,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1342
+              },
+              "child_cpu_seconds": 1.2622569999999984,
+              "cumulative_child_max_rss_kib": 92120
+            }
+          ]
+        },
+        {
+          "wall_seconds": 2.386983450036496,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.20017151208594441,
+              "refinement_seconds": 0.2743543069809675,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 3109,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1464
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 2690,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1164
+              },
+              "child_cpu_seconds": 0.15826600000000002,
+              "cumulative_child_max_rss_kib": 92120
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.5926576999481767,
+              "refinement_seconds": 0.3034860109910369,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 959,
+                "distance_m": 5238,
+                "waiting_seconds": 14737,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 601,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1859
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1342,
+                "distance_m": 7889,
+                "waiting_seconds": 5128,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 304,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1342
+              },
+              "child_cpu_seconds": 1.2699479999999985,
+              "cumulative_child_max_rss_kib": 92248
+            }
+          ]
+        },
+        {
+          "wall_seconds": 2.363061805954203,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.23062609299086034,
+              "refinement_seconds": 0.2432312750024721,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 3109,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1464
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1081,
+                "distance_m": 6067,
+                "waiting_seconds": 2690,
+                "empty_travel_seconds": 207,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 217,
+                "window_risk_seconds": 83,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1164
+              },
+              "child_cpu_seconds": 0.18322000000000083,
+              "cumulative_child_max_rss_kib": 92248
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.615720900008455,
+              "refinement_seconds": 0.25984723097644746,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 959,
+                "distance_m": 5238,
+                "waiting_seconds": 14737,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 601,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1859
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 1342,
+                "distance_m": 7889,
+                "waiting_seconds": 5128,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 304,
+                "window_risk_seconds": 0,
+                "supplementary_lots": 0,
+                "generalized_seconds": 1342
+              },
+              "child_cpu_seconds": 1.2372279999999982,
+              "cumulative_child_max_rss_kib": 92248
+            }
+          ]
+        }
+      ],
+      "matrix_seconds": 0.06839740299619734,
+      "cache_seconds": 1.4583929441869259e-05,
+      "matrix_hits": 1,
+      "matrix_misses": 1
+    },
+    {
+      "vehicles": 16,
+      "requests": 64,
+      "samples": [
+        {
+          "wall_seconds": 4.249241974088363,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.9460016400553286,
+              "refinement_seconds": 0.6970219539944082,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2865,
+                "distance_m": 16435,
+                "waiting_seconds": 6623,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 960,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4425
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 3299,
+                "distance_m": 19445,
+                "waiting_seconds": 2017,
+                "empty_travel_seconds": 227,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 960,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4259
+              },
+              "child_cpu_seconds": 0.8851509999999994,
+              "cumulative_child_max_rss_kib": 92888
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.745171629008837,
+              "refinement_seconds": 0.8042637770995498,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2326,
+                "distance_m": 12895,
+                "waiting_seconds": 12799,
+                "empty_travel_seconds": 629,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3480
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2553,
+                "distance_m": 14453,
+                "waiting_seconds": 12393,
+                "empty_travel_seconds": 856,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3407
+              },
+              "child_cpu_seconds": 1.3148450000000014,
+              "cumulative_child_max_rss_kib": 103788
+            }
+          ]
+        },
+        {
+          "wall_seconds": 4.266301486990415,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.9697808730416,
+              "refinement_seconds": 0.7129846250172704,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2865,
+                "distance_m": 16435,
+                "waiting_seconds": 6623,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 960,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4425
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 3299,
+                "distance_m": 19445,
+                "waiting_seconds": 2017,
+                "empty_travel_seconds": 227,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 960,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4259
+              },
+              "child_cpu_seconds": 0.8962550000000002,
+              "cumulative_child_max_rss_kib": 103788
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.6565698280464858,
+              "refinement_seconds": 0.8698715759674087,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2326,
+                "distance_m": 12895,
+                "waiting_seconds": 12799,
+                "empty_travel_seconds": 629,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3480
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2553,
+                "distance_m": 14453,
+                "waiting_seconds": 12393,
+                "empty_travel_seconds": 856,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3407
+              },
+              "child_cpu_seconds": 1.2926779999999984,
+              "cumulative_child_max_rss_kib": 103788
+            }
+          ]
+        },
+        {
+          "wall_seconds": 4.386354341986589,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 0.9951084520434961,
+              "refinement_seconds": 0.7323053310392424,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2816,
+                "distance_m": 16168,
+                "waiting_seconds": 2158,
+                "empty_travel_seconds": 0,
+                "additional_vehicles": 1,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 1005,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4121
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 3043,
+                "distance_m": 17726,
+                "waiting_seconds": 1752,
+                "empty_travel_seconds": 227,
+                "additional_vehicles": 0,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 22,
+                "window_risk_seconds": 1005,
+                "supplementary_lots": 0,
+                "generalized_seconds": 4048
+              },
+              "child_cpu_seconds": 0.9259620000000015,
+              "cumulative_child_max_rss_kib": 103788
+            },
+            {
+              "engine": "OR_TOOLS",
+              "native_seconds": 1.7545633630361408,
+              "refinement_seconds": 0.8498605909990147,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2326,
+                "distance_m": 12895,
+                "waiting_seconds": 12799,
+                "empty_travel_seconds": 629,
+                "additional_vehicles": 3,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3480
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 2553,
+                "distance_m": 14453,
+                "waiting_seconds": 12393,
+                "empty_travel_seconds": 856,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 128,
+                "window_risk_seconds": 254,
+                "supplementary_lots": 0,
+                "generalized_seconds": 3407
+              },
+              "child_cpu_seconds": 1.339194,
+              "cumulative_child_max_rss_kib": 103844
+            }
+          ]
+        }
+      ],
+      "matrix_seconds": 0.09154523606412113,
+      "cache_seconds": 4.323897883296013e-05,
+      "matrix_hits": 1,
+      "matrix_misses": 1
+    },
+    {
+      "vehicles": 32,
+      "requests": 128,
+      "samples": [
+        {
+          "wall_seconds": 10.904905861010775,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 7.154528880957514,
+              "refinement_seconds": 1.6916307549690828,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "child_cpu_seconds": 6.918425999999997,
+              "cumulative_child_max_rss_kib": 103844
+            },
+            {
+              "engine": "OR_TOOLS",
+              "failure_type": "RoutingAdapterError",
+              "failure_code": "NO_FEASIBLE_PROPOSAL",
+              "native_seconds": 1.9297062689438462,
+              "child_cpu_seconds": 1.4580660000000014,
+              "cumulative_child_max_rss_kib": 134744
+            }
+          ]
+        },
+        {
+          "wall_seconds": 14.349643657915294,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 10.850313605973497,
+              "refinement_seconds": 1.5887615690007806,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "child_cpu_seconds": 10.580393,
+              "cumulative_child_max_rss_kib": 134744
+            },
+            {
+              "engine": "OR_TOOLS",
+              "failure_type": "RoutingAdapterError",
+              "failure_code": "NO_FEASIBLE_PROPOSAL",
+              "native_seconds": 1.7680886969901621,
+              "child_cpu_seconds": 1.335543000000004,
+              "cumulative_child_max_rss_kib": 135252
+            }
+          ]
+        },
+        {
+          "wall_seconds": 9.90143009996973,
+          "engines": [
+            {
+              "engine": "VROOM",
+              "native_seconds": 6.445233640028164,
+              "refinement_seconds": 1.630425531999208,
+              "evaluations": 300,
+              "native": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "refined": {
+                "unserved_lots": 0,
+                "deadline_risk": [],
+                "travel_seconds": 6246,
+                "distance_m": 36500,
+                "waiting_seconds": 4651,
+                "empty_travel_seconds": 294,
+                "additional_vehicles": 2,
+                "disruptions": 0,
+                "minimum_window_slack_seconds": 0,
+                "window_risk_seconds": 2998,
+                "supplementary_lots": 0,
+                "generalized_seconds": 9844
+              },
+              "child_cpu_seconds": 6.2166640000000015,
+              "cumulative_child_max_rss_kib": 135252
+            },
+            {
+              "engine": "OR_TOOLS",
+              "failure_type": "RoutingAdapterError",
+              "failure_code": "NO_FEASIBLE_PROPOSAL",
+              "native_seconds": 1.71160034800414,
+              "child_cpu_seconds": 1.3682460000000018,
+              "cumulative_child_max_rss_kib": 135252
+            }
+          ]
+        }
+      ],
+      "matrix_seconds": 0.20831953990273178,
+      "cache_seconds": 4.772294778376818e-05,
+      "matrix_hits": 1,
+      "matrix_misses": 1
+    },
+    {
+      "matrix_nodes": 512,
+      "concurrency": 1,
+      "wall_seconds": 1.276287343003787
+    },
+    {
+      "matrix_nodes": 512,
+      "concurrency": 2,
+      "wall_seconds": 1.8301327020162717
+    },
+    {
+      "matrix_nodes": 512,
+      "concurrency": 4,
+      "wall_seconds": 5.270494843018241
+    }
+  ],
+  "parent_max_rss_kib": 153152
+}

@@ -132,3 +132,13 @@ now repeats to a strict local fixed point or the existing total candidate limit.
 engines, independent feasibility, objective calibration, authority and infrastructure
 remain as approved. No global-optimum guarantee is implied. Test-only generated
 verification/evidence is documented in [Increment 6](../V2_ROUTING_INCREMENT_6.md).
+
+## Increment 7 — regional admission and dynamic work
+
+Configured regions span H3 cells; cells are not capacity pools. Durable capacity
+certificates account for load, future commitments, road travel, service windows, breaks
+and authorized discharge. Native work stays outside locks; SERIALIZABLE generation/source
+validation establishes a race-safe reservation. Incremental certificates and coalesced wakes
+reduce collective solves. Passive holds have no assignment authority; executable routes are
+independently validated again. Planning T−M remains independent of commercial N. Default
+activation stays false. See [increment 7](../V2_ROUTING_INCREMENT_7.md).

@@ -199,6 +199,19 @@ async def record_handover_in_session(
             )
         )
     )
+    from tirodhan.modules.routing_operations.orchestration_models import CargoTransfer
+
+    for pickup in pickups:
+        transfer = await session.scalar(
+            select(CargoTransfer)
+            .where(CargoTransfer.request_id == pickup.request_id)
+            .order_by(CargoTransfer.sequence.desc())
+            .limit(1)
+        )
+        if transfer is not None:
+            attributed_pickup_ids.discard(pickup.pickup_execution_id)
+            if transfer.to_rider_id == rider_id:
+                attributed_pickup_ids.add(pickup.pickup_execution_id)
     if attributed_pickup_ids != set(canonical_pickup_ids):
         raise HandoverRiderAttributionError(
             "every pickup must retain unreleased assignment attribution to the rider"

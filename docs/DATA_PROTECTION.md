@@ -282,3 +282,14 @@ attention/recovery/route outbox payloads contain identifiers only. Manager statu
 backlog are bounded and omit addresses/coordinates. No GPS retention duration or
 external notification provider was silently chosen; approved retention/cleanup and
 mobile capture remain release work.
+
+## Increment 7 routing privacy and retention
+
+Native diagnostics/GPS remain private. Suppress OSRM coordinate URLs in logs; customers see
+rider references and revision-bound ETA, without live maps. Wake/delivery metadata carries
+identifiers/reasons, not household coordinates, addresses, tokens or PHOTO content. Recovery
+keeps actual witness attribution and private self-upload ownership. Upload failure does not
+undo business facts. Read-only retention inventory follows operational 90/30/7-day and
+twelve-month recommendations while preserving live references. Financial/customer/custody/
+evidence retention and irreversible destruction require separate verified policy. PITR is
+unchanged. See [increment 7](V2_ROUTING_INCREMENT_7.md).

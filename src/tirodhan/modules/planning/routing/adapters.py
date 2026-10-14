@@ -217,6 +217,14 @@ def vroom_payload(prepared: PreparedProblem) -> dict[str, Any]:
                 start_index=v["start"],
                 end_index=v["end"],
                 time_window=[v["available"], v["end_at"]],
+                breaks=[
+                    dict(
+                        id=100000 + v["id"] * 100 + i,
+                        time_windows=[[max(a, v["available"]), max(a, v["available"])]],
+                        service=b - max(a, v["available"]),
+                    )
+                    for i, (a, b) in enumerate(v.get("breaks", []))
+                ],
                 capacity=v["capacity"],
                 skills=sorted(skills[v["id"]]),
                 costs=dict(fixed=0, per_hour=3600, per_km=0),

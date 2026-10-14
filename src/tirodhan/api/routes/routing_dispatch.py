@@ -28,6 +28,7 @@ from tirodhan.modules.routing_operations.dispatch_models import (
 from tirodhan.modules.routing_operations.execution import (
     DischargeTask,
     ExecutionCommand,
+    PickupTask,
     execute_task,
 )
 from tirodhan.modules.routing_operations.recovery import RecoveryCommand, recover_route
@@ -126,6 +127,15 @@ async def progress(
                 "resource_id": result,
                 "handover_status": event.status,
                 "validation_code": event.validation_code,
+            }
+    if isinstance(command, PickupTask) and command.failed_reason is not None:
+        from tirodhan.modules.routing_operations.orchestration_models import PickupReattempt
+
+        async with factory() as session:
+            failed = await session.get(PickupReattempt, result)
+            return {
+                "resource_id": result,
+                "evidence_capture_id": failed.evidence_capture_id if failed else None,
             }
     return {"resource_id": result}
 

@@ -92,6 +92,7 @@ async def recover_route(
         vehicle = await session.get(OperatingVehicle, root.vehicle_id)
         assert vehicle is not None
         vehicle.version += 1
+        vehicle.safety_version += 1
         recovery = RouteRecovery(
             route_id=root.route_id,
             manager_id=manager_id,
@@ -114,6 +115,29 @@ async def recover_route(
 
 async def detach_cancelled_booking(session: AsyncSession, request_id: UUID, now: datetime) -> None:
     """Caller holds Payment -> work-unit -> request; same transaction as refund intent."""
+    from tirodhan.modules.collection_requests.models import CollectionRequest
+
+    from .fleet_models import FleetControl
+    from .orchestration_models import CapacityReservation, RegionCell
+
+    control = await session.get(FleetControl, "COMMITTED_FLEET")
+    booking = await session.get(CollectionRequest, request_id)
+    regional = (
+        control is not None
+        and control.configuration.get("regional", False)
+        and booking is not None
+        and await session.get(RegionCell, booking.cell_id) is not None
+    )
+
+    if regional or await session.scalar(
+        select(CapacityReservation.reservation_id).where(
+            CapacityReservation.request_id == request_id
+        )
+    ):
+        from .orchestration import wake
+
+        await wake(session, "BOOKING_CANCELLED", now, urgent=True)
+        return  # Request status fences execution; finite reconciliation releases operational rows.
     pickup = await session.scalar(
         select(PickupExecution).where(PickupExecution.request_id == request_id)
     )
@@ -142,6 +166,7 @@ async def detach_cancelled_booking(session: AsyncSession, request_id: UUID, now:
     vehicle = await session.get(OperatingVehicle, root.vehicle_id)
     assert vehicle is not None
     vehicle.version += 1
+    vehicle.safety_version += 1
     await session.flush()
     await finish_if_empty(session, root, now)
     await _event(session, root, f"cancel:{request_id}")

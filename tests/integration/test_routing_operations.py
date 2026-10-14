@@ -1135,7 +1135,6 @@ async def test_two_waiting_closures_preserve_first_timestamp_and_revision(databa
             .where(OperatingVehicle.vehicle_id == vehicle)
             .with_for_update()
         )
-        xid = await blocker.scalar(text("SELECT txid_current()::text"))
 
         async def close(index):
             return await execute_resource_command(
@@ -1148,21 +1147,23 @@ async def test_two_waiting_closures_preserve_first_timestamp_and_revision(databa
 
         tasks = [asyncio.create_task(close(index)) for index in range(2)]
         try:
-
+            # One closure can wait on the vehicle while its peer waits on the common
+            # rider resource it holds. Both must be live PostgreSQL lock waiters.
             async def waiting():
                 for _ in range(500):
-                    count = await blocker.scalar(
-                        text(
-                            "SELECT count(DISTINCT pid) FROM pg_locks WHERE NOT granted AND "
-                            "(relation = 'operating_vehicle'::regclass OR "
-                            "transactionid::text = :xid)"
-                        ),
-                        {"xid": xid},
-                    )
+                    async with factory() as observer:
+                        count = await observer.scalar(
+                            text(
+                                "SELECT count(*) FROM pg_stat_activity "
+                                "WHERE datname=current_database() "
+                                "AND pid<>pg_backend_pid() AND wait_event_type='Lock' "
+                                "AND xact_start IS NOT NULL"
+                            ),
+                        )
                     if count >= 2:
                         return
                     await asyncio.sleep(0.01)
-                raise AssertionError("both closure sessions did not wait on the vehicle lock")
+                raise AssertionError("both closure sessions did not wait on shared resources")
 
             await asyncio.wait_for(waiting(), 5)
             await blocker.commit()
