@@ -39,3 +39,11 @@ or independently deployed service. No production schedule/hosting is selected or
 provisioned. Approved ACA compute and cost gates remain unchanged; road graph hosting,
 solver worker packaging and schedule frequency require a measured release decision.
 See [Increment 5](../V2_ROUTING_INCREMENT_5.md).
+
+## Increment 7 — finite preflight and road work
+
+Choose read-only preflight plus finite native work with private job-local OSRM and immutable
+graph storage. The local harness validates pinned components; no cloud job, warm service or
+production schedule is provisioned. Full-city/profile startup and memory are unmeasured
+release prerequisites. A warm/separately billed service requires evidence and approval
+before enablement. See [INR forecast](../V2_ROUTING_INCREMENT_7.md).

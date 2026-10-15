@@ -124,3 +124,10 @@ resources across cells/slots, compares both pinned engines on a measured objecti
 rebases on current positions and activates through existing transactional authority.
 Production fleet/dispatch flags remain false. Increment 5 does not provision a schedule
 or road-service hosting. See [implementation, validation and gaps](V2_ROUTING_INCREMENT_5.md).
+
+## Current V2 boundary — increment 7
+
+Regional capacity, receipt/acceptance, reattempt consent, explicit custody recovery, breaks/
+shift authorization, destination fallback, ETA and finite preflight/reconciliation are behind
+disabled production flags. No new cloud resources or fixed recurring service are provisioned.
+See [implementation and release prerequisites](V2_ROUTING_INCREMENT_7.md).

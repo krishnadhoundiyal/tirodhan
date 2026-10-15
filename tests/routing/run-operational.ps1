@@ -1,5 +1,5 @@
 # Finite local-only database + road + dual-engine tests. No host ports or cloud resources.
-param([switch]$SkipBuild)
+param([switch]$SkipBuild, [switch]$Benchmark, [switch]$Extended, [int]$Seed = 61010)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'data/delhi-road.osm.pbf')).Path
@@ -10,6 +10,27 @@ $suffix = [Guid]::NewGuid().ToString('N')
 $database = "tirodhan-v2-db-$suffix"
 $server = "tirodhan-v2-road-$suffix"
 $volume = "tirodhan-v2-graph-$suffix"
+$profile = if ($Extended) { 'fleet-extended' } else { 'fleet-ci' }
+$benchmarkMode = if ($Benchmark) { '1' } else { '0' }
+$selection = @(
+    'tests/routing',
+    'tests/integration/test_routing_operations.py',
+    'tests/integration/test_routing_dispatch.py',
+    'tests/integration/test_routing_fleet.py',
+    'tests/integration/test_routing_fleet_reliability.py',
+    'tests/integration/test_fleet_hypothesis_stateful.py',
+    'tests/integration/test_fleet_hypothesis_concurrency.py',
+    'tests/integration/test_fleet_hypothesis_native.py',
+    'tests/integration/test_operational_orchestration.py',
+    'tests/integration/test_orchestration_custody_races.py',
+    'tests/integration/test_orchestration_migration.py',
+    'tests/integration/test_orchestration_preflight.py',
+    'tests/unit/test_fleet_differential.py'
+)
+if ($Benchmark) {
+    $selection += 'tests/integration/test_orchestration_benchmark.py'
+    $selection += 'tests/integration/test_orchestration_batch_benchmark.py'
+}
 function Invoke-Docker {
     & docker @args
     if ($LASTEXITCODE -ne 0) { throw "Docker exited with $LASTEXITCODE" }
@@ -29,10 +50,10 @@ try {
         Start-Sleep -Seconds 1
     }
     if (-not $ready) { throw 'Disposable PostgreSQL did not become ready' }
-    Invoke-Docker run -d --name $server --network "container:$database" --cpus 2 --memory 2g -v "${volume}:/data:ro" $osrmImage osrm-routed -t 2 --algorithm mld /data/map.osrm
+    Invoke-Docker run -d --name $server --network "container:$database" --cpus 2 --memory 2g -v "${volume}:/data:ro" $osrmImage osrm-routed -t 2 --algorithm mld --max-table-size 512 --verbosity WARNING /data/map.osrm
     Invoke-Docker run --rm --network "container:$database" --entrypoint python tirodhan-routing-tests:increment-6 tests/routing/wait_osrm.py
     # Mount the exact reviewed source read-only; native processes write no repository files.
-    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis -e TIRODHAN_OSRM_TEST_URL=http://localhost:5000 -e "TIRODHAN_OSRM_GRAPH_VERSION=fixture-$hash" -e TIRODHAN_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-6 python -m pytest -q -s tests/routing tests/integration/test_routing_operations.py tests/integration/test_routing_dispatch.py tests/integration/test_routing_fleet.py tests/integration/test_routing_fleet_reliability.py tests/integration/test_fleet_hypothesis_stateful.py tests/integration/test_fleet_hypothesis_concurrency.py tests/integration/test_fleet_hypothesis_native.py tests/unit/test_fleet_differential.py --hypothesis-seed=61010 -p no:cacheprovider
+    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e "TIRODHAN_HYPOTHESIS_PROFILE=$profile" -e "TIRODHAN_ORCHESTRATION_BENCHMARK=$benchmarkMode" -e TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis -e TIRODHAN_OSRM_TEST_URL=http://localhost:5000 -e "TIRODHAN_OSRM_GRAPH_VERSION=fixture-$hash" -e TIRODHAN_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-6 python -m pytest -q -s @selection "--hypothesis-seed=$Seed" -p no:cacheprovider
 } finally {
     $cleanupPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'

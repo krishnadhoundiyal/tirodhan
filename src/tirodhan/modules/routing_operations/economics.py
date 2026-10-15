@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from tirodhan.modules.planning.routing.contracts import (
     ProposedRoute,
+    ResourceKind,
     RouteProposal,
     RoutingProblem,
     StopKind,
@@ -43,6 +45,7 @@ class FleetCost:
     disruptions: int
     minimum_window_slack_seconds: int | None
     window_risk_seconds: int
+    supplementary_lots: int
     generalized_seconds: int
 
     @property
@@ -51,6 +54,7 @@ class FleetCost:
         return (
             self.unserved_lots,
             self.deadline_risk,
+            self.supplementary_lots,
             self.generalized_seconds,
             self.distance_m,
             self.disruptions,
@@ -132,6 +136,15 @@ def measure(
         disruptions,
         min(slack) if slack else None,
         risk_seconds,
+        len(
+            {
+                stops[s].lot_id
+                for route in proposal.routes
+                if vehicles[route.vehicle_id].resource_kind == ResourceKind.FLEXIBLE
+                for s in route.stop_ids
+                if stops[s].kind == StopKind.PICKUP and stops[s].bound_vehicle_id is None
+            }
+        ),
         travel
         + waiting * policy.waiting_weight
         + activated * policy.additional_vehicle_seconds
@@ -164,6 +177,8 @@ def insertion_search(
     seed: RouteProposal,
     policy: EconomicPolicy,
     incumbent: dict[UUID, tuple[UUID, ...]],
+    *,
+    max_wall_seconds: float | None = None,
 ) -> tuple[RouteProposal, FleetCost, int]:
     """Whole-household relocate/insertion; every fleet candidate passes the independent gate.
 
@@ -174,13 +189,14 @@ def insertion_search(
     best = seed
     gate = FeasibilityGate(problem)
     cost = measure(problem, best, policy, incumbent, gate)
+    deadline = time.monotonic() + max_wall_seconds if max_wall_seconds is not None else float("inf")
     evaluations = 0
     by_lot: dict[UUID, list[UUID]] = {}
     stops = {s.stop_id: s for s in problem.stops}
     protected = {s for v in problem.vehicles for s in v.protected_prefix}
     for stop in problem.stops:
         by_lot.setdefault(stop.lot_id, []).append(stop.stop_id)
-    while evaluations < policy.max_candidate_evaluations:
+    while evaluations < policy.max_candidate_evaluations and time.monotonic() < deadline:
         before = cost.rank
         # A one-lot move may cost more while moving several future lots together saves a
         # complete vehicle journey. Evaluate blocks before individual insertions to escape
@@ -209,7 +225,10 @@ def insertion_search(
                 for i in range(
                     len(vehicle_map[recipient.vehicle_id].protected_prefix), len(target) + 1
                 ):
-                    if evaluations >= policy.max_candidate_evaluations:
+                    if (
+                        evaluations >= policy.max_candidate_evaluations
+                        or time.monotonic() >= deadline
+                    ):
                         return best, cost, evaluations
                     evaluations += 1
                     changed = dict(orders)
@@ -244,7 +263,10 @@ def insertion_search(
                 for i in range(len(vehicle.protected_prefix), len(suffix) + 1):
                     with_pickup = suffix[:i] + (pickup,) + suffix[i:]
                     for j in range(i + 1, len(with_pickup) + 1):
-                        if evaluations >= policy.max_candidate_evaluations:
+                        if (
+                            evaluations >= policy.max_candidate_evaluations
+                            or time.monotonic() >= deadline
+                        ):
                             return best, cost, evaluations
                         evaluations += 1
                         changed = dict(residual)

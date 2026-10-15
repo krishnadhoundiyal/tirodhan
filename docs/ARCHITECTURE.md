@@ -1013,3 +1013,12 @@ unnecessary-vehicle counterexample corrected refinement from one sweep to repeat
 strictly improving sweeps within the same total candidate bound. The independent gate,
 authority transaction and business policy remain unchanged. This does not establish
 global optimality or activate production. See [evidence and limits](V2_ROUTING_INCREMENT_6.md).
+
+## Increment 7 operational integration
+
+V2-admitted new work uses regional road/capacity certification and transactional route
+authority; it cannot return to cell planning. Historical V1 drains under existing flags.
+The monolith adds finite admission/preflight, coalesced wakes, cancellation reconciliation,
+receipt, reattempt and evidenced custody workflows. Proposals establish neither assignment,
+custody nor finance. Production remains disabled. Full-city/private finite road hosting
+requires release review. See [increment 7](V2_ROUTING_INCREMENT_7.md).

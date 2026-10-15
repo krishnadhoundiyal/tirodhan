@@ -94,11 +94,15 @@ def prepare(problem: RoutingProblem) -> PreparedProblem:
             leg = matrix.travel_seconds[indexes[node]][indexes[stop.node_id]]
             if leg is None:
                 raise RoutingAdapterError("UNREACHABLE_PREFIX")
-            arrival = time + leg
+            from .validation import avoid_breaks
+
+            arrival = avoid_breaks(time, leg, vehicle.breaks) + leg
             start = next(
                 (max(arrival, a) for a, b in stop_windows(problem, stop) if max(arrival, a) <= b),
                 None,
             )
+            if start is not None:
+                start = avoid_breaks(start, stop.service_seconds, vehicle.breaks)
             if start is None:
                 raise RoutingAdapterError("INFEASIBLE_PREFIX")
             time, node = start + stop.service_seconds, stop.node_id
@@ -131,6 +135,7 @@ def prepare(problem: RoutingProblem) -> PreparedProblem:
                 end=node_indexes[vehicle.end_node_id],
                 available=time,
                 end_at=vehicle.shift.end,
+                breaks=[[b.start, b.end] for b in vehicle.breaks if b.end > time],
                 capacity=list(vehicle.capacity) + [lots[key].quantity for key in lot_ids],
                 initial=initial,
                 mandatory=bool(vehicle.protected_prefix or vehicle.initial_cargo),

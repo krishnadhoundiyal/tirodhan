@@ -45,7 +45,7 @@ async def request_shadow_run(
     config: ShadowConfiguration,
 ) -> UUID:
     configuration = config.model_dump(mode="json")
-    fingerprint = hashlib.sha256(config.model_dump_json().encode()).digest()
+    fingerprint = hashlib.sha256(config.stable_json().encode()).digest()
     async with factory() as session, session.begin():
         await require_live_role(session, manager_id, "MANAGER")
         await session.execute(

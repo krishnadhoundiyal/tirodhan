@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
-from typing import Annotated, Literal
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
-from sqlalchemy import exists, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -14,7 +15,6 @@ from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.customers.service import GeoPoint
 from tirodhan.modules.dispatch.models import RiderAssignment, RiderAssignmentItem, RiderAvailability
 from tirodhan.modules.evidence.models import EvidenceCapture, HandoverEvidenceLink
-from tirodhan.modules.handovers.models import HandoverEvent, HandoverEventItem
 from tirodhan.modules.handovers.service import record_handover_in_session
 from tirodhan.modules.pickups.models import PickupAttempt
 from tirodhan.modules.planning.models import PickupExecution
@@ -65,6 +65,9 @@ class DepartTask(TaskCommand):
 class PickupTask(TaskCommand):
     operation: Literal["PICKUP"] = "PICKUP"
     outcome: Literal["COLLECTED", "NOT_COLLECTED"]
+    failed_reason: Literal["CUSTOMER_UNAVAILABLE", "UNCONTACTABLE", "ACCESS_BLOCKED"] | None = None
+    client_capture_id: UUID | None = None
+    captured_at: AwareDatetime | None = None
 
 
 class DischargeTask(TaskCommand):
@@ -80,7 +83,7 @@ class DischargeTask(TaskCommand):
 ExecutionCommand = Annotated[
     DepartTask | StartTask | PickupTask | DischargeTask, Field(discriminator="operation")
 ]
-EXECUTION_CODEC: TypeAdapter[ExecutionCommand] = TypeAdapter(ExecutionCommand)
+EXECUTION_CODEC: TypeAdapter[ExecutionCommand] = TypeAdapter(cast(Any, ExecutionCommand))
 
 
 async def current_tasks(session: AsyncSession, root: VehicleRoute) -> list[RouteTask]:
@@ -106,7 +109,9 @@ async def execute_task(
     command: ExecutionCommand,
     expires_at: datetime,
     now: datetime | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> UUID:
+    clock = clock or (utc_now if now is None else None)
     now = now or utc_now()
     async with factory() as session, session.begin():
         await require_live_role(session, rider_id, "RIDER")
@@ -114,7 +119,9 @@ async def execute_task(
             session,
             scope=f"routing.execute:{rider_id}",
             idempotency_key=str(command.client_command_id),
-            request_fingerprint=hashlib.sha256(EXECUTION_CODEC.dump_json(command)).digest(),
+            request_fingerprint=hashlib.sha256(
+                EXECUTION_CODEC.dump_json(command, exclude_none=True)
+            ).digest(),
             expires_at=expires_at,
             now=now,
         )
@@ -135,12 +142,12 @@ async def execute_task(
         pickup = await session.get(PickupExecution, task.pickup_execution_id)
         assert pickup is not None
         # Cancellation and pickup must have one winner. No resource -> Payment lock inversion.
-        if task.kind == "PICKUP":
-            await lock_booking_population(session, [pickup.request_id])
+        await lock_booking_population(session, [pickup.request_id])
         await lock_resources(session, [rider_id], [root.vehicle_id])
         await session.refresh(root)
         await session.refresh(task)
         await session.refresh(pickup)
+        now = max(now, clock()) if clock is not None else now
         if root.status == "CLOSED" or (
             root.status == "RECOVERY_REQUIRED" and task.kind != "DISCHARGE"
         ):
@@ -168,7 +175,11 @@ async def execute_task(
             raise RouteAuthorityError("ROUTE_REVISION_STALE")
         shift = await session.get(OperatingShift, root.shift_id)
         assert shift is not None
-        if shift.closed_at is not None or not shift.starts_at <= now < shift.ends_at:
+        from .regional_projection import effective_shift_end
+
+        if shift.closed_at is not None or not shift.starts_at <= now < await effective_shift_end(
+            session, shift.shift_id, shift.ends_at
+        ):
             raise RouteAuthorityError("ACTIVE_SHIFT_REQUIRED")
         run_id = await session.scalar(
             select(RouteActivation.run_id).where(
@@ -193,15 +204,62 @@ async def execute_task(
             raise RouteAuthorityError("FRESH_POSITION_REQUIRED")
         manifest = await session.get(RoutingManifest, pickup.request_id)
         assert manifest is not None
+        from .physical import appointment_window, effective_manifest
+
+        manifest = await effective_manifest(session, manifest)
+        from .orchestration_models import OperatingBreak
+
+        on_break = await session.scalar(
+            select(OperatingBreak.break_id).where(
+                OperatingBreak.shift_id == shift.shift_id,
+                OperatingBreak.starts_at <= now,
+                OperatingBreak.ends_at > now,
+            )
+        )
+        if on_break:
+            raise RouteAuthorityError("RIDER_ON_BREAK")
+        if task.kind == "PICKUP":
+            request = await session.get(CollectionRequest, pickup.request_id)
+            assert request is not None
+            if request.status == "CANCELLED":
+                raise RouteAuthorityError("BOOKING_CANCELLED")
+        from .orchestration_models import CargoTransferIntent
+
+        transfer_pending = await session.scalar(
+            select(CargoTransferIntent.intent_id)
+            .join(OperatingShift, OperatingShift.shift_id == CargoTransferIntent.to_shift_id)
+            .where(
+                CargoTransferIntent.resolved_at.is_(None),
+                (CargoTransferIntent.from_vehicle_id == root.vehicle_id)
+                | (OperatingShift.vehicle_id == root.vehicle_id),
+            )
+            .limit(1)
+        )
+        if transfer_pending:
+            raise RouteAuthorityError("PHYSICAL_TRANSFER_IN_PROGRESS")
         vehicle = await session.get(OperatingVehicle, root.vehicle_id)
         assert vehicle is not None
         if vehicle.blocked_reason is not None and task.kind == "PICKUP":
             raise RouteAuthorityError("VEHICLE_OPERATION_BLOCKED")
+        if config.regional and task.committed_at is None:
+            from .orchestration_models import RouteAcknowledgment
+
+            if await session.get(RouteAcknowledgment, revision.revision_id) is None:
+                raise RouteAuthorityError("ROUTE_RECEIPT_REQUIRED")
         if isinstance(command, DepartTask):
             if task.state not in ("PENDING", "STARTED"):
                 raise RouteAuthorityError("TASK_NOT_EXECUTABLE")
             if task.kind == "DISCHARGE":
-                await _require_discharge_ready(session, root, task, pickup, manifest, now)
+                await _require_discharge_ready(
+                    session,
+                    root,
+                    task,
+                    pickup,
+                    manifest,
+                    now,
+                    departure=True,
+                    allow_late=config.regional,
+                )
             task.committed_at = task.committed_at or now
             result = task.task_id
         elif isinstance(command, StartTask):
@@ -209,14 +267,27 @@ async def execute_task(
                 if task.kind == "PICKUP":
                     request = await session.get(CollectionRequest, pickup.request_id)
                     assert request is not None
+
                     if (
                         request.status not in ("ACCEPTED", "PLANNED")
-                        or not request.slot_start <= now <= request.slot_end
+                        or not (
+                            await appointment_window(
+                                session, request.request_id, request.slot_start, request.slot_end
+                            )
+                        )[0]
+                        <= now
+                        <= (
+                            await appointment_window(
+                                session, request.request_id, request.slot_start, request.slot_end
+                            )
+                        )[1]
                     ):
                         raise RouteAuthorityError("PICKUP_WINDOW_OR_BOOKING_INVALID")
                     request.status = "PLANNED"
                 else:
-                    await _require_discharge_ready(session, root, task, pickup, manifest, now)
+                    await _require_discharge_ready(
+                        session, root, task, pickup, manifest, now, allow_late=config.regional
+                    )
                 task.state, task.started_at = "STARTED", now
                 task.committed_at = task.committed_at or now
             result = task.task_id
@@ -265,11 +336,71 @@ async def execute_task(
                         created_at=now,
                     )
                 )
+            elif config.regional:
+                if (
+                    command.failed_reason is None
+                    or command.client_capture_id is None
+                    or command.captured_at is None
+                    or task.started_at is None
+                    or not task.started_at <= command.captured_at <= now
+                ):
+                    raise RouteAuthorityError("UNSUCCESSFUL_ATTEMPT_EVIDENCE_REQUIRED")
+
+                from .orchestration_models import PickupReattempt
+                from .recovery import _release
+
+                capture = EvidenceCapture(
+                    evidence_capture_id=new_uuid7(),
+                    client_capture_id=command.client_capture_id,
+                    captured_by_user_id=rider_id,
+                    captured_at=command.captured_at,
+                    created_at=now,
+                )
+                session.add(capture)
+                await session.flush([capture])
+                pickup_request = await session.get(CollectionRequest, pickup.request_id)
+                assert pickup_request is not None
+                session.add(
+                    PickupReattempt(
+                        attempt_id=attempt.pickup_attempt_id,
+                        reason=command.failed_reason,
+                        evidence_capture_id=capture.evidence_capture_id,
+                        eligible_at=now
+                        + timedelta(
+                            seconds=min(
+                                60,
+                                max(
+                                    0,
+                                    int(
+                                        (
+                                            (
+                                                await appointment_window(
+                                                    session,
+                                                    pickup.request_id,
+                                                    pickup_request.slot_start,
+                                                    pickup_request.slot_end,
+                                                )
+                                            )[1]
+                                            - now
+                                        ).total_seconds()
+                                    )
+                                    // 2,
+                                ),
+                            )
+                        ),
+                    )
+                )
+                await _release(session, root, pickup, now, "REASSIGNED")
+                from .orchestration import wake
+
+                await wake(session, "PICKUP_REATTEMPT", now, urgent=True)
             result = attempt.pickup_attempt_id
         else:
             if task.kind != "DISCHARGE" or task.state != "STARTED":
                 raise RouteAuthorityError("DISCHARGE_NOT_STARTED")
-            await _require_discharge_ready(session, root, task, pickup, manifest, now)
+            await _require_discharge_ready(
+                session, root, task, pickup, manifest, now, allow_late=config.regional
+            )
             if command.scanned_pickup_id != pickup.pickup_execution_id:
                 raise RouteAuthorityError("CARGO_LABEL_MISMATCH")
             if task.started_at is None or not task.started_at <= command.captured_at <= now:
@@ -325,6 +456,9 @@ async def execute_task(
         assert vehicle is not None
         vehicle.version += 1
         await session.flush()
+        from .orchestration import wake
+
+        await wake(session, "ROUTE_PROGRESS", now)
         await finish_if_empty(session, root, now)
         await append_outbox_event(
             session,
@@ -351,6 +485,9 @@ async def _require_discharge_ready(
     pickup: PickupExecution,
     manifest: RoutingManifest,
     now: datetime,
+    *,
+    departure: bool = False,
+    allow_late: bool = False,
 ) -> None:
     from .fleet_models import FacilityRestriction
 
@@ -371,15 +508,18 @@ async def _require_discharge_ready(
     )
     if point is None or point.status != "ACTIVE" or blocked is not None:
         raise RouteAuthorityError("RECEIVING_POINT_UNAVAILABLE")
+    from .operational_commands import custodian
+
+    current_vehicle, _ = await custodian(session, pickup.request_id)
     observation = await session.get(CargoVehicleObservation, pickup.request_id)
-    if (
-        pickup.status != "COLLECTED"
-        or observation is None
-        or observation.vehicle_id != root.vehicle_id
-    ):
+    if pickup.status != "COLLECTED" or observation is None or current_vehicle != root.vehicle_id:
         raise RouteAuthorityError("VEHICLE_CARGO_REQUIRED")
-    if task.receiving_point_id != manifest.receiving_point_id or now > manifest.discharge_deadline:
+    if task.receiving_point_id != manifest.receiving_point_id or (
+        not allow_late and now > manifest.discharge_deadline
+    ):
         raise RouteAuthorityError("DISCHARGE_DESTINATION_OR_DEADLINE_INVALID")
+    if departure:
+        return
     window = await session.scalar(
         select(ReceivingWindow.window_id)
         .where(
@@ -396,26 +536,9 @@ async def _require_discharge_ready(
 async def _require_capacity(
     session: AsyncSession, root: VehicleRoute, new: RoutingManifest
 ) -> None:
-    handed = exists().where(
-        HandoverEventItem.pickup_execution_id == PickupExecution.pickup_execution_id,
-        HandoverEventItem.status == "VALIDATED",
-        HandoverEventItem.handover_event_id == HandoverEvent.handover_event_id,
-        HandoverEvent.status == "VALIDATED",
-    )
-    loads = (
-        await session.execute(
-            select(
-                func.coalesce(func.sum(RoutingManifest.mass_g), 0),
-                func.coalesce(func.sum(RoutingManifest.volume_ml), 0),
-            )
-            .join(
-                CargoVehicleObservation,
-                CargoVehicleObservation.request_id == RoutingManifest.request_id,
-            )
-            .join(PickupExecution, PickupExecution.request_id == RoutingManifest.request_id)
-            .where(CargoVehicleObservation.vehicle_id == root.vehicle_id, ~handed)
-        )
-    ).one()
+    from .physical import cargo_load
+
+    loads = await cargo_load(session, root.vehicle_id)
     vehicle = await session.get(OperatingVehicle, root.vehicle_id)
     assert vehicle is not None
     if (
@@ -432,6 +555,11 @@ async def finish_if_empty(session: AsyncSession, root: VehicleRoute, now: dateti
         .limit(1)
     )
     if remaining is not None:
+        return
+    from .physical import cargo_load
+
+    mass, volume = await cargo_load(session, root.vehicle_id)
+    if mass or volume:
         return
     root.status, root.closed_at = "CLOSED", now
     assignment = await session.get(RiderAssignment, root.assignment_id)

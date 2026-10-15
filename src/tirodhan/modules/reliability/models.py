@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, Integer, LargeBinary, String, UniqueConstraint
+from sqlalchemy import DateTime, Index, Integer, LargeBinary, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -70,7 +70,15 @@ class InboxMessage(Base):
 
 class OutboxEvent(Base):
     __tablename__ = "outbox_event"
-    __table_args__ = (UniqueConstraint("event_key", name="uq_outbox_event_event_key"),)
+    __table_args__ = (
+        UniqueConstraint("event_key", name="uq_outbox_event_event_key"),
+        Index(
+            "ix_outbox_routing_wakeup",
+            "available_at",
+            "outbox_event_id",
+            postgresql_where=text("event_type = 'CustomerFinancialStatusChanged'"),
+        ),
+    )
 
     outbox_event_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),

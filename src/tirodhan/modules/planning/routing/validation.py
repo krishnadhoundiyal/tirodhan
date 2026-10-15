@@ -6,6 +6,7 @@ from uuid import UUID
 
 from .contracts import (
     ROUTING_CONTRACT_V1,
+    ROUTING_CONTRACT_V2,
     OptimizerEngine,
     ResourceKind,
     RoadMatrix,
@@ -53,7 +54,10 @@ def _vector(vector: tuple[int, ...], dimensions: int) -> bool:
 
 def validate_problem(problem: RoutingProblem) -> None:
     """Validate complete immutable inputs before an adapter or validator consumes them."""
-    _require(problem.contract_version == ROUTING_CONTRACT_V1, "UNSUPPORTED_CONTRACT")
+    _require(
+        problem.contract_version in (ROUTING_CONTRACT_V1, ROUTING_CONTRACT_V2),
+        "UNSUPPORTED_CONTRACT",
+    )
     _require(bool(problem.policy_version), "MISSING_POLICY_VERSION")
     _require(problem.epoch.utcoffset() == timedelta(0), "EPOCH_NOT_UTC")
     _require(
@@ -141,7 +145,20 @@ def validate_problem(problem: RoutingProblem) -> None:
             vehicle.start_node_id in nodes and vehicle.end_node_id in nodes,
             "UNKNOWN_VEHICLE_NODE",
         )
-        _require(type(vehicle.initial_cargo) is tuple, "MUTABLE_INPUT")
+        _require(
+            type(vehicle.initial_cargo) is tuple and type(vehicle.breaks) is tuple, "MUTABLE_INPUT"
+        )
+        _require(
+            not vehicle.breaks or problem.contract_version == ROUTING_CONTRACT_V2,
+            "BREAKS_REQUIRE_CONTRACT_V2",
+        )
+        _require(
+            all(_window(b) and b.start < b.end for b in vehicle.breaks)
+            and all(
+                a.end <= b.start for a, b in zip(vehicle.breaks, vehicle.breaks[1:], strict=False)
+            ),
+            "INVALID_BREAK_WINDOWS",
+        )
         _require(_unique(vehicle.protected_prefix), "INVALID_PROTECTED_PREFIX")
         for stop_id in vehicle.protected_prefix:
             _require(
@@ -382,8 +399,10 @@ def _assess_route(
             "STOP_VEHICLE_INELIGIBLE",
         )
         seconds, meters = _arc(matrix, node_indexes, current_node, stop.node_id)
-        arrival = current_time + seconds
+        departure = avoid_breaks(current_time, seconds, vehicle.breaks)
+        arrival = departure + seconds
         start = max(arrival, stop.service_start_window.start)
+        start = avoid_breaks(start, stop.service_seconds, vehicle.breaks)
         if stop.kind == StopKind.DISCHARGE:
             if stop.receiving_point_id is None:
                 raise RoutingValidationError("UNAUTHORIZED_RECEIVING_POINT")
@@ -391,9 +410,11 @@ def _assess_route(
             _require(facility.available, "RECEIVING_POINT_UNAVAILABLE")
             start = next(
                 (
-                    max(start, window.start)
+                    avoid_breaks(max(start, window.start), stop.service_seconds, vehicle.breaks)
                     for window in facility.opening_windows
-                    if max(start, window.start) + stop.service_seconds <= window.end
+                    if avoid_breaks(max(start, window.start), stop.service_seconds, vehicle.breaks)
+                    + stop.service_seconds
+                    <= window.end
                 ),
                 -1,
             )
@@ -416,7 +437,7 @@ def _assess_route(
         distance_m += meters
     _require(not any(balances.values()), "CARGO_NOT_DISCHARGED")
     seconds, meters = _arc(matrix, node_indexes, current_node, vehicle.end_node_id)
-    end_at = current_time + seconds
+    end_at = avoid_breaks(current_time, seconds, vehicle.breaks) + seconds
     _require(end_at <= vehicle.shift.end, "SHIFT_END_MISSED")
     return RouteAssessment(
         vehicle.vehicle_id,
@@ -436,3 +457,11 @@ def _arc(
     if seconds is None or meters is None:
         raise RoutingValidationError("UNREACHABLE_ARC")
     return seconds, meters
+
+
+def avoid_breaks(start: int, duration: int, breaks: tuple[TimeWindow, ...]) -> int:
+    """Half-open nonworking intervals; never pause a road arc or service in its middle."""
+    for pause in breaks:
+        if start < pause.end and start + duration > pause.start:
+            start = pause.end
+    return start

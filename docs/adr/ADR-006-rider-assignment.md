@@ -189,3 +189,15 @@ manager recovery may release outstanding work from an already held route but can
 transfer collected cargo implicitly. Old-revision execution is permitted only for the
 same committed next task. Flexible acceptance and final V1 retirement remain later
 integration. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).
+
+## Increment 7 — receipt, reattempt and recovery
+
+Committed idle and moving/loaded resources are one primary tier; accepted flexible offers
+are supplementary. Revision-bound receipt is not a veto or flexible acceptance. Unsuccessful
+attempts preserve evidence/history and release only that household; new windows need customer
+consent. Actual custody follows evidenced transfers. Pending handoffs fence both vehicles
+until an attributable resolution. Effective custody prevents premature IDLE/shift close.
+Breaks retain cargo; extensions need fresh availability and safety authorization. Authorized
+alternatives and the designated warehouse support recovery; late discharge has no 30-minute
+SLA. Current validation and Payment-first authority remain mandatory. See
+[increment 7](../V2_ROUTING_INCREMENT_7.md) and [mobile contract](../V2_ORCHESTRATION_API.md).

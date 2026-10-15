@@ -242,3 +242,15 @@ erDiagram
 Nullable exception endpoints are real FKs with at least one target required.
 Policy JSON and measured cost JSON do not replace these relationships. Task commitment
 and resource blocks extend existing entities; they do not change custody-ledger edges.
+
+## Increment 7 relationships
+
+OperatingRegion owns cell/vehicle/receiving membership and designates an authorized warehouse.
+Admission belongs to customer/context; reservation belongs to region/customer/context and
+optionally binds booking. AppointmentConsent joins booking/customer/reserved window. Receipt
+and delivery reference RouteRevision. Flexible offers/commitments reference shifts and their
+business admission/booking. Reattempt links attempt/evidence; authorization links its anchor.
+Break/extension/availability reference shift. Discharge amendments and load observations
+reference request/actor/evidence. Transfer intent names request/from-vehicle/to-shift/authorizer
+and write-once resolution. Receipts identify signer/witness and capture. Transfer retains
+donor/receiver vehicles/riders, evidence, authorizer and confirmer in monotonic custody order.

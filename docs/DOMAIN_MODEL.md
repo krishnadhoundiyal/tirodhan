@@ -577,3 +577,13 @@ BUSY persists through cargo discharge. Blocked vehicles enter controlled recover
 LOAD_UNCERTAIN survives assignment release and cannot be cleared with an old manifest;
 audited correction remains a later workflow. Manager recovery accepts ACTIVE or held
 routes, releasing only uncollected work. See [Increment 5](V2_ROUTING_INCREMENT_5.md).
+
+## Increment 7 operational facts
+
+Region membership, capacity evaluation/reservation, route receipt, flexible acceptance,
+appointment consent, reattempt evidence, breaks, shift availability/authorization, discharge
+amendments and custody transfer are distinct relational facts. Stable PickupExecution and
+original successful pickup attribution remain. Transfer intent is a fenced workflow; final
+custody is immutable and sequenced, with two-party evidence or an identified donor witness.
+Abort needs inspection evidence and records no handover. Cancellation remains final. See
+[V2 increment 7](V2_ROUTING_INCREMENT_7.md).

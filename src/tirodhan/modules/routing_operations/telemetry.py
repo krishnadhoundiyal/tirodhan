@@ -85,7 +85,11 @@ async def report_position(
             return claim.record.result_resource_id
         if not claim.created:
             raise RouteAuthorityError("COMMAND_IN_PROGRESS")
-        if shift.closed_at is not None or not shift.starts_at <= now < shift.ends_at:
+        from .regional_projection import effective_shift_end
+
+        if shift.closed_at is not None or not shift.starts_at <= now < await effective_shift_end(
+            session, shift.shift_id, shift.ends_at
+        ):
             raise RouteAuthorityError("ACTIVE_SHIFT_REQUIRED")
         if (
             not 0 <= (now - command.observed_at).total_seconds() <= policy.max_age_seconds
@@ -186,6 +190,7 @@ async def report_vehicle_issue(
         vehicle = await session.get(OperatingVehicle, root.vehicle_id)
         assert vehicle is not None
         vehicle.blocked_reason = command.reason
+        vehicle.safety_version += 1
         vehicle.version += 1
         root.status = "RECOVERY_REQUIRED"
         issue = FleetException(

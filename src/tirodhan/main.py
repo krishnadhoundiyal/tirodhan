@@ -167,6 +167,18 @@ def create_app(
         from tirodhan.api.routes.routing_dispatch import router as routing_dispatch_router
 
         application.include_router(routing_dispatch_router)
+    if application_settings.routing_orchestration_enabled:
+        if (
+            not application_settings.routing_fleet_enabled
+            or not application_settings.routing_dispatch_enabled
+        ):
+            raise ValueError("Operational orchestration requires fleet and dispatch flags")
+        from tirodhan.api.routes.routing_orchestration import router as orchestration_router
+
+        application.include_router(orchestration_router)
+        from tirodhan.api.routes.routing_recovery_media import router as recovery_media_router
+
+        application.include_router(recovery_media_router)
     if application_settings.routing_fleet_enabled:
         from tirodhan.api.routes.routing_fleet import router as routing_fleet_router
 

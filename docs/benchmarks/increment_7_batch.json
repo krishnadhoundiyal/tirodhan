@@ -1,0 +1,144 @@
+[
+  {
+    "synthetic_matrix_and_seed_engines": true,
+    "batched": false,
+    "separate_routes": false,
+    "cancellation_transactions_seconds": [
+      0.06197878799866885,
+      0.0335760039743036
+    ],
+    "batch_reconciliation_seconds": [
+      0.036770428996533155,
+      0.052118588937446475
+    ],
+    "admissions": [
+      {
+        "seconds": 0.19935163494665176,
+        "incremental": false,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.1604670260567218,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.16608948598150164,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.14679190004244447,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      }
+    ],
+    "matrix_calls": 4
+  },
+  {
+    "synthetic_matrix_and_seed_engines": true,
+    "batched": true,
+    "separate_routes": false,
+    "cancellation_transactions_seconds": [
+      0.0648673310643062,
+      0.040571789955720305
+    ],
+    "batch_reconciliation_seconds": [
+      0.06060195493046194
+    ],
+    "admissions": [
+      {
+        "seconds": 0.17412058997433633,
+        "incremental": false,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.17443795909639448,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.16239459195639938,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.1608087639324367,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      }
+    ],
+    "matrix_calls": 4
+  },
+  {
+    "synthetic_matrix_and_seed_engines": true,
+    "batched": false,
+    "separate_routes": true,
+    "cancellation_transactions_seconds": [
+      0.05469902395270765,
+      0.029129268950782716
+    ],
+    "batch_reconciliation_seconds": [
+      0.040642649051733315,
+      0.02746108896099031
+    ],
+    "admissions": [
+      {
+        "seconds": 0.15136501903180033,
+        "incremental": false,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.2577086969977245,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.13888382399454713,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.16166435601189733,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      }
+    ],
+    "matrix_calls": 4
+  },
+  {
+    "synthetic_matrix_and_seed_engines": true,
+    "batched": true,
+    "separate_routes": true,
+    "cancellation_transactions_seconds": [
+      0.053392586996778846,
+      0.04345104203093797
+    ],
+    "batch_reconciliation_seconds": [
+      0.06342863105237484
+    ],
+    "admissions": [
+      {
+        "seconds": 0.2149181179702282,
+        "incremental": false,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.18137588794343174,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.1829454170074314,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      },
+      {
+        "seconds": 0.1634047960396856,
+        "incremental": true,
+        "cumulative_solver_calls": 2
+      }
+    ],
+    "matrix_calls": 4
+  }
+]

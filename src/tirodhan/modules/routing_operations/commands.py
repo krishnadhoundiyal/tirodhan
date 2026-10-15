@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -137,7 +137,7 @@ ResourceCommand = Annotated[
     | ClearVehicle,
     Field(discriminator="operation"),
 ]
-COMMAND_CODEC: TypeAdapter[ResourceCommand] = TypeAdapter(ResourceCommand)
+COMMAND_CODEC: TypeAdapter[ResourceCommand] = TypeAdapter(cast(Any, ResourceCommand))
 
 
 async def require_live_role(session: AsyncSession, user_id: UUID, role: str) -> None:
@@ -249,6 +249,15 @@ async def _apply(
         vehicle_id = shift.vehicle_id
     else:
         vehicle_id = command.vehicle_id
+    if isinstance(command, (ShiftOpen, ShiftClose)):
+        from .authority import lock_resources
+
+        if isinstance(command, ShiftOpen):
+            rider = command.rider_id
+        else:
+            assert shift is not None
+            rider = shift.rider_id
+        await lock_resources(session, [rider], [vehicle_id], authorize=False)
     vehicle = await session.scalar(
         select(OperatingVehicle).where(OperatingVehicle.vehicle_id == vehicle_id).with_for_update()
     )
@@ -256,8 +265,32 @@ async def _apply(
         raise OperationalInputError("VEHICLE_NOT_FOUND")
     if isinstance(command, ClearVehicle):
         if vehicle.blocked_reason == "LOAD_UNCERTAIN":
-            raise OperationalInputError("AUDITED_LOAD_CORRECTION_REQUIRED")
+            from .dispatch_models import VehicleRoute
+            from .fleet_models import FleetException
+            from .physical import cargo_load, unresolved_load
+
+            requests = list(
+                await session.scalars(
+                    select(FleetException.request_id).where(
+                        FleetException.route_id.in_(
+                            select(VehicleRoute.route_id).where(
+                                VehicleRoute.vehicle_id == vehicle_id
+                            )
+                        ),
+                        FleetException.reason == "LOAD_UNCERTAIN",
+                        FleetException.request_id.is_not(None),
+                    )
+                )
+            )
+            if not requests or any(
+                [await unresolved_load(session, r) for r in requests if r is not None]
+            ):
+                raise OperationalInputError("AUDITED_LOAD_CORRECTION_REQUIRED")
+            mass, volume = await cargo_load(session, vehicle_id)
+            if mass > vehicle.mass_capacity_g or volume > vehicle.volume_capacity_ml:
+                raise OperationalInputError("PHYSICAL_CAPACITY_EXCEEDED")
         vehicle.blocked_reason = None
+        vehicle.safety_version += 1
         vehicle.version += 1
         return vehicle_id  # Clearing the resource never resumes a held route implicitly.
     if isinstance(command, CargoObserve):
@@ -354,7 +387,27 @@ async def _apply(
                 )
             )
         )
-        if active or await rider_has_obligations(session, shift.rider_id):
+        from .orchestration_models import CargoTransferIntent
+        from .physical import cargo_load
+
+        pending_transfer = await session.scalar(
+            select(CargoTransferIntent.intent_id)
+            .join(OperatingShift, OperatingShift.shift_id == CargoTransferIntent.to_shift_id)
+            .where(
+                CargoTransferIntent.resolved_at.is_(None),
+                (CargoTransferIntent.from_vehicle_id == vehicle_id)
+                | (OperatingShift.vehicle_id == vehicle_id),
+            )
+            .limit(1)
+        )
+        mass, volume = await cargo_load(session, vehicle_id)
+        if (
+            active
+            or mass
+            or volume
+            or pending_transfer
+            or await rider_has_obligations(session, shift.rider_id)
+        ):
             raise OperationalInputError("SHIFT_HAS_OBLIGATIONS")
         shift.closed_at = now
         vehicle.version += 1

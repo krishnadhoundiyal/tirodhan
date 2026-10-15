@@ -4,13 +4,13 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from geoalchemy2 import Geometry
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, cast, exists, func, or_, select
+from sqlalchemy import and_, cast, exists, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
@@ -27,6 +27,7 @@ from tirodhan.modules.pickups.models import PickupAttempt
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.planning.routing.contracts import (
     ROUTING_CONTRACT_V1,
+    ROUTING_CONTRACT_V2,
     CargoBalance,
     CargoLot,
     ReceivingPointSnapshot,
@@ -54,6 +55,7 @@ from .models import (
     RoutingManifest,
     VehiclePosition,
 )
+from .orchestration_models import CargoTransfer
 
 
 class ShadowConfiguration(BaseModel):
@@ -69,11 +71,31 @@ class ShadowConfiguration(BaseModel):
     search_seconds: int = Field(strict=True, ge=1, le=30)
     lease_seconds: int = Field(strict=True, ge=60, le=3600)
     fleet_mode: bool = False
+    as_of: AwareDatetime | None = None
+    regional: bool = False
+    dispatch_readiness_seconds: int = Field(default=0, strict=True, ge=0, le=3600)
+    region_id: UUID | None = None
+    admission_mode: bool = False
+    pickup_horizon_end: AwareDatetime | None = None
+
+    def stable_json(self) -> str:
+        added = {
+            "as_of": self.as_of,
+            "regional": self.regional,
+            "region_id": self.region_id,
+            "admission_mode": self.admission_mode,
+            "dispatch_readiness_seconds": self.dispatch_readiness_seconds,
+            "pickup_horizon_end": self.pickup_horizon_end,
+        }
+        return self.model_dump_json(
+            exclude={k for k, v in added.items() if v is None or v is False or v == 0}
+        )
 
     @model_validator(mode="after")
     def ordered(self) -> ShadowConfiguration:
         if (
-            self.horizon_end <= self.epoch
+            (self.pickup_horizon_end is not None and self.pickup_horizon_end > self.horizon_end)
+            or self.horizon_end <= self.epoch
             or self.horizon_end.timestamp() - self.epoch.timestamp() > 86400
         ):
             raise ValueError("scope must be between zero and one day")
@@ -134,21 +156,38 @@ def _seconds(value: datetime, epoch: datetime, *, start: bool = False) -> int:
 
 
 async def rider_has_obligations(session: AsyncSession, rider: UUID) -> bool:
+    from .orchestration_models import CargoTransfer
+
     handed = exists().where(
         HandoverEventItem.pickup_execution_id == PickupExecution.pickup_execution_id,
         HandoverEventItem.status == "VALIDATED",
-        HandoverEventItem.handover_event_id == HandoverEvent.handover_event_id,
-        HandoverEvent.status == "VALIDATED",
+    )
+    latest_custodian = (
+        select(CargoTransfer.to_rider_id)
+        .where(CargoTransfer.request_id == PickupExecution.request_id)
+        .order_by(CargoTransfer.sequence.desc())
+        .limit(1)
+        .correlate(PickupExecution)
+        .scalar_subquery()
+    )
+    owned = exists().where(
+        RiderAssignmentItem.assignment_id == RiderAssignment.assignment_id,
+        RiderAssignmentItem.pickup_execution_id == PickupExecution.pickup_execution_id,
+        RiderAssignmentItem.released_at.is_(None),
+        RiderAssignment.rider_id == rider,
     )
     return bool(
         await session.scalar(
             select(
                 exists().where(
-                    RiderAssignment.rider_id == rider,
-                    RiderAssignmentItem.assignment_id == RiderAssignment.assignment_id,
-                    RiderAssignmentItem.pickup_execution_id == PickupExecution.pickup_execution_id,
-                    RiderAssignmentItem.released_at.is_(None),
                     ~handed,
+                    or_(
+                        and_(PickupExecution.status != "COLLECTED", owned),
+                        and_(
+                            PickupExecution.status == "COLLECTED",
+                            or_(latest_custodian == rider, and_(latest_custodian.is_(None), owned)),
+                        ),
+                    ),
                 )
             )
         )
@@ -173,6 +212,24 @@ async def capture_snapshot(
 
 
 async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> dict[str, Any]:
+    from .orchestration_models import (
+        AdmissionFlexibleCommitment,
+        AppointmentConsent,
+        FlexibleCommitment,
+        RegionCell,
+        RegionVehicle,
+        ShiftExtension,
+    )
+
+    extended_end = (
+        select(func.max(ShiftExtension.ends_at))
+        .where(ShiftExtension.shift_id == OperatingShift.shift_id)
+        .correlate(OperatingShift)
+        .scalar_subquery()
+    )
+    effective_end = func.greatest(
+        OperatingShift.ends_at, func.coalesce(extended_end, OperatingShift.ends_at)
+    )
     latest = (
         select(VehiclePosition.position_id)
         .where(VehiclePosition.vehicle_id == OperatingVehicle.vehicle_id)
@@ -197,6 +254,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     OperatingVehicle.profile_version,
                     OperatingVehicle.end_receiving_point_id,
                     OperatingVehicle.version,
+                    OperatingVehicle.safety_version,
                     OperatingVehicle.blocked_reason,
                     OperatingShift.shift_id,
                     OperatingShift.resource_kind,
@@ -229,9 +287,27 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     VehiclePosition.position_id == latest,
                 )
                 .where(
+                    exists().where(
+                        RegionVehicle.vehicle_id == OperatingVehicle.vehicle_id,
+                        RegionVehicle.region_id == config.region_id,
+                    )
+                    if config.region_id
+                    else exists().where(RegionVehicle.vehicle_id == OperatingVehicle.vehicle_id)
+                    if config.regional
+                    else true(),
                     OperatingShift.closed_at.is_(None),
-                    OperatingShift.resource_kind == "COMMITTED",
-                    OperatingShift.ends_at > config.epoch,
+                    or_(
+                        OperatingShift.resource_kind == "COMMITTED",
+                        exists().where(FlexibleCommitment.shift_id == OperatingShift.shift_id),
+                        exists().where(
+                            AdmissionFlexibleCommitment.shift_id == OperatingShift.shift_id
+                        ),
+                        exists().where(
+                            CargoTransfer.to_vehicle_id == OperatingVehicle.vehicle_id,
+                            CargoTransfer.to_rider_id == OperatingShift.rider_id,
+                        ),
+                    ),
+                    effective_end > config.epoch,
                     OperatingShift.starts_at < config.horizon_end,
                 )
                 .order_by(OperatingVehicle.vehicle_id)
@@ -319,6 +395,23 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                         PickupExecution.status == "COLLECTED",
                         current.rider_id.in_(riders),
                     ),
+                    or_(
+                        (
+                            exists().where(
+                                RegionCell.cell_id == CollectionRequest.cell_id,
+                                RegionCell.region_id == config.region_id,
+                            )
+                            if config.region_id
+                            else exists().where(RegionCell.cell_id == CollectionRequest.cell_id)
+                        ),
+                        current.rider_id.in_(riders),
+                        exists().where(
+                            CargoTransfer.request_id == CollectionRequest.request_id,
+                            CargoTransfer.to_rider_id.in_(riders),
+                        ),
+                    )
+                    if config.regional
+                    else true(),
                     ~handed,
                     or_(
                         and_(
@@ -328,16 +421,27 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                             ),
                             or_(
                                 and_(
-                                    CollectionRequest.slot_start < config.horizon_end,
+                                    CollectionRequest.slot_start
+                                    < (config.pickup_horizon_end or config.horizon_end),
                                     CollectionRequest.slot_end >= config.epoch,
                                 ),
                                 current.rider_id.in_(riders),
+                                exists().where(
+                                    AppointmentConsent.request_id == CollectionRequest.request_id,
+                                    AppointmentConsent.slot_end >= config.epoch,
+                                    AppointmentConsent.slot_start
+                                    < (config.pickup_horizon_end or config.horizon_end),
+                                ),
                             ),
                         ),
                         and_(
                             PickupExecution.status == "COLLECTED",
                             or_(
                                 collector.c.collector_id.in_(riders),
+                                exists().where(
+                                    CargoTransfer.request_id == CollectionRequest.request_id,
+                                    CargoTransfer.to_rider_id.in_(riders),
+                                ),
                                 CargoVehicleObservation.vehicle_id.in_(
                                     [v["vehicle_id"] for v in vehicles]
                                 ),
@@ -352,9 +456,29 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
     ]
     if len(requests) > config.max_requests:
         raise OperationalInputError("REQUEST_SCOPE_LIMIT")
+    from .regional_projection import project
+
+    operational_inputs = await project(session, config, vehicles, requests)
     point_ids = {v["end_receiving_point_id"] for v in vehicles} | {
         r["receiving_point_id"] for r in requests if r["receiving_point_id"]
     }
+    if config.regional:
+        from .orchestration_models import RegionReceivingPoint
+
+        point_ids.update(
+            await session.scalars(
+                select(RegionReceivingPoint.receiving_point_id).where(
+                    RegionReceivingPoint.region_id == config.region_id
+                )
+                if config.region_id
+                else select(RegionReceivingPoint.receiving_point_id).where(
+                    RegionReceivingPoint.region_id.in_(
+                        {v.get("region_id") for v in vehicles}
+                        | {r.get("region_id") for r in requests}
+                    )
+                )
+            )
+        )
     points = [
         dict(row)
         for row in (
@@ -500,7 +624,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 .where(
                     VehicleRoute.status != "CLOSED",
                     or_(
-                        OperatingShift.ends_at <= config.epoch,
+                        effective_end <= config.epoch,
                         OperatingShift.closed_at.is_not(None),
                     ),
                 )
@@ -521,6 +645,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
         "released": released,
         "restrictions": restrictions,
         "orphaned_routes": orphaned,
+        "operational_inputs": operational_inputs,
     }
 
 
@@ -565,7 +690,9 @@ async def build_problem(
         for v in vehicles
         if v["blocked_reason"] is None
         and not any(
-            route["vehicle_id"] == v["vehicle_id"] and route["status"] == "RECOVERY_REQUIRED"
+            route["vehicle_id"] == v["vehicle_id"]
+            and route["status"] == "RECOVERY_REQUIRED"
+            and not v.get("resume_authorized")
             for route in data["routes"]
         )
     )
@@ -620,15 +747,31 @@ async def build_problem(
                 pickup_id,
             )
         )
+        region_eligible = tuple(
+            v
+            for v in eligible
+            if not config.regional
+            or any(
+                vehicle["vehicle_id"] == v
+                and vehicle.get("region_id") == r.get("region_id")
+                and r.get("region_id") is not None
+                and (
+                    vehicle["resource_kind"] == "COMMITTED"
+                    or r["request_id"] in vehicle.get("accepted_requests", ())
+                )
+                for vehicle in vehicles
+            )
+        )
         allowed = (
             (bound,)
             if bound
             else tuple(
                 vehicle
-                for vehicle in eligible
+                for vehicle in region_eligible
                 if not any(
-                    r["vehicle_id"] == vehicle and r["request_id"] == request_id
-                    for r in data["released"]
+                    release["vehicle_id"] == vehicle
+                    and release["request_id"] == (r.get("reattempt_of") or request_id)
+                    for release in data["released"]
                 )
             )
         )
@@ -645,10 +788,26 @@ async def build_problem(
                     TimeWindow(0, _seconds(config.horizon_end, epoch))
                     if started
                     else TimeWindow(
-                        max(0, _seconds(r["slot_start"], epoch, start=True)),
+                        max(
+                            0,
+                            _seconds(r["slot_start"], epoch, start=True),
+                            _seconds(
+                                now + timedelta(seconds=config.dispatch_readiness_seconds),
+                                epoch,
+                                start=True,
+                            )
+                            if config.regional and r["owner_id"] is None
+                            else 0,
+                            _seconds(
+                                r.get("retry_eligible_at", r["slot_start"]), epoch, start=True
+                            ),
+                        ),
                         _seconds(r["slot_end"], epoch),
                     ),
-                    not config.fleet_mode or r["owner_id"] is not None,
+                    config.admission_mode
+                    or r.get("hold", False)
+                    or not config.fleet_mode
+                    or r["owner_id"] is not None,
                     allowed,
                     bound,
                     None,
@@ -663,7 +822,11 @@ async def build_problem(
                 1,
                 r["discharge_seconds"],
                 TimeWindow(0, deadline),
-                not config.fleet_mode or collected or r["owner_id"] is not None,
+                config.admission_mode
+                or r.get("hold", False)
+                or not config.fleet_mode
+                or collected
+                or r["owner_id"] is not None,
                 allowed,
                 bound,
                 r["receiving_point_id"],
@@ -736,7 +899,7 @@ async def build_problem(
                 v["vehicle_id"],
                 v["rider_id"],
                 v["version"],
-                ResourceKind.COMMITTED,
+                ResourceKind(v["resource_kind"]),
                 v["shift_id"],
                 by_profile[v["profile_version"]],
                 v["position_id"],
@@ -752,12 +915,17 @@ async def build_problem(
                     and t["route_id"]
                     in {r["route_id"] for r in data["routes"] if r["vehicle_id"] == v["vehicle_id"]}
                 ),
+                tuple(
+                    TimeWindow(max(0, _seconds(a, epoch)), _seconds(b, epoch))
+                    for a, b in v.get("breaks", ())
+                    if b > epoch
+                ),
             )
         )
     problem = RoutingProblem(
         run_id,
         run_id,
-        ROUTING_CONTRACT_V1,
+        ROUTING_CONTRACT_V2 if any(v.breaks for v in vehicle_snapshots) else ROUTING_CONTRACT_V1,
         config.policy_version,
         epoch,
         ("MASS_G", "VOLUME_ML"),

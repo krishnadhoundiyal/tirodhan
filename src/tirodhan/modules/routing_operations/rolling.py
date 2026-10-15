@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta
@@ -45,7 +45,8 @@ from .economics import (
     nearest_feasible_baseline,
 )
 from .fleet_models import FleetControl, FleetCycle, FleetException, FleetPositionAnchor
-from .models import RoutingShadowRun, VehiclePosition
+from .fleet_priority import propose_prioritized
+from .models import OperatingVehicle, RoutingShadowRun, VehiclePosition
 from .service import PROBLEM_CODEC, PROPOSAL_CODEC
 from .snapshot import (
     MatrixSource,
@@ -65,6 +66,11 @@ class FleetPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     version: str = Field(min_length=1, max_length=100)
     horizon_seconds: int = Field(strict=True, ge=60, le=86400)
+    regional: bool = False
+    pickup_horizon_seconds: int | None = Field(default=None, strict=True, ge=60, le=86400)
+    planning_lead_seconds: int = Field(default=0, strict=True, ge=0, le=86400)
+    dispatch_readiness_seconds: int = Field(default=0, strict=True, ge=0, le=3600)
+    delivery_ack_seconds: int = Field(default=60, strict=True, ge=1, le=600)
     minimum_interval_seconds: int = Field(strict=True, ge=1, le=3600)
     maximum_interval_seconds: int = Field(strict=True, ge=1, le=86400)
     displacement_m: int = Field(strict=True, ge=1, le=10000)
@@ -81,6 +87,11 @@ class FleetPolicy(BaseModel):
 
     @model_validator(mode="after")
     def ordered(self) -> FleetPolicy:
+        if (
+            self.pickup_horizon_seconds is not None
+            and self.pickup_horizon_seconds > self.horizon_seconds
+        ):
+            raise ValueError("pickup horizon exceeds routing horizon")
         if self.maximum_interval_seconds < self.minimum_interval_seconds:
             raise ValueError("maximum interval precedes minimum interval")
         if self.lease_seconds < self.search_seconds * 2 + 30:
@@ -101,6 +112,11 @@ class FleetPolicy(BaseModel):
             search_seconds=self.search_seconds,
             lease_seconds=self.lease_seconds,
             fleet_mode=True,
+            regional=self.regional,
+            dispatch_readiness_seconds=self.dispatch_readiness_seconds,
+            pickup_horizon_end=epoch + timedelta(seconds=self.pickup_horizon_seconds)
+            if self.pickup_horizon_seconds is not None
+            else None,
         )
 
 
@@ -126,7 +142,28 @@ async def configure_fleet(
             session,
             scope=f"routing.fleet.configure:{manager_id}",
             idempotency_key=str(command.client_command_id),
-            request_fingerprint=hashlib.sha256(command.model_dump_json().encode()).digest(),
+            request_fingerprint=hashlib.sha256(
+                command.model_dump_json(
+                    exclude={
+                        "policy": {
+                            k
+                            for k, v in {
+                                "regional": command.policy.regional,
+                                "delivery_ack_seconds": 0
+                                if not command.policy.regional
+                                and command.policy.delivery_ack_seconds == 60
+                                else command.policy.delivery_ack_seconds,
+                                "pickup_horizon_seconds": command.policy.pickup_horizon_seconds,
+                                "planning_lead_seconds": command.policy.planning_lead_seconds,
+                                "dispatch_readiness_seconds": (
+                                    command.policy.dispatch_readiness_seconds
+                                ),
+                            }.items()
+                            if not v
+                        }
+                    }
+                ).encode()
+            ).digest(),
             expires_at=expires_at,
             now=now,
         )
@@ -293,13 +330,17 @@ def ready_snapshot(
             (r for r in sources["routes"] if r["vehicle_id"] == vehicle["vehicle_id"]), None
         )
         reason = None
-        if vehicle["blocked_reason"] is not None or (
-            route and route["status"] == "RECOVERY_REQUIRED"
+        if vehicle.get("transfer_in_progress"):
+            reason = "PHYSICAL_TRANSFER_IN_PROGRESS"
+        elif vehicle["blocked_reason"] is not None or (
+            route
+            and route["status"] == "RECOVERY_REQUIRED"
+            and not vehicle.get("resume_authorized")
         ):
             reason = "CONTROLLED_RECOVERY_REQUIRED"
         elif vehicle["legacy_assignment"]:
             reason = "LEGACY_ASSIGNMENT_MUST_DRAIN"
-        elif vehicle["starts_at"] > now:
+        elif vehicle["starts_at"] > now and not config.admission_mode and not config.regional:
             reason = "SHIFT_NOT_ACTIVE"
         elif (
             vehicle["observed_at"] is None
@@ -368,6 +409,8 @@ def ready_snapshot(
             reason = (
                 "AUDITED_LOAD_CORRECTION_REQUIRED"
                 if request["load_uncertain"]
+                else "REATTEMPT_REVIEW_REQUIRED"
+                if request.get("retry_review_required")
                 else "MANIFEST_REQUIRED"
                 if request["mass_g"] is None
                 else "COMMITMENT_WINDOW_EXPIRED"
@@ -400,6 +443,27 @@ async def _should_evaluate(
             or (now - control.last_evaluated_at).total_seconds() >= policy.maximum_interval_seconds
         ):
             return True
+        if policy.regional:
+            from .orchestration_models import FleetWakeup
+
+            pending = await session.get(FleetWakeup, SCOPE)
+            if pending and pending.generation > pending.acknowledged and pending.due_at <= now:
+                return True
+            last = control.last_evaluated_at
+            lead = timedelta(seconds=policy.planning_lead_seconds)
+            deadlines = [
+                r["slot_start"] - lead
+                for r in snapshot.sources["requests"]
+                if r["pickup_status"] != "COLLECTED"
+            ]
+            deadlines += [
+                t
+                for v in snapshot.sources["vehicles"]
+                for pair in v.get("breaks", ())
+                for t in pair
+            ]
+            if any((last is None or last < t) and t <= now for t in deadlines):
+                return True
         for vehicle in snapshot.sources["vehicles"]:
             anchor = await session.get(FleetPositionAnchor, vehicle["vehicle_id"])
             if anchor is None or vehicle["position_id"] is None:
@@ -550,7 +614,7 @@ async def _finish(
 async def _hold_unsafe_routes(
     factory: async_sessionmaker[AsyncSession],
     actor: UUID,
-    issues: list[tuple[UUID | None, UUID | None, str]],
+    issues: Sequence[tuple[UUID | None, UUID | None, str]],
     snapshot: OperationalSnapshot,
     cycle: FleetCycle,
     config: ShadowConfiguration,
@@ -610,6 +674,9 @@ async def _hold_unsafe_routes(
                 ):
                     continue
                 root.status = "RECOVERY_REQUIRED"
+                held_vehicle = await session.get(OperatingVehicle, root.vehicle_id)
+                assert held_vehicle is not None
+                held_vehicle.safety_version += 1
                 for expected_route in (
                     expected_sources["routes"] + expected_sources["orphaned_routes"]
                 ):
@@ -634,6 +701,12 @@ async def run_fleet_cycle(
 ) -> FleetCycle | None:
     if set(optimizers) != set(OptimizerEngine):
         raise OperationalInputError("BOTH_ENGINES_REQUIRED")
+    from .orchestration import prepare_due
+    from .reconciliation import reconcile_cancellations
+
+    generation = await prepare_due(factory, clock())
+    if generation is not None:
+        await reconcile_cancellations(factory, clock())
     claimed = await _claim(factory, clock())
     if claimed is None:
         return None
@@ -641,10 +714,15 @@ async def run_fleet_cycle(
     config = policy.snapshot_configuration(clock())
     issues: list[tuple[UUID | None, UUID | None, str]] = []
     try:
-        return await asyncio.wait_for(
+        result = await asyncio.wait_for(
             _plan(factory, cycle, policy, actor, config, providers, optimizers, issues, clock),
             timeout=policy.lease_seconds - 5,
         )
+        if result.status in ("ACTIVATED", "UNCHANGED"):
+            from .orchestration import acknowledge_generation
+
+            await acknowledge_generation(factory, generation)
+        return result
     except (OperationalInputError, RoutingAdapterError, RoutingValidationError) as error:
         return await _finish(
             factory, cycle, policy, actor, "FAILED", str(error), None, issues, clock()
@@ -708,7 +786,10 @@ async def _plan(
     unsafe: list[tuple[UUID | None, UUID | None, str]] = []
     for vehicle in problem.vehicles:
         order = orders.get(vehicle.vehicle_id, ())
-        if not order:
+        if not order or any(
+            r["vehicle_id"] == vehicle.vehicle_id and r["status"] == "RECOVERY_REQUIRED"
+            for r in ready.sources["routes"]
+        ):
             continue
         lot_ids = {s.lot_id for s in problem.stops if s.stop_id in order}
         subproblem = replace(
@@ -746,8 +827,11 @@ async def _plan(
     raw_results: dict[str, Any] = {}
     for engine in OptimizerEngine:
         try:
-            proposal = await optimizers[engine].propose(
-                problem, search_seconds=policy.search_seconds
+            proposal = await propose_prioritized(
+                optimizers[engine],
+                problem,
+                search_seconds=policy.search_seconds,
+                economics=policy.economics,
             )
             if proposal.engine != engine or proposal.engine_version != VERSIONS[engine]:
                 raise OperationalInputError("ENGINE_IDENTITY_MISMATCH")
@@ -810,21 +894,45 @@ async def _plan(
             _, nearest_cost = nearest_feasible_baseline(rebased, baseline, policy.economics, orders)
             measurements["nearest_feasible_baseline"] = asdict(nearest_cost)
             greedy, greedy_cost, count = insertion_search(
-                rebased, baseline, policy.economics, orders
+                rebased,
+                baseline,
+                policy.economics,
+                orders,
+                max_wall_seconds=10 if policy.regional else None,
             )
             measurements["collective_insertion_baseline"] = dict(
                 asdict(greedy_cost), evaluations=count
             )
         except RoutingValidationError as error:
-            # Do not blindly execute an incumbent invalidated by new physical/time facts.
-            publication_unsafe: list[tuple[UUID | None, UUID | None, str]] = [
-                (None, r["route_id"], str(error)) for r in live.sources["routes"]
-            ]
-            issues.extend(publication_unsafe)
-            await _hold_unsafe_routes(
-                factory, actor, publication_unsafe, current, cycle, config, clock()
+            # Explicit new cargo/destination obligations may have no incumbent task yet.
+            # A healthy, independently validated native proposal may establish the suffix.
+            authorized_recovery = not any(orders.values()) or any(
+                v.get("resume_authorized") for v in live.sources["vehicles"]
             )
-            raise OperationalInputError("INCUMBENT_REQUIRES_RECOVERY") from None
+            native_live = []
+            if authorized_recovery:
+                for native in candidates.values():
+                    candidate = replace(
+                        native, problem_id=rebased.problem_id, snapshot_id=rebased.snapshot_id
+                    )
+                    try:
+                        native_live.append(
+                            (candidate, measure(rebased, candidate, policy.economics, orders))
+                        )
+                    except RoutingValidationError:
+                        pass
+            if native_live:
+                greedy, greedy_cost = min(native_live, key=lambda item: item[1].rank)
+                measurements["new_obligation_baseline"] = asdict(greedy_cost)
+            else:
+                publication_unsafe = [
+                    (None, r["route_id"], str(error)) for r in live.sources["routes"]
+                ]
+                issues.extend(publication_unsafe)
+                await _hold_unsafe_routes(
+                    factory, actor, publication_unsafe, current, cycle, config, clock()
+                )
+                raise OperationalInputError("INCUMBENT_REQUIRES_RECOVERY") from None
         results: dict[str, Any] = {}
         for engine, proposal in candidates.items():
             refreshed = replace(
@@ -833,7 +941,11 @@ async def _plan(
             try:
                 native_cost = measure(rebased, refreshed, policy.economics, orders)
                 improved, cost, count = insertion_search(
-                    rebased, refreshed, policy.economics, orders
+                    rebased,
+                    refreshed,
+                    policy.economics,
+                    orders,
+                    max_wall_seconds=10 if policy.regional else None,
                 )
                 if greedy_cost.rank < cost.rank:
                     improved = replace(greedy, engine=engine, engine_version=VERSIONS[engine])
@@ -863,11 +975,50 @@ async def _plan(
         if not viable:
             raise OperationalInputError("NO_LIVE_FEASIBLE_PROPOSAL")
         selected, selected_cost = min(viable, key=lambda c: (c[1].rank, c[0].engine.value))
-        selected_orders = {r.vehicle_id: r.stop_ids for r in selected.routes if r.stop_ids}
+        holds = {r["request_id"] for r in live.sources["requests"] if r.get("hold")}
+        held_stops = {s.stop_id for s in rebased.stops if s.lot_id in holds}
+        selected_orders = {
+            r.vehicle_id: tuple(s for s in r.stop_ids if s not in held_stops)
+            for r in selected.routes
+            if any(s not in held_stops for s in r.stop_ids)
+        }
         for stop_id in selected.unserved_stop_ids:
             stop = next(s for s in rebased.stops if s.stop_id == stop_id)
-            issues.append((stop.lot_id, None, "CAPACITY_OR_WINDOW_SHORTFALL"))
-        if selected_orders == {v: order for v, order in orders.items() if order}:
+            pending_offer = False
+            if policy.regional and stop.kind.value == "PICKUP":
+                from .flexible import offer_supplementary
+
+                demand = next(r for r in live.sources["requests"] if r["request_id"] == stop.lot_id)
+                if not demand.get("hold"):
+                    async with factory() as session, session.begin():
+                        pending_offer = await offer_supplementary(
+                            session, demand, clock(), policy.planning_lead_seconds
+                        )
+            if not pending_offer and (
+                not policy.regional
+                or clock()
+                >= next(
+                    r["slot_end"]
+                    for r in live.sources["requests"]
+                    if r["request_id"] == stop.lot_id
+                )
+                - timedelta(seconds=policy.planning_lead_seconds)
+            ):
+                issues.append((stop.lot_id, None, "CAPACITY_OR_WINDOW_SHORTFALL"))
+        if policy.regional:
+            from .synchronization import publish_etas
+
+            # Advisory values only; each ETA is matched to current authority before storage.
+            await publish_etas(
+                factory,
+                rebased,
+                selected,
+                now=clock(),
+                freshness_seconds=policy.maximum_interval_seconds,
+            )
+        if selected_orders == {v: order for v, order in orders.items() if order} and not any(
+            r["status"] == "RECOVERY_REQUIRED" for r in live.sources["routes"]
+        ):
             async with factory() as session, session.begin():
                 stored_cycle = await session.get(FleetCycle, cycle.cycle_id)
                 assert stored_cycle is not None
@@ -908,6 +1059,9 @@ async def _plan(
                     run_id=rebased.problem_id,
                     engine=selected.engine,
                     fleet_cycle_id=cycle.cycle_id,
+                    resume_recovery=any(
+                        v.get("resume_authorized") for v in live.sources["vehicles"]
+                    ),
                 ),
                 expires_at=clock() + timedelta(seconds=policy.lease_seconds),
                 now=clock(),
@@ -921,6 +1075,14 @@ async def _plan(
             }:
                 continue  # Rebase/validate current road positions, do not repeat long solver calls.
             raise
+        if policy.regional:
+            await publish_etas(
+                factory,
+                rebased,
+                selected,
+                now=clock(),
+                freshness_seconds=policy.maximum_interval_seconds,
+            )
         return await _finish(
             factory, cycle, policy, actor, "ACTIVATED", None, current, issues, clock()
         )

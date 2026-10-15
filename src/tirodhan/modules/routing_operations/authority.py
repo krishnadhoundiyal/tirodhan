@@ -235,8 +235,17 @@ async def _activate(
     versions = {OptimizerEngine.VROOM: VROOM_VERSION, OptimizerEngine.OR_TOOLS: ORTOOLS_VERSION}
     if proposal.engine != command.engine or proposal.engine_version != versions[command.engine]:
         raise RouteAuthorityError("ENGINE_IDENTITY_MISMATCH")
+    from .orchestration_models import CapacityReservation
+
+    hold_ids = set(
+        await session.scalars(
+            select(CapacityReservation.reservation_id).where(
+                CapacityReservation.reservation_id.in_([lot.lot_id for lot in problem.lots])
+            )
+        )
+    )
     requests = await lock_booking_population(
-        session, [lot.collection_request_id for lot in problem.lots]
+        session, [lot.collection_request_id for lot in problem.lots if lot.lot_id not in hold_ids]
     )
     await lock_resources(
         session, [v.rider_id for v in problem.vehicles], [v.vehicle_id for v in problem.vehicles]
@@ -271,7 +280,12 @@ async def _activate(
         raise RouteAuthorityError("FLEET_OWNER_REQUIRED")
     if now >= config.horizon_end:
         raise RouteAuthorityError("HORIZON_EXPIRED")
-    used_vehicles = {route.vehicle_id for route in proposal.routes if route.stop_ids}
+    held_stops = {s.stop_id for s in problem.stops if s.lot_id in hold_ids}
+    used_vehicles = {
+        route.vehicle_id
+        for route in proposal.routes
+        if any(s not in held_stops for s in route.stop_ids)
+    }
     for v in current["vehicles"]:
         if config.fleet_mode and v["vehicle_id"] not in {
             item.vehicle_id for item in problem.vehicles
@@ -294,7 +308,14 @@ async def _activate(
         ),
     )
     assessment = validate_proposal(live_problem, proposal)
-    if any(v.resource_kind != ResourceKind.COMMITTED for v in problem.vehicles):
+    if any(
+        v.resource_kind != ResourceKind.COMMITTED
+        and not any(
+            r["vehicle_id"] == v.vehicle_id and r.get("accepted_requests")
+            for r in current["vehicles"]
+        )
+        for v in problem.vehicles
+    ):
         raise RouteAuthorityError("COMMITTED_ONLY")
     legacy = await session.scalar(
         select(RiderAssignment.assignment_id)
@@ -361,8 +382,13 @@ async def _activate(
     )
     session.add(activation)
     await session.flush([activation])
-    by_stop = {s.stop_id: s for s in problem.stops}
-    by_vehicle = {v.vehicle_id: v for v in problem.vehicles}
+    from .hold_projection import executable_projection
+
+    actual_problem, proposal = executable_projection(live_problem, proposal, hold_ids)
+    # Removing a passive visit changes road arcs. Check the route we actually authorize.
+    assessment = validate_proposal(actual_problem, proposal)
+    by_stop = {s.stop_id: s for s in actual_problem.stops}
+    by_vehicle = {v.vehicle_id: v for v in actual_problem.vehicles}
     schedules = {r.vehicle_id: r for r in assessment.routes}
     if config.fleet_mode:
         # Transfer future work before inserting successor ownership, regardless of UUID order.
@@ -442,7 +468,7 @@ async def _activate(
                 raise RouteAuthorityError("EXPLICIT_RECOVERY_RESUME_REQUIRED")
             assignment = await session.get(RiderAssignment, root.assignment_id)
             assert assignment is not None
-            if config.fleet_mode:
+            if config.fleet_mode and root.status == "ACTIVE":
                 from .execution import current_tasks
 
                 if (
@@ -557,7 +583,7 @@ async def _activate(
                 )
                 session.add(task)
                 await session.flush([task])
-            scheduled = schedules[v.vehicle_id].stops[ordinal]
+            scheduled = next(s for s in schedules[v.vehicle_id].stops if s.stop_id == stop_id)
             session.add(
                 RouteRevisionStop(
                     revision_id=revision.revision_id,
@@ -575,6 +601,31 @@ async def _activate(
         vehicle = await session.get(OperatingVehicle, v.vehicle_id)
         assert vehicle is not None
         vehicle.version += 1
+        if config.regional:
+            from .orchestration_models import RouteDelivery
+
+            # Receipt deadline derives from dispatch readiness and predicted first stop.
+            acknowledgment = 60
+            readiness = 0
+            if command.fleet_cycle_id:
+                assert cycle is not None and cycle.measurements is not None
+                configured = cycle.measurements["policy"]
+                acknowledgment = configured.get("delivery_ack_seconds", 60)
+                readiness = max(0, configured.get("dispatch_readiness_seconds", 0) - acknowledgment)
+            first = schedules[v.vehicle_id].stops[0].service_start_at
+            due = min(
+                now + timedelta(seconds=acknowledgment),
+                max(now, problem.epoch + timedelta(seconds=first - readiness)),
+            )
+            session.add(
+                RouteDelivery(
+                    revision_id=revision.revision_id,
+                    rider_id=v.rider_id,
+                    due_at=now,
+                    acknowledgment_due_at=due,
+                    attempts=0,
+                )
+            )
         await append_outbox_event(
             session,
             event_key=f"vehicle-route-revised:{revision.revision_id}",

@@ -52,6 +52,25 @@ def solve(p: dict[str, Any]) -> dict[str, Any]:
     for vi, vehicle in enumerate(vehicles):
         time.CumulVar(routing.Start(vi)).SetRange(vehicle["available"], vehicle["end_at"])
         time.CumulVar(routing.End(vi)).SetRange(vehicle["available"], vehicle["end_at"])
+        pauses = [
+            routing.solver().FixedDurationIntervalVar(
+                max(a, vehicle["available"]),
+                max(a, vehicle["available"]),
+                b - max(a, vehicle["available"]),
+                False,
+                f"break-{vi}-{i}",
+            )
+            for i, (a, b) in enumerate(vehicle.get("breaks", []))
+        ]
+        if pauses:
+            time.SetBreakIntervalsOfVehicle(
+                pauses,
+                vi,
+                [
+                    jobs[manager.IndexToNode(i)]["service"] if manager.IndexToNode(i) < n else 0
+                    for i in range(routing.Size())
+                ],
+            )
     dimensions = len(vehicles[0]["capacity"])
     for dimension in range(dimensions):
 

@@ -1208,3 +1208,14 @@ business and exact publication fingerprints. Downgrade refuses new operational h
 before dropping anything; empty adoption retains populated prior financial/V1 facts.
 Catalog-based extension exclusions retain strict application-schema drift checks.
 See [Increment 5](V2_ROUTING_INCREMENT_5.md).
+
+## Migration 0027 — regional operational orchestration
+
+Adds 26 relational tables with real FKs, unique capacity generations, physical/time checks
+and immutable evidence/consent/custody history. Reservations bind once; deferred SQL verifies
+customer/context/location and original or consented windows. Transfer intents preserve terms
+and resolve once; SQL resource locks/uniqueness fence handoffs. Transfer checks custody,
+authorization, PHOTO attribution and effective measured capacity. Vehicle safety generation
+is separate from GPS. The indexed financial-outbox bridge leaves publication/producer intact.
+Empty-adoption downgrade preserves earlier finance/V1 data; new populated history makes
+downgrade refuse before destruction. See [validation](V2_ROUTING_INCREMENT_7.md).

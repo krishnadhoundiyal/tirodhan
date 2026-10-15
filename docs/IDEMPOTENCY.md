@@ -648,3 +648,15 @@ commit roll back; after commit they replay one activation. Old tokens cannot fin
 activate a successor. Solver/road calls have no operational side effects and run outside
 locks. Events use identifier-only transactional outbox records; new event delivery
 consumer integration remains outstanding. See [Increment 5](V2_ROUTING_INCREMENT_5.md).
+
+## Increment 7 commands and scheduling
+
+Operational mutations use actor/client UUID, canonical fingerprint and atomic fact/result
+commit. Admissions add durable token/expiry takeover, SERIALIZABLE source/generation fencing
+and unique certificates. Reservation binds once; consent references its own reserved window.
+Receipt is unique per revision; flexible commitment per business identity; custody per intent
+and monotonic request sequence. Transfer resolution is write-once. Financial wake consumption
+has a separate inbox identity and preserves original publication. Wake acknowledgment cannot
+consume later generations. Cancellation is never reversed by failed route/refund/notification
+consequences. Road/solver calls have no external business effect. Processes/leases are bounded.
+See [implementation](V2_ROUTING_INCREMENT_7.md).
