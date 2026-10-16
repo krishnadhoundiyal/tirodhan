@@ -22,7 +22,10 @@ from tirodhan.modules.planning import models as planning_models  # noqa: F401
 from tirodhan.modules.receiving_points import models as receiving_point_models  # noqa: F401
 from tirodhan.modules.reliability import models as reliability_models  # noqa: F401
 from tirodhan.modules.routing_operations import dispatch_models as route_models  # noqa: F401
-from tirodhan.modules.routing_operations import fleet_models  # noqa: F401
+from tirodhan.modules.routing_operations import (
+    fleet_models,  # noqa: F401
+    parallel_models,  # noqa: F401
+)
 from tirodhan.modules.routing_operations import models as routing_operations_models  # noqa: F401
 from tirodhan.modules.serviceability import models as serviceability_models  # noqa: F401
 

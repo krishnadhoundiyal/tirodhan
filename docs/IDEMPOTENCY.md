@@ -1,5 +1,21 @@
 # Idempotency
 
+## Increment 8 regional planning
+
+| Operation | Logical key / DB protection | Transaction and replay |
+|---|---|---|
+| Pre-shift rider confirmation | Existing actor/client command UUID + fingerprint; shift PK and SQL owner/time guard | Confirmation and command result commit together; exact replay remains historical confirmation; changed payload conflicts |
+| Configure regional planner | Region scope PK + unique region FK; exact manager/configuration identity | Insert-once transaction; identical configuration is a no-op, conflicting replacement is rejected |
+| Regional wake | Region scope PK; atomic generation increment and bounded due time | Same source transaction when called by domain commands; inbox protects financial fact replay; wake is not per-order completion |
+| Finite regional execution | Region version/token/expiry; unique cycle token | Claim commits before native work; expired predecessor becomes stale; all external computation is advisory and retryable |
+| Composite activation | Existing activation command UUID/fingerprint and unique run activation; native/pool provenance and live source checks | SERIALIZABLE Payment-first/resource transaction commits route authority, cycle, per-booking outcomes and captured-generation acknowledgment together; response-loss replays one activation |
+| Deferred work | Cycle/request outcome PK, real booking/region FKs; immutable history and explicit retry time | Later cycles retain eligibility; technical/solver failure does not acknowledge completion; later wake generations survive older completion |
+
+No OSRM/solver request creates an external business side effect. Worker task/result IDs and versions
+survive transport replacement; workers never mutate assignment, custody or financial state. Native
+and process deadlines bound computation, while database fencing remains the authority boundary.
+See [implementation and validation](V2_ROUTING_INCREMENT_8.md).
+
 ## Architectural rule
 
 Idempotency is a system-wide invariant.

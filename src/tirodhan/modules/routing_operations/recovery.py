@@ -136,7 +136,7 @@ async def detach_cancelled_booking(session: AsyncSession, request_id: UUID, now:
     ):
         from .orchestration import wake
 
-        await wake(session, "BOOKING_CANCELLED", now, urgent=True)
+        await wake(session, "BOOKING_CANCELLED", now, urgent=True, request_id=request_id)
         return  # Request status fences execution; finite reconciliation releases operational rows.
     pickup = await session.scalar(
         select(PickupExecution).where(PickupExecution.request_id == request_id)

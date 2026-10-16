@@ -28,7 +28,11 @@ from tirodhan.modules.planning.locking import (
 )
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.planning.routing.adapters import ORTOOLS_VERSION, VROOM_VERSION
-from tirodhan.modules.planning.routing.contracts import OptimizerEngine, ResourceKind
+from tirodhan.modules.planning.routing.contracts import (
+    OptimizerEngine,
+    ResourceKind,
+    SelectionEngine,
+)
 from tirodhan.modules.planning.routing.validation import validate_proposal
 from tirodhan.modules.reliability.primitives import (
     append_outbox_event,
@@ -57,7 +61,7 @@ class ActivationCommand(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     client_command_id: UUID
     run_id: UUID
-    engine: OptimizerEngine
+    engine: OptimizerEngine | SelectionEngine
     resume_recovery: bool = False
     fleet_cycle_id: UUID | None = None
 
@@ -227,14 +231,40 @@ async def _activate(
     ):
         raise RouteAuthorityError("VALIDATED_RUN_REQUIRED")
     config = ShadowConfiguration.model_validate(run.configuration)
+    if command.engine != SelectionEngine.COMPOSITE:
+        from .fleet_models import FleetControl
+        from .orchestration_models import RegionVehicle
+
+        if await session.scalar(
+            select(FleetControl.scope).where(
+                FleetControl.region_id.in_(select(RegionVehicle.region_id))
+            )
+        ):
+            raise RouteAuthorityError("REGIONAL_OWNER_REQUIRED")
     problem = PROBLEM_CODEC.validate_python(run.problem)
     result = run.results.get(command.engine.value)
     if result is None or "proposal" not in result or "failure_code" in result:
         raise RouteAuthorityError("VALIDATED_ENGINE_RESULT_REQUIRED")
     proposal = PROPOSAL_CODEC.validate_python(result["proposal"])
-    versions = {OptimizerEngine.VROOM: VROOM_VERSION, OptimizerEngine.OR_TOOLS: ORTOOLS_VERSION}
+    from .parallel import VERSION, Selection, selected_routes
+
+    versions = {
+        OptimizerEngine.VROOM: VROOM_VERSION,
+        OptimizerEngine.OR_TOOLS: ORTOOLS_VERSION,
+        SelectionEngine.COMPOSITE: VERSION,
+    }
     if proposal.engine != command.engine or proposal.engine_version != versions[command.engine]:
         raise RouteAuthorityError("ENGINE_IDENTITY_MISMATCH")
+    if command.engine == SelectionEngine.COMPOSITE:
+        selection = Selection.model_validate(result.get("selection"))
+        if (
+            selection.policy_version != problem.policy_version
+            or selected_routes(selection) != proposal.routes
+            or not config.confirmed_shifts
+            or config.region_id is None
+            or command.fleet_cycle_id is None
+        ):
+            raise RouteAuthorityError("COMPOSITE_SELECTION_MISMATCH")
     from .orchestration_models import CapacityReservation
 
     hold_ids = set(
@@ -294,9 +324,20 @@ async def _activate(
         if v["vehicle_id"] in used_vehicles and v["blocked_reason"] is not None:
             raise RouteAuthorityError("VEHICLE_OPERATION_BLOCKED")
         if v["vehicle_id"] in used_vehicles and (
-            v["resource_kind"] != "COMMITTED" or not v["starts_at"] <= now < v["ends_at"]
+            not v["starts_at"] <= now < v["ends_at"]
+            or (
+                v["resource_kind"] != "COMMITTED"
+                and not (config.regional and v.get("accepted_requests"))
+            )
         ):
             raise RouteAuthorityError("ACTIVE_COMMITTED_SHIFT_REQUIRED")
+        if (
+            config.confirmed_shifts
+            and v["vehicle_id"] in used_vehicles
+            and v["resource_kind"] == "COMMITTED"
+            and not v.get("shift_confirmed")
+        ):
+            raise RouteAuthorityError("CONFIRMED_ACTIVE_SHIFT_REQUIRED")
         if not 0 <= (now - v["observed_at"]).total_seconds() <= config.max_position_age_seconds:
             raise RouteAuthorityError("FRESH_POSITION_REQUIRED")
     # Revalidate from activation time, never use an old predicted departure as live authority.
@@ -308,6 +349,10 @@ async def _activate(
         ),
     )
     assessment = validate_proposal(live_problem, proposal)
+    if command.engine == SelectionEngine.COMPOSITE:
+        from tirodhan.modules.planning.routing.facilities import validate_sources
+
+        validate_sources(live_problem, assessment, current)
     if any(
         v.resource_kind != ResourceKind.COMMITTED
         and not any(
@@ -335,7 +380,9 @@ async def _activate(
 
         cycle = await session.get(FleetCycle, command.fleet_cycle_id)
         control = await session.scalar(
-            select(FleetControl).where(FleetControl.scope == "COMMITTED_FLEET").with_for_update()
+            select(FleetControl)
+            .where(FleetControl.scope == (cycle.scope if cycle else "COMMITTED_FLEET"))
+            .with_for_update()
         )
         if (
             cycle is None
@@ -360,8 +407,26 @@ async def _activate(
         assert cycle.measurements is not None
         economics = EconomicPolicy.model_validate(cycle.measurements["policy"]["economics"])
         orders = incumbent_orders(OperationalSnapshot(current, digest))
+        if command.engine == SelectionEngine.COMPOSITE:
+            from .parallel import verify_selection
+
+            verify_selection(
+                problem,
+                selection,
+                economics,
+                orders,
+                tuple(
+                    (
+                        PROBLEM_CODEC.validate_python(item["problem"]),
+                        Selection.model_validate(item["selection"]),
+                    )
+                    for item in result.get("rebase_history", [])
+                ),
+            )
         ranked = []
-        for engine, candidate_result in run.results.items():
+        for engine, candidate_result in (
+            run.results.items() if command.engine != SelectionEngine.COMPOSITE else ()
+        ):
             if "proposal" not in candidate_result or "failure_code" in candidate_result:
                 continue
             candidate = PROPOSAL_CODEC.validate_python(candidate_result["proposal"])
@@ -375,7 +440,9 @@ async def _activate(
                 ranked.append((cost.rank, engine))
             except RoutingValidationError:
                 continue
-        if not ranked or min(ranked)[1] != command.engine.value:
+        if command.engine != SelectionEngine.COMPOSITE and (
+            not ranked or min(ranked)[1] != command.engine.value
+        ):
             raise RouteAuthorityError("FLEET_SELECTION_CHANGED_REBASE_REQUIRED")
     activation = RouteActivation(
         run_id=run.run_id, engine=command.engine.value, activated_by=actor, created_at=now
@@ -387,6 +454,8 @@ async def _activate(
     actual_problem, proposal = executable_projection(live_problem, proposal, hold_ids)
     # Removing a passive visit changes road arcs. Check the route we actually authorize.
     assessment = validate_proposal(actual_problem, proposal)
+    if command.engine == SelectionEngine.COMPOSITE:
+        validate_sources(actual_problem, assessment, current)
     by_stop = {s.stop_id: s for s in actual_problem.stops}
     by_vehicle = {v.vehicle_id: v for v in actual_problem.vehicles}
     schedules = {r.vehicle_id: r for r in assessment.routes}
@@ -650,4 +719,8 @@ async def _activate(
         cycle.activation_id = activation.activation_id
         cycle.selected_engine = command.engine.value
         cycle.status, cycle.completed_at = "ACTIVATED", now
+        if command.engine == SelectionEngine.COMPOSITE:
+            from .regional_planner import complete_cycle
+
+            await complete_cycle(session, cycle, now)
     return activation.activation_id

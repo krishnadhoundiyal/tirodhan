@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from uuid import UUID
 
-from sqlalchemy import case, exists, func, select
+from sqlalchemy import case, exists, func, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -22,7 +23,43 @@ from .orchestration_models import FleetWakeup, RouteAcknowledgment, RouteDeliver
 SCOPE = "COMMITTED_FLEET"
 
 
-async def wake(session: AsyncSession, reason: str, now: datetime, *, urgent: bool = False) -> None:
+async def wake(
+    session: AsyncSession,
+    reason: str,
+    now: datetime,
+    *,
+    urgent: bool = False,
+    region_id: UUID | None = None,
+    request_id: UUID | None = None,
+    vehicle_id: UUID | None = None,
+) -> None:
+    from tirodhan.modules.collection_requests.models import CollectionRequest
+
+    from .orchestration_models import RegionCell, RegionVehicle
+    from .regional_planner import regional_wake
+
+    target = region_id
+    if request_id is not None:
+        target = await session.scalar(
+            select(RegionCell.region_id)
+            .join(CollectionRequest, CollectionRequest.cell_id == RegionCell.cell_id)
+            .where(CollectionRequest.request_id == request_id)
+        )
+    if vehicle_id is not None:
+        target = await session.scalar(
+            select(RegionVehicle.region_id).where(RegionVehicle.vehicle_id == vehicle_id)
+        )
+
+    for region in await session.scalars(
+        select(FleetControl.region_id)
+        .where(
+            FleetControl.region_id.is_not(None),
+            FleetControl.region_id == target if target else true(),
+        )
+        .order_by(FleetControl.region_id)
+    ):
+        assert region is not None
+        await regional_wake(session, region, now, urgent=urgent)
     control = await session.get(FleetControl, SCOPE)
     if control is None or not control.configuration.get("regional", False):
         return
@@ -45,13 +82,18 @@ async def wake(session: AsyncSession, reason: str, now: datetime, *, urgent: boo
     )
 
 
-async def prepare_due(factory: async_sessionmaker[AsyncSession], now: datetime) -> int | None:
+async def prepare_due(
+    factory: async_sessionmaker[AsyncSession], now: datetime, *, control_scope: str = SCOPE
+) -> int | None:
     """No roads/native work. Deadline alarms are durable, and polling remains sufficient."""
     async with factory() as session, session.begin():
         control = await session.scalar(
-            select(FleetControl).where(FleetControl.scope == SCOPE).with_for_update()
+            select(FleetControl).where(FleetControl.scope == control_scope).with_for_update()
         )
-        if control is None or not control.configuration.get("regional", False):
+        if control is None:
+            return None
+        configuration = control.configuration.get("fleet", control.configuration)
+        if not configuration.get("regional", False):
             return None
         # Consume existing financial facts without changing their producer or publication state.
         consumed = exists().where(
@@ -88,19 +130,36 @@ async def prepare_due(factory: async_sessionmaker[AsyncSession], now: datetime) 
                         "BOOKING_FINANCIAL_FACT",
                         now,
                         urgent=event.payload.get("change") == "COLLECTION_CANCELLED",
+                        request_id=event.aggregate_id,
                     )
                 await complete_inbox_message(session, claim.message, processed_at=now)
-        pending = await session.get(FleetWakeup, SCOPE)
+        pending = await session.get(FleetWakeup, control_scope)
         if pending and pending.generation > pending.acknowledged and pending.due_at <= now:
             # Preserve an existing owner; the token fence, rather than wakeup transport, owns work.
             control.next_due_at = min(control.next_due_at, now)
+        from sqlalchemy import true
+
         from .models import OperatingShift
-        from .orchestration_models import OperatingBreak
+        from .orchestration_models import OperatingBreak, RegionVehicle
+
+        region_vehicles = select(RegionVehicle.vehicle_id).where(
+            RegionVehicle.region_id == control.region_id
+        )
 
         deliveries = list(
             await session.scalars(
                 select(RouteDelivery)
-                .where(RouteDelivery.due_at <= now, RouteDelivery.escalated_at.is_(None))
+                .where(
+                    RouteDelivery.due_at <= now,
+                    RouteDelivery.escalated_at.is_(None),
+                    exists().where(
+                        RouteRevision.revision_id == RouteDelivery.revision_id,
+                        VehicleRoute.route_id == RouteRevision.route_id,
+                        VehicleRoute.vehicle_id.in_(region_vehicles),
+                    )
+                    if control.region_id
+                    else true(),
+                )
                 .order_by(RouteDelivery.revision_id)
                 .limit(128)
                 .with_for_update(skip_locked=True)
@@ -160,8 +219,9 @@ async def prepare_due(factory: async_sessionmaker[AsyncSession], now: datetime) 
             .join(VehicleRoute, VehicleRoute.route_id == RouteRevision.route_id)
             .join(RouteTask, RouteTask.task_id == RouteRevisionStop.task_id)
             .where(RouteRevision.version == VehicleRoute.version, RouteTask.state == "PENDING")
+            .where(VehicleRoute.vehicle_id.in_(region_vehicles) if control.region_id else true())
         )
-        lead = control.configuration.get("planning_lead_seconds", 0)
+        lead = configuration.get("planning_lead_seconds", 0)
         if (
             next_start is not None
             and (
@@ -178,6 +238,7 @@ async def prepare_due(factory: async_sessionmaker[AsyncSession], now: datetime) 
             .join(OperatingShift)
             .where(
                 OperatingShift.closed_at.is_(None),
+                OperatingShift.vehicle_id.in_(region_vehicles) if control.region_id else true(),
                 OperatingBreak.starts_at <= now,
                 OperatingBreak.ends_at >= now,
             )

@@ -30,7 +30,9 @@ class RouteActivation(Base):
     activated_by: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
-        CheckConstraint("engine IN ('VROOM', 'OR_TOOLS')", name="ck_route_activation_engine"),
+        CheckConstraint(
+            "engine IN ('VROOM', 'OR_TOOLS', 'COMPOSITE')", name="ck_route_activation_engine"
+        ),
     )
 
 

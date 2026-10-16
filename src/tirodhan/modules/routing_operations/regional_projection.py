@@ -36,7 +36,13 @@ async def project(
     if config.regional:
         from .fleet_models import FleetControl
 
-        control = await session.get(FleetControl, "COMMITTED_FLEET")
+        control = (
+            await session.get(FleetControl, f"REGION:{config.region_id}")
+            if config.region_id
+            else None
+        )
+        if control is None:
+            control = await session.get(FleetControl, "COMMITTED_FLEET")
         inputs["fleet_policy"] = (control.version, control.configuration) if control else None
         cells: dict[str, UUID] = dict(
             (
@@ -68,6 +74,20 @@ async def project(
         )
         for v in vehicles:
             v["region_id"] = memberships.get(v["vehicle_id"])
+        if config.confirmed_shifts:
+            from .parallel_models import ShiftConfirmation
+
+            confirmations = {
+                c.shift_id: c
+                for c in await session.scalars(
+                    select(ShiftConfirmation).where(
+                        ShiftConfirmation.shift_id.in_([v["shift_id"] for v in vehicles])
+                    )
+                )
+            }
+            for v in vehicles:
+                c = confirmations.get(v["shift_id"])
+                v["shift_confirmed"] = bool(c and c.rider_id == v["rider_id"])
         request_cells: dict[UUID, str] = dict(
             (
                 await session.execute(
@@ -323,11 +343,22 @@ async def project(
                 )
     if config.region_id:
         riders = {v["rider_id"] for v in vehicles}
+        regional_custody_vehicles = (
+            set(
+                await session.scalars(
+                    select(RegionVehicle.vehicle_id).where(
+                        RegionVehicle.region_id == config.region_id
+                    )
+                )
+            )
+            if config.confirmed_shifts
+            else set()
+        )
         requests[:] = [
             r
             for r in requests
             if (
-                r["collector_id"] in riders
+                (r["collector_id"] in riders or r["cargo_vehicle_id"] in regional_custody_vehicles)
                 if r["pickup_status"] == "COLLECTED"
                 else r.get("region_id") == config.region_id or r["owner_id"] in riders
             )

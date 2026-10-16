@@ -15,6 +15,10 @@ class OptimizerEngine(str, Enum):
     OR_TOOLS = "OR_TOOLS"
 
 
+class SelectionEngine(str, Enum):
+    COMPOSITE = "COMPOSITE"
+
+
 class ResourceKind(str, Enum):
     COMMITTED = "COMMITTED"
     FLEXIBLE = "FLEXIBLE"
@@ -141,7 +145,7 @@ class RouteProposal:
     snapshot_id: UUID
     contract_version: str
     policy_version: str
-    engine: OptimizerEngine
+    engine: OptimizerEngine | SelectionEngine
     engine_version: str
     routes: tuple[ProposedRoute, ...]
     unserved_stop_ids: tuple[UUID, ...]

@@ -10,7 +10,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from geoalchemy2 import Geometry
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, cast, exists, func, or_, select, true
+from sqlalchemy import and_, cast, exists, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
@@ -64,7 +64,7 @@ class ShadowConfiguration(BaseModel):
     horizon_end: AwareDatetime
     policy_version: str = Field(min_length=1, max_length=100)
     max_position_age_seconds: Positive
-    max_requests: int = Field(strict=True, ge=1, le=128)
+    max_requests: int = Field(strict=True, ge=1, le=100000)
     max_vehicles: int = Field(strict=True, ge=1, le=32)
     max_nodes: int = Field(strict=True, ge=1, le=512)
     max_profiles: int = Field(strict=True, ge=1, le=8)
@@ -75,6 +75,8 @@ class ShadowConfiguration(BaseModel):
     regional: bool = False
     dispatch_readiness_seconds: int = Field(default=0, strict=True, ge=0, le=3600)
     region_id: UUID | None = None
+    request_ids: tuple[UUID, ...] | None = None
+    confirmed_shifts: bool = False
     admission_mode: bool = False
     pickup_horizon_end: AwareDatetime | None = None
 
@@ -83,6 +85,8 @@ class ShadowConfiguration(BaseModel):
             "as_of": self.as_of,
             "regional": self.regional,
             "region_id": self.region_id,
+            "request_ids": self.request_ids,
+            "confirmed_shifts": self.confirmed_shifts,
             "admission_mode": self.admission_mode,
             "dispatch_readiness_seconds": self.dispatch_readiness_seconds,
             "pickup_horizon_end": self.pickup_horizon_end,
@@ -93,6 +97,8 @@ class ShadowConfiguration(BaseModel):
 
     @model_validator(mode="after")
     def ordered(self) -> ShadowConfiguration:
+        if self.max_requests > 128 and not (self.confirmed_shifts and self.region_id is not None):
+            raise ValueError("large discovery requires a regional owner")
         if (
             (self.pickup_horizon_end is not None and self.pickup_horizon_end > self.horizon_end)
             or self.horizon_end <= self.epoch
@@ -335,6 +341,13 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
         HandoverEventItem.handover_event_id == HandoverEvent.handover_event_id,
         HandoverEvent.status == "VALIDATED",
     )
+    regional_custody = (
+        CargoVehicleObservation.vehicle_id.in_(
+            select(RegionVehicle.vehicle_id).where(RegionVehicle.region_id == config.region_id)
+        )
+        if config.confirmed_shifts
+        else false()
+    )
     requests = [
         dict(row)
         for row in (
@@ -405,6 +418,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                             else exists().where(RegionCell.cell_id == CollectionRequest.cell_id)
                         ),
                         current.rider_id.in_(riders),
+                        regional_custody,
                         exists().where(
                             CargoTransfer.request_id == CollectionRequest.request_id,
                             CargoTransfer.to_rider_id.in_(riders),
@@ -423,7 +437,9 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                                 and_(
                                     CollectionRequest.slot_start
                                     < (config.pickup_horizon_end or config.horizon_end),
-                                    CollectionRequest.slot_end >= config.epoch,
+                                    true()
+                                    if config.confirmed_shifts
+                                    else CollectionRequest.slot_end >= config.epoch,
                                 ),
                                 current.rider_id.in_(riders),
                                 exists().where(
@@ -438,6 +454,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                             PickupExecution.status == "COLLECTED",
                             or_(
                                 collector.c.collector_id.in_(riders),
+                                regional_custody,
                                 exists().where(
                                     CargoTransfer.request_id == CollectionRequest.request_id,
                                     CargoTransfer.to_rider_id.in_(riders),
@@ -448,6 +465,17 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                             ),
                         ),
                     ),
+                )
+                .where(
+                    or_(
+                        CollectionRequest.request_id.in_(config.request_ids),
+                        current.rider_id.in_(riders),
+                        PickupExecution.status == "COLLECTED",
+                    )
+                    if config.confirmed_shifts and config.request_ids is not None
+                    else CollectionRequest.request_id.in_(config.request_ids)
+                    if config.request_ids is not None
+                    else true()
                 )
                 .order_by(CollectionRequest.request_id)
                 .limit(config.max_requests + 1)
@@ -486,6 +514,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 select(
                     ReceivingPoint.receiving_point_id,
                     ReceivingPoint.status,
+                    ReceivingPoint.unloading_capacity,
                     ReceivingPoint.version,
                     ReceivingPoint.official_identifier,
                     ReceivingPoint.allowed_radius_m,
@@ -619,9 +648,16 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     VehicleRoute.vehicle_id,
                     VehicleRoute.version,
                     VehicleRoute.status,
+                    OperatingShift.rider_id,
                 )
                 .join(OperatingShift, OperatingShift.shift_id == VehicleRoute.shift_id)
                 .where(
+                    exists().where(
+                        RegionVehicle.vehicle_id == VehicleRoute.vehicle_id,
+                        RegionVehicle.region_id == config.region_id,
+                    )
+                    if config.region_id
+                    else true(),
                     VehicleRoute.status != "CLOSED",
                     or_(
                         effective_end <= config.epoch,
@@ -635,6 +671,43 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
     ]
     if len(orphaned) > config.max_vehicles:
         raise OperationalInputError("RECOVERY_SCOPE_LIMIT")
+    external_facility_visits = []
+    if config.confirmed_shifts:
+        external_facility_visits = [
+            dict(row)
+            for row in (
+                await session.execute(
+                    select(
+                        RouteTask.receiving_point_id,
+                        RouteRevisionStop.planned_start,
+                        RouteRevisionStop.planned_end,
+                    )
+                    .join(RouteRevisionStop, RouteRevisionStop.task_id == RouteTask.task_id)
+                    .join(RouteRevision, RouteRevision.revision_id == RouteRevisionStop.revision_id)
+                    .join(VehicleRoute, VehicleRoute.route_id == RouteRevision.route_id)
+                    .where(
+                        RouteTask.kind == "DISCHARGE",
+                        RouteTask.state.in_(("PENDING", "STARTED")),
+                        VehicleRoute.status != "CLOSED",
+                        VehicleRoute.vehicle_id.not_in([v["vehicle_id"] for v in vehicles]),
+                        VehicleRoute.version == RouteRevision.version,
+                        RouteTask.receiving_point_id.in_(
+                            [
+                                point["receiving_point_id"]
+                                for point in points
+                                if point.get("unloading_capacity") is not None
+                            ]
+                        ),
+                        RouteRevisionStop.planned_end > config.epoch,
+                    )
+                    .order_by(
+                        RouteTask.receiving_point_id,
+                        RouteRevisionStop.planned_start,
+                        RouteTask.task_id,
+                    )
+                )
+            ).mappings()
+        ]
     return {
         "vehicles": vehicles,
         "requests": requests,
@@ -646,6 +719,11 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
         "restrictions": restrictions,
         "orphaned_routes": orphaned,
         "operational_inputs": operational_inputs,
+        **(
+            {"external_facility_visits": external_facility_visits}
+            if config.confirmed_shifts
+            else {}
+        ),
     }
 
 

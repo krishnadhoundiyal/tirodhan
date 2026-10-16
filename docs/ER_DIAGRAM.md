@@ -1,5 +1,12 @@
 # ER Diagram
 
+Increment 8 adds `OperatingRegion -> FleetControl` (unique region FK),
+`OperatingShift -> ShiftConfirmation -> RiderProfile`, and
+`FleetCycle / CollectionRequest / OperatingRegion -> PlanningOutcome` with a
+`(cycle_id, request_id)` primary key. Wake scope identifies the regional owner; outcome
+and confirmation history are immutable. Composite selection JSON remains optimization
+provenance and does not replace any assignment, pickup, custody or payment relationship.
+
 This file contains the consolidated relationship view for quick review.
 
 For entity semantics, see `DOMAIN_MODEL.md`.

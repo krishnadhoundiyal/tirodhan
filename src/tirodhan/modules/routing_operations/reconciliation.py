@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.modules.collection_requests.models import CollectionRequest
@@ -18,9 +19,15 @@ from .orchestration import wake
 
 
 async def reconcile_cancellations(
-    factory: async_sessionmaker[AsyncSession], now: datetime, limit: int = 128
+    factory: async_sessionmaker[AsyncSession],
+    now: datetime,
+    limit: int = 128,
+    *,
+    region_id: UUID | None = None,
 ) -> int:
     async with factory() as session, session.begin():
+        from .orchestration_models import RegionCell
+
         requests = list(
             await session.scalars(
                 select(CollectionRequest.request_id)
@@ -28,6 +35,12 @@ async def reconcile_cancellations(
                 .join(RiderAssignmentItem)
                 .where(
                     CollectionRequest.status == "CANCELLED",
+                    exists().where(
+                        RegionCell.cell_id == CollectionRequest.cell_id,
+                        RegionCell.region_id == region_id,
+                    )
+                    if region_id
+                    else true(),
                     RiderAssignmentItem.released_at.is_(None),
                 )
                 .order_by(CollectionRequest.request_id)
@@ -96,5 +109,5 @@ async def reconcile_cancellations(
         for root in roots:
             # Unaffected tasks continue. Their order is preserved until a validated revision.
             await finish_if_empty(session, root, now)
-        await wake(session, "CANCELLATIONS_RECONCILED", now)
+        await wake(session, "CANCELLATIONS_RECONCILED", now, region_id=region_id)
         return count

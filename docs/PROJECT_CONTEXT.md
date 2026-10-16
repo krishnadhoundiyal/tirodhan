@@ -1,5 +1,10 @@
 # Project Context
 
+Current engineering increment 8 adds finite regional owners, explicit pre-shift rider
+confirmation, local per-profile OSRM, parallel native candidate workers, hybrid CP-SAT
+selection and composite transactional activation with per-booking outcomes. Production
+remains disabled. See [implementation and measured limits](V2_ROUTING_INCREMENT_8.md).
+
 The approved 12 October 2026 V2 direction extends the V1 operating model below with
 cross-cell/compatible-slot routing, continuous collection vehicles and authoritative
 dispatch during committed operating shifts; flexible riders use voluntary acceptance.

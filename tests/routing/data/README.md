@@ -20,3 +20,27 @@ cargo and vehicles are synthetic. OSRM uses its shipped **car** profile, which h
 approved or calibrated for loaded Tirodhan vehicles. No claim of operational suitability
 follows from these tests. Routing graph files are generated in a disposable Docker volume
 by the pinned OSRM 6.0.0 image; no generated graph binary is committed.
+
+## Increment 8 regional performance positions
+
+`inc8-road-nodes.json` contains 64 public OSM road vertices sampled from the same
+checked-in extract (same attribution and ODbL license above). It contains no household
+or rider observations. Each row retains the original public OSM node ID for provenance.
+The UTF-8 JSON SHA-256 after LF normalization is `2fe707d09685a1dc8d7f73673e2bb12f0018e6d0b608925da37c9651de3c076b`.
+
+Sampling is deterministic: consider vertices referenced by residential, service,
+tertiary, secondary, primary, living_street or unclassified ways inside
+77.204–77.214 longitude / 28.627–28.635 latitude; start nearest 77.209/28.632,
+then greedily maximize minimum squared distance to selected vertices, scaling longitude
+by 0.88 and breaking ties by ascending OSM ID. Take 64 vertices. This is fixture sampling,
+not a production clustering or distance algorithm. Raw vertices may snap to another
+profile-legal road; the normal maximum-snap and matrix gates still apply.
+
+The varied benchmark repeats these positions across distinct synthetic bookings and uses
+canonical resolution-7 H3 membership. Dense mode retains the earlier four-anchor fixture.
+Neither mode represents Delhi-wide demand, real traffic, actual customer service durations
+or operationally calibrated car/bicycle profiles.
+
+An earlier artificial coordinate-jitter fixture produced negative OSRM distance cells.
+The strict provider rejected it; no negative values were clamped or accepted, and no
+routing-validator rule was relaxed. See the increment 8 report for this release limitation.

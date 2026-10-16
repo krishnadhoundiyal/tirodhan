@@ -1,0 +1,1575 @@
+{
+  "date": "2026-10-16",
+  "base_commit": "6510ade1ee416ae78a8a86681bcbfe18fa387a00",
+  "branch": "codex/v2-regional-parallel-routing",
+  "versions": {
+    "osrm": "6.0.0",
+    "vroom": "1.15.0",
+    "ortools": "9.14.6206"
+  },
+  "planner_limits": {
+    "cpus": 2,
+    "memory_gib": 4
+  },
+  "database_limits": {
+    "cpus": 2,
+    "memory_gib": 1
+  },
+  "quantiles": "Nearest rank. Five samples per matrix strategy; empirical P95/P99 equal maxima and are not production tail estimates.",
+  "scope": "Synthetic accepted paid histories, public clipped graph; not customer checkout throughput or production vehicle calibration.",
+  "database_campaign_samples": {
+    "samples": 1127,
+    "sample_interval_about_seconds": 4,
+    "max_memory_mib": 169.8,
+    "max_cpu_percent": 48.74
+  },
+  "summary": [
+    {
+      "strategy": "global",
+      "processes": 2,
+      "admitted": 160,
+      "service_mode": "synthetic_fast",
+      "samples": 5,
+      "median_seconds": 66.7011585450091,
+      "p95_seconds": 70.71486543699575,
+      "p99_seconds": 70.71486543699575,
+      "range_seconds": [
+        63.9545188399934,
+        70.71486543699575
+      ],
+      "assigned_range": [
+        160,
+        160
+      ],
+      "deferred_range": [
+        1840,
+        1840
+      ],
+      "max_aggregate_rss_mib": 486.14453125,
+      "max_cgroup_mib": 337.04296875,
+      "max_sampled_cpu_cores": 2.5447219714506413,
+      "median_sampled_cpu_seconds": 79.33000000000001,
+      "matrix_queries": [
+        1,
+        1
+      ],
+      "fleet_cost_range": [
+        22826,
+        22826
+      ],
+      "used_riders_range": [
+        19,
+        19
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.6762269800092326,
+        "matrix_build_seconds": 0.2602759760047775,
+        "worker_seconds": 61.41007451999758,
+        "conflict_selection_seconds": 0.20050223400176037,
+        "publication_refresh_seconds": 0.22309943298751023,
+        "validation_commit_seconds": 3.6883226390054915,
+        "total_seconds": 66.56375807699806
+      }
+    },
+    {
+      "strategy": "zonal",
+      "processes": 2,
+      "admitted": 160,
+      "service_mode": "synthetic_fast",
+      "samples": 5,
+      "median_seconds": 68.29095306999807,
+      "p95_seconds": 70.77803929400397,
+      "p99_seconds": 70.77803929400397,
+      "range_seconds": [
+        63.35618900999543,
+        70.77803929400397
+      ],
+      "assigned_range": [
+        160,
+        160
+      ],
+      "deferred_range": [
+        1840,
+        1840
+      ],
+      "max_aggregate_rss_mib": 484.7265625,
+      "max_cgroup_mib": 336.6484375,
+      "max_sampled_cpu_cores": 4.609118151405686,
+      "median_sampled_cpu_seconds": 80.28999999999999,
+      "matrix_queries": [
+        2,
+        2
+      ],
+      "fleet_cost_range": [
+        22826,
+        22826
+      ],
+      "used_riders_range": [
+        19,
+        19
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.8208460300083971,
+        "matrix_build_seconds": 0.42439873100374825,
+        "worker_seconds": 62.595067642003414,
+        "conflict_selection_seconds": 0.18692445900524035,
+        "publication_refresh_seconds": 0.22426655000890605,
+        "validation_commit_seconds": 3.6318680650001625,
+        "total_seconds": 68.15422601700993
+      }
+    },
+    {
+      "strategy": "on_demand",
+      "processes": 2,
+      "admitted": 160,
+      "service_mode": "synthetic_fast",
+      "samples": 5,
+      "median_seconds": 465.95624031999614,
+      "p95_seconds": 692.9225298970123,
+      "p99_seconds": 692.9225298970123,
+      "range_seconds": [
+        248.8839963240025,
+        692.9225298970123
+      ],
+      "assigned_range": [
+        160,
+        160
+      ],
+      "deferred_range": [
+        1840,
+        1840
+      ],
+      "max_aggregate_rss_mib": 617.8359375,
+      "max_cgroup_mib": 339.78515625,
+      "max_sampled_cpu_cores": 2.5532985862419997,
+      "median_sampled_cpu_seconds": 134.07000000000002,
+      "matrix_queries": [
+        2279,
+        2279
+      ],
+      "fleet_cost_range": [
+        22826,
+        22826
+      ],
+      "used_riders_range": [
+        19,
+        19
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.6872316930093803,
+        "matrix_build_seconds": 398.3296673559962,
+        "worker_seconds": 61.99330962399836,
+        "conflict_selection_seconds": 0.19080239100730978,
+        "publication_refresh_seconds": 0.2295752520003589,
+        "validation_commit_seconds": 3.718888050992973,
+        "total_seconds": 465.81922521999513
+      }
+    },
+    {
+      "strategy": "global",
+      "processes": 1,
+      "admitted": 160,
+      "service_mode": "synthetic_fast",
+      "samples": 1,
+      "median_seconds": 102.40523695899174,
+      "p95_seconds": 102.40523695899174,
+      "p99_seconds": 102.40523695899174,
+      "range_seconds": [
+        102.40523695899174,
+        102.40523695899174
+      ],
+      "assigned_range": [
+        160,
+        160
+      ],
+      "deferred_range": [
+        1840,
+        1840
+      ],
+      "max_aggregate_rss_mib": 304.51953125,
+      "max_cgroup_mib": 221.76171875,
+      "max_sampled_cpu_cores": 1.3793245593706973,
+      "median_sampled_cpu_seconds": 78.89,
+      "matrix_queries": [
+        1,
+        1
+      ],
+      "fleet_cost_range": [
+        22826,
+        22826
+      ],
+      "used_riders_range": [
+        19,
+        19
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.8354771839949535,
+        "matrix_build_seconds": 0.1401108730060514,
+        "worker_seconds": 96.51663231500424,
+        "conflict_selection_seconds": 0.5676976519898744,
+        "publication_refresh_seconds": 0.1885490390122868,
+        "validation_commit_seconds": 3.5749871019943384,
+        "total_seconds": 102.2617246459995
+      }
+    },
+    {
+      "strategy": "global",
+      "processes": 2,
+      "admitted": 80,
+      "service_mode": "synthetic_fast",
+      "samples": 1,
+      "median_seconds": 63.02320044900989,
+      "p95_seconds": 63.02320044900989,
+      "p99_seconds": 63.02320044900989,
+      "range_seconds": [
+        63.02320044900989,
+        63.02320044900989
+      ],
+      "assigned_range": [
+        80,
+        80
+      ],
+      "deferred_range": [
+        1920,
+        1920
+      ],
+      "max_aggregate_rss_mib": 375.5859375,
+      "max_cgroup_mib": 253.6328125,
+      "max_sampled_cpu_cores": 2.5313306199312664,
+      "median_sampled_cpu_seconds": 75.56,
+      "matrix_queries": [
+        1,
+        1
+      ],
+      "fleet_cost_range": [
+        15987,
+        15987
+      ],
+      "used_riders_range": [
+        19,
+        19
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.8762310839956626,
+        "matrix_build_seconds": 0.09946858299372252,
+        "worker_seconds": 58.922086860999116,
+        "conflict_selection_seconds": 0.5042718119948404,
+        "publication_refresh_seconds": 0.15035049099242315,
+        "validation_commit_seconds": 2.0826842810056405,
+        "total_seconds": 62.84682412499387
+      }
+    },
+    {
+      "strategy": "global",
+      "processes": 2,
+      "admitted": 320,
+      "service_mode": "synthetic_fast",
+      "samples": 1,
+      "median_seconds": 74.84166164499766,
+      "p95_seconds": 74.84166164499766,
+      "p99_seconds": 74.84166164499766,
+      "range_seconds": [
+        74.84166164499766,
+        74.84166164499766
+      ],
+      "assigned_range": [
+        320,
+        320
+      ],
+      "deferred_range": [
+        1680,
+        1680
+      ],
+      "max_aggregate_rss_mib": 395.12109375,
+      "max_cgroup_mib": 274.02734375,
+      "max_sampled_cpu_cores": 2.352349675238195,
+      "median_sampled_cpu_seconds": 88.99,
+      "matrix_queries": [
+        1,
+        1
+      ],
+      "fleet_cost_range": [
+        35531,
+        35531
+      ],
+      "used_riders_range": [
+        20,
+        20
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.9753608330065617,
+        "matrix_build_seconds": 0.2546418940037256,
+        "worker_seconds": 64.89751452500059,
+        "conflict_selection_seconds": 0.6456738289998611,
+        "publication_refresh_seconds": 0.38310479700157885,
+        "validation_commit_seconds": 6.580170009008725,
+        "total_seconds": 74.6528050449997
+      }
+    },
+    {
+      "strategy": "global",
+      "processes": 2,
+      "admitted": 160,
+      "service_mode": "regional_minimum",
+      "samples": 1,
+      "median_seconds": 57.37860681099119,
+      "p95_seconds": 57.37860681099119,
+      "p99_seconds": 57.37860681099119,
+      "range_seconds": [
+        57.37860681099119,
+        57.37860681099119
+      ],
+      "assigned_range": [
+        159,
+        159
+      ],
+      "deferred_range": [
+        1841,
+        1841
+      ],
+      "max_aggregate_rss_mib": 379.484375,
+      "max_cgroup_mib": 257.85546875,
+      "max_sampled_cpu_cores": 2.3662673906729346,
+      "median_sampled_cpu_seconds": 71.74000000000001,
+      "matrix_queries": [
+        1,
+        1
+      ],
+      "fleet_cost_range": [
+        26684,
+        26684
+      ],
+      "used_riders_range": [
+        20,
+        20
+      ],
+      "median_phases": {
+        "snapshot_admission_seconds": 0.6191617639997276,
+        "matrix_build_seconds": 0.10456468199845403,
+        "worker_seconds": 52.4986501159874,
+        "conflict_selection_seconds": 0.46484779700404033,
+        "publication_refresh_seconds": 0.13974163999955636,
+        "validation_commit_seconds": 3.146088576002512,
+        "total_seconds": 57.24575440099579
+      }
+    }
+  ],
+  "runs": [
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 63.9545188399934,
+      "startup_seconds": 0.10887642500165384,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 398770176,
+      "peak_cgroup_bytes": 271114240,
+      "sampled_peak_cpu_cores": 2.5447219714506413,
+      "sampled_cpu_seconds": 77.16,
+      "samples": 1239,
+      "repeat": 0,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6309252890059724,
+          "matrix_build_seconds": 0.11129635499673896,
+          "worker_seconds": 58.76808845800406,
+          "conflict_selection_seconds": 0.5633958569960669,
+          "publication_refresh_seconds": 0.18796624999959022,
+          "validation_commit_seconds": 3.182313475990668,
+          "total_seconds": 63.832659951003734
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45783,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 208,
+          "occupied_route_seconds": 72509
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "zonal",
+      "total_seconds": 63.35618900999543,
+      "startup_seconds": 0.11514892100240104,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2,
+      "matrix_hits": 4896,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 478011392,
+      "peak_cgroup_bytes": 322351104,
+      "sampled_peak_cpu_cores": 2.536702771969706,
+      "sampled_cpu_seconds": 76.28,
+      "samples": 1229,
+      "repeat": 0,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6303849090036238,
+          "matrix_build_seconds": 0.23417196299124043,
+          "worker_seconds": 57.89598618600576,
+          "conflict_selection_seconds": 0.1636003050080035,
+          "publication_refresh_seconds": 0.1792684200045187,
+          "validation_commit_seconds": 3.715025985002285,
+          "total_seconds": 63.22519363700121
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45892,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 206,
+          "occupied_route_seconds": 72618
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "on_demand",
+      "total_seconds": 248.8839963240025,
+      "startup_seconds": 0.12129951099632308,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2279,
+      "matrix_hits": 6969,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 490217472,
+      "peak_cgroup_bytes": 333529088,
+      "sampled_peak_cpu_cores": 2.3558210520633316,
+      "sampled_cpu_seconds": 111.22,
+      "samples": 4866,
+      "repeat": 0,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6872316930093803,
+          "matrix_build_seconds": 183.32088962299167,
+          "worker_seconds": 60.08279768700595,
+          "conflict_selection_seconds": 0.18743069199263118,
+          "publication_refresh_seconds": 0.22636130600585602,
+          "validation_commit_seconds": 3.7535228329943493,
+          "total_seconds": 248.73739387300157
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 42279,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 69005
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 66.7011585450091,
+      "startup_seconds": 0.11857565300306305,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 495415296,
+      "peak_cgroup_bytes": 339324928,
+      "sampled_peak_cpu_cores": 2.5364806402314435,
+      "sampled_cpu_seconds": 79.33000000000001,
+      "samples": 1290,
+      "repeat": 1,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6266722219879739,
+          "matrix_build_seconds": 0.1897483940119855,
+          "worker_seconds": 61.41007451999758,
+          "conflict_selection_seconds": 0.1950360969931353,
+          "publication_refresh_seconds": 0.22431401399080642,
+          "validation_commit_seconds": 3.4936441040044883,
+          "total_seconds": 66.56375807699806
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45876,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 205,
+          "occupied_route_seconds": 72602
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "zonal",
+      "total_seconds": 68.29095306999807,
+      "startup_seconds": 0.11903265300497878,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2,
+      "matrix_hits": 4896,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 499597312,
+      "peak_cgroup_bytes": 344080384,
+      "sampled_peak_cpu_cores": 2.54577464408772,
+      "sampled_cpu_seconds": 80.52,
+      "samples": 1321,
+      "repeat": 1,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.8208460300083971,
+          "matrix_build_seconds": 0.34204926299571525,
+          "worker_seconds": 62.595067642003414,
+          "conflict_selection_seconds": 0.18692445900524035,
+          "publication_refresh_seconds": 0.25161532098718453,
+          "validation_commit_seconds": 3.5012829519982915,
+          "total_seconds": 68.15422601700993
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45688,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 208,
+          "occupied_route_seconds": 72414
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "on_demand",
+      "total_seconds": 364.50698557301075,
+      "startup_seconds": 0.1172961620031856,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2279,
+      "matrix_hits": 6969,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 500297728,
+      "peak_cgroup_bytes": 344903680,
+      "sampled_peak_cpu_cores": 2.5462509845628816,
+      "sampled_cpu_seconds": 123.91999999999999,
+      "samples": 7130,
+      "repeat": 1,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 1.0258897979947506,
+          "matrix_build_seconds": 296.79300639800203,
+          "worker_seconds": 61.99330962399836,
+          "conflict_selection_seconds": 0.1873828190000495,
+          "publication_refresh_seconds": 0.21977711099316366,
+          "validation_commit_seconds": 3.718888050992973,
+          "total_seconds": 364.3738270779868
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 40154,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 66880
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 66.33347703200707,
+      "startup_seconds": 0.12239222800417338,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 501252096,
+      "peak_cgroup_bytes": 345546752,
+      "sampled_peak_cpu_cores": 2.5372827847654698,
+      "sampled_cpu_seconds": 78.22000000000001,
+      "samples": 1283,
+      "repeat": 2,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.711248142994009,
+          "matrix_build_seconds": 0.2602759760047775,
+          "worker_seconds": 60.603144345994224,
+          "conflict_selection_seconds": 0.16673882899340242,
+          "publication_refresh_seconds": 0.21825694599829149,
+          "validation_commit_seconds": 3.6883226390054915,
+          "total_seconds": 66.19461257600051
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45685,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 206,
+          "occupied_route_seconds": 72411
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "zonal",
+      "total_seconds": 66.66702066900325,
+      "startup_seconds": 0.11692281700379681,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2,
+      "matrix_hits": 4896,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 505462784,
+      "peak_cgroup_bytes": 349646848,
+      "sampled_peak_cpu_cores": 2.355622105334815,
+      "sampled_cpu_seconds": 78.02000000000001,
+      "samples": 1293,
+      "repeat": 2,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6488217639998766,
+          "matrix_build_seconds": 0.42439873100374825,
+          "worker_seconds": 61.04122797999298,
+          "conflict_selection_seconds": 0.1773943649895955,
+          "publication_refresh_seconds": 0.1988961690076394,
+          "validation_commit_seconds": 3.580541107992758,
+          "total_seconds": 66.53102028400463
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45726,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 72452
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "on_demand",
+      "total_seconds": 465.95624031999614,
+      "startup_seconds": 0.11747037500026636,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2279,
+      "matrix_hits": 6969,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 506478592,
+      "peak_cgroup_bytes": 350867456,
+      "sampled_peak_cpu_cores": 2.5532985862419997,
+      "sampled_cpu_seconds": 134.07000000000002,
+      "samples": 9125,
+      "repeat": 2,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6903319809935056,
+          "matrix_build_seconds": 398.3296673559962,
+          "worker_seconds": 61.82023494600435,
+          "conflict_selection_seconds": 0.19080239100730978,
+          "publication_refresh_seconds": 0.2295752520003589,
+          "validation_commit_seconds": 3.6809977239900036,
+          "total_seconds": 465.81922521999513
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 38175,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 64901
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 68.97944733599434,
+      "startup_seconds": 0.11484413300058804,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 507011072,
+      "peak_cgroup_bytes": 351363072,
+      "sampled_peak_cpu_cores": 2.352753555671338,
+      "sampled_cpu_seconds": 80.74999999999997,
+      "samples": 1327,
+      "repeat": 3,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6762269800092326,
+          "matrix_build_seconds": 0.297701777992188,
+          "worker_seconds": 62.679468816000735,
+          "conflict_selection_seconds": 0.20050223400176037,
+          "publication_refresh_seconds": 0.424096742994152,
+          "validation_commit_seconds": 4.046819397990475,
+          "total_seconds": 68.84746836900013
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45928,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 206,
+          "occupied_route_seconds": 72654
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "zonal",
+      "total_seconds": 69.9358816120075,
+      "startup_seconds": 0.11926847200084012,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2,
+      "matrix_hits": 4896,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 508272640,
+      "peak_cgroup_bytes": 353001472,
+      "sampled_peak_cpu_cores": 2.7111145373695655,
+      "sampled_cpu_seconds": 80.28999999999999,
+      "samples": 1347,
+      "repeat": 3,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.964506121003069,
+          "matrix_build_seconds": 0.7109627460013144,
+          "worker_seconds": 63.513253803001135,
+          "conflict_selection_seconds": 0.1977407399972435,
+          "publication_refresh_seconds": 0.22426655000890605,
+          "validation_commit_seconds": 3.731201215996407,
+          "total_seconds": 69.80032157899404
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45609,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 72335
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "on_demand",
+      "total_seconds": 605.0251827619941,
+      "startup_seconds": 0.12005408099503256,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2279,
+      "matrix_hits": 6969,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 512323584,
+      "peak_cgroup_bytes": 356290560,
+      "sampled_peak_cpu_cores": 2.3543607172403704,
+      "sampled_cpu_seconds": 150.74999999999997,
+      "samples": 11848,
+      "repeat": 3,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6741515460016672,
+          "matrix_build_seconds": 534.883866958,
+          "worker_seconds": 63.9576408030116,
+          "conflict_selection_seconds": 0.27642149598977994,
+          "publication_refresh_seconds": 0.328061501000775,
+          "validation_commit_seconds": 4.161663364007836,
+          "total_seconds": 604.8835700429918
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 35594,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 205,
+          "occupied_route_seconds": 62320
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 70.71486543699575,
+      "startup_seconds": 0.11686493399611209,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 509759488,
+      "peak_cgroup_bytes": 353415168,
+      "sampled_peak_cpu_cores": 2.5367038610690047,
+      "sampled_cpu_seconds": 81.40000000000009,
+      "samples": 1363,
+      "repeat": 4,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 1.1061971840099432,
+          "matrix_build_seconds": 0.3352282510022633,
+          "worker_seconds": 64.41289741799119,
+          "conflict_selection_seconds": 0.21237661800114438,
+          "publication_refresh_seconds": 0.22309943298751023,
+          "validation_commit_seconds": 3.846710023994092,
+          "total_seconds": 70.58037191101175
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45770,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 72496
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "zonal",
+      "total_seconds": 70.77803929400397,
+      "startup_seconds": 0.1201776539965067,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2,
+      "matrix_hits": 4896,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 506630144,
+      "peak_cgroup_bytes": 351297536,
+      "sampled_peak_cpu_cores": 4.609118151405686,
+      "sampled_cpu_seconds": 80.61000000000001,
+      "samples": 1365,
+      "repeat": 4,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.9948005839978578,
+          "matrix_build_seconds": 0.6302201390062692,
+          "worker_seconds": 64.51007273000141,
+          "conflict_selection_seconds": 0.193182823000825,
+          "publication_refresh_seconds": 0.23335359500197228,
+          "validation_commit_seconds": 3.6318680650001625,
+          "total_seconds": 70.64002694099327
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45740,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 207,
+          "occupied_route_seconds": 72466
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "on_demand",
+      "total_seconds": 692.9225298970123,
+      "startup_seconds": 0.11627044501074124,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 2279,
+      "matrix_hits": 6969,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 647847936,
+      "peak_cgroup_bytes": 356143104,
+      "sampled_peak_cpu_cores": 2.5393133064163353,
+      "sampled_cpu_seconds": 157.71999999999997,
+      "samples": 13583,
+      "repeat": 4,
+      "admitted": 160,
+      "coordinates": "varied",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6326245880045462,
+          "matrix_build_seconds": 625.0112816129986,
+          "worker_seconds": 62.532271075993776,
+          "conflict_selection_seconds": 0.3272589990083361,
+          "publication_refresh_seconds": 0.25994577301025856,
+          "validation_commit_seconds": 3.5567992919968674,
+          "total_seconds": 692.789339719995
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 33922,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 206,
+          "occupied_route_seconds": 60648
+        }
+      },
+      "service_mode": "synthetic_fast"
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 1,
+      "strategy": "global",
+      "total_seconds": 102.40523695899174,
+      "startup_seconds": 0.12921175299561583,
+      "assigned": 160,
+      "unresolved": 1840,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 319311872,
+      "peak_cgroup_bytes": 232534016,
+      "sampled_peak_cpu_cores": 1.3793245593706973,
+      "sampled_cpu_seconds": 78.89,
+      "samples": 1993,
+      "repeat": 0,
+      "admitted": 160,
+      "coordinates": "varied",
+      "service_mode": "synthetic_fast",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.8354771839949535,
+          "matrix_build_seconds": 0.1401108730060514,
+          "worker_seconds": 96.51663231500424,
+          "conflict_selection_seconds": 0.5676976519898744,
+          "publication_refresh_seconds": 0.1885490390122868,
+          "validation_commit_seconds": 3.5749871019943384,
+          "total_seconds": 102.2617246459995
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 133242,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 17126,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 45331,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            160.0,
+            -22826.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            160,
+            -22826
+          ],
+          "fleet_cost_seconds": 22826,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 210,
+          "occupied_route_seconds": 72057
+        }
+      }
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 63.02320044900989,
+      "startup_seconds": 0.16076800900918897,
+      "assigned": 80,
+      "unresolved": 1920,
+      "matrix_queries": 1,
+      "matrix_hits": 2304,
+      "matrix_pairs": 2304,
+      "peak_rss_bytes": 393830400,
+      "peak_cgroup_bytes": 265953280,
+      "sampled_peak_cpu_cores": 2.5313306199312664,
+      "sampled_cpu_seconds": 75.56,
+      "samples": 1224,
+      "repeat": 0,
+      "admitted": 80,
+      "coordinates": "varied",
+      "service_mode": "synthetic_fast",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.8762310839956626,
+          "matrix_build_seconds": 0.09946858299372252,
+          "worker_seconds": 58.922086860999116,
+          "conflict_selection_seconds": 0.5042718119948404,
+          "publication_refresh_seconds": 0.15035049099242315,
+          "validation_commit_seconds": 2.0826842810056405,
+          "total_seconds": 62.84682412499387
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 81826,
+          "task_count": 118,
+          "used_riders": 19,
+          "travel_seconds": 10287,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 29431,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            80.0,
+            -15987.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            80,
+            -15987
+          ],
+          "fleet_cost_seconds": 15987,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 188,
+          "occupied_route_seconds": 44518
+        }
+      }
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 74.84166164499766,
+      "startup_seconds": 0.16628715099068359,
+      "assigned": 320,
+      "unresolved": 1680,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 414314496,
+      "peak_cgroup_bytes": 287338496,
+      "sampled_peak_cpu_cores": 2.352349675238195,
+      "sampled_cpu_seconds": 88.99,
+      "samples": 1431,
+      "repeat": 0,
+      "admitted": 320,
+      "coordinates": "varied",
+      "service_mode": "synthetic_fast",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.9753608330065617,
+          "matrix_build_seconds": 0.2546418940037256,
+          "worker_seconds": 64.89751452500059,
+          "conflict_selection_seconds": 0.6456738289998611,
+          "publication_refresh_seconds": 0.38310479700157885,
+          "validation_commit_seconds": 6.580170009008725,
+          "total_seconds": 74.6528050449997
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 221044,
+          "task_count": 118,
+          "used_riders": 20,
+          "travel_seconds": 28923,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 64826,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            320.0,
+            -35531.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            320,
+            -35531
+          ],
+          "fleet_cost_seconds": 35531,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 226,
+          "occupied_route_seconds": 112949
+        }
+      }
+    },
+    {
+      "bookings": 2000,
+      "riders": 20,
+      "processes": 2,
+      "strategy": "global",
+      "total_seconds": 57.37860681099119,
+      "startup_seconds": 0.1198507599910954,
+      "assigned": 159,
+      "unresolved": 1841,
+      "matrix_queries": 1,
+      "matrix_hits": 4624,
+      "matrix_pairs": 4624,
+      "peak_rss_bytes": 397918208,
+      "peak_cgroup_bytes": 270381056,
+      "sampled_peak_cpu_cores": 2.3662673906729346,
+      "sampled_cpu_seconds": 71.74000000000001,
+      "samples": 1120,
+      "repeat": 0,
+      "admitted": 160,
+      "coordinates": "varied",
+      "service_mode": "regional_minimum",
+      "measurements": {
+        "timings": {
+          "snapshot_admission_seconds": 0.6191617639997276,
+          "matrix_build_seconds": 0.10456468199845403,
+          "worker_seconds": 52.4986501159874,
+          "conflict_selection_seconds": 0.46484779700404033,
+          "publication_refresh_seconds": 0.13974163999955636,
+          "validation_commit_seconds": 3.146088576002512,
+          "total_seconds": 57.24575440099579
+        },
+        "worker_failures": 0,
+        "routing_metrics": {
+          "distance_m": 137996,
+          "task_count": 118,
+          "used_riders": 20,
+          "travel_seconds": 17677,
+          "candidate_count": 40,
+          "solver_timeouts": 0,
+          "waiting_seconds": 31285,
+          "selection_bounds": [
+            0.0,
+            0.0,
+            159.0,
+            -26684.0
+          ],
+          "selection_values": [
+            0,
+            0,
+            159,
+            -26684
+          ],
+          "fleet_cost_seconds": 26684,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 226,
+          "occupied_route_seconds": 86942
+        }
+      }
+    }
+  ]
+}

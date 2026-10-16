@@ -12,6 +12,7 @@ from .contracts import (
     RoadMatrix,
     RouteProposal,
     RoutingProblem,
+    SelectionEngine,
     StopKind,
     TimeWindow,
     VehicleSnapshot,
@@ -323,7 +324,8 @@ def _validate_routes(problem: RoutingProblem, proposal: RouteProposal) -> Propos
         "PROPOSAL_SNAPSHOT_MISMATCH",
     )
     _require(
-        isinstance(proposal.engine, OptimizerEngine) and bool(proposal.engine_version),
+        isinstance(proposal.engine, (OptimizerEngine, SelectionEngine))
+        and bool(proposal.engine_version),
         "INVALID_ENGINE_VERSION",
     )
     _require(type(proposal.routes) is tuple, "MUTABLE_PROPOSAL")
