@@ -1,5 +1,10 @@
 # Project Context
 
+The focused post-increment-8 reliability correction adds regional commercial preparation ownership,
+bounded incremental certificates and durable retry scheduling. It does not activate V2. OSRM's
+verified upstream negative-distance defect and large regional certificate limits remain release
+work. See [findings, measurements and remaining effort](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 Current engineering increment 8 adds finite regional owners, explicit pre-shift rider
 confirmation, local per-profile OSRM, parallel native candidate workers, hybrid CP-SAT
 selection and composite transactional activation with per-booking outcomes. Production

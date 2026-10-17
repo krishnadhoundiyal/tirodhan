@@ -1,0 +1,503 @@
+{
+  "date": "2026-10-17",
+  "base_commit": "fb28affdfae1b94b222a8a5e2cfa5878cbce5976",
+  "branch": "codex/routing-reliability-admission-scalability",
+  "versions": {
+    "postgres": "17/PostGIS 3.5",
+    "osrm": "6.0.0",
+    "vroom": "1.15.0",
+    "ortools": "9.14.6206"
+  },
+  "limits": {
+    "application_cpus": 2,
+    "application_memory_gib": 4,
+    "database_cpus": 2,
+    "database_memory_gib": 1,
+    "capacity_requests": 128
+  },
+  "method": {
+    "workload": "real domain admission, native certification, checkout, authenticated test capture; resolved public-location and identity inputs only are fixtures",
+    "samples_per_case": 1,
+    "riders": 20,
+    "vehicle_mass_g": 10000,
+    "vehicle_volume_ml": 10000,
+    "pickup_seconds": 180,
+    "discharge_seconds": 60,
+    "location_fixture": "tests/routing/data/inc8-road-nodes.json",
+    "application_http_auth_external_pricing_geocoding_gateway_calls_measured": false,
+    "quantiles": "nearest rank across customer requests/attempts in a closed burst; NOT repeated campaign tail quantiles",
+    "stress_budget_seconds": 120,
+    "stress": "budget applies to certificate processing; total also includes 2000 submissions and successful checkouts; pending decision latency is censored",
+    "base_archive": "exact base Git archive with benchmark harness copied in; final retry harness waits for due backoff, with bounded wall budget",
+    "database_statistics": "pg_stat_database values are cumulative per disposable database, not isolated per-run deltas; rollbacks include normal read-only session closes",
+    "resource_sampling": "docker stats approximately every 3 seconds including fixture preparation/idle; shared host, separate correctness/static containers sometimes active; not reliable production peaks or CPU sizing"
+  },
+  "database_campaign_samples": {
+    "before": {
+      "samples": 74,
+      "peak_cpu_percent": 16.68,
+      "peak_memory_mib": 88.82
+    },
+    "after": {
+      "samples": 344,
+      "peak_cpu_percent": 30.11,
+      "peak_memory_mib": 160.5
+    }
+  },
+  "cases": [
+    {
+      "accepted": 48,
+      "certification_attempt_seconds": {
+        "p50": 3.467577055009315,
+        "p95": 6.601246309990529
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08540930700837635,
+        "p95": 0.12273759400704876
+      },
+      "concurrency": 1,
+      "count": 48,
+      "database": {
+        "blks_hit": 658373,
+        "blks_read": 3170,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 1491,
+        "xact_rollback": 803
+      },
+      "decision_seconds": {
+        "p50": 40.850291309005115,
+        "p95": 146.9806431360048
+      },
+      "elapsed_seconds": 163.4621394170099,
+      "enqueue_seconds": {
+        "p50": 0.009481466011493467,
+        "p95": 0.010828260987182148
+      },
+      "failures": {},
+      "sql": {
+        "calls": 8546,
+        "max_seconds": 0.019838609005091712,
+        "seconds": 6.949474979934166
+      },
+      "statuses": {
+        "SUCCEEDED": 48
+      },
+      "throughput_per_second": 0.2936459792536223,
+      "case": "base_one_worker",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 0.2936459792536223,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 32,
+      "certification_attempt_seconds": {
+        "p50": 4.039383055001963,
+        "p95": 12.166719650005689
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.09431344900804106,
+        "p95": 0.26116096699843183
+      },
+      "concurrency": 4,
+      "count": 48,
+      "database": {
+        "blks_hit": 872915,
+        "blks_read": 3309,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 2237,
+        "xact_rollback": 1588
+      },
+      "decision_seconds": {
+        "p50": 55.43807863899565,
+        "p95": 171.58834855999157
+      },
+      "elapsed_seconds": 179.15965504798805,
+      "enqueue_seconds": {
+        "p50": 0.01381087998743169,
+        "p95": 0.01732885799719952
+      },
+      "failures": {
+        "CAPACITY_PROJECTION_STALE_RETRY": 6,
+        "CAPACITY_TRANSACTION_RETRY": 10
+      },
+      "sql": {
+        "calls": 10524,
+        "max_seconds": 4.5437143739982275,
+        "seconds": 111.64812266755325
+      },
+      "statuses": {
+        "FAILED": 16,
+        "SUCCEEDED": 32
+      },
+      "throughput_per_second": 0.2679174615911331,
+      "case": "base_four_workers",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 0.17861164106075542,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.3333333333333333,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 48,
+      "certification_attempt_seconds": {
+        "p50": 0.49156453300383873,
+        "p95": 1.4883022750000237
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06707001299946569,
+        "p95": 0.08793398000125308
+      },
+      "concurrency": 1,
+      "count": 48,
+      "database": {
+        "blks_hit": 1019462,
+        "blks_read": 3448,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 2835,
+        "xact_rollback": 1983
+      },
+      "decision_seconds": {
+        "p50": 9.962923781989957,
+        "p95": 26.549868175003212
+      },
+      "elapsed_seconds": 32.814040768003906,
+      "enqueue_seconds": {
+        "p50": 0.011633144997176714,
+        "p95": 0.015002662999904715
+      },
+      "failures": {},
+      "sql": {
+        "calls": 8547,
+        "max_seconds": 0.1463075560022844,
+        "seconds": 6.130645211262163
+      },
+      "statuses": {
+        "SUCCEEDED": 48
+      },
+      "throughput_per_second": 1.4627884550812016,
+      "case": "insertion_backoff_one_worker",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 1.4627884550812016,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 48,
+      "certification_attempt_seconds": {
+        "p50": 1.0103392000019085,
+        "p95": 3.06994507201307
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08274136499676388,
+        "p95": 0.12017802298942115
+      },
+      "concurrency": 4,
+      "count": 48,
+      "database": {
+        "blks_hit": 1294055,
+        "blks_read": 3597,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 10537,
+        "xact_rollback": 6376
+      },
+      "decision_seconds": {
+        "p50": 25.800267261001864,
+        "p95": 208.6868298479967
+      },
+      "elapsed_seconds": 285.16423914799816,
+      "enqueue_seconds": {
+        "p50": 0.016034640997531824,
+        "p95": 0.03387112899508793
+      },
+      "failures": {},
+      "interleaved": false,
+      "sql": {
+        "calls": 23523,
+        "max_seconds": 2.222167215004447,
+        "seconds": 98.87206450497615
+      },
+      "statuses": {
+        "SUCCEEDED": 48
+      },
+      "throughput_per_second": 0.168324051232414,
+      "case": "insertion_backoff_four_workers",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 0.168324051232414,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 48,
+      "certification_attempt_seconds": {
+        "p50": 0.6230129229952581,
+        "p95": 1.8268111090001184
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08604280500730965,
+        "p95": 0.12635285200667568
+      },
+      "concurrency": 4,
+      "count": 48,
+      "database": {
+        "blks_hit": 436287,
+        "blks_read": 211,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 1118,
+        "xact_rollback": 636
+      },
+      "decision_seconds": {
+        "p50": 13.9269460659998,
+        "p95": 35.12663461800548
+      },
+      "elapsed_seconds": 42.51527531199099,
+      "enqueue_seconds": {
+        "p50": 0.018555085989646614,
+        "p95": 0.028826972004026175
+      },
+      "failures": {},
+      "interleaved": false,
+      "sql": {
+        "calls": 9604,
+        "max_seconds": 0.4758624819951365,
+        "seconds": 14.151831749841222
+      },
+      "statuses": {
+        "SUCCEEDED": 48
+      },
+      "throughput_per_second": 1.129005978386834,
+      "case": "final_four_workers",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 1.129005978386834,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 48,
+      "certification_attempt_seconds": {
+        "p50": 0.5922429769998416,
+        "p95": 1.3629503100091824
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.09471224999288097,
+        "p95": 0.19852854499185923
+      },
+      "concurrency": 4,
+      "count": 48,
+      "database": {
+        "blks_hit": 634432,
+        "blks_read": 357,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 2379,
+        "xact_rollback": 1460
+      },
+      "decision_seconds": {
+        "p50": 17.83742642699508,
+        "p95": 41.94537728499563
+      },
+      "elapsed_seconds": 45.32329132499581,
+      "enqueue_seconds": {
+        "p50": 0.016337938999640755,
+        "p95": 0.020183244996587746
+      },
+      "failures": {},
+      "interleaved": true,
+      "sql": {
+        "calls": 10600,
+        "max_seconds": 0.7875126239960082,
+        "seconds": 21.0160357941204
+      },
+      "statuses": {
+        "SUCCEEDED": 48
+      },
+      "throughput_per_second": 1.0590581265559589,
+      "case": "final_interleaved_four_workers",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 1.0590581265559589,
+      "completed_decisions": 48,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 67,
+      "certification_attempt_seconds": {
+        "p50": 1.4363613259920385,
+        "p95": 5.420869200010202
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.16476467900793068,
+        "p95": 0.27879182099422906
+      },
+      "concurrency": 4,
+      "count": 2000,
+      "database": {
+        "blks_hit": 1087228,
+        "blks_read": 498,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 6096,
+        "xact_rollback": 4269
+      },
+      "decision_seconds": {
+        "p50": 92.55455590000201,
+        "p95": 159.5307103979867
+      },
+      "elapsed_seconds": 199.87981597000908,
+      "enqueue_seconds": {
+        "p50": 0.024601202996564098,
+        "p95": 0.051085598999634385
+      },
+      "failures": {},
+      "interleaved": false,
+      "sql": {
+        "calls": 31185,
+        "max_seconds": 7.998323867999716,
+        "seconds": 74.16949010574899
+      },
+      "statuses": {
+        "PENDING": 1933,
+        "SUCCEEDED": 67
+      },
+      "throughput_per_second": 0.33520142929315583,
+      "case": "final_bounded_2000",
+      "adopted_policy": false,
+      "successful_purchases_per_second": 0.33520142929315583,
+      "completed_decisions": 67,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": true
+    },
+    {
+      "accepted": 17,
+      "adopted_policy": true,
+      "certification_attempt_seconds": {
+        "p50": 2.6670949580002343,
+        "p95": 5.770443802000955
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08207662199856713,
+        "p95": 0.17321745101071429
+      },
+      "concurrency": 4,
+      "count": 24,
+      "database": {
+        "blks_hit": 379979,
+        "blks_read": 196,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 548,
+        "xact_rollback": 450
+      },
+      "decision_seconds": {
+        "p50": 14.952130825986387,
+        "p95": 47.132766882990836
+      },
+      "elapsed_seconds": 50.871072052003,
+      "enqueue_seconds": {
+        "p50": 0.012049694996676408,
+        "p95": 0.013751384991337545
+      },
+      "failures": {
+        "CAPACITY_PROJECTION_STALE_RETRY": 2,
+        "CAPACITY_TRANSACTION_RETRY": 5
+      },
+      "interleaved": false,
+      "sql": {
+        "calls": 4989,
+        "max_seconds": 3.3123323189938674,
+        "seconds": 56.31578086904483
+      },
+      "statuses": {
+        "FAILED": 7,
+        "SUCCEEDED": 17
+      },
+      "throughput_per_second": 0.4717808969204733,
+      "case": "base_adopted_policy_four_workers",
+      "successful_purchases_per_second": 0.33417813531866863,
+      "completed_decisions": 24,
+      "terminal_failure_rate": 0.2916666666666667,
+      "decision_latency_is_censored": false
+    },
+    {
+      "accepted": 24,
+      "adopted_policy": true,
+      "certification_attempt_seconds": {
+        "p50": 0.2997585590055678,
+        "p95": 0.4498593919997802
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08816718000161927,
+        "p95": 0.14102006900066044
+      },
+      "concurrency": 4,
+      "count": 24,
+      "database": {
+        "blks_hit": 1203805,
+        "blks_read": 639,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 6657,
+        "xact_rollback": 4748
+      },
+      "decision_seconds": {
+        "p50": 5.06714430100692,
+        "p95": 8.786653058006777
+      },
+      "elapsed_seconds": 12.078601405009977,
+      "enqueue_seconds": {
+        "p50": 0.013530926007661037,
+        "p95": 0.015656411997042596
+      },
+      "failures": {},
+      "interleaved": false,
+      "sql": {
+        "calls": 4064,
+        "max_seconds": 0.03256501199211925,
+        "seconds": 4.482925848671584
+      },
+      "statuses": {
+        "SUCCEEDED": 24
+      },
+      "throughput_per_second": 1.986985015503968,
+      "case": "final_adopted_policy_four_workers",
+      "successful_purchases_per_second": 1.986985015503968,
+      "completed_decisions": 24,
+      "terminal_failure_rate": 0.0,
+      "decision_latency_is_censored": false
+    }
+  ],
+  "osrm_defect": {
+    "raw_negative_distance_cells": 69,
+    "negative_durations": 0,
+    "invalid_diagonals": 0,
+    "quantized_same_enabled_edge_cells": 69,
+    "max_snap_distance_m": 34.79285305,
+    "strict_provider": "INVALID_ROAD_MATRIX",
+    "example": {
+      "source_index": 4,
+      "target_index": 20,
+      "source_forward_weight": 335,
+      "target_forward_weight": 335,
+      "source_forward_distance": 139.0833034515381,
+      "target_forward_distance": 138.88803672790527,
+      "table_distance": -0.2,
+      "table_duration": 0,
+      "route_distance": 0.2,
+      "route_duration": 0,
+      "route_weight": 0
+    }
+  },
+  "blockers": [
+    "Pinned OSRM phantom quantization/loop-forcing defect unresolved; no unverified correction adopted",
+    "Dense bounded full-regional capacity certificate is not qualified for 2000 active promises; stress case retains unprocessed backlog"
+  ]
+}

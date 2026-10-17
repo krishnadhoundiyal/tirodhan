@@ -1,5 +1,15 @@
 # Schema Design
 
+## Migration 0029 — commercial preparation ownership and retry
+
+CapacityAdmissionRequest gains a real nullable historical OperatingRegion FK and nullable
+next_attempt_at. New intents resolve server-owned membership. Backfill preserves unmappable
+historical records. A partial unique region index permits at most one RUNNING regional preparation;
+a status/retry index supports bounded durable backoff. Existing certificate uniqueness, source
+generation and financial/ownership constraints remain. Upgrade refuses overlapping old RUNNING
+owners until workers drain. Populated downgrade removes only these preparation fields/indexes.
+See [implementation and evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 ## Migration 0028 — regional parallel ownership
 
 Fleet control scopes support a unique OperatingRegion FK and mutually consistent global/regional

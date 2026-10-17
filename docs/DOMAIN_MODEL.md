@@ -1,5 +1,11 @@
 # Domain Model
 
+Commercial capacity preparation retains the customer intent and region-owned certificate model.
+Migration 0029 attaches a region to preparation intents for one durable RUNNING owner per region,
+and adds retry scheduling. The preparation owner is neither a route assignment nor a capacity
+promise; live independent feasibility and the transactional certificate fence still establish
+reservations. See [focused reliability evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 Increment 8 adds rider-owned `ShiftConfirmation` and append-only per-cycle/per-booking
 `PlanningOutcome`. Regional `FleetControl` names a real OperatingRegion FK; a wake remains
 a coalesced signal. Composite candidate/selection documents are versioned optimization audit,

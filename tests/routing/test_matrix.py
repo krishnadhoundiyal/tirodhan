@@ -58,13 +58,18 @@ async def test_directed_road_matrix_rounds_up_and_replay_retains_identity():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["null", "negative", "nan", "snap", "shape", "fallback", "mask"])
+@pytest.mark.parametrize(
+    "case", ["null", "negative", "negative_distance", "nan", "snap", "shape", "fallback", "mask"]
+)
 async def test_matrix_never_fabricates_missing_roads(case):
     data = response()
     if case == "null":
         data["durations"][0][1] = data["distances"][0][1] = None
     elif case == "negative":
         data["durations"][0][1] = -1
+    elif case == "negative_distance":
+        data["durations"][0][1] = 0
+        data["distances"][0][1] = -0.1
     elif case == "nan":
         data["durations"][0][1] = "NaN"
     elif case == "snap":
@@ -87,7 +92,9 @@ async def test_matrix_never_fabricates_missing_roads(case):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["timeout", "status", "malformed", "large", "duplicate"])
+@pytest.mark.parametrize(
+    "case", ["timeout", "status", "malformed", "large", "duplicate", "negative_distance"]
+)
 async def test_read_failure_is_bounded_private_and_retryable(case):
     count = 0
 
@@ -104,6 +111,11 @@ async def test_read_failure_is_bounded_private_and_retryable(case):
             return httpx.Response(200, content=b"x" * 10001)
         if case == "duplicate":
             return httpx.Response(200, content=b'{"code":"Ok","code":"SECRET_COORDINATES"}')
+        if case == "negative_distance":
+            invalid = response()
+            invalid["durations"][0][1] = 0
+            invalid["distances"][0][1] = -0.1
+            return httpx.Response(200, json=invalid)
         return httpx.Response(200, content=b"SECRET_COORDINATES")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
