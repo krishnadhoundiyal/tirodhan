@@ -12,21 +12,3 @@ services:
       test: ["CMD-SHELL", "pg_isready -U tirodhan -d tirodhan_test"]
       interval: 5s
       retries: 20
-
-  vroom:
-    image: vroomvrp/vroom-docker:v1.15.0
-    ports:
-      - "3000:3000"
-    environment:
-      - VROOM_ROUTER=osrm
-
-  osrm-car:
-    image: ghcr.io/project-osrm/osrm-backend@sha256:729461bcc9ae9e6aafa92c0f93db9b060a32e85d5e72092c01ae4a4a9f1eb564
-    ports:
-      - "5000:5000"
-    command: "osrm-routed --algorithm mld /data/map.osrm"
-    volumes:
-      - tirodhan-qa-graphs:/data:ro
-
-volumes:
-  tirodhan-qa-graphs:

@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 import pytest_asyncio
 import sqlalchemy as sa
+from sqlalchemy.orm import declarative_base
 
 from tirodhan.core.config import Settings
 from tirodhan.db.base import Base
@@ -20,35 +21,36 @@ def uid(value: int) -> UUID:
 
 @pytest_asyncio.fixture
 async def disposable_engine():
-    # Only test if integration DB available
-    # Uses the environment variables from the workflow
     database_url = os.getenv("TIRODHAN_TEST_DATABASE_URL")
     if not database_url:
-        yield None
+        pytest.skip("TIRODHAN_TEST_DATABASE_URL not set in environment. Skipping.")
         return
 
     settings = Settings(_env_file=None, TIRODHAN_DATABASE_URL=database_url)
     try:
         engine = create_database_engine(settings)
-        # Create schema for required dependencies
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        yield engine
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await engine.dispose()
+        # Verify db is reachable
+        async with engine.connect() as conn:
+            await conn.execute(sa.text("SELECT 1"))
     except Exception:
-        yield None
+        pytest.skip("Database is unreachable. Skipping.")
+        return
+
+    # Create schema for required dependencies
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_racing_transactions_do_not_double_book_riders(disposable_engine):
     # This simulates a race condition using the real DB schemas
-
     if disposable_engine is None:
-        pytest.skip("Integration database not available")
-        return
+        pytest.skip("No engine available")
 
     now = datetime.now(timezone.utc)
 
