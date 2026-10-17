@@ -4,7 +4,6 @@ from uuid import UUID
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tests.routing.test_admission_insertion import seed
 from tirodhan.modules.planning.routing.contracts import TimeWindow
 from tirodhan.modules.routing_operations.admission import insert_obligation
 
@@ -19,7 +18,24 @@ def uid(i):
     end=st.integers(min_value=-10000, max_value=10000),
 )
 def test_adversarial_time_window_never_bypasses_capacity(routing_problem, start, end):
-    s = seed(routing_problem)
+    from tirodhan.modules.planning.routing.adapters import VROOM_VERSION
+    from tirodhan.modules.planning.routing.contracts import (
+        OptimizerEngine,
+        ProposedRoute,
+        RouteProposal,
+    )
+
+    # Existing cargo has two immutable discharge obligations, one protected.
+    s = RouteProposal(
+        routing_problem.problem_id,
+        routing_problem.snapshot_id,
+        routing_problem.contract_version,
+        routing_problem.policy_version,
+        OptimizerEngine.VROOM,
+        VROOM_VERSION,
+        (ProposedRoute(UUID(int=30), (UUID(int=50), UUID(int=52))),),
+        (UUID(int=51), UUID(int=53)),
+    )
 
     stops = list(routing_problem.stops)
     for i, stop in enumerate(stops):
