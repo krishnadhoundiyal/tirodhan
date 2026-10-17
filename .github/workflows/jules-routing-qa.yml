@@ -1,0 +1,34 @@
+name: Independent Routing QA (Jules)
+
+# A Jules QA session is requested for every push/merge to main and once daily.
+# Job success means Jules accepted the session, NOT that QA has completed or passed.
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # 02:30 UTC = 08:00 India Standard Time; scheduled Actions are best effort.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  request-jules-qa:
+    name: Dispatch autonomous routing QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout standing QA instructions
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Create Jules QA session
+        env:
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          JULES_GITHUB_REPO: ${{ github.repository }}
+          JULES_TARGET_SHA: ${{ github.sha }}
+          JULES_EVENT_NAME: ${{ github.event_name }}
+        run: python3 scripts/qa/launch_jules.py
