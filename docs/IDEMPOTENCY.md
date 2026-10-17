@@ -1,5 +1,17 @@
 # Idempotency
 
+## Commercial admission reliability (0029)
+
+The existing customer/client intent UUID and fingerprint remain the replay key. Preparation
+claims one RUNNING intent per region, protected by a partial unique index and short regional
+claim transaction. Native/road work holds no transaction. Lease takeover preserves the intent;
+source/transaction/provider failures back off durably until expiry rather than exhausting three
+arbitrary conflicts. Certificate commit remains SERIALIZABLE and generation/source fenced.
+Crash after certificate commit recovers that historical success even after intent expiry;
+fresh checkout still requires unexpired permission. Different regions prepare independently.
+Old admission workers must drain before migration/protocol cutover. See
+[evidence and limits](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 ## Increment 8 regional planning
 
 | Operation | Logical key / DB protection | Transaction and replay |

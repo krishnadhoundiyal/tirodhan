@@ -1,5 +1,11 @@
 # Architecture
 
+Commercial admission preparation now has a durable PostgreSQL regional owner and bounded new-lot
+certificate insertion, with full feasibility and live transactional source fencing retained.
+Provider/source failures retry durably; no road values are repaired. The verified OSRM phantom
+quantization defect and high-volume certificate limits remain explicit release gates.
+See [focused reliability/scalability evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 ## Current regional replacement — increment 8
 
 Regional PostgreSQL ownership/wake generations replace the global planning writer on

@@ -1,5 +1,15 @@
 # ADR-004: Geographic Planning and Compaction
 
+## Commercial admission reliability refinement
+
+Regional capacity preparation serializes through a durable PostgreSQL intent owner per region,
+independently of operational planning. Bounded whole-household insertion preserves validated
+incumbents; both native engines remain available for repair. Full independent validation and
+SERIALIZABLE source/generation fencing establish each promise, not the queue claim or old seed.
+Provider/transaction failures retry with durable backoff until intent expiry. Raw invalid OSRM
+matrices remain rejected; no estimated or clamped road values are authorized. See
+[verified failure, benchmark and remaining release limits](../ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 ## Increment 8 — approved regional parallel architecture
 
 The replacement planner owns one finite PostgreSQL-fenced scope/wake per operating region.

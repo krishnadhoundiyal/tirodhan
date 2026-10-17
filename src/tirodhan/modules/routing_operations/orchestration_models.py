@@ -337,6 +337,7 @@ class ShiftExtensionConsent(Base):
 class CapacityAdmissionRequest(Base):
     __tablename__ = "capacity_admission_request"
     admission_id: Mapped[UUID] = mapped_column(primary_key=True)
+    region_id: Mapped[UUID | None] = mapped_column(ForeignKey("operating_region.region_id"))
     reattempt_request_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("collection_request.request_id")
     )
@@ -357,10 +358,18 @@ class CapacityAdmissionRequest(Base):
     lease_token: Mapped[UUID | None] = mapped_column()
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     __table_args__ = (
         Index("ix_capacity_admission_due", "status", "created_at", "admission_id"),
         Index("ix_capacity_admission_lease", "status", "lease_until"),
+        Index("ix_capacity_admission_retry", "status", "next_attempt_at"),
+        Index(
+            "uq_capacity_admission_region_running",
+            "region_id",
+            unique=True,
+            postgresql_where=text("status = 'RUNNING'"),
+        ),
         CheckConstraint(
             "status IN ('PENDING','RUNNING','SUCCEEDED','FAILED','NEEDS_ACCEPTANCE')",
             name="ck_admission_status",

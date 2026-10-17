@@ -1,6 +1,7 @@
 # Disposable local PostgreSQL and car/bicycle graphs; no cloud changes or host ports.
-param([switch]$SkipBuild,[switch]$Benchmark,[switch]$FullSuite,[int]$Repeats=1,[int]$Processes=2,[int]$Admitted=160,[ValidateSet("dense","varied")][string]$Coordinates="varied",[ValidateSet("synthetic_fast","regional_minimum")][string]$ServiceMode="regional_minimum")
+param([switch]$SkipBuild,[switch]$Benchmark,[switch]$FullSuite,[int]$Repeats=1,[int]$Processes=2,[int]$Admitted=160,[ValidateSet("dense","varied")][string]$Coordinates="varied",[ValidateSet("synthetic_fast","regional_minimum")][string]$ServiceMode="regional_minimum",[switch]$CommercialAdmission,[ValidateRange(1,10000)][int]$AdmissionCount=48,[ValidateRange(1,16)][int]$AdmissionConcurrency=1,[ValidateRange(1,3600)][int]$AdmissionBudget=300,[switch]$InterleavedCheckout,[switch]$AdoptedPolicy)
 $ErrorActionPreference='Stop'
+if ($CommercialAdmission -and ($Benchmark -or $FullSuite)) { throw 'Select one admission, regional benchmark, or full-suite mode' }
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $fixture=(Resolve-Path (Join-Path $PSScriptRoot 'data/delhi-road.osm.pbf')).Path
 if ((Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4f36f7e749aef6f21128288ab8ca6447666a506a440d74db778a079974a71b49') { throw 'Unexpected road fixture' }
@@ -28,11 +29,12 @@ try {
         Start-Sleep -Seconds 1
     }
     if (-not $ready) { throw 'Disposable database did not start' }
-    $selection=@('tests/integration/test_regional_parallel.py','tests/integration/test_regional_parallel_migration.py','tests/routing/test_regional_selection.py','tests/routing/test_regional_runtime.py')
+    $selection=@('tests/integration/test_regional_parallel.py','tests/integration/test_regional_parallel_migration.py','tests/routing/test_regional_selection.py','tests/routing/test_regional_runtime.py','tests/integration/test_admission_reliability.py','tests/routing/test_admission_insertion.py','tests/routing/test_matrix.py','tests/routing/test_osrm_quantization.py')
     $entry=@('python','tests/routing/regional_entry.py')
     if ($FullSuite) { $selection=@('tests') }
     if ($Benchmark) { $selection=@('tests/integration/test_regional_parallel_benchmark.py');$entry=@('python','-m','pytest') }
-    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -v "${volume}:/graphs:ro" -e TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e TIRODHAN_REGIONAL_GRAPH_DIR=/graphs -e "TIRODHAN_REGIONAL_BENCHMARK=$([int][bool]$Benchmark)" -e "TIRODHAN_BENCH_REPEATS=$Repeats" -e "TIRODHAN_BENCH_PROCESSES=$Processes" -e "TIRODHAN_BENCH_ADMITTED=$Admitted" -e "TIRODHAN_BENCH_COORDINATES=$Coordinates" -e "TIRODHAN_BENCH_SERVICE=$ServiceMode" -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-8 @entry -q -s @selection -p no:cacheprovider
+    if ($CommercialAdmission) { $selection=@('tests/integration/test_commercial_admission_benchmark.py') }
+    Invoke-Docker run --rm --cpus 2 --memory 4g --network "container:$database" -v "${repo}:/repo:ro" -v "${volume}:/graphs:ro" -e TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis -e TIRODHAN_ROUTING_ENGINE_TESTS=1 -e TIRODHAN_REGIONAL_GRAPH_DIR=/graphs -e "TIRODHAN_REGIONAL_BENCHMARK=$([int][bool]$Benchmark)" -e "TIRODHAN_BENCH_REPEATS=$Repeats" -e "TIRODHAN_BENCH_PROCESSES=$Processes" -e "TIRODHAN_BENCH_ADMITTED=$Admitted" -e "TIRODHAN_BENCH_COORDINATES=$Coordinates" -e "TIRODHAN_BENCH_SERVICE=$ServiceMode" -e "TIRODHAN_ADMISSION_BENCHMARK=$([int][bool]$CommercialAdmission)" -e "TIRODHAN_ADMISSION_COUNT=$AdmissionCount" -e "TIRODHAN_ADMISSION_CONCURRENCY=$AdmissionConcurrency" -e "TIRODHAN_ADMISSION_BUDGET=$AdmissionBudget" -e "TIRODHAN_ADMISSION_INTERLEAVED=$([int][bool]$InterleavedCheckout)" -e "TIRODHAN_ADMISSION_ADOPTED=$([int][bool]$AdoptedPolicy)" -e TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/tirodhan_test tirodhan-routing-tests:increment-8 @entry -q -s @selection -p no:cacheprovider
 } finally {
     & docker rm -fv $database 2>$null | Out-Null
     & docker volume rm $volume 2>$null | Out-Null

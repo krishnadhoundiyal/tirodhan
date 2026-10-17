@@ -1,5 +1,10 @@
 # ER Diagram
 
+Commercial admission migration 0029 adds `CapacityAdmissionRequest.region_id -> OperatingRegion`
+for regional preparation ownership, plus retry scheduling. Existing reservation/customer/context/
+booking and financial relationships are unchanged. See
+[schema and migration evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+
 Increment 8 adds `OperatingRegion -> FleetControl` (unique region FK),
 `OperatingShift -> ShiftConfirmation -> RiderProfile`, and
 `FleetCycle / CollectionRequest / OperatingRegion -> PlanningOutcome` with a
