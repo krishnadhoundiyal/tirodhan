@@ -1,3 +1,4 @@
+import importlib.metadata
 from uuid import UUID
 
 import pytest
@@ -15,9 +16,13 @@ def uid(value: int) -> UUID:
 @given(nodes=st.integers(min_value=2, max_value=200))
 def test_cpsat_selection_limits(nodes):
     try:
-        from tirodhan.modules.routing_operations.parallel import consolidate
-    except ImportError:
+        ortools_version = importlib.metadata.version("ortools")
+        if ortools_version != "9.14.6206":
+            pytest.skip("ortools version mismatch")
+    except importlib.metadata.PackageNotFoundError:
         pytest.skip("ortools not installed")
+
+    from tirodhan.modules.routing_operations.parallel import consolidate
 
     candidates = []
     vehicles = set()
@@ -54,6 +59,5 @@ def test_cpsat_selection_limits(nodes):
             threads=1,
         )
         assert len(selection.selected_ids) > 0
-    except (RoutingAdapterError, ImportError):
-        # We only catch missing native dependency or version mismatch gracefully
+    except RoutingAdapterError:
         pass

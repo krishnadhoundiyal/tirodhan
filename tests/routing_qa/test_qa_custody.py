@@ -24,7 +24,8 @@ def uid(value: int) -> UUID:
 @given(quantity=st.integers(min_value=1, max_value=100))
 def test_vehicle_retains_custody_across_shift_boundaries(quantity):
     # A vehicle with initial cargo should retain it even if the shift expires.
-    # Validate the routing problem ensures that vehicles with initial cargo are correctly validated even after shift boundaries.
+    # Validate the routing problem ensures that vehicles with initial cargo
+    # are correctly validated even after shift boundaries.
 
     cargo = CargoBalance(lot_id=uid(10), quantity=quantity)
     v = VehicleSnapshot(
@@ -36,7 +37,7 @@ def test_vehicle_retains_custody_across_shift_boundaries(quantity):
         matrix_id=uid(4),
         start_node_id=uid(5),
         end_node_id=uid(6),
-        available_at=86401,  # Available after shift ends (0, 86400) - simulate shift boundary exception
+        available_at=86401,  # Available after shift ends - simulate exception
         shift=TimeWindow(0, 86400),
         capacity=(100,),
         initial_cargo=(cargo,),
@@ -58,7 +59,8 @@ def test_vehicle_retains_custody_across_shift_boundaries(quantity):
         stops=(),
     )
 
-    # Validation should reject the problem because available_at is outside the shift, demonstrating the temporal constraint validation works
+    # Validation should reject the problem because available_at is outside the shift,
+    # demonstrating the temporal constraint validation works
     from tirodhan.modules.planning.routing.validation import RoutingValidationError
 
     with pytest.raises(RoutingValidationError, match="INVALID_VEHICLE_AVAILABILITY"):
