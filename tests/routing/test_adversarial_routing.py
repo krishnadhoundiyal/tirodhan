@@ -1,19 +1,22 @@
-import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 from dataclasses import replace
 from uuid import UUID
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from tests.routing.test_admission_insertion import seed
 from tirodhan.modules.planning.routing.contracts import TimeWindow
 from tirodhan.modules.routing_operations.admission import insert_obligation
-from tests.routing.test_admission_insertion import seed
 
-def uid(i): return UUID(int=i)
+
+def uid(i):
+    return UUID(int=i)
+
 
 @settings(max_examples=200, deadline=None)
 @given(
     start=st.integers(min_value=-10000, max_value=10000),
-    end=st.integers(min_value=-10000, max_value=10000)
+    end=st.integers(min_value=-10000, max_value=10000),
 )
 def test_adversarial_time_window_never_bypasses_capacity(routing_problem, start, end):
     s = seed(routing_problem)
@@ -30,11 +33,12 @@ def test_adversarial_time_window_never_bypasses_capacity(routing_problem, start,
         try:
             result = insert_obligation(impossible, s, uid(42), max_evaluations=10)
             assert result is None, "Inverted or negative time window should never certify capacity"
-        except Exception as e:
+        except Exception:
             # We also accept if it throws a validation error right away
             pass
     else:
         result = insert_obligation(impossible, s, uid(42), max_evaluations=10)
         if result is not None:
             from tirodhan.modules.planning.routing.validation import validate_proposal
+
             validate_proposal(impossible, result)
