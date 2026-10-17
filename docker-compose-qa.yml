@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  database:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: tirodhan
+      POSTGRES_PASSWORD: disposable-test-only
+      POSTGRES_DB: tirodhan_test
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tirodhan -d tirodhan_test"]
+      interval: 5s
+      retries: 20
