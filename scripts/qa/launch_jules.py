@@ -27,7 +27,9 @@ def request(api_key: str, path: str, payload: dict | None = None) -> dict:
             return json.load(response)
     except HTTPError as error:
         # Never print the API key or raw provider response body.
-        raise RuntimeError(f"Jules API {method} {path.split('?')[0]} returned HTTP {error.code}") from None
+        raise RuntimeError(
+            f"Jules API {method} {path.split('?')[0]} returned HTTP {error.code}"
+        ) from None
     except URLError as error:
         raise RuntimeError(f"Jules API connection failed ({type(error.reason).__name__})") from None
 
