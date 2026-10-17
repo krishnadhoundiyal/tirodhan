@@ -78,8 +78,7 @@ def main() -> None:
         "all relevant architecture/QA documents.\n"
         "Implement and EXECUTE the following standing QA mandate. Do not merely propose "
         "a plan or summarize old tests. Own tests, fixtures, QA reports and QA-only PRs; "
-        "do not edit production source or merge/deploy.\n\n"
-        + mandate
+        "do not edit production source or merge/deploy.\n\n" + mandate
     )
     session = request(
         key,
