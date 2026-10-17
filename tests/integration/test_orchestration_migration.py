@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_operational_orchestration import admission, regional, reserve
@@ -72,7 +73,7 @@ async def test_0027_downgrade_refuses_to_destroy_regional_history(database_sessi
     async with factory() as session:
         assert (
             await session.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0027_operational_orchestration"
+            == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
         )
 
 

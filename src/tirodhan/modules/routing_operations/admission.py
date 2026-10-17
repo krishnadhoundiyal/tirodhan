@@ -116,10 +116,14 @@ async def reserve_capacity(
         assert region is not None
         from .fleet_models import FleetControl
 
-        control = await session.get(FleetControl, "COMMITTED_FLEET")
-        if control is None or not control.configuration.get("regional", False):
+        control = await session.get(FleetControl, f"REGION:{region.region_id}")
+        regional_owner = control is not None
+        if control is None:
+            control = await session.get(FleetControl, "COMMITTED_FLEET")
+        configuration = control.configuration.get("fleet", control.configuration) if control else {}
+        if not configuration.get("regional", False):
             raise OperationalInputError("REGIONAL_FLEET_POLICY_REQUIRED")
-        policy = FleetPolicy.model_validate(control.configuration)
+        policy = FleetPolicy.model_validate(configuration)
         safety_percent = region.policy["safety_percent"]
         pickup_seconds = max(command.pickup_seconds, region.policy["minimum_pickup_seconds"])
         discharge_seconds = max(
@@ -280,10 +284,12 @@ async def reserve_capacity(
                 raise OperationalInputError("CAPACITY_PROJECTION_STALE_RETRY")
             # A certificate must also fit the pilot coordinator's technical working set.
             # This is an infrastructure limit, not a cell booking-count capacity quota.
-            global_sources = await _read_sources(
-                session, config.model_copy(update={"region_id": None})
+            working_sources = (
+                current
+                if regional_owner
+                else await _read_sources(session, config.model_copy(update={"region_id": None}))
             )
-            if len(global_sources["requests"]) + 1 > config.max_requests:
+            if len(working_sources["requests"]) + 1 > config.max_requests:
                 raise OperationalInputError("PLANNING_WORKING_SET_REQUIRES_PARTITION")
             current_time = max(now, utc_now())
             if lease_token is not None:
@@ -363,7 +369,7 @@ async def reserve_capacity(
                 },
             )
             session.add(reservation)
-            await wake(session, "CAPACITY_RESERVED", now)
+            await wake(session, "CAPACITY_RESERVED", now, region_id=region.region_id)
         await session.commit()
     return command.client_command_id
 
@@ -428,4 +434,4 @@ async def bind_reservation(
             recorded_by=request.customer_id,
         )
     )
-    await wake(session, "BOOKING_BOUND", utc_now())
+    await wake(session, "BOOKING_BOUND", utc_now(), request_id=request.request_id)

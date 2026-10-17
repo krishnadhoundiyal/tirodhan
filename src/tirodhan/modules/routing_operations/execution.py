@@ -393,7 +393,9 @@ async def execute_task(
                 await _release(session, root, pickup, now, "REASSIGNED")
                 from .orchestration import wake
 
-                await wake(session, "PICKUP_REATTEMPT", now, urgent=True)
+                await wake(
+                    session, "PICKUP_REATTEMPT", now, urgent=True, vehicle_id=root.vehicle_id
+                )
             result = attempt.pickup_attempt_id
         else:
             if task.kind != "DISCHARGE" or task.state != "STARTED":
@@ -458,7 +460,7 @@ async def execute_task(
         await session.flush()
         from .orchestration import wake
 
-        await wake(session, "ROUTE_PROGRESS", now)
+        await wake(session, "ROUTE_PROGRESS", now, vehicle_id=root.vehicle_id)
         await finish_if_empty(session, root, now)
         await append_outbox_event(
             session,

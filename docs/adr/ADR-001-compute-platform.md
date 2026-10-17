@@ -1,5 +1,17 @@
 # ADR-001: Compute Platform
 
+## Increment 8 — finite regional runtime
+
+The initial regional execution uses one bounded local multiprocessing pool with private localhost
+OSRM processes, one per required graph/profile, in the finite planner container. Every native and
+road child is bounded/supervised and reaped. Transportable solver contracts contain routing
+matrices rather than coordinator localhost/file dependencies; external worker containers remain
+a future benchmark-driven alternative. No threshold, service or deployment is invented. Car and
+bicycle graphs remain distinct. Local-only pinned OSRM/solver packaging and disposable PostGIS
+tests introduce no production image, Terraform resource or recurring service. Full-city graph
+memory/startup, candidate budgets and actual resource/cost calibration remain release gates.
+See [evidence and limitations](../V2_ROUTING_INCREMENT_8.md).
+
 **Status:** Accepted for MVP
 
 ## Decision

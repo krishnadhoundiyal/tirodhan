@@ -16,7 +16,10 @@ from tirodhan.db.values import new_uuid7
 
 class FleetControl(Base):
     __tablename__ = "fleet_control"
-    scope: Mapped[str] = mapped_column(String(32), primary_key=True)
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    region_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("operating_region.region_id"), unique=True
+    )
     manager_id: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
     version: Mapped[int] = mapped_column(BigInteger)
     configuration: Mapped[dict[str, Any]] = mapped_column(JSONB)
@@ -26,7 +29,11 @@ class FleetControl(Base):
     business_fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
     last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
-        CheckConstraint("scope = 'COMMITTED_FLEET'", name="ck_fleet_scope"),
+        CheckConstraint(
+            "(scope = 'COMMITTED_FLEET' AND region_id IS NULL) OR "
+            "(region_id IS NOT NULL AND scope = 'REGION:' || region_id::text)",
+            name="ck_fleet_scope",
+        ),
         CheckConstraint("version > 0", name="ck_fleet_version"),
         CheckConstraint("(lease_token IS NULL) = (lease_until IS NULL)", name="ck_fleet_lease"),
     )
@@ -54,7 +61,7 @@ class FleetCycle(Base):
         ),
         Index("ix_fleet_cycle_created", "created_at"),
         CheckConstraint(
-            "selected_engine IS NULL OR selected_engine IN ('VROOM','OR_TOOLS')",
+            "selected_engine IS NULL OR selected_engine IN ('VROOM','OR_TOOLS','COMPOSITE')",
             name="ck_fleet_selected_engine",
         ),
         CheckConstraint(

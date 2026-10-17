@@ -25,6 +25,10 @@ class ReceivingPoint(Base):
             name="ck_receiving_point_positive_allowed_radius",
         ),
         CheckConstraint("version > 0", name="ck_receiving_point_positive_version"),
+        CheckConstraint(
+            "unloading_capacity IS NULL OR unloading_capacity > 0",
+            name="ck_receiving_unloading_capacity",
+        ),
         Index(
             "ix_receiving_point_location_gist",
             "location",
@@ -43,6 +47,7 @@ class ReceivingPoint(Base):
     )
     allowed_radius_m: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    unloading_capacity: Mapped[int | None] = mapped_column(Integer)
     version: Mapped[int] = mapped_column(
         BigInteger,
         nullable=False,

@@ -1,0 +1,9 @@
+# Local validation only. Preserve the pinned musl OSRM runtime without mixing ABIs.
+FROM ghcr.io/project-osrm/osrm-backend@sha256:729461bcc9ae9e6aafa92c0f93db9b060a32e85d5e72092c01ae4a4a9f1eb564 AS road
+FROM tirodhan-routing-tests:increment-6
+COPY --from=road /usr/local/bin/osrm-routed /opt/osrm/bin/osrm-routed
+COPY --from=road /usr/lib/ /opt/osrm/lib/
+COPY --from=road /lib/ /opt/osrm/syslib/
+RUN printf '#!/bin/sh\nexec /opt/osrm/syslib/ld-musl-x86_64.so.1 --library-path /opt/osrm/lib:/opt/osrm/syslib /opt/osrm/bin/osrm-routed "$@"\n' > /usr/local/bin/osrm-routed && chmod +x /usr/local/bin/osrm-routed
+ENTRYPOINT []
+CMD ["python", "-m", "pytest", "-q", "tests/routing/test_regional_selection.py"]

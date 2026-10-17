@@ -1,5 +1,19 @@
 # ADR-006: Rider Assignment and Operational Escalation
 
+## Increment 8 — rider commitment and regional authority
+
+Committed riders explicitly confirm availability before shift start. Confirmation is rider-owned
+and idempotent, separate from manager shift attestation and route receipt. Only confirmed active
+committed shifts supply regional dispatch capacity. Routes during that shift require no individual
+acceptance; receipt does not confer a rejection right. Existing flexible offers/acceptance remain
+distinct supplementary capacity. Emergencies use existing holds, incidents, consent and evidenced
+custody/recovery mechanisms; healthy regional resources can continue planning. Protected work and
+onboard cargo cannot be removed to improve optimization. Regional composite proposals have no
+authority until the existing Payment-first SERIALIZABLE ownership/custody transaction validates
+and commits them. Old single-engine/global activation cannot bypass an adopted regional owner.
+Unconfirmed historical shifts require drain before cutover; no confirmation is fabricated.
+See [implementation and release gates](../V2_ROUTING_INCREMENT_8.md).
+
 **Status:** Accepted for MVP
 
 ## V2 amendment — approved 12 October 2026

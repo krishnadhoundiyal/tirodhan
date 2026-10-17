@@ -1,5 +1,18 @@
 # Architecture
 
+## Current regional replacement — increment 8
+
+Regional PostgreSQL ownership/wake generations replace the global planning writer on
+adoption. Confirmed active committed shifts supply operational capacity; route receipt
+is not acceptance. A finite container supervises private OSRM per graph/profile and
+bounded local solver processes. Versioned transportable tasks yield independently valid
+complete-route alternatives; local OR-Tools CP-SAT selects compatible routes with the
+approved hybrid priority/coverage/cost policy. Composite provenance replaces a fictional
+single-engine winner. Live SERIALIZABLE Payment-first activation, durable booking outcomes
+and captured-generation acknowledgment commit together. Custody/recovery/financial rights
+remain authoritative existing domain mechanisms. No production flags or infrastructure are
+enabled. See [implementation, cutover requirements and evidence](V2_ROUTING_INCREMENT_8.md).
+
 ## V2 operational replacement — increment 5
 
 The approved destination is one road-network/capacity-based V2 operational workflow:

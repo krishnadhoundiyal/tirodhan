@@ -218,6 +218,10 @@ async def _claim(
     now: datetime,
 ) -> tuple[FleetCycle, FleetPolicy, UUID] | None:
     async with factory() as session, session.begin():
+        if await session.scalar(
+            select(FleetControl.scope).where(FleetControl.region_id.is_not(None)).limit(1)
+        ):
+            return None  # Regional owners replace the global writer; never compete with it.
         control = await session.scalar(
             select(FleetControl).where(FleetControl.scope == SCOPE).with_for_update()
         )
@@ -330,7 +334,12 @@ def ready_snapshot(
             (r for r in sources["routes"] if r["vehicle_id"] == vehicle["vehicle_id"]), None
         )
         reason = None
-        if vehicle.get("transfer_in_progress"):
+        if config.confirmed_shifts and (
+            (vehicle["resource_kind"] == "COMMITTED" and not vehicle.get("shift_confirmed"))
+            or vehicle["starts_at"] > now
+        ):
+            reason = "CONFIRMED_ACTIVE_SHIFT_REQUIRED"
+        elif vehicle.get("transfer_in_progress"):
             reason = "PHYSICAL_TRANSFER_IN_PROGRESS"
         elif vehicle["blocked_reason"] is not None or (
             route
@@ -635,7 +644,7 @@ async def _hold_unsafe_routes(
             await lock_resources(session, [assignment.rider_id], [root.vehicle_id], authorize=False)
             await session.refresh(root)
             control = await session.scalar(
-                select(FleetControl).where(FleetControl.scope == SCOPE).with_for_update()
+                select(FleetControl).where(FleetControl.scope == cycle.scope).with_for_update()
             )
             expected = next(
                 (

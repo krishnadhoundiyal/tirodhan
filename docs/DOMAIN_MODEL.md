@@ -1,5 +1,12 @@
 # Domain Model
 
+Increment 8 adds rider-owned `ShiftConfirmation` and append-only per-cycle/per-booking
+`PlanningOutcome`. Regional `FleetControl` names a real OperatingRegion FK; a wake remains
+a coalesced signal. Composite candidate/selection documents are versioned optimization audit,
+not assignment or custody entities. Optional receiving-point unloading concurrency is explicit
+master data. Existing route tasks, stable pickups, assignments, custody and financial entities
+remain authoritative. See [implemented semantics](V2_ROUTING_INCREMENT_8.md).
+
 The approved V2 amendments in ADR-004/006/015 supersede V1 planning/dispatch policy
 as the target workflow; retained V1 execution drains at an approved cutover. `planning.routing` dataclasses are immutable
 optimizer projections, not persistent domain entities or replacements for the relational

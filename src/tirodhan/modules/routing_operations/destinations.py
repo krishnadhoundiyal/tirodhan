@@ -2,8 +2,9 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7
@@ -27,23 +28,44 @@ async def recover_destinations(
     optimizers: dict[OptimizerEngine, RouteOptimizer],
     now: datetime,
     limit: int = 16,
+    control_scope: str = SCOPE,
+    region_id: UUID | None = None,
 ) -> int:
     async with factory() as session:
-        control = await session.get(FleetControl, SCOPE)
-        if control is None or not control.configuration.get("regional"):
+        control = await session.get(FleetControl, control_scope)
+        if control is None or not control.configuration.get("fleet", control.configuration).get(
+            "regional"
+        ):
             return 0
-        policy = FleetPolicy.model_validate(control.configuration)
+        policy = FleetPolicy.model_validate(
+            control.configuration.get("fleet", control.configuration)
+        )
         manager = control.manager_id
         regions = list(
             await session.scalars(
-                select(OperatingRegion).order_by(OperatingRegion.region_id).limit(32)
+                select(OperatingRegion)
+                .where(OperatingRegion.region_id == region_id if region_id else true())
+                .order_by(OperatingRegion.region_id)
+                .limit(32)
             )
         )
         permissions = list((await session.execute(select(RegionReceivingPoint))).scalars())
     count = 0
+    evaluations = 0
     for region in regions:
         config = policy.snapshot_configuration(now.replace(microsecond=0)).model_copy(
-            update={"region_id": region.region_id, "as_of": now}
+            update={
+                "region_id": region.region_id,
+                "as_of": now,
+                **(
+                    {
+                        "max_requests": control.configuration["max_discovery"],
+                        "confirmed_shifts": True,
+                    }
+                    if control.region_id
+                    else {}
+                ),
+            }
         )
         snapshot = await capture_snapshot(factory, config)
         points = {p["receiving_point_id"]: p for p in snapshot.sources["points"]}
@@ -79,6 +101,15 @@ async def recover_destinations(
                 ):
                     continue
                 changed = deepcopy(snapshot.sources)
+                if control.region_id:
+                    changed["requests"] = [
+                        r
+                        for r in changed["requests"]
+                        if r["owner_id"] is not None
+                        or r["pickup_status"] == "COLLECTED"
+                        or r.get("hold")
+                        or r["request_id"] == request["request_id"]
+                    ]
                 changed_request = next(
                     r for r in changed["requests"] if r["request_id"] == request["request_id"]
                 )
@@ -105,6 +136,9 @@ async def recover_destinations(
                     problem = await build_problem(ready, config, new_uuid7(), providers, now=now)
                     feasible = False
                     for engine in OptimizerEngine:
+                        if evaluations >= limit:
+                            return count
+                        evaluations += 1
                         try:
                             proposal = await optimizers[engine].propose(
                                 problem, search_seconds=policy.search_seconds

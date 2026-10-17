@@ -135,6 +135,11 @@ class ConsentAppointment(Command):
     reservation_id: UUID
 
 
+class ConfirmShift(Command):
+    operation: Literal["SHIFT_CONFIRM"] = "SHIFT_CONFIRM"
+    shift_id: UUID
+
+
 class AcceptFlexibleOffer(Command):
     operation: Literal["FLEXIBLE_ACCEPT"] = "FLEXIBLE_ACCEPT"
     offer_id: UUID
@@ -182,7 +187,9 @@ OperationalCommand = Annotated[
     | AcceptAdmissionOffer
     | ResumeRoute
     | AuthorizeReattempt
-    | ObservePhysicalLoad,
+    | ObservePhysicalLoad
+    | ConfirmShift,
+    # Rider confirmation is separate from receipt and flexible offer acceptance.
     Field(discriminator="operation"),
 ]
 OPERATIONAL_CODEC: TypeAdapter[OperationalCommand] = TypeAdapter(cast(Any, OperationalCommand))
@@ -237,11 +244,15 @@ async def execute_operational(
         if not isinstance(
             command, (AcknowledgeRoute, PrepareTransfer, TransferReceipt, ConsentExtension)
         ):
+            target_shift = getattr(command, "shift_id", None)
+            target = await session.get(OperatingShift, target_shift) if target_shift else None
             await wake(
                 session,
                 command.operation,
                 now,
                 urgent=isinstance(command, (CompleteTransfer, AuthorizeDischarge)),
+                vehicle_id=target.vehicle_id if target else None,
+                request_id=getattr(command, "request_id", None),
             )
         await complete_idempotency_record(
             session,
@@ -311,6 +322,28 @@ async def _execute(
     clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     result = command.client_command_id
+    if isinstance(command, ConfirmShift):
+        from .parallel_models import ShiftConfirmation
+
+        shift = await session.scalar(
+            select(OperatingShift)
+            .where(OperatingShift.shift_id == command.shift_id)
+            .with_for_update()
+        )
+        if (
+            shift is None
+            or shift.rider_id != actor
+            or shift.resource_kind != "COMMITTED"
+            or shift.closed_at is not None
+        ):
+            raise RouteAuthorityError("COMMITTED_RIDER_SHIFT_REQUIRED")
+        confirmation = await session.get(ShiftConfirmation, shift.shift_id)
+        if confirmation is not None:
+            return shift.shift_id
+        if now >= shift.starts_at:
+            raise RouteAuthorityError("PRE_SHIFT_CONFIRMATION_REQUIRED")
+        session.add(ShiftConfirmation(shift_id=shift.shift_id, rider_id=actor, confirmed_at=now))
+        return shift.shift_id
     if isinstance(command, ConfigureRegion):
         import h3  # type: ignore[import-untyped]
 

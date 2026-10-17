@@ -1,5 +1,16 @@
 # Schema Design
 
+## Migration 0028 — regional parallel ownership
+
+Fleet control scopes support a unique OperatingRegion FK and mutually consistent global/regional
+scope identity. Composite construction is allowed in cycle/activation history. Rider confirmation
+references the actual shift and rider; SQL enforces owner, committed/open shift and pre-start time.
+Confirmation and per-cycle/request planning outcomes are append-only. Outcomes reference cycle,
+booking and region and record evaluated generation, explicit result/reason and retry time. Shared
+receiving-point unloading concurrency is nullable positive master data; no capacity is invented.
+Downgrade refuses adopted regional/confirmation/outcome/composite history. Financial tables,
+terms triggers and custody history are unchanged. See [migration and evidence](V2_ROUTING_INCREMENT_8.md).
+
 ## Purpose
 
 This document defines the approved PostgreSQL/PostGIS physical-schema conventions and table-level shape before implementation.

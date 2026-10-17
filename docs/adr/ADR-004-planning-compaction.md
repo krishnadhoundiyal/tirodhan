@@ -1,5 +1,24 @@
 # ADR-004: Geographic Planning and Compaction
 
+## Increment 8 — approved regional parallel architecture
+
+The replacement planner owns one finite PostgreSQL-fenced scope/wake per operating region.
+Candidate admission is an engineering working set, separate from booking capacity reservations;
+mandatory commitments/cargo are retained, exceptions held explicitly, and excluded bookings
+receive durable retry outcomes. Rider-trajectory-aware bounded neighbourhoods overlap for
+alternative proposals, including bounded nearby-rider pair searches for future unprotected
+commitments. Local VROOM/OR-Tools workers return complete routes; optional contested
+households can be removed only as complete obligations followed by independent revalidation.
+OR-Tools CP-SAT selects compatible alternatives using the versioned hybrid policy: mandatory
+coverage, waiting-age escalation, urgent reattempt/deadline classes, general coverage, committed
+capacity priority and fleet cost. It does not reorder routes. Optimality is restricted to the
+candidate pool and proved priority stages; timeouts do not prove infeasibility. Composite
+activation and every captured booking outcome precede acknowledgment of the captured generation.
+Publication refreshes movement/progress and reselects complete routes with recorded lineage;
+bounded conflicts retry under the same region fence. Commercial capacity certificates retain
+independent feasibility and resolve the adopted regional policy.
+See [implemented boundaries and measurements](../V2_ROUTING_INCREMENT_8.md). Production is disabled.
+
 **Status:** Accepted
 
 ## V2 amendment — approved 12 October 2026

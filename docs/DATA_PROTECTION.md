@@ -1,5 +1,15 @@
 # Data Protection
 
+## Increment 8 regional runtime
+
+Local OSRM children remain private to the finite job and suppress access/error payload output.
+Transportable worker projections carry scoped operational IDs/matrices, not household coordinates,
+addresses or phones. External workers and network transport are not deployed. Existing review,
+rider/customer ownership and retention controls still apply to stored routing documents.
+The regional process boundary logs only controlled status and exception type; it does not dump
+SQL/transport exception text or tracebacks. Performance artifacts contain aggregate synthetic
+results and clearly identified public OSM fixture data, never operational location observations.
+
 ## 1. Baseline
 
 Use OWASP ASVS Level 2 principles for the backend/application and OWASP MASVS principles for mobile clients.

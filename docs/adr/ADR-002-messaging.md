@@ -1,5 +1,15 @@
 # ADR-002: Messaging
 
+## Increment 8 — regional durable wake-up
+
+PostgreSQL stores one coalesced wake generation per configured region. Known booking/vehicle
+changes target their region; broader configuration changes may wake configured owners.
+Existing financial outbox facts are consumed idempotently without changing producers. A wake is
+not an order-completion ledger. Relational booking outcomes, route authority and captured-generation
+acknowledgment commit together; later generations and deferred retry debt survive. Finite deadline/
+backlog probes remain necessary without new messages. No new queue, broker, always-on consumer or
+cloud deployment is introduced. See [implemented recovery](../V2_ROUTING_INCREMENT_8.md).
+
 **Status:** Accepted for MVP
 
 ## Decision
