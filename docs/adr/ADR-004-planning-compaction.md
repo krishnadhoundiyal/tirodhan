@@ -1,5 +1,15 @@
 # ADR-004: Geographic Planning and Compaction
 
+## Regional capacity/recovery clarification
+
+Regions remain configurable groups of H3 cells; no fixed 20 km² boundary or hard rider wall is
+introduced. An idle resource can transfer atomically to an adjacent region under one versioned
+owner, after checking all promises and custody. Slot read models are advisory pressure estimates,
+invalidated by source events and reconciled in finite jobs; current exact certification remains
+mandatory. OSRM rectangles serve sparse stars and square blocks serve dense useful work. Dated
+calendar projection excludes disjoint intervals. Production remains disabled. See
+[actual implementation and limitations](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Commercial admission reliability refinement
 
 Regional capacity preparation serializes through a durable PostgreSQL intent owner per region,

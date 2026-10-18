@@ -414,7 +414,7 @@ At 128, application CPU falls from 106.88 to 23.61 seconds and DB CPU from
 6.24 to 5.57 seconds. SQL calls increase from 21,490 to 25,780 with relational
 history/fencing/polling, while measured SQL time falls from 28.82 to 14.93 seconds.
 There were no measured deadlocks or temporary-byte spills in any final run.
-DB end-of-run cgroup memory ranges roughly 0.75–1 GiB and includes reclaimable
+DB end-of-run cgroup memory ranges roughly 0.75â€“1 GiB and includes reclaimable
 cache; this is not PostgreSQL process RSS or evidence of a memory leak.
 
 Throughput declines at 256/512 as regional inputs, eligibility, hashing and

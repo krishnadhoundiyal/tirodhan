@@ -51,7 +51,7 @@ from .fleet_priority import propose_prioritized
 from .models import RoutingManifest
 from .orchestration import wake
 from .orchestration_models import CapacityReservation, OperatingRegion, RegionCell
-from .rolling import FleetPolicy, incumbent_orders, ready_snapshot
+from .rolling import FleetPolicy, incumbent_orders
 from .snapshot import (
     MatrixSource,
     OperationalSnapshot,
@@ -251,8 +251,14 @@ async def reserve_capacity(
 
     cache = read_cache(factory)
     snapshot, source_stamp = await cache.capture(factory, config, version)
-    ready, issues = ready_snapshot(snapshot, config, now)
-    if issues:
+    from .regional_planner import regional_ready
+
+    ready, issues = regional_ready(snapshot, config, now)
+    quarantined = {row["route_id"] for row in snapshot.sources["routes"]} | {
+        row["route_id"] for row in snapshot.sources["orphaned_routes"]
+    }
+    quarantined -= {row["route_id"] for row in ready.sources["routes"]}
+    if any(route not in quarantined for _, route, _ in issues):
         raise OperationalInputError("REGIONAL_INPUTS_REQUIRE_ATTENTION")
     active_profiles = {v["profile_version"] for v in ready.sources["vehicles"]}
     roads = cache.roads(
@@ -380,6 +386,7 @@ async def reserve_capacity(
         routes=tuple(
             replace(r, stop_ids=tuple(s for s in r.stop_ids if s in valid_stops))
             for r in seed.routes
+            if r.vehicle_id in {v.vehicle_id for v in problem.vehicles}
         ),
         unserved_stop_ids=tuple(
             valid_stops - {s for r in seed.routes for s in r.stop_ids if s in valid_stops}

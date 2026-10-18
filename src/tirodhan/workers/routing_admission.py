@@ -17,7 +17,7 @@ from tirodhan.core.config import Settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.modules.planning.routing.adapters import ORToolsOptimizer, VroomOptimizer
-from tirodhan.modules.planning.routing.contracts import OptimizerEngine
+from tirodhan.modules.planning.routing.contracts import OptimizerEngine, RouteOptimizer
 from tirodhan.modules.planning.routing.osrm import OSRMMatrixProvider
 from tirodhan.modules.routing_operations.admission_jobs import run_admissions
 from tirodhan.modules.routing_operations.commands import OperationalInputError
@@ -71,14 +71,28 @@ async def execute(
                     )
                     for p in profiles
                 }
+                from tirodhan.db.values import utc_now
+                from tirodhan.modules.routing_operations.capacity_maintenance import (
+                    maintain_capacity,
+                )
+
+                optimizers: dict[OptimizerEngine, RouteOptimizer] = {
+                    OptimizerEngine.VROOM: VroomOptimizer(),
+                    OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
+                }
+                await maintain_capacity(
+                    factory,
+                    region_id,
+                    providers=providers,
+                    optimizers=optimizers,
+                    now=utc_now(),
+                    recommend=False,
+                )
                 return await run_admissions(
                     factory,
                     region_id=region_id,
                     providers=providers,
-                    optimizers={
-                        OptimizerEngine.VROOM: VroomOptimizer(),
-                        OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
-                    },
+                    optimizers=optimizers,
                     limit=max_intents,
                     max_wall_seconds=max_wall_seconds,
                     lease_seconds=max_wall_seconds + 30,

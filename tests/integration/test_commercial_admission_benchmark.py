@@ -349,6 +349,19 @@ async def test_real_commercial_workflow(database_session_factory):
             max_nodes=256,
             max_snap_distance_m=300,
         )
+        if os.getenv("TIRODHAN_ADMISSION_MATRIX_MODE") == "square":
+            # Controlled before/after comparison: same workflow, graph and budgets.
+            # Hide the new optional rectangle operation; retain identical provenance.
+            class SquareSource:
+                cache_namespace = provider.cache_namespace
+                max_nodes = provider.max_nodes
+
+                async def acquire(self, nodes):
+                    return await provider.acquire(nodes)
+
+            road_source = SquareSource()
+        else:
+            road_source = provider
         solvers = {
             OptimizerEngine.VROOM: VroomOptimizer(),
             OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
@@ -360,7 +373,7 @@ async def test_real_commercial_workflow(database_session_factory):
                 stamp = time.perf_counter()
                 processed = await run_admissions(
                     factory,
-                    providers={"test-car": provider},
+                    providers={"test-car": road_source},
                     optimizers=solvers,
                     limit=int(os.getenv("TIRODHAN_ADMISSION_QUANTUM", "1")),
                     clock=lambda: max(now, utc_now()),
@@ -463,6 +476,7 @@ async def test_real_commercial_workflow(database_session_factory):
             },
         }
     result = dict(
+        matrix_mode=os.getenv("TIRODHAN_ADMISSION_MATRIX_MODE", "adaptive_rectangular"),
         count=count,
         concurrency=concurrency,
         interleaved=interleaved,
@@ -491,6 +505,35 @@ async def test_real_commercial_workflow(database_session_factory):
         pending_fraction=sum(v for k, v in statuses.items() if k in ("PENDING", "RUNNING")) / count,
     )
     print("COMMERCIAL_ADMISSION_RESULT=" + json.dumps(result, sort_keys=True))
+
+    if os.getenv("TIRODHAN_SLOT_PROJECTION_BENCHMARK") == "1":
+        from tirodhan.modules.routing_operations.orchestration_models import OperatingRegion
+        from tirodhan.modules.routing_operations.slot_projection import read_slots, refresh_slots
+
+        async with factory() as session:
+            region_id = await session.scalar(select(OperatingRegion.region_id))
+        refresh_times, read_times = [], []
+        for _ in range(30):
+            stamp = time.perf_counter()
+            size = await refresh_slots(factory, region_id, now=now)
+            refresh_times.append(time.perf_counter() - stamp)
+            stamp = time.perf_counter()
+            async with factory() as session:
+                await read_slots(session, region_id, now=now)
+            read_times.append(time.perf_counter() - stamp)
+        print(
+            "SLOT_PROJECTION_RESULT="
+            + json.dumps(
+                dict(
+                    accepted=accepted,
+                    slots=size,
+                    refresh_seconds=quantiles(refresh_times),
+                    read_seconds=quantiles(read_times),
+                    refreshes=30,
+                ),
+                sort_keys=True,
+            )
+        )
 
     if os.getenv("TIRODHAN_ADMISSION_EXPECT_ALL", "1") == "1":
         assert accepted == count, {"statuses": dict(statuses), "failures": dict(failures)}

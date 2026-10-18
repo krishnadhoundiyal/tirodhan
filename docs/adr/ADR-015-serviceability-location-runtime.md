@@ -1,5 +1,10 @@
 # ADR-015: Serviceability Location and Messaging Runtime
 
+Regional advisory slot reads resolve an owned, unexpired server serviceability context to its
+existing region. They do not alter canonical H3 resolution, address/pin authority or serviceability.
+Source version/timestamp/expiry govern freshness; only exact transactional admission creates a
+capacity reservation. [Implementation](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 **Status:** Accepted for MVP (Phase 1T)
 
 ## Decision

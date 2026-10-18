@@ -1,5 +1,18 @@
 # ADR-006: Rider Assignment and Operational Escalation
 
+## Regional ownership and manager-approved rider replacement
+
+One live capacity owner is maintained through versioned regional vehicle membership and existing
+unique open rider/vehicle shifts. Idle adjacent-region transfers cannot abandon assignments,
+certified holds or cargo; closing/reopening duty cannot bypass those guards. Rider replacement
+requests require a manager decision. Before pickup, approved replacement uses ordinary validated
+route activation; started service requires explicit recovery. After pickup, approval only prepares
+existing evidenced CargoTransfer. Actual custody and affected operational state change together;
+both regional planners are woken for mandatory continuation. Expiry retains custody and excludes
+the old resource from supply, while isolated healthy capacity can continue admission. No automatic
+same-vehicle shift rebinding, production enablement or new custody system is introduced. See
+[commands, audit and recovery](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Increment 8 — rider commitment and regional authority
 
 Committed riders explicitly confirm availability before shift start. Confirmation is rider-owned

@@ -439,6 +439,9 @@ async def project(
         v["ends_at"] = max(
             [v["ends_at"]] + [e.ends_at for e in extensions if e.shift_id == v["shift_id"]]
         )
+    from .replacements import replacement_targets
+
+    inputs["replacements"] = await replacement_targets(session, requests)
     if not config.admission_mode and len(requests) > config.max_requests:
         from .commands import OperationalInputError
 

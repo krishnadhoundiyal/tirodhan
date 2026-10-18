@@ -6,8 +6,8 @@ from datetime import timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -42,6 +42,115 @@ Factory = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factor
 Customer = Annotated[AuthenticatedPrincipal, Depends(require_role("CUSTOMER"))]
 Rider = Annotated[AuthenticatedPrincipal, Depends(require_role("RIDER"))]
 Manager = Annotated[AuthenticatedPrincipal, Depends(require_role("MANAGER"))]
+
+
+@router.get("/customer/slot-availability")
+async def regional_slots(
+    serviceability_context_id: UUID,
+    actor: Customer,
+    factory: Factory,
+) -> dict[str, Any]:
+    from tirodhan.modules.routing_operations.orchestration_models import RegionCell
+    from tirodhan.modules.routing_operations.slot_projection import read_slots
+    from tirodhan.modules.serviceability.models import ServiceabilityContext
+
+    now = utc_now()
+    async with factory() as session:
+        context = await session.get(ServiceabilityContext, serviceability_context_id)
+        if (
+            context is None
+            or context.user_id != actor.user_id
+            or context.status != "SERVICEABLE"
+            or context.expires_at <= now
+        ):
+            raise HTTPException(404, "SERVICEABILITY_CONTEXT_UNAVAILABLE")
+        region = await session.get(RegionCell, context.cell_id)
+        if region is None:
+            raise HTTPException(409, "OPERATING_REGION_REQUIRED")
+        return {
+            "region_id": region.region_id,
+            "capacity_certified": False,
+            "slots": await read_slots(session, region.region_id, now=now),
+        }
+
+
+@router.get("/manager/replacements/{replacement_id}")
+async def read_replacement(
+    replacement_id: UUID,
+    actor: Manager,
+    factory: Factory,
+) -> dict[str, Any]:
+    from tirodhan.modules.routing_operations.capacity_models import RiderReplacement
+
+    async with factory() as session:
+        row = await session.get(RiderReplacement, replacement_id)
+        if row is None:
+            raise HTTPException(404, "REPLACEMENT_UNAVAILABLE")
+        return {
+            "replacement_id": row.replacement_id,
+            "status": row.status,
+            "version": row.version,
+            "request_id": row.request_id,
+            "recommended_shift_id": row.recommended_shift_id,
+            "recommended_at": row.recommended_at,
+            "source_version": row.source_version,
+            "transfer_intent_id": row.transfer_intent_id,
+            "failure_code": row.failure_code,
+            "authoritative": False,
+        }
+
+
+@router.get("/manager/regions/{region_id}/capacity")
+async def regional_capacity(
+    region_id: UUID,
+    actor: Manager,
+    factory: Factory,
+    after_vehicle_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> dict[str, Any]:
+    from tirodhan.modules.routing_operations.models import OperatingShift
+    from tirodhan.modules.routing_operations.orchestration_models import (
+        OperatingRegion,
+        RegionVehicle,
+    )
+
+    async with factory() as session:
+        region = await session.get(OperatingRegion, region_id)
+        if region is None:
+            raise HTTPException(404, "OPERATING_REGION_UNAVAILABLE")
+        resources = (
+            (
+                await session.execute(
+                    select(
+                        RegionVehicle.vehicle_id,
+                        RegionVehicle.version.label("membership_version"),
+                        OperatingShift.shift_id,
+                        OperatingShift.rider_id,
+                        OperatingShift.starts_at,
+                        OperatingShift.ends_at,
+                    )
+                    .outerjoin(
+                        OperatingShift,
+                        (OperatingShift.vehicle_id == RegionVehicle.vehicle_id)
+                        & OperatingShift.closed_at.is_(None),
+                    )
+                    .where(
+                        RegionVehicle.region_id == region_id,
+                        RegionVehicle.vehicle_id > after_vehicle_id if after_vehicle_id else true(),
+                    )
+                    .order_by(RegionVehicle.vehicle_id)
+                    .limit(limit + 1)
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return {
+            "region_id": region_id,
+            "region_version": region.version,
+            "resources": [dict(r) for r in resources[:limit]],
+            "next_cursor": resources[limit - 1]["vehicle_id"] if len(resources) > limit else None,
+        }
 
 
 @router.get("/rider/flexible-admission-offers")

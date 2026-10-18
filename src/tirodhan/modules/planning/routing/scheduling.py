@@ -112,6 +112,12 @@ class RouteSchedule:
             self.endings.append(end)
             self.loads.append(load)
         self.latest = [0] * len(order)
+        if not order and not vehicle.initial_cargo:
+            # An unused vehicle has no return journey in the independent contract.
+            # Check the actual pickup/discharge/end path when inserting work below;
+            # an impossible empty return must not abort other available resources.
+            self.latest_entry = vehicle.shift.end
+            return
         node, limit = vehicle.end_node_id, vehicle.shift.end
         for i in range(len(order) - 1, -1, -1):
             stop = self.stops[order[i]]

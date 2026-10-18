@@ -1,5 +1,24 @@
 # Idempotency
 
+## Regional ownership, replacement and slot projection
+
+- Capacity transfer: existing actor/client command UUID + fingerprint, unique vehicle/membership
+  audit version, SERIALIZABLE resource/region/source fences. Membership/audit/wakes commit together;
+  exact replay returns the original transfer, conflicts roll back and retry with current versions.
+- Replacement request/manager decision: same command convention, unique open request per household
+  and optimistic row version. Decisions are append-only. Advisory recommendations use source and row
+  versions; duplicate computation cannot approve/assign work. Failed computation backs off durably.
+- Pre-pickup activation remains the existing Payment-first composite transaction. After-pickup
+  replacement reuses transfer intent, attributable receipts and immutable CargoTransfer; approval
+  alone never changes custody. Transfer and operational recovery state commit together.
+- Slot invalidation is a coalesced per-region database work row, not order completion. REPEATABLE
+  READ calculation and source-head publication locking reject source drift. Duplicate refresh is
+  an idempotent upsert; a crash preserves pending work. Periodic due-time reconciliation recovers
+  missed/interrupted execution. Read-model freshness never replaces final certified admission.
+
+No solver/matrix call creates a business side effect or assignment authority. No new transport or
+paid infrastructure is introduced. See [commands and recovery](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Commercial admission reliability (0029)
 
 The existing customer/client intent UUID and fingerprint remain the replay key. Preparation

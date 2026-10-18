@@ -433,6 +433,11 @@ async def test_finite_local_runtime_certifies_and_customers_pay_without_dispatch
     )
     assert await execute(region, [profile], settings) == 3
     assert await execute(region, [profile], settings) == 0
+    async with factory() as session:
+        prepared_rows = list(await session.scalars(select(CapacityAdmissionRequest)))
+        assert all(row.status == "SUCCEEDED" for row in prepared_rows), [
+            (row.status, row.failure_code) for row in prepared_rows
+        ]
     for customer, command in inputs:
         await purchase(factory, customer, command, now)
     async with factory() as session:

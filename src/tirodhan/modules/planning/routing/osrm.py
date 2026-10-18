@@ -203,13 +203,29 @@ class OSRMMatrixProvider:
             else (),
         )
 
-    async def _fetch(self, nodes: tuple[RoadNode, ...]) -> bytes:
+    async def acquire_star(self, nodes: tuple[RoadNode, ...]) -> RoadMatrix:
+        from .osrm_rectangular import acquire_star
+
+        return await acquire_star(self, nodes)
+
+    async def _fetch(
+        self,
+        nodes: tuple[RoadNode, ...],
+        *,
+        sources: tuple[int, ...] | None = None,
+        destinations: tuple[int, ...] | None = None,
+    ) -> bytes:
         coordinates = ";".join(f"{node.longitude},{node.latitude}" for node in nodes)
         url = f"{self.endpoint}/table/v1/{self.profile}/{coordinates}"
+        params = {"annotations": "duration,distance"}
+        if sources is not None:
+            params["sources"] = ";".join(map(str, sources))
+        if destinations is not None:
+            params["destinations"] = ";".join(map(str, destinations))
         async with self.client.stream(
             "GET",
             url,
-            params={"annotations": "duration,distance"},
+            params=params,
             timeout=self.timeout,
             follow_redirects=False,
         ) as response:

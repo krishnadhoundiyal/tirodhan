@@ -1,5 +1,12 @@
 # ER Diagram
 
+Migration 0031: RegionVehicle gains version; RegionCapacityTransfer references its vehicle/rider,
+both OperatingRegions and authorizing AppUser. RiderReplacement references CollectionRequest,
+original RiderProfile, OperatingRegion, recommended OperatingShift and optional CargoTransferIntent.
+ReplacementDecision references that request and manager AppUser. RegionalSlotProjection and
+RegionalSlotRefresh reference OperatingRegion. Existing custody/evidence/financial relationships
+remain. See [semantics](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 Commercial admission migration 0029 adds `CapacityAdmissionRequest.region_id -> OperatingRegion`
 for regional preparation ownership, plus retry scheduling. Existing reservation/customer/context/
 booking and financial relationships are unchanged. See

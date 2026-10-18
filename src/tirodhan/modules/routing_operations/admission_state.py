@@ -230,14 +230,23 @@ def project_horizon(sources: dict[str, Any], config: ShadowConfiguration) -> dic
         )
     ]
     past = {v["vehicle_id"] for v in sources["vehicles"] if v["ends_at"] <= config.epoch}
+    riders_by_vehicle = {v["vehicle_id"]: v["rider_id"] for v in sources["vehicles"]}
     projected["orphaned_routes"] = sources["orphaned_routes"] + [
-        r for r in sources["routes"] if r["vehicle_id"] in past
+        dict(r, rider_id=riders_by_vehicle[r["vehicle_id"]])
+        for r in sources["routes"]
+        if r["vehicle_id"] in past
     ]
     active = {v["vehicle_id"] for v in vehicles}
     projected["routes"] = [r for r in sources["routes"] if r["vehicle_id"] in active]
     roots = {r["route_id"] for r in projected["routes"]}
     projected["tasks"] = [t for t in sources["tasks"] if t["route_id"] in roots]
     projected["released"] = [r for r in sources["released"] if r["vehicle_id"] in active]
+    for name in ("windows", "restrictions"):
+        projected[name] = [
+            row
+            for row in sources[name]
+            if row["ends_at"] >= config.epoch and row["starts_at"] <= config.horizon_end
+        ]
     return projected
 
 

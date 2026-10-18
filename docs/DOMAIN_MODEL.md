@@ -1,5 +1,12 @@
 # Domain Model
 
+Regional capacity/recovery introduces immutable RegionCapacityTransfer, versioned RiderReplacement
+and immutable ReplacementDecision, plus advisory RegionalSlotProjection/Refresh. RegionVehicle
+membership has a monotonic version; existing one-open-shift constraints retain one live rider capacity
+owner. Existing CargoTransfer/PickupExecution remain custody/fulfilment authority. Approval before
+pickup enables normal reassignment; after pickup it only prepares evidenced transfer. See
+[lifecycle and limits](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 Commercial capacity preparation retains the customer intent and region-owned certificate model.
 Migration 0029 attaches a region to preparation intents for one durable RUNNING owner per region,
 and adds retry scheduling. The preparation owner is neither a route assignment nor a capacity

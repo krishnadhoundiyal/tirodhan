@@ -115,7 +115,7 @@ class DirectedRoadCache:
                 selected: list[Location] = []
                 while neighbours[hub] and len(selected) < self.block_nodes - 1:
                     key = heapq.heappop(neighbours[hub])
-                    if key in adjacent[hub]:
+                    if key != hub and key in adjacent[hub]:
                         selected.append(key)
                 keys = list(dict.fromkeys([hub] + selected))
                 query = tuple(locations[k] for k in keys)
@@ -128,7 +128,16 @@ class DirectedRoadCache:
                             node.latitude,
                         ),
                     )
-                matrix = await self.source.acquire(query)
+                star = getattr(self.source, "acquire_star", None)
+                useful = sum((a, b) in pending for a in keys for b in keys)
+                use_rectangles = (
+                    star is not None and len(query) >= 4 and useful * 2 < len(query) ** 2
+                )
+                matrix = (
+                    await star(query)
+                    if use_rectangles and star is not None
+                    else await self.source.acquire(query)
+                )
                 if matrix.node_ids != tuple(n.node_id for n in query):
                     raise RoutingAdapterError("MATRIX_PROVENANCE_CHANGED")
                 try:
@@ -162,12 +171,16 @@ class DirectedRoadCache:
                             raise RoutingAdapterError("MATRIX_SNAPPING_CHANGED")
                     for i, key in enumerate(keys):
                         self.snaps[key] = matrix.snap_tokens[i]
-                self.queries += 1
-                self.provider_cells += len(query) ** 2
+                rectangular = star is not None and matrix.sparse_arcs is not None
+                self.queries += 2 if rectangular else 1
+                self.provider_cells += 2 * len(query) if rectangular else len(query) ** 2
+                indices = {n.node_id: i for i, n in enumerate(query)}
                 for i, origin in enumerate(keys):
                     for j, destination in enumerate(keys):
                         arc_key = (origin, destination)
                         if arc_key not in pending:
+                            continue
+                        if matrix.sparse_arcs is not None and i != 0 and j != 0:
                             continue
                         pending.remove(arc_key)
                         if (destination, origin) not in pending:
@@ -175,7 +188,7 @@ class DirectedRoadCache:
                             adjacent[destination].discard(origin)
                             heapq.heappush(heap, (-len(adjacent[origin]), origin))
                             heapq.heappush(heap, (-len(adjacent[destination]), destination))
-                        value = (matrix.travel_seconds[i][j], matrix.distance_m[i][j])
+                        value = matrix.arc(query[i].node_id, query[j].node_id, indices)
                         result[arc_key] = value
                         if reusable and all(v is None or v < 2**63 for v in value):
                             packed = ARC.pack(*(v if v is not None else -1 for v in value))

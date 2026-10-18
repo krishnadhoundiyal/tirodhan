@@ -23,6 +23,7 @@ from tirodhan.modules.receiving_points import models as receiving_point_models  
 from tirodhan.modules.reliability import models as reliability_models  # noqa: F401
 from tirodhan.modules.routing_operations import (
     admission_models,  # noqa: F401
+    capacity_models,  # noqa: F401
     fleet_models,  # noqa: F401
     parallel_models,  # noqa: F401
 )

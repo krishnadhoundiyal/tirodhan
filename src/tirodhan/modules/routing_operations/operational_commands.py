@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, TypeAdapter
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
@@ -45,7 +46,14 @@ from .orchestration_models import (
     ShiftExtension,
     ShiftExtensionConsent,
 )
+from .regional_commands import TransferRegionalCapacity, transfer_capacity
 from .regional_projection import effective_shift_end
+from .replacement_commands import (
+    DecideReplacement,
+    RecommendReplacement,
+    RequestReplacement,
+    replacement_command,
+)
 from .rolling import FleetPolicy
 
 
@@ -53,7 +61,7 @@ class ConfigureRegion(Command):
     operation: Literal["REGION"] = "REGION"
     name: str = Field(min_length=1, max_length=100)
     cells: tuple[str, ...] = Field(min_length=1, max_length=10000)
-    vehicle_ids: tuple[UUID, ...] = Field(min_length=1, max_length=32)
+    vehicle_ids: tuple[UUID, ...] = Field(max_length=32)
     receiving_point_ids: tuple[UUID, ...] = Field(min_length=1, max_length=64)
     default_warehouse_id: UUID
     fleet: FleetPolicy
@@ -188,7 +196,11 @@ OperationalCommand = Annotated[
     | ResumeRoute
     | AuthorizeReattempt
     | ObservePhysicalLoad
-    | ConfirmShift,
+    | ConfirmShift
+    | TransferRegionalCapacity
+    | RequestReplacement
+    | RecommendReplacement
+    | DecideReplacement,
     # Rider confirmation is separate from receipt and flexible offer acceptance.
     Field(discriminator="operation"),
 ]
@@ -204,12 +216,34 @@ async def execute_operational(
     now: datetime | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> UUID:
+    try:
+        return await _execute_operation_once(
+            factory, actor_id=actor_id, command=command, expires_at=expires_at, now=now, clock=clock
+        )
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) in {"40001", "40P01"}:
+            raise RouteAuthorityError("RETRYABLE_TRANSACTION_CONFLICT") from None
+        raise
+
+
+async def _execute_operation_once(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    actor_id: UUID,
+    command: OperationalCommand,
+    expires_at: datetime,
+    now: datetime | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> UUID:
     clock = clock or (utc_now if now is None else None)
     now = now or utc_now()
     manager = isinstance(
         command,
         (
             ConfigureRegion,
+            TransferRegionalCapacity,
+            RecommendReplacement,
+            DecideReplacement,
             AuthorizeExtension,
             PrepareTransfer,
             CompleteTransfer,
@@ -225,6 +259,8 @@ async def execute_operational(
         "MANAGER" if manager else "CUSTOMER" if isinstance(command, ConsentAppointment) else "RIDER"
     )
     async with factory() as session, session.begin():
+        if isinstance(command, (TransferRegionalCapacity, DecideReplacement)):
+            await session.connection(execution_options={"isolation_level": "SERIALIZABLE"})
         await require_live_role(session, actor_id, role)
         claim = await claim_idempotency_record(
             session,
@@ -242,16 +278,31 @@ async def execute_operational(
         result = await _execute(session, actor_id, command, now, expires_at, clock=clock)
         await session.flush()
         if not isinstance(
-            command, (AcknowledgeRoute, PrepareTransfer, TransferReceipt, ConsentExtension)
+            command,
+            (
+                AcknowledgeRoute,
+                PrepareTransfer,
+                TransferReceipt,
+                ConsentExtension,
+                TransferRegionalCapacity,
+            ),
         ):
             target_shift = getattr(command, "shift_id", None)
             target = await session.get(OperatingShift, target_shift) if target_shift else None
+            replacement_region = None
+            if isinstance(command, (RecommendReplacement, DecideReplacement)):
+                from .capacity_models import RiderReplacement
+
+                replacement = await session.get(RiderReplacement, command.replacement_id)
+                assert replacement is not None
+                replacement_region = replacement.region_id
             await wake(
                 session,
                 command.operation,
                 now,
                 urgent=isinstance(command, (CompleteTransfer, AuthorizeDischarge)),
                 vehicle_id=target.vehicle_id if target else None,
+                region_id=replacement_region,
                 request_id=getattr(command, "request_id", None),
             )
         await complete_idempotency_record(
@@ -322,6 +373,10 @@ async def _execute(
     clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     result = command.client_command_id
+    if isinstance(command, TransferRegionalCapacity):
+        return await transfer_capacity(session, actor, command, now, clock)
+    if isinstance(command, (RequestReplacement, RecommendReplacement, DecideReplacement)):
+        return await replacement_command(session, actor, command, now, expires_at, clock)
     if isinstance(command, ConfirmShift):
         from .parallel_models import ShiftConfirmation
 
@@ -945,6 +1000,16 @@ async def _execute(
 
         await session.flush()
         intent.resolved_at, intent.resolution, intent.resolved_by = now, "TRANSFERRED", actor
+        from .capacity_models import RiderReplacement
+
+        for replacement in await session.scalars(
+            select(RiderReplacement).where(
+                RiderReplacement.transfer_intent_id == intent.intent_id,
+                RiderReplacement.status == "APPROVED",
+            )
+        ):
+            replacement.status = "COMPLETED"
+            replacement.version += 1
         availability = await session.get(RiderAvailability, target.rider_id)
         assert availability is not None
         availability.work_state = "BUSY"
@@ -970,6 +1035,8 @@ async def _execute(
         donor_vehicle.safety_version += 1
         await session.flush()
         await resume_transfer_resources(session, (current_vehicle, target.vehicle_id), actor, now)
+        await wake(session, "CARGO_TRANSFERRED", now, urgent=True, vehicle_id=current_vehicle)
+        await wake(session, "CARGO_RECEIVED", now, urgent=True, vehicle_id=target.vehicle_id)
         if donor_root is not None:
             from .execution import finish_if_empty
 

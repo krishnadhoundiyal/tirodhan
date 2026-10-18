@@ -1,5 +1,12 @@
 # Schema Design
 
+Migration 0031 adds versioned RegionVehicle membership, append-only capacity-transfer and replacement
+decision audits, relational replacement/retry state and versioned advisory slot projections with
+coalesced refresh rows. Region transfers and shift close cannot discard live certified commitments.
+Source-head changes invalidate projections transactionally. Historical financial/custody entities and
+all initiation-term triggers remain. Downgrade refuses populated new audit history. See
+[schema and authority](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Migration 0029 — commercial preparation ownership and retry
 
 CapacityAdmissionRequest gains a real nullable historical OperatingRegion FK and nullable

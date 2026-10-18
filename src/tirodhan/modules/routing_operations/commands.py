@@ -401,6 +401,10 @@ async def _apply(
             .limit(1)
         )
         mass, volume = await cargo_load(session, vehicle_id)
+        from .capacity_commitments import has_capacity_commitments
+
+        if await has_capacity_commitments(session, vehicle_id, now):
+            raise OperationalInputError("SHIFT_HAS_CERTIFIED_COMMITMENTS")
         if (
             active
             or mass

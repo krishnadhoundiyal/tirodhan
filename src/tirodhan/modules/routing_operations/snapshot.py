@@ -851,6 +851,10 @@ async def build_problem(
                 )
             )
         )
+        if r.get("replacement_shift_id") is not None and not collected:
+            region_eligible = tuple(
+                v for v in region_eligible if by_vehicle[v]["shift_id"] == r["replacement_shift_id"]
+            )
         allowed = (
             (bound,)
             if bound
@@ -957,9 +961,14 @@ async def build_problem(
     facility_snapshots = []
     for p in data["points"]:
         ranges = sorted(
-            (max(0, _seconds(w["starts_at"], epoch, start=True)), _seconds(w["ends_at"], epoch))
+            (
+                max(0, _seconds(w["starts_at"], epoch, start=True)),
+                min(_seconds(config.horizon_end, epoch), _seconds(w["ends_at"], epoch)),
+            )
             for w in data["windows"]
             if w["receiving_point_id"] == p["receiving_point_id"]
+            and w["ends_at"] >= epoch
+            and w["starts_at"] <= config.horizon_end
         )
         # Union overlapping operator-declared opening intervals; no fabricated 24-hour opening.
         merged: list[TimeWindow] = []

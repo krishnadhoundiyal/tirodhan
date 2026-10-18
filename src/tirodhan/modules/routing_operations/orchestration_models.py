@@ -52,6 +52,7 @@ class RegionVehicle(Base):
         ForeignKey("operating_vehicle.vehicle_id"), primary_key=True
     )
     region_id: Mapped[UUID] = mapped_column(ForeignKey("operating_region.region_id"), index=True)
+    version: Mapped[int] = mapped_column(BigInteger, server_default="1", default=1)
 
 
 class RegionReceivingPoint(Base):

@@ -1,5 +1,11 @@
 # Project Context
 
+Regional capacity transfer now uses one versioned owner and refuses outstanding commitments,
+cargo and live holds. Rider replacement is manager-approved; custody moves only through existing
+evidenced transfers. Versioned advisory slot projections use database invalidation and finite
+reconciliation, with exact commercial admission unchanged. Adaptive OSRM rectangles preserve strict
+road provenance. Production remains disabled. See [implementation](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 Commercial preparation now uses exact resumable pair insertion, sparse directed road acquisition,
 independent shared route certificates, incremental source reads and a durable regional writer.
 Migration 0030 removes commercial population ceilings, including 128 bookings; byte/time budgets

@@ -1,5 +1,12 @@
 # Architecture
 
+Regional ownership/recovery adds atomic adjacent-region idle-resource transfers, manager-reviewed
+replacement recommendations and existing evidenced custody handoffs. PostgreSQL source heads also
+invalidate bounded advisory slot read models; finite workers refresh/reconcile them without new
+infrastructure. A projection never grants a commercial reservation. Sparse stars can use verified
+OSRM rectangles while dense local problems retain square requests. See
+[implemented boundaries](REGIONAL_CAPACITY_AND_RECOVERY.md). No production flag is enabled.
+
 Commercial preparation uses a finite PostgreSQL-leased regional writer, exact calendar-aware
 resumable pair insertion, sparse directed road acquisition and independently composed route proofs.
 Identifier-only source invalidations maintain a bounded read cache; a separate source-head row

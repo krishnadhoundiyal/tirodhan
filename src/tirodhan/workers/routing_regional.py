@@ -39,6 +39,11 @@ class LazyMatrixSource:
         self.start()
         return await self.source.acquire(nodes)
 
+    async def acquire_star(self, nodes: tuple[RoadNode, ...]) -> RoadMatrix:
+        self.start()
+        method = getattr(self.source, "acquire_star", None)
+        return await method(nodes) if method else await self.source.acquire(nodes)
+
     @property
     def cache_namespace(self) -> object:
         return getattr(self.source, "cache_namespace", None)
@@ -191,7 +196,26 @@ async def execute(
                     )
                     for p in profiles
                 }
+                from tirodhan.modules.planning.routing.adapters import (
+                    ORToolsOptimizer,
+                    VroomOptimizer,
+                )
+                from tirodhan.modules.planning.routing.contracts import OptimizerEngine
+                from tirodhan.modules.routing_operations.capacity_maintenance import (
+                    maintain_capacity,
+                )
+
                 cycle = await run_region(factory, region_id=region_id, providers=providers)
+                await maintain_capacity(
+                    factory,
+                    region_id,
+                    providers=providers,
+                    optimizers={
+                        OptimizerEngine.VROOM: VroomOptimizer(),
+                        OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
+                    },
+                    now=utc_now(),
+                )
                 return cycle.status if cycle else "NOT_DUE_OR_OWNED"
     finally:
         await engine.dispose()
