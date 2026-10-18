@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/opt/routing/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-s",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=/tmp/tirodhan-geographical-qa-07n6wvg9/junit.xml",
+    "tests/routing",
+    "tests/integration/test_admission_reliability.py",
+    "tests/integration/test_admission_scalability.py",
+    "tests/integration/test_operational_orchestration.py",
+    "tests/integration/test_orchestration_custody_races.py",
+    "tests/integration/test_routing_dispatch.py",
+    "tests/integration/test_geographical_recovery_qa.py",
+    "tests/integration/test_geographical_custody_qa.py"
+  ],
+  "counts": {
+    "errors": 0,
+    "failures": 3,
+    "skipped": 0,
+    "tests": 205
+  },
+  "elapsed_seconds": 245.24329857502016,
+  "exit_code": 1,
+  "qualified": false,
+  "resource_qualification": "20ms samples; short-lived processes may be missed",
+  "sampled_cpu_seconds": {
+    "application": 82.22,
+    "ortools": 20.36,
+    "vroom": 0.12
+  },
+  "sampled_peak_rss_bytes": {
+    "application": 351133696,
+    "ortools": 48414720,
+    "vroom": 8912896
+  }
+}

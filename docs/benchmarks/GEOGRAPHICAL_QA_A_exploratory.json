@@ -1,0 +1,708 @@
+{
+  "accepted": 64,
+  "admission_worker_quantum": 1,
+  "adopted_policy": false,
+  "application": {
+    "container_cpu_usec": 28078990,
+    "cpu_fraction_of_two_cores": 0.3521952134635477,
+    "peak_process_rss_bytes": 210378752
+  },
+  "caches": {
+    "delta_reads": 0,
+    "full_reads": 1,
+    "hits": 63,
+    "retained_read_bytes_charged": 1000984,
+    "roads": {
+      "test-car": {
+        "arc_bytes_charged": 1742000,
+        "hits": 6237,
+        "provider_cells": 59953,
+        "queries": 103
+      }
+    }
+  },
+  "campaign": "A",
+  "certification_attempt_seconds": {
+    "p50": 0.48041620099684224,
+    "p95": 0.876156660990091,
+    "p99": 0.9605129339906853
+  },
+  "checkout_capture_seconds": {
+    "p50": 0.0940953709941823,
+    "p95": 0.12750833400059491,
+    "p99": 0.19173382999724708
+  },
+  "concurrency": 4,
+  "count": 64,
+  "database": {
+    "blks_hit": 311917,
+    "blks_read": 38,
+    "container_cpu_usec": 14158752,
+    "cpu_fraction_of_two_cores": 0.17759344915958275,
+    "deadlocks": 0,
+    "memory_bytes_at_end": 631959552,
+    "temp_bytes": 0,
+    "xact_commit": 1614,
+    "xact_rollback": 910
+  },
+  "decision_seconds": {
+    "p50": 12.741458122007316,
+    "p95": 30.310618338990025,
+    "p99": 32.404717012977926
+  },
+  "elapsed_seconds": 39.86282170598861,
+  "enqueue_seconds": {
+    "p50": 0.012454354990040883,
+    "p95": 0.014578130998415872,
+    "p99": 0.025714785006130114
+  },
+  "expired": 0,
+  "failures": {},
+  "geography": {
+    "asymmetric_duration_cells": 4026,
+    "bounds": [
+      77.2000055,
+      28.6200049,
+      77.2199598,
+      28.6399708
+    ],
+    "bridge_sites": 0,
+    "confirmed_unreachable_cells": 0,
+    "distinct_coordinates": 64,
+    "distinct_snapped": 64,
+    "independent_witness": {
+      "method": "earliest-finish pickup-then-discharge schedule; exact raw directed arcs",
+      "schedule": [
+        {
+          "booking_index": 0,
+          "discharge_complete": 401,
+          "pickup_start": 0,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 2,
+          "discharge_complete": 370,
+          "pickup_start": 0,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 4,
+          "discharge_complete": 337,
+          "pickup_start": 0,
+          "vehicle": 2
+        },
+        {
+          "booking_index": 6,
+          "discharge_complete": 443,
+          "pickup_start": 0,
+          "vehicle": 3
+        },
+        {
+          "booking_index": 10,
+          "discharge_complete": 497,
+          "pickup_start": 0,
+          "vehicle": 4
+        },
+        {
+          "booking_index": 12,
+          "discharge_complete": 314,
+          "pickup_start": 0,
+          "vehicle": 5
+        },
+        {
+          "booking_index": 14,
+          "discharge_complete": 425,
+          "pickup_start": 0,
+          "vehicle": 6
+        },
+        {
+          "booking_index": 16,
+          "discharge_complete": 416,
+          "pickup_start": 0,
+          "vehicle": 7
+        },
+        {
+          "booking_index": 20,
+          "discharge_complete": 425,
+          "pickup_start": 0,
+          "vehicle": 8
+        },
+        {
+          "booking_index": 22,
+          "discharge_complete": 387,
+          "pickup_start": 0,
+          "vehicle": 9
+        },
+        {
+          "booking_index": 24,
+          "discharge_complete": 332,
+          "pickup_start": 0,
+          "vehicle": 10
+        },
+        {
+          "booking_index": 26,
+          "discharge_complete": 438,
+          "pickup_start": 0,
+          "vehicle": 11
+        },
+        {
+          "booking_index": 30,
+          "discharge_complete": 551,
+          "pickup_start": 0,
+          "vehicle": 12
+        },
+        {
+          "booking_index": 32,
+          "discharge_complete": 405,
+          "pickup_start": 0,
+          "vehicle": 13
+        },
+        {
+          "booking_index": 34,
+          "discharge_complete": 539,
+          "pickup_start": 0,
+          "vehicle": 14
+        },
+        {
+          "booking_index": 36,
+          "discharge_complete": 413,
+          "pickup_start": 0,
+          "vehicle": 15
+        },
+        {
+          "booking_index": 40,
+          "discharge_complete": 438,
+          "pickup_start": 0,
+          "vehicle": 16
+        },
+        {
+          "booking_index": 42,
+          "discharge_complete": 383,
+          "pickup_start": 0,
+          "vehicle": 17
+        },
+        {
+          "booking_index": 44,
+          "discharge_complete": 424,
+          "pickup_start": 0,
+          "vehicle": 18
+        },
+        {
+          "booking_index": 46,
+          "discharge_complete": 420,
+          "pickup_start": 0,
+          "vehicle": 19
+        },
+        {
+          "booking_index": 50,
+          "discharge_complete": 536,
+          "pickup_start": 0,
+          "vehicle": 20
+        },
+        {
+          "booking_index": 52,
+          "discharge_complete": 377,
+          "pickup_start": 0,
+          "vehicle": 21
+        },
+        {
+          "booking_index": 54,
+          "discharge_complete": 342,
+          "pickup_start": 0,
+          "vehicle": 22
+        },
+        {
+          "booking_index": 56,
+          "discharge_complete": 433,
+          "pickup_start": 0,
+          "vehicle": 23
+        },
+        {
+          "booking_index": 60,
+          "discharge_complete": 366,
+          "pickup_start": 0,
+          "vehicle": 24
+        },
+        {
+          "booking_index": 62,
+          "discharge_complete": 452,
+          "pickup_start": 0,
+          "vehicle": 25
+        },
+        {
+          "booking_index": 1,
+          "discharge_complete": 2236,
+          "pickup_start": 1800,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 3,
+          "discharge_complete": 2206,
+          "pickup_start": 1800,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 5,
+          "discharge_complete": 2245,
+          "pickup_start": 1800,
+          "vehicle": 2
+        },
+        {
+          "booking_index": 11,
+          "discharge_complete": 2248,
+          "pickup_start": 1800,
+          "vehicle": 3
+        },
+        {
+          "booking_index": 13,
+          "discharge_complete": 2085,
+          "pickup_start": 1800,
+          "vehicle": 4
+        },
+        {
+          "booking_index": 15,
+          "discharge_complete": 2140,
+          "pickup_start": 1800,
+          "vehicle": 5
+        },
+        {
+          "booking_index": 21,
+          "discharge_complete": 2251,
+          "pickup_start": 1800,
+          "vehicle": 6
+        },
+        {
+          "booking_index": 23,
+          "discharge_complete": 2201,
+          "pickup_start": 1800,
+          "vehicle": 7
+        },
+        {
+          "booking_index": 25,
+          "discharge_complete": 2247,
+          "pickup_start": 1800,
+          "vehicle": 8
+        },
+        {
+          "booking_index": 31,
+          "discharge_complete": 2385,
+          "pickup_start": 1800,
+          "vehicle": 9
+        },
+        {
+          "booking_index": 33,
+          "discharge_complete": 2197,
+          "pickup_start": 1800,
+          "vehicle": 10
+        },
+        {
+          "booking_index": 35,
+          "discharge_complete": 2263,
+          "pickup_start": 1800,
+          "vehicle": 11
+        },
+        {
+          "booking_index": 41,
+          "discharge_complete": 2354,
+          "pickup_start": 1800,
+          "vehicle": 12
+        },
+        {
+          "booking_index": 43,
+          "discharge_complete": 2345,
+          "pickup_start": 1800,
+          "vehicle": 13
+        },
+        {
+          "booking_index": 45,
+          "discharge_complete": 2267,
+          "pickup_start": 1800,
+          "vehicle": 14
+        },
+        {
+          "booking_index": 51,
+          "discharge_complete": 2179,
+          "pickup_start": 1800,
+          "vehicle": 15
+        },
+        {
+          "booking_index": 53,
+          "discharge_complete": 2225,
+          "pickup_start": 1800,
+          "vehicle": 16
+        },
+        {
+          "booking_index": 55,
+          "discharge_complete": 2298,
+          "pickup_start": 1800,
+          "vehicle": 17
+        },
+        {
+          "booking_index": 61,
+          "discharge_complete": 2226,
+          "pickup_start": 1800,
+          "vehicle": 18
+        },
+        {
+          "booking_index": 63,
+          "discharge_complete": 2103,
+          "pickup_start": 1800,
+          "vehicle": 19
+        },
+        {
+          "booking_index": 18,
+          "discharge_complete": 3969,
+          "pickup_start": 3600,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 48,
+          "discharge_complete": 3937,
+          "pickup_start": 3600,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 7,
+          "discharge_complete": 5803,
+          "pickup_start": 5400,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 19,
+          "discharge_complete": 5842,
+          "pickup_start": 5400,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 37,
+          "discharge_complete": 5762,
+          "pickup_start": 5400,
+          "vehicle": 2
+        },
+        {
+          "booking_index": 49,
+          "discharge_complete": 5854,
+          "pickup_start": 5400,
+          "vehicle": 3
+        },
+        {
+          "booking_index": 8,
+          "discharge_complete": 7589,
+          "pickup_start": 7200,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 38,
+          "discharge_complete": 7631,
+          "pickup_start": 7200,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 9,
+          "discharge_complete": 9378,
+          "pickup_start": 9000,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 27,
+          "discharge_complete": 9471,
+          "pickup_start": 9000,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 39,
+          "discharge_complete": 9389,
+          "pickup_start": 9000,
+          "vehicle": 2
+        },
+        {
+          "booking_index": 57,
+          "discharge_complete": 9380,
+          "pickup_start": 9000,
+          "vehicle": 3
+        },
+        {
+          "booking_index": 28,
+          "discharge_complete": 11262,
+          "pickup_start": 10800,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 58,
+          "discharge_complete": 11286,
+          "pickup_start": 10800,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 17,
+          "discharge_complete": 13002,
+          "pickup_start": 12600,
+          "vehicle": 0
+        },
+        {
+          "booking_index": 29,
+          "discharge_complete": 13017,
+          "pickup_start": 12600,
+          "vehicle": 1
+        },
+        {
+          "booking_index": 47,
+          "discharge_complete": 12981,
+          "pickup_start": 12600,
+          "vehicle": 2
+        },
+        {
+          "booking_index": 59,
+          "discharge_complete": 13114,
+          "pickup_start": 12600,
+          "vehicle": 3
+        }
+      ],
+      "unplaced_indices": [],
+      "valid": true,
+      "vehicles": 80
+    },
+    "invalid_cells": 0,
+    "invalid_examples": [],
+    "max_distance_m": 4698.3,
+    "min_distance_m": 111.2,
+    "one_way_sites": 14,
+    "road_distance_m": {
+      "p50": 2003.7,
+      "p95": 3413,
+      "p99": 3945.1
+    },
+    "table_seconds": 0.037582625984214246,
+    "table_sha256": "ea0f39340dd4c69d92dd2f4a89bac797b7bfde5ade6bc6a63302c5f3df6eebab"
+  },
+  "independent_validation_seconds": 0.7464571629825514,
+  "interleaved": false,
+  "measurement": "QA instrumentation and independent validation included in wall time",
+  "memory": {
+    "child_peak_rss_bytes": 141565952,
+    "database_bytes": 631672832,
+    "parent_peak_rss_bytes": 210378752
+  },
+  "metrics": {
+    "cache_misses_at_call": 14625,
+    "certificates_independently_verified": 64,
+    "complete_validator_calls": 2274,
+    "insertion_pairs": 64,
+    "native_ortools_calls": 0,
+    "native_vroom_calls": 0,
+    "provider_failures": 0,
+    "provider_requests": 103,
+    "prunes": 0,
+    "requested_arcs": 30816
+  },
+  "pending_fraction": 0.0,
+  "provider_seconds": {
+    "p50": 0.0681672370119486,
+    "p95": 0.10796630498953164,
+    "p99": 0.11433850199682638
+  },
+  "queue": {
+    "max_pending": 63,
+    "samples": [
+      [
+        171872.818207328,
+        0
+      ],
+      [
+        171873.824540254,
+        0
+      ],
+      [
+        171874.83216824,
+        0
+      ],
+      [
+        171875.838253922,
+        0
+      ],
+      [
+        171876.846982119,
+        0
+      ],
+      [
+        171877.856897745,
+        0
+      ],
+      [
+        171878.862724419,
+        0
+      ],
+      [
+        171879.868965596,
+        37
+      ],
+      [
+        171880.875958554,
+        63
+      ],
+      [
+        171881.881710102,
+        60
+      ],
+      [
+        171882.911630712,
+        56
+      ],
+      [
+        171883.919573444,
+        53
+      ],
+      [
+        171884.933214411,
+        51
+      ],
+      [
+        171885.940723939,
+        49
+      ],
+      [
+        171886.945820187,
+        46
+      ],
+      [
+        171887.984606074,
+        43
+      ],
+      [
+        171888.996087227,
+        40
+      ],
+      [
+        171890.000919076,
+        37
+      ],
+      [
+        171891.013439653,
+        35
+      ],
+      [
+        171892.094315202,
+        33
+      ],
+      [
+        171893.119344725,
+        31
+      ],
+      [
+        171894.125076484,
+        30
+      ],
+      [
+        171895.130987987,
+        28
+      ],
+      [
+        171896.146391456,
+        26
+      ],
+      [
+        171897.153487985,
+        23
+      ],
+      [
+        171898.159946763,
+        21
+      ],
+      [
+        171899.163860822,
+        19
+      ],
+      [
+        171900.17080609,
+        18
+      ],
+      [
+        171901.177794029,
+        16
+      ],
+      [
+        171902.206288124,
+        14
+      ],
+      [
+        171903.223813671,
+        13
+      ],
+      [
+        171904.239407596,
+        11
+      ],
+      [
+        171905.335203817,
+        10
+      ],
+      [
+        171906.343943129,
+        9
+      ],
+      [
+        171907.350938675,
+        8
+      ],
+      [
+        171908.362164003,
+        7
+      ],
+      [
+        171909.397603604,
+        5
+      ],
+      [
+        171910.401995961,
+        4
+      ],
+      [
+        171911.458389444,
+        2
+      ],
+      [
+        171912.47511773,
+        1
+      ],
+      [
+        171913.485076127,
+        0
+      ],
+      [
+        171914.489073507,
+        0
+      ],
+      [
+        171915.495475477,
+        0
+      ],
+      [
+        171916.50129982,
+        0
+      ],
+      [
+        171917.510319493,
+        0
+      ],
+      [
+        171918.518308373,
+        0
+      ]
+    ]
+  },
+  "retried": 0,
+  "sql": {
+    "calls": 17071,
+    "max_seconds": 0.06820555700687692,
+    "seconds": 23.391561030672165
+  },
+  "statuses": {
+    "SUCCEEDED": 64
+  },
+  "terminal_failure_fraction": 0.0,
+  "terminal_throughput_per_second": 1.6055060144020175,
+  "throughput_per_second": 1.6055060144020175,
+  "total_attempts": 64,
+  "unknown": 0,
+  "vehicles": 80
+}

@@ -1,0 +1,16 @@
+{
+  "failure_code": "INVALID_FACILITY_HOURS",
+  "reservations": 0,
+  "status": "PENDING",
+  "unrelated_window": true,
+  "window_offsets_seconds": [
+    [
+      -7200.0,
+      -3600.0
+    ],
+    [
+      39600.0,
+      86400.0
+    ]
+  ]
+}

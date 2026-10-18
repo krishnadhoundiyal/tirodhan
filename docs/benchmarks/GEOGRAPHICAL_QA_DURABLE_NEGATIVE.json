@@ -1,0 +1,9 @@
+{
+  "accepted_bookings_preserved": 1,
+  "attempts": 2,
+  "false_promises": 0,
+  "negative_intent_code": "INVALID_ROAD_MATRIX",
+  "negative_intent_status": "PENDING",
+  "process_cache_restarts": 1,
+  "reservations": 1
+}

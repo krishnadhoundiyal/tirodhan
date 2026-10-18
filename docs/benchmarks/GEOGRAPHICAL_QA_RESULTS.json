@@ -1,0 +1,1730 @@
+{
+  "campaigns": [
+    {
+      "accepted": 512,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 299944816,
+        "cpu_fraction_of_two_cores": 0.4012516867302788,
+        "peak_process_rss_bytes": 216539136
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 511,
+        "retained_read_bytes_charged": 3423792,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 167234,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "Control",
+      "certification_attempt_seconds": {
+        "p50": 0.6148258130124304,
+        "p95": 0.9514341760077514,
+        "p99": 1.2150003949936945
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.08325144700938836,
+        "p95": 0.11891138801001944,
+        "p99": 0.20977435700478964
+      },
+      "concurrency": 4,
+      "count": 512,
+      "database": {
+        "blks_hit": 6202712,
+        "blks_read": 41,
+        "container_cpu_usec": 66969175,
+        "cpu_fraction_of_two_cores": 0.08958812752971607,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 596684800,
+        "temp_bytes": 0,
+        "xact_commit": 14512,
+        "xact_rollback": 8018
+      },
+      "decision_seconds": {
+        "p50": 132.33140383899445,
+        "p95": 298.7084059860208,
+        "p99": 314.83492878300603
+      },
+      "elapsed_seconds": 373.76143941498594,
+      "enqueue_seconds": {
+        "p50": 0.014599683985579759,
+        "p95": 0.020920842012856156,
+        "p99": 0.024669972975971177
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 20.32547262767912,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 735121,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 141041664,
+        "database_bytes": 624336896,
+        "parent_peak_rss_bytes": 216539136
+      },
+      "metrics": {
+        "cache_misses_at_call": 14625,
+        "certificates_independently_verified": 512,
+        "complete_validator_calls": 39101,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 3448,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 103,
+        "prunes": 1162,
+        "requested_arcs": 749746,
+        "serialization_calls": 38077,
+        "serialization_seconds": 2.2562408417870756
+      },
+      "pending_fraction": 0.0,
+      "provider_seconds": {
+        "p50": 0.047710988990729675,
+        "p95": 0.05999391901423223,
+        "p99": 0.06479620200116187
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "Control",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-Control",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=Control",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=600",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_Control.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 0,
+        "osrm_after": {
+          "cpu_nanoseconds": 107968954145,
+          "current_memory_bytes": 13651968,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 107005868523,
+          "current_memory_bytes": 11255808,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 0.963085622,
+        "started_at": "2026-10-18T06:41:20.6303868+00:00"
+      },
+      "sql": {
+        "calls": 223197,
+        "max_seconds": 0.2951145650004037,
+        "seconds": 202.94541722821305
+      },
+      "statuses": {
+        "SUCCEEDED": 512
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.3698577381374226,
+      "throughput_per_second": 1.3698577381374226,
+      "total_attempts": 512,
+      "unknown": 0,
+      "vehicles": 80
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 22893055,
+        "cpu_fraction_of_two_cores": 0.3311005951685051,
+        "peak_process_rss_bytes": 211439616
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 63,
+        "retained_read_bytes_charged": 1000984,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 6237,
+            "provider_cells": 59953,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "A",
+      "certification_attempt_seconds": {
+        "p50": 0.3215285270125605,
+        "p95": 1.189381645002868,
+        "p99": 1.916473165008938
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07356569499825127,
+        "p95": 0.0940522909804713,
+        "p99": 0.14194242499070242
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 329624,
+        "blks_read": 38,
+        "container_cpu_usec": 5219243,
+        "cpu_fraction_of_two_cores": 0.07548553321647347,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 522616832,
+        "temp_bytes": 0,
+        "xact_commit": 1431,
+        "xact_rollback": 849
+      },
+      "decision_seconds": {
+        "p50": 7.771380988997407,
+        "p95": 27.02533031400526,
+        "p99": 28.45664129999932
+      },
+      "elapsed_seconds": 34.571147461014334,
+      "enqueue_seconds": {
+        "p50": 0.012558494985569268,
+        "p95": 0.015094799018697813,
+        "p99": 0.016664163005771115
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 0.7484804760315455,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 16191,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 141971456,
+        "database_bytes": 523235328,
+        "parent_peak_rss_bytes": 211439616
+      },
+      "metrics": {
+        "cache_misses_at_call": 14625,
+        "certificates_independently_verified": 64,
+        "complete_validator_calls": 2274,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 64,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 103,
+        "prunes": 0,
+        "requested_arcs": 30816,
+        "serialization_calls": 2146,
+        "serialization_seconds": 0.14369101842748933,
+        "source_coverage_checks": 64
+      },
+      "pending_fraction": 0.0,
+      "provider_seconds": {
+        "p50": 0.04915449899272062,
+        "p95": 0.09734284301521257,
+        "p99": 0.3933616980211809
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "A",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-A",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=A",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=600",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_A.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 0,
+        "osrm_after": {
+          "cpu_nanoseconds": 109125206325,
+          "current_memory_bytes": 13152256,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 107998621830,
+          "current_memory_bytes": 13393920,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 1.126584495,
+        "started_at": "2026-10-18T06:48:02.6415626+00:00"
+      },
+      "sql": {
+        "calls": 16965,
+        "max_seconds": 0.17583859100705013,
+        "seconds": 20.911043432657607
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.8512547225160054,
+      "throughput_per_second": 1.8512547225160054,
+      "total_attempts": 64,
+      "unknown": 0,
+      "vehicles": 80
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 51651576,
+        "cpu_fraction_of_two_cores": 0.3269729719962529,
+        "peak_process_rss_bytes": 211902464
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 127,
+        "retained_read_bytes_charged": 1343936,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 2000000,
+            "hits": 23858,
+            "provider_cells": 255113,
+            "queries": 337
+          }
+        }
+      },
+      "campaign": "B",
+      "certification_attempt_seconds": {
+        "p50": 0.5283014169835951,
+        "p95": 0.9139434239768889,
+        "p99": 1.0676744070078712
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07479866300127469,
+        "p95": 0.09277148201363161,
+        "p99": 0.1002924409986008
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 977830,
+        "blks_read": 38,
+        "container_cpu_usec": 11661534,
+        "cpu_fraction_of_two_cores": 0.07382168609947838,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 535322624,
+        "temp_bytes": 0,
+        "xact_commit": 3297,
+        "xact_rollback": 1873
+      },
+      "decision_seconds": {
+        "p50": 22.60674053101684,
+        "p95": 62.123631163005484,
+        "p99": 65.70630448599695
+      },
+      "elapsed_seconds": 78.98447337199468,
+      "enqueue_seconds": {
+        "p50": 0.015866936009842902,
+        "p95": 0.028698617999907583,
+        "p99": 0.053071329020895064
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 1.8797955519985408,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 43924,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 141385728,
+        "database_bytes": 535191552,
+        "parent_peak_rss_bytes": 211902464
+      },
+      "metrics": {
+        "cache_misses_at_call": 37281,
+        "certificates_independently_verified": 128,
+        "complete_validator_calls": 7466,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 137,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 337,
+        "prunes": 9,
+        "requested_arcs": 81205,
+        "serialization_calls": 7210,
+        "serialization_seconds": 0.3710599063197151,
+        "source_coverage_checks": 128
+      },
+      "pending_fraction": 0.0,
+      "provider_seconds": {
+        "p50": 0.050602664006873965,
+        "p95": 0.07514284702483565,
+        "p99": 0.08567835600115359
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "B",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-B",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=B",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=600",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_B.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 0,
+        "osrm_after": {
+          "cpu_nanoseconds": 112939746077,
+          "current_memory_bytes": 13025280,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 109152388251,
+          "current_memory_bytes": 13090816,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 3.787357826,
+        "started_at": "2026-10-18T06:49:01.7479272+00:00"
+      },
+      "sql": {
+        "calls": 46207,
+        "max_seconds": 0.182870008982718,
+        "seconds": 41.13313382145134
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.6205716710568665,
+      "throughput_per_second": 1.6205716710568665,
+      "total_attempts": 128,
+      "unknown": 0,
+      "vehicles": 80
+    },
+    {
+      "accepted": 256,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 129750679,
+        "cpu_fraction_of_two_cores": 0.31275389567347056,
+        "peak_process_rss_bytes": 212897792
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 255,
+        "retained_read_bytes_charged": 2029768,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 2000000,
+            "hits": 86390,
+            "provider_cells": 1051762,
+            "queries": 1200
+          }
+        }
+      },
+      "campaign": "C",
+      "certification_attempt_seconds": {
+        "p50": 0.7359552209964022,
+        "p95": 1.1757761210028548,
+        "p99": 1.3819416559999809
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07271590200252831,
+        "p95": 0.08773949899477884,
+        "p99": 0.10484552799607627
+      },
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 2461062,
+        "blks_read": 38,
+        "container_cpu_usec": 27144620,
+        "cpu_fraction_of_two_cores": 0.06542999017042526,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 567042048,
+        "temp_bytes": 0,
+        "xact_commit": 8059,
+        "xact_rollback": 4289
+      },
+      "decision_seconds": {
+        "p50": 65.59848757399595,
+        "p95": 172.32115159698878,
+        "p99": 182.49950703102513
+      },
+      "elapsed_seconds": 207.43255447002593,
+      "enqueue_seconds": {
+        "p50": 0.012056320992996916,
+        "p95": 0.013845026987837628,
+        "p99": 0.01499909401172772
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 6.081653115019435,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 126680,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 141463552,
+        "database_bytes": 567074816,
+        "parent_peak_rss_bytes": 212897792
+      },
+      "metrics": {
+        "cache_misses_at_call": 107169,
+        "certificates_independently_verified": 256,
+        "complete_validator_calls": 18090,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 307,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 1200,
+        "prunes": 46,
+        "requested_arcs": 233849,
+        "serialization_calls": 17578,
+        "serialization_seconds": 0.940224909922108,
+        "source_coverage_checks": 256
+      },
+      "pending_fraction": 0.0,
+      "provider_seconds": {
+        "p50": 0.05017617001431063,
+        "p95": 0.06909139000345021,
+        "p99": 0.08334243000717834
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "C",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-C",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=C",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=600",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_C.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 0,
+        "osrm_after": {
+          "cpu_nanoseconds": 127461828510,
+          "current_memory_bytes": 13557760,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 112963462070,
+          "current_memory_bytes": 12992512,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 14.49836644,
+        "started_at": "2026-10-18T06:50:49.4819464+00:00"
+      },
+      "sql": {
+        "calls": 107079,
+        "max_seconds": 0.2145339430135209,
+        "seconds": 103.75243252149085
+      },
+      "statuses": {
+        "SUCCEEDED": 256
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.2341360817450284,
+      "throughput_per_second": 1.2341360817450284,
+      "total_attempts": 256,
+      "unknown": 0,
+      "vehicles": 80
+    },
+    {
+      "accepted": 512,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 369408701,
+        "cpu_fraction_of_two_cores": 0.29431737860440754,
+        "peak_process_rss_bytes": 216821760
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 511,
+        "retained_read_bytes_charged": 3401584,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 2000000,
+            "hits": 327202,
+            "provider_cells": 4269570,
+            "queries": 4508
+          }
+        }
+      },
+      "campaign": "D",
+      "certification_attempt_seconds": {
+        "p50": 1.1555178670096211,
+        "p95": 1.899311432003742,
+        "p99": 2.5077058559982106
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07062775499070995,
+        "p95": 0.08546763501362875,
+        "p99": 0.094110706995707
+      },
+      "concurrency": 4,
+      "count": 512,
+      "database": {
+        "blks_hit": 6478364,
+        "blks_read": 38,
+        "container_cpu_usec": 79417876,
+        "cpu_fraction_of_two_cores": 0.06327425698251188,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 726515712,
+        "temp_bytes": 0,
+        "xact_commit": 21445,
+        "xact_rollback": 10522
+      },
+      "decision_seconds": {
+        "p50": 187.60151352302637,
+        "p95": 539.6626075409877,
+        "p99": 574.3256576169806
+      },
+      "elapsed_seconds": 627.5686178499891,
+      "enqueue_seconds": {
+        "p50": 0.012153424002462998,
+        "p95": 0.014641404995927587,
+        "p99": 0.017296956008067355
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 22.529340301058255,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 407940,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 141455360,
+        "database_bytes": 787931136,
+        "parent_peak_rss_bytes": 216821760
+      },
+      "metrics": {
+        "cache_misses_at_call": 345249,
+        "certificates_independently_verified": 512,
+        "complete_validator_calls": 39210,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 3961,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 4508,
+        "prunes": 1602,
+        "requested_arcs": 753189,
+        "serialization_calls": 38186,
+        "serialization_seconds": 2.2792921209475026,
+        "source_coverage_checks": 512
+      },
+      "pending_fraction": 0.0,
+      "provider_seconds": {
+        "p50": 0.051143427001079544,
+        "p95": 0.08124286698875949,
+        "p99": 0.10561186200357042
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "D",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-D",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=D",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=600",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_D.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 0,
+        "osrm_after": {
+          "cpu_nanoseconds": 206846536733,
+          "current_memory_bytes": 13193216,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 146387049598,
+          "current_memory_bytes": 11096064,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 60.459487135,
+        "started_at": "2026-10-18T07:03:28.9226390+00:00"
+      },
+      "sql": {
+        "calls": 233703,
+        "max_seconds": 0.9612035719910637,
+        "seconds": 330.0430263686867
+      },
+      "statuses": {
+        "SUCCEEDED": 512
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 0.8158470411635305,
+      "throughput_per_second": 0.8158470411635305,
+      "total_attempts": 512,
+      "unknown": 0,
+      "vehicles": 80
+    },
+    {
+      "accepted": 250,
+      "admission_worker_quantum": 1,
+      "adopted_policy": false,
+      "application": {
+        "container_cpu_usec": 133272699,
+        "cpu_fraction_of_two_cores": 0.3211022303142206,
+        "peak_process_rss_bytes": 213037056
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 249,
+        "retained_read_bytes_charged": 1997688,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 2000000,
+            "hits": 79250,
+            "provider_cells": 924422,
+            "queries": 1068
+          }
+        }
+      },
+      "campaign": "E",
+      "certification_attempt_seconds": {
+        "p50": 0.7738357780035585,
+        "p95": 1.2177549219923094,
+        "p99": 1.3870061299821828
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07211825301055796,
+        "p95": 0.08837847702670842,
+        "p99": 0.10475889800000004
+      },
+      "concurrency": 4,
+      "count": 512,
+      "database": {
+        "blks_hit": 2365397,
+        "blks_read": 38,
+        "container_cpu_usec": 29170329,
+        "cpu_fraction_of_two_cores": 0.07028189397514631,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 569016320,
+        "temp_bytes": 0,
+        "xact_commit": 8092,
+        "xact_rollback": 4231
+      },
+      "decision_seconds": {
+        "p50": 70.55306889000349,
+        "p95": 172.31388854901888,
+        "p99": 182.04115904300124
+      },
+      "elapsed_seconds": 207.5237827989913,
+      "enqueue_seconds": {
+        "p50": 0.013753764011198655,
+        "p95": 0.01906891298131086,
+        "p99": 0.022615402995143086
+      },
+      "expired": 0,
+      "failures": {},
+      "independent_validation_seconds": 6.242505597358104,
+      "interleaved": false,
+      "logical_id_pair_entry_hits_at_call": 123905,
+      "measurement": "QA instrumentation and independent validation included in wall time",
+      "memory": {
+        "child_peak_rss_bytes": 140947456,
+        "database_bytes": 569241600,
+        "parent_peak_rss_bytes": 213037056
+      },
+      "metrics": {
+        "cache_misses_at_call": 101222,
+        "certificates_independently_verified": 250,
+        "complete_validator_calls": 17592,
+        "database_sqlstate_40001": 0,
+        "database_sqlstate_40P01": 0,
+        "insertion_pairs": 295,
+        "native_ortools_calls": 0,
+        "native_vroom_calls": 0,
+        "provider_failures": 0,
+        "provider_requests": 1068,
+        "prunes": 44,
+        "requested_arcs": 225127,
+        "serialization_calls": 17092,
+        "serialization_seconds": 0.9267472815117799,
+        "source_coverage_checks": 250
+      },
+      "pending_fraction": 0.51171875,
+      "provider_seconds": {
+        "p50": 0.05032253498211503,
+        "p95": 0.07707420000224374,
+        "p99": 0.10516873598680831
+      },
+      "retried": 0,
+      "runtime": {
+        "campaign": "E",
+        "docker_arguments": [
+          "run",
+          "--rm",
+          "--name",
+          "tirodhan-geographical-qa-E",
+          "--label",
+          "tirodhan.task=geographical-qa",
+          "--cpus",
+          "2",
+          "--memory",
+          "4g",
+          "--network",
+          "container:tirodhan-geographical-qa-db",
+          "-v",
+          "C:\\Users\\91956\\Tirodhan\\tirodhan:/repo",
+          "-e",
+          "TIRODHAN_HYPOTHESIS_DATABASE=/tmp/hypothesis",
+          "-e",
+          "TIRODHAN_GEO_QA=1",
+          "-e",
+          "TIRODHAN_TEST_DATABASE_URL=postgresql+asyncpg://postgres:local-test-only@127.0.0.1:5432/geographical_qa",
+          "-e",
+          "TIRODHAN_OSRM_TEST_URL=http://127.0.0.1:5000",
+          "-e",
+          "TIRODHAN_GEO_CAMPAIGN=E",
+          "-e",
+          "TIRODHAN_ADMISSION_BUDGET=180",
+          "-e",
+          "TIRODHAN_GEO_OUTPUT=docs/benchmarks/GEOGRAPHICAL_QA_E.json",
+          "tirodhan-routing-tests:increment-8",
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "-s",
+          "tests/integration/test_geographical_qa.py",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "exit_code": 1,
+        "osrm_after": {
+          "cpu_nanoseconds": 140763910925,
+          "current_memory_bytes": 13742080,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_before": {
+          "cpu_nanoseconds": 127501810297,
+          "current_memory_bytes": 13578240,
+          "lifetime_peak_memory_bytes": 60723200
+        },
+        "osrm_cpu_seconds": 13.262100628,
+        "started_at": "2026-10-18T06:54:53.7712687+00:00"
+      },
+      "sql": {
+        "calls": 106572,
+        "max_seconds": 0.2911626860150136,
+        "seconds": 108.23200136041851
+      },
+      "statuses": {
+        "PENDING": 262,
+        "SUCCEEDED": 250
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.2046812014898138,
+      "throughput_per_second": 1.2046812014898138,
+      "total_attempts": 250,
+      "unknown": 0,
+      "vehicles": 80
+    }
+  ],
+  "custody": {
+    "cargo_preserved": true,
+    "cargo_released_after_handover": false,
+    "collected_before_expiry": 2,
+    "collected_history_preserved": true,
+    "discharge_deadline_after_expiry": true,
+    "expired_shift_excluded": true,
+    "future_shift_constraint": "uq_open_rider_shift",
+    "future_shift_same_vehicle": "IntegrityError",
+    "handover": "ACTIVE_SHIFT_REQUIRED",
+    "independent_admission": "PENDING",
+    "independent_admission_code": "REGIONAL_INPUTS_REQUIRE_ATTENTION",
+    "independent_vehicle_present": true,
+    "onboard_mass_g": 8000,
+    "orphaned_route_explicit": true,
+    "shift_close": "SHIFT_HAS_OBLIGATIONS"
+  },
+  "durable_negative": {
+    "accepted_bookings_preserved": 1,
+    "attempts": 2,
+    "false_promises": 0,
+    "negative_intent_code": "INVALID_ROAD_MATRIX",
+    "negative_intent_status": "PENDING",
+    "process_cache_restarts": 1,
+    "reservations": 1
+  },
+  "future_window_comparison": [
+    {
+      "failure_code": null,
+      "reservations": 1,
+      "status": "SUCCEEDED",
+      "unrelated_window": false,
+      "window_offsets_seconds": [
+        [
+          39600.0,
+          86400.0
+        ]
+      ]
+    },
+    {
+      "failure_code": "INVALID_FACILITY_HOURS",
+      "reservations": 0,
+      "status": "PENDING",
+      "unrelated_window": true,
+      "window_offsets_seconds": [
+        [
+          -7200.0,
+          -3600.0
+        ],
+        [
+          39600.0,
+          86400.0
+        ]
+      ]
+    }
+  ],
+  "initial_verification": {
+    "command": [
+      "/opt/routing/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-s",
+      "-p",
+      "no:cacheprovider",
+      "--junitxml=/tmp/tirodhan-geographical-qa-d0xkdxuz/junit.xml",
+      "tests/routing",
+      "tests/integration/test_admission_reliability.py",
+      "tests/integration/test_admission_scalability.py",
+      "tests/integration/test_operational_orchestration.py",
+      "tests/integration/test_orchestration_custody_races.py",
+      "tests/integration/test_routing_dispatch.py",
+      "tests/integration/test_geographical_recovery_qa.py",
+      "tests/integration/test_geographical_custody_qa.py"
+    ],
+    "counts": {
+      "errors": 0,
+      "failures": 6,
+      "skipped": 0,
+      "tests": 202
+    },
+    "elapsed_seconds": 232.41885933099547,
+    "exit_code": 1,
+    "qualified": false,
+    "resource_qualification": "20ms samples; short-lived processes may be missed",
+    "sampled_cpu_seconds": {
+      "application": 82.18,
+      "ortools": 15.08,
+      "vroom": 0.15
+    },
+    "sampled_peak_rss_bytes": {
+      "application": 345407488,
+      "ortools": 48357376,
+      "vroom": 8912896
+    }
+  },
+  "metric_definitions": {
+    "cache_misses_at_call": "logical requested node-ID pairs with absent coordinate entry",
+    "logical_id_pair_entry_hits_at_call": "same logical ID-pair denominator as misses",
+    "pending": "right-censored at budget, includes unknown; not proven infeasible",
+    "road_cache_hits": "production counter after physical-coordinate deduplication"
+  },
+  "original_benchmark": [
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 34978408,
+        "cpu_fraction_of_two_cores": 0.42755394898538396,
+        "peak_process_rss_bytes": 210190336
+      },
+      "caches": null,
+      "campaign": "base64-final",
+      "certification_attempt_seconds": {
+        "p50": 0.35897450998891145,
+        "p95": 1.59970613400219
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06702258400036953,
+        "p95": 0.08776838300400414
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 129187,
+        "blks_read": 55,
+        "container_cpu_usec": 2808477,
+        "cpu_fraction_of_two_cores": 0.03432904756513287,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 838721536,
+        "temp_bytes": 0,
+        "xact_commit": 995,
+        "xact_rollback": 676
+      },
+      "decision_seconds": {
+        "p50": 9.690697081998223,
+        "p95": 30.28140094401897
+      },
+      "elapsed_seconds": 40.90525661499123,
+      "enqueue_seconds": {
+        "p50": 0.01059145899489522,
+        "p95": 0.013044238992733881
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 48.42s",
+      "sql": {
+        "calls": 10645,
+        "max_seconds": 1.349146660999395,
+        "seconds": 12.716949078108883
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.5645910891693282,
+      "throughput_per_second": 1.5645910891693282,
+      "vehicles": 20
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 106880105,
+        "cpu_fraction_of_two_cores": 0.45013622384266744,
+        "peak_process_rss_bytes": 217001984
+      },
+      "caches": null,
+      "campaign": "base128-final",
+      "certification_attempt_seconds": {
+        "p50": 0.5474360740045086,
+        "p95": 2.208944854006404
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07805842100060545,
+        "p95": 0.1013628350046929
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 254751,
+        "blks_read": 31,
+        "container_cpu_usec": 6244723,
+        "cpu_fraction_of_two_cores": 0.026300273845758792,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 865550336,
+        "temp_bytes": 0,
+        "xact_commit": 2178,
+        "xact_rollback": 1478
+      },
+      "decision_seconds": {
+        "p50": 37.36568138099392,
+        "p95": 97.52182012898265
+      },
+      "elapsed_seconds": 118.71973342602723,
+      "enqueue_seconds": {
+        "p50": 0.010973388998536393,
+        "p95": 0.014014913002029061
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 126.58s (0:02:06)",
+      "sql": {
+        "calls": 21490,
+        "max_seconds": 2.3571852689783555,
+        "seconds": 28.815858119778568
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.0781695368256128,
+      "throughput_per_second": 1.0781695368256128,
+      "vehicles": 20
+    },
+    {
+      "accepted": 0,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 8127764,
+        "cpu_fraction_of_two_cores": 0.3040793661508431,
+        "peak_process_rss_bytes": 197525504
+      },
+      "caches": null,
+      "campaign": "base256-final",
+      "certification_attempt_seconds": {
+        "p50": 0.032210827979724854,
+        "p95": 0.05032183401635848
+      },
+      "checkout_capture_seconds": null,
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 252289,
+        "blks_read": 10,
+        "container_cpu_usec": 2989096,
+        "cpu_fraction_of_two_cores": 0.11182933178719515,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 834191360,
+        "temp_bytes": 0,
+        "xact_commit": 1245,
+        "xact_rollback": 1055
+      },
+      "decision_seconds": {
+        "p50": 6.544009122007992,
+        "p95": 9.288548366021132
+      },
+      "elapsed_seconds": 13.364543775009224,
+      "enqueue_seconds": {
+        "p50": 0.011239219980780035,
+        "p95": 0.014367995987413451
+      },
+      "failures": {
+        "VEHICLE_SCOPE_LIMIT": 256
+      },
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed in 23.29s",
+      "sql": {
+        "calls": 7017,
+        "max_seconds": 0.11104138399241492,
+        "seconds": 6.266980826650979
+      },
+      "statuses": {
+        "FAILED": 256
+      },
+      "terminal_failure_fraction": 1.0,
+      "terminal_throughput_per_second": 19.155161920207284,
+      "throughput_per_second": 0.0,
+      "vehicles": 40
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 12064482,
+        "cpu_fraction_of_two_cores": 0.3201621519656138,
+        "peak_process_rss_bytes": 206381056
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 63,
+        "retained_read_bytes_charged": 521792,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 5476,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after64-final",
+      "certification_attempt_seconds": {
+        "p50": 0.1905783490219619,
+        "p95": 0.2994260350242257
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06874501900165342,
+        "p95": 0.09588326798984781
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 206855,
+        "blks_read": 46,
+        "container_cpu_usec": 2765079,
+        "cpu_fraction_of_two_cores": 0.07337850419064221,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 942960640,
+        "temp_bytes": 0,
+        "xact_commit": 1076,
+        "xact_rollback": 682
+      },
+      "decision_seconds": {
+        "p50": 5.9769331389979925,
+        "p95": 12.292680818005465
+      },
+      "elapsed_seconds": 18.841205817006994,
+      "enqueue_seconds": {
+        "p50": 0.011761342990212142,
+        "p95": 0.031061500980285928
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 26.74s",
+      "sql": {
+        "calls": 12569,
+        "max_seconds": 0.04066287601017393,
+        "seconds": 7.979989921237575
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.3968101947185603,
+      "throughput_per_second": 3.3968101947185603,
+      "vehicles": 20
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 23614631,
+        "cpu_fraction_of_two_cores": 0.340064120572732,
+        "peak_process_rss_bytes": 209690624
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 127,
+        "retained_read_bytes_charged": 867512,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 24691,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after128-final",
+      "certification_attempt_seconds": {
+        "p50": 0.17441855699871667,
+        "p95": 0.271691979985917
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06788447799044661,
+        "p95": 0.08760943001834676
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 546541,
+        "blks_read": 42,
+        "container_cpu_usec": 5574333,
+        "cpu_fraction_of_two_cores": 0.0802735663929942,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 958160896,
+        "temp_bytes": 0,
+        "xact_commit": 2137,
+        "xact_rollback": 1390
+      },
+      "decision_seconds": {
+        "p50": 13.211767775996123,
+        "p95": 22.781928624986904
+      },
+      "elapsed_seconds": 34.72085052699549,
+      "enqueue_seconds": {
+        "p50": 0.011054514005081728,
+        "p95": 0.013190861005568877
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 42.80s",
+      "sql": {
+        "calls": 25780,
+        "max_seconds": 0.04503713597659953,
+        "seconds": 14.933276034600567
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.6865456363311115,
+      "throughput_per_second": 3.6865456363311115,
+      "vehicles": 20
+    },
+    {
+      "accepted": 256,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 67607184,
+        "cpu_fraction_of_two_cores": 0.32609552865240327,
+        "peak_process_rss_bytes": 212017152
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 255,
+        "retained_read_bytes_charged": 1720232,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 67283,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after256-final",
+      "certification_attempt_seconds": {
+        "p50": 0.2992244490014855,
+        "p95": 0.5202863090089522
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06698635697830468,
+        "p95": 0.0836805829894729
+      },
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 13067191,
+        "blks_read": 42,
+        "container_cpu_usec": 28084617,
+        "cpu_fraction_of_two_cores": 0.13546294174322174,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 1073741824,
+        "temp_bytes": 0,
+        "xact_commit": 5217,
+        "xact_rollback": 3142
+      },
+      "decision_seconds": {
+        "p50": 37.17758486099774,
+        "p95": 78.48804492800264
+      },
+      "elapsed_seconds": 103.66162375698332,
+      "enqueue_seconds": {
+        "p50": 0.010853293992113322,
+        "p95": 0.0139063140086364
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 113.11s (0:01:53)",
+      "sql": {
+        "calls": 71788,
+        "max_seconds": 0.25513489797594957,
+        "seconds": 56.87231828973745
+      },
+      "statuses": {
+        "SUCCEEDED": 256
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 2.4695735096736238,
+      "throughput_per_second": 2.4695735096736238,
+      "vehicles": 40
+    },
+    {
+      "accepted": 512,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 222634046,
+        "cpu_fraction_of_two_cores": 0.39043382162627477,
+        "peak_process_rss_bytes": 213483520
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 511,
+        "retained_read_bytes_charged": 3425672,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 167091,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after512-final",
+      "certification_attempt_seconds": {
+        "p50": 0.4754832499893382,
+        "p95": 0.7167127470020205
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.0669756050046999,
+        "p95": 0.08791062698583119
+      },
+      "concurrency": 4,
+      "count": 512,
+      "database": {
+        "blks_hit": 6332983,
+        "blks_read": 66,
+        "container_cpu_usec": 53732340,
+        "cpu_fraction_of_two_cores": 0.09423052416305791,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 1041330176,
+        "temp_bytes": 0,
+        "xact_commit": 12651,
+        "xact_rollback": 7056
+      },
+      "decision_seconds": {
+        "p50": 98.77155517201754,
+        "p95": 227.2046853240172
+      },
+      "elapsed_seconds": 285.1111170039803,
+      "enqueue_seconds": {
+        "p50": 0.010898132983129472,
+        "p95": 0.013276799989398569
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 296.83s (0:04:56)",
+      "sql": {
+        "calls": 222133,
+        "max_seconds": 0.1499383540067356,
+        "seconds": 143.6895804682572
+      },
+      "statuses": {
+        "SUCCEEDED": 512
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.7957910774585901,
+      "throughput_per_second": 1.7957910774585901,
+      "vehicles": 80
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 15173629,
+        "cpu_fraction_of_two_cores": 0.29807830497699017,
+        "peak_process_rss_bytes": 213467136
+      },
+      "caches": {
+        "delta_reads": 74,
+        "full_reads": 1,
+        "hits": 4,
+        "retained_read_bytes_charged": 506600,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 7185,
+            "provider_cells": 56098,
+            "queries": 112
+          }
+        }
+      },
+      "campaign": "after64-interleaved",
+      "certification_attempt_seconds": {
+        "p50": 0.20941079998738132,
+        "p95": 0.28763887600507587
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07070213198312558,
+        "p95": 0.13844644601340406
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 269731,
+        "blks_read": 187,
+        "container_cpu_usec": 3735006,
+        "cpu_fraction_of_two_cores": 0.0733723130807329,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 981315584,
+        "temp_bytes": 0,
+        "xact_commit": 1618,
+        "xact_rollback": 954
+      },
+      "decision_seconds": {
+        "p50": 10.336059820023365,
+        "p95": 21.38631327499752
+      },
+      "elapsed_seconds": 25.452420968998922,
+      "enqueue_seconds": {
+        "p50": 0.01114043898996897,
+        "p95": 0.012994994001928717
+      },
+      "failures": {},
+      "interleaved": true,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 33.30s",
+      "sql": {
+        "calls": 15509,
+        "max_seconds": 0.17894664098275825,
+        "seconds": 11.802525761188008
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 2.5144955789452044,
+      "throughput_per_second": 2.5144955789452044,
+      "vehicles": 20
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 34069271,
+        "cpu_fraction_of_two_cores": 0.42451063832698804,
+        "peak_process_rss_bytes": 213692416
+      },
+      "caches": null,
+      "campaign": "base64-interleaved",
+      "certification_attempt_seconds": {
+        "p50": 0.3386995949840639,
+        "p95": 1.5959172690054402
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06486036701244302,
+        "p95": 0.11830365299829282
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 171089,
+        "blks_read": 96,
+        "container_cpu_usec": 3397616,
+        "cpu_fraction_of_two_cores": 0.042335045471034234,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 963465216,
+        "temp_bytes": 0,
+        "xact_commit": 1208,
+        "xact_rollback": 851
+      },
+      "decision_seconds": {
+        "p50": 12.569069391000085,
+        "p95": 34.1576409600093
+      },
+      "elapsed_seconds": 40.12769990201923,
+      "enqueue_seconds": {
+        "p50": 0.010951332980766892,
+        "p95": 0.013839849998475984
+      },
+      "failures": {},
+      "interleaved": true,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 47.85s",
+      "sql": {
+        "calls": 11276,
+        "max_seconds": 0.8570808850054163,
+        "seconds": 15.345682452607434
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.5949082592889785,
+      "throughput_per_second": 1.5949082592889785,
+      "vehicles": 20
+    }
+  ],
+  "qa_branch": "codex/geographical-scalability-qa",
+  "qualification": "FAILED",
+  "quality": {
+    "full_repository_format": 2,
+    "mypy": 0,
+    "mypy_result": "Success: no issues found in 214 source files",
+    "preexisting_format_failure": {
+      "byte": "0x96",
+      "line": 417,
+      "matches_target_commit": true,
+      "normalized_blob_sha256": "c55d85f34763ce960e05ba4f7f564a74ebe74d6b2507d2ab5fb625f7c339a299",
+      "normalized_offset": 28450,
+      "path": "docs/COMMERCIAL_ADMISSION_SCALABILITY.md"
+    },
+    "python_format": 0,
+    "ruff": 0
+  },
+  "target_commit": "d9b676d74fd84394789b1909c2afa0335f5b69a9",
+  "verification": {
+    "command": [
+      "/opt/routing/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-s",
+      "-p",
+      "no:cacheprovider",
+      "--junitxml=/tmp/tirodhan-geographical-qa-07n6wvg9/junit.xml",
+      "tests/routing",
+      "tests/integration/test_admission_reliability.py",
+      "tests/integration/test_admission_scalability.py",
+      "tests/integration/test_operational_orchestration.py",
+      "tests/integration/test_orchestration_custody_races.py",
+      "tests/integration/test_routing_dispatch.py",
+      "tests/integration/test_geographical_recovery_qa.py",
+      "tests/integration/test_geographical_custody_qa.py"
+    ],
+    "counts": {
+      "errors": 0,
+      "failures": 3,
+      "skipped": 0,
+      "tests": 205
+    },
+    "elapsed_seconds": 245.24329857502016,
+    "exit_code": 1,
+    "qualified": false,
+    "resource_qualification": "20ms samples; short-lived processes may be missed",
+    "sampled_cpu_seconds": {
+      "application": 82.22,
+      "ortools": 20.36,
+      "vroom": 0.12
+    },
+    "sampled_peak_rss_bytes": {
+      "application": 351133696,
+      "ortools": 48414720,
+      "vroom": 8912896
+    }
+  }
+}

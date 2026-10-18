@@ -1,0 +1,12 @@
+{
+  "failure_code": null,
+  "reservations": 1,
+  "status": "SUCCEEDED",
+  "unrelated_window": false,
+  "window_offsets_seconds": [
+    [
+      39600.0,
+      86400.0
+    ]
+  ]
+}

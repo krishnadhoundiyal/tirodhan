@@ -1,0 +1,84 @@
+{
+  "bicycle": {
+    "cold_seconds": 0.08417469399864785,
+    "distance_m": [
+      [
+        0,
+        197,
+        null
+      ],
+      [
+        197,
+        0,
+        null
+      ],
+      [
+        null,
+        null,
+        0
+      ]
+    ],
+    "hits": 2,
+    "provider_cells": 17,
+    "queries": 3,
+    "travel_seconds": [
+      [
+        0,
+        48,
+        null
+      ],
+      [
+        48,
+        0,
+        null
+      ],
+      [
+        null,
+        null,
+        0
+      ]
+    ],
+    "warm_seconds": 4.78779838886112e-05
+  },
+  "car": {
+    "cold_seconds": 0.06292820299859159,
+    "distance_m": [
+      [
+        0,
+        197,
+        null
+      ],
+      [
+        null,
+        0,
+        null
+      ],
+      [
+        null,
+        null,
+        0
+      ]
+    ],
+    "hits": 2,
+    "provider_cells": 17,
+    "queries": 3,
+    "travel_seconds": [
+      [
+        0,
+        29,
+        null
+      ],
+      [
+        null,
+        0,
+        null
+      ],
+      [
+        null,
+        null,
+        0
+      ]
+    ],
+    "warm_seconds": 4.112499300390482e-05
+  }
+}

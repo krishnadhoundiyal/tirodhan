@@ -1,0 +1,99 @@
+{
+  "input_sites": [
+    {
+      "bridge": false,
+      "latitude": 28.6272752,
+      "longitude": 77.2088478,
+      "one_way": false,
+      "osm_node_id": 12319493474,
+      "snap_distance_m": 59.76933463,
+      "snapped": [
+        77.208565,
+        28.627753
+      ],
+      "ways": [
+        1331474324
+      ]
+    },
+    {
+      "bridge": false,
+      "latitude": 28.6277537,
+      "longitude": 77.2085677,
+      "one_way": true,
+      "osm_node_id": 11778255747,
+      "snap_distance_m": 0,
+      "snapped": [
+        77.208568,
+        28.627754
+      ],
+      "ways": [
+        24583332
+      ]
+    }
+  ],
+  "raw_osrm": {
+    "code": "Ok",
+    "destinations": [
+      {
+        "distance": 59.76933463,
+        "hint": "-AAAgP___38AAAAAFQAAAAsAAABHAAAAgpCgPocX_EHivYBBYejVQgAAAAAVAAAACwAAAEcAAAAlAAAA9RuaBCnTtAEQHZoES9G0AQIALw8AAAAA",
+        "location": [
+          77.208565,
+          28.627753
+        ],
+        "name": "Baba Kharak Singh Marg"
+      },
+      {
+        "distance": 0,
+        "hint": "-AAAgP___38LAAAACwAAAAAAAABcAAAA4r2AQQAAAAAAAAAA3cYKQwsAAAALAAAAAAAAAFwAAAAlAAAA-BuaBCrTtAH4G5oEKtO0AQAALw8AAAAA",
+        "location": [
+          77.208568,
+          28.627754
+        ],
+        "name": "Baba Kharak Singh Marg"
+      }
+    ],
+    "distances": [
+      [
+        0,
+        -0.3
+      ],
+      [
+        0.3,
+        0
+      ]
+    ],
+    "durations": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "sources": [
+      {
+        "distance": 59.76933463,
+        "hint": "-AAAgP___38AAAAAFQAAAAsAAABHAAAAgpCgPocX_EHivYBBYejVQgAAAAAVAAAACwAAAEcAAAAlAAAA9RuaBCnTtAEQHZoES9G0AQIALw8AAAAA",
+        "location": [
+          77.208565,
+          28.627753
+        ],
+        "name": "Baba Kharak Singh Marg"
+      },
+      {
+        "distance": 0,
+        "hint": "-AAAgP___38LAAAACwAAAAAAAABcAAAA4r2AQQAAAAAAAAAA3cYKQwsAAAALAAAAAAAAAFwAAAAlAAAA-BuaBCrTtAH4G5oEKtO0AQAALw8AAAAA",
+        "location": [
+          77.208568,
+          28.627754
+        ],
+        "name": "Baba Kharak Singh Marg"
+      }
+    ]
+  },
+  "result": "INVALID_ROAD_MATRIX; no cache entries or invented distances",
+  "seed": 20261018
+}

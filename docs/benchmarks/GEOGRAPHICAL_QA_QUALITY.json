@@ -1,0 +1,15 @@
+{
+  "full_repository_format": 2,
+  "ruff": 0,
+  "preexisting_format_failure": {
+    "line": 417,
+    "normalized_blob_sha256": "c55d85f34763ce960e05ba4f7f564a74ebe74d6b2507d2ab5fb625f7c339a299",
+    "matches_target_commit": true,
+    "normalized_offset": 28450,
+    "path": "docs/COMMERCIAL_ADMISSION_SCALABILITY.md",
+    "byte": "0x96"
+  },
+  "mypy": 0,
+  "python_format": 0,
+  "mypy_result": "Success: no issues found in 214 source files"
+}

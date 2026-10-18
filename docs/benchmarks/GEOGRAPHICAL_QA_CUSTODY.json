@@ -1,0 +1,17 @@
+{
+  "cargo_preserved": true,
+  "cargo_released_after_handover": false,
+  "collected_before_expiry": 2,
+  "collected_history_preserved": true,
+  "discharge_deadline_after_expiry": true,
+  "expired_shift_excluded": true,
+  "future_shift_constraint": "uq_open_rider_shift",
+  "future_shift_same_vehicle": "IntegrityError",
+  "handover": "ACTIVE_SHIFT_REQUIRED",
+  "independent_admission": "PENDING",
+  "independent_admission_code": "REGIONAL_INPUTS_REQUIRE_ATTENTION",
+  "independent_vehicle_present": true,
+  "onboard_mass_g": 8000,
+  "orphaned_route_explicit": true,
+  "shift_close": "SHIFT_HAS_OBLIGATIONS"
+}

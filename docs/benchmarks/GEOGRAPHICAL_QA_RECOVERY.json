@@ -1,0 +1,76 @@
+{
+  "accepted_source_change_after": 3,
+  "admitted": 8,
+  "certificates_full_gate": 8,
+  "process_cache_restarts": 1,
+  "profiles": [
+    "test-car",
+    "test-bicycle"
+  ],
+  "proofs": [
+    {
+      "durable_obligations": 1,
+      "lots": 1,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 2,
+      "lots": 2,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 3,
+      "lots": 3,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 4,
+      "lots": 4,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 5,
+      "lots": 5,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 6,
+      "lots": 6,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 7,
+      "lots": 7,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    },
+    {
+      "durable_obligations": 8,
+      "lots": 8,
+      "profiles": [
+        "test-bicycle",
+        "test-car"
+      ]
+    }
+  ]
+}
