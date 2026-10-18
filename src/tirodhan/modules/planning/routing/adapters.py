@@ -163,8 +163,10 @@ def vroom_payload(prepared: PreparedProblem) -> dict[str, Any]:
             time_windows=stop["windows"],
         )
 
-    for lot in sorted({stop["lot"] for stop in stops}):
-        group = [stop for stop in stops if stop["lot"] == lot]
+    groups: dict[int, list[dict[str, Any]]] = {}
+    for stop in stops:
+        groups.setdefault(stop["lot"], []).append(stop)
+    for lot, group in sorted(groups.items()):
         pickups = [stop for stop in group if stop["kind"] == "PICKUP"]
         drops = [stop for stop in group if stop["kind"] == "DISCHARGE"]
         if pickups:
@@ -189,11 +191,10 @@ def vroom_payload(prepared: PreparedProblem) -> dict[str, Any]:
                 )
             )
         else:
-            owners = [v for v in vehicles if v["initial"][p["physical_dimensions"] + lot] > 0]
+            owners = [v for v in vehicles if v["initial_lots"].get(str(lot), 0) > 0]
             if (
                 len(owners) != 1
-                or sum(stop["quantity"] for stop in drops)
-                != owners[0]["initial"][p["physical_dimensions"] + lot]
+                or sum(stop["quantity"] for stop in drops) != owners[0]["initial_lots"][str(lot)]
             ):
                 raise RoutingAdapterError("VROOM_CARGO_BALANCE_UNSUPPORTED")
             for stop in drops:

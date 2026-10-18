@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -8,6 +9,7 @@ from uuid import UUID
 
 ROUTING_CONTRACT_V1 = "DYNAMIC_COLLECTION_ROUTING_V1"
 ROUTING_CONTRACT_V2 = "DYNAMIC_COLLECTION_ROUTING_V2"
+ROUTING_CONTRACT_V3 = "DYNAMIC_COLLECTION_ROUTING_V3"
 
 
 class OptimizerEngine(str, Enum):
@@ -48,6 +50,14 @@ class RoutingLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class RoadArc:
+    origin: UUID
+    destination: UUID
+    seconds: int | None
+    metres: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class RoadMatrix:
     matrix_id: UUID
     graph_version: str
@@ -55,6 +65,26 @@ class RoadMatrix:
     node_ids: tuple[UUID, ...]
     travel_seconds: tuple[tuple[int | None, ...], ...]
     distance_m: tuple[tuple[int | None, ...], ...]
+    sparse_arcs: tuple[RoadArc, ...] | None = None
+    snap_tokens: tuple[tuple[str, str], ...] = ()
+
+    def arc(
+        self, origin: UUID, destination: UUID, indices: dict[UUID, int]
+    ) -> tuple[int | None, int | None]:
+        if self.sparse_arcs is not None:
+            key = (origin.int, destination.int)
+            position = bisect_left(
+                self.sparse_arcs, key, key=lambda a: (a.origin.int, a.destination.int)
+            )
+            if position == len(self.sparse_arcs) or (
+                self.sparse_arcs[position].origin,
+                self.sparse_arcs[position].destination,
+            ) != (origin, destination):
+                raise KeyError("ROAD_ARC_NOT_ACQUIRED")
+            arc = self.sparse_arcs[position]
+            return arc.seconds, arc.metres
+        i, j = indices[origin], indices[destination]
+        return self.travel_seconds[i][j], self.distance_m[i][j]
 
 
 @dataclass(frozen=True, slots=True)

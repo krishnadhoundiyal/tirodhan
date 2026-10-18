@@ -1240,3 +1240,23 @@ authorization, PHOTO attribution and effective measured capacity. Vehicle safety
 is separate from GPS. The indexed financial-outbox bridge leaves publication/producer intact.
 Empty-adoption downgrade preserves earlier finance/V1 data; new populated history makes
 downgrade refuse before destruction. See [validation](V2_ROUTING_INCREMENT_7.md).
+
+## Migration 0030 — shared commercial proofs
+
+Adds nine relational tables: admission_plan_revision, admission_route_certificate,
+admission_route_membership, admission_obligation, admission_allocation,
+admission_proof_obligation, admission_preparation_lease, admission_source_notice and
+admission_source_head. Stable obligation aliases reference real reservations/requests;
+proofs reference vehicles/shifts, and temporal membership uses composite ownership FKs
+and one active membership per vehicle. Immutable proof/revision coverage, close-once
+membership and bind-once aliases are enforced in PostgreSQL. Allocation is advisory.
+Versioned route proof JSON contains contract evidence, not core ownership relationships.
+
+Transactional triggers coalesce source invalidations by region/table/identifier and update
+a separate source-head fence. They carry no coordinates or customer payloads. The existing admission intent gains a per-command preparation_cursor JSONB field for
+identifier-only resumable computation; it is not shared on the regional lease. The regional
+intent due index supports bounded FIFO claims; large identity predicates use PostgreSQL
+arrays. Upgrade requires draining RUNNING admission preparation. Legacy certificates remain
+readable; downgrade preserves populated legacy data but refuses populated new proof history.
+No financial schema or initiation-term trigger changes. See
+[schema, recovery and validation](COMMERCIAL_ADMISSION_SCALABILITY.md).

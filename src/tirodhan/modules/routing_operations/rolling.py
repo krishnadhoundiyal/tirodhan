@@ -76,10 +76,10 @@ class FleetPolicy(BaseModel):
     displacement_m: int = Field(strict=True, ge=1, le=10000)
     destination_divergence_m: int = Field(strict=True, ge=1, le=10000)
     publication_attempts: int = Field(strict=True, ge=1, le=10)
-    max_requests: int = Field(strict=True, ge=1, le=128)
-    max_vehicles: int = Field(strict=True, ge=1, le=32)
-    max_nodes: int = Field(strict=True, ge=1, le=512)
-    max_profiles: int = Field(strict=True, ge=1, le=8)
+    max_requests: int = Field(strict=True, ge=1)
+    max_vehicles: int = Field(strict=True, ge=1)
+    max_nodes: int = Field(strict=True, ge=1)
+    max_profiles: int = Field(strict=True, ge=1)
     search_seconds: int = Field(strict=True, ge=1, le=30)
     lease_seconds: int = Field(strict=True, ge=60, le=3600)
     telemetry: TelemetryPolicy
@@ -98,10 +98,14 @@ class FleetPolicy(BaseModel):
             raise ValueError("lease must cover both solver budgets and publication")
         return self
 
-    def snapshot_configuration(self, now: datetime) -> ShadowConfiguration:
+    def snapshot_configuration(
+        self, now: datetime, *, region_id: UUID | None = None, admission_mode: bool = False
+    ) -> ShadowConfiguration:
         epoch = now.replace(microsecond=0)
         return ShadowConfiguration(
             epoch=epoch,
+            region_id=region_id,
+            admission_mode=admission_mode,
             horizon_end=epoch + timedelta(seconds=self.horizon_seconds),
             policy_version=self.version,
             max_position_age_seconds=self.telemetry.max_age_seconds,
@@ -329,10 +333,13 @@ def ready_snapshot(
         (None, r["route_id"], "SHIFT_END_REQUIRES_RECOVERY") for r in sources["orphaned_routes"]
     )
     excluded: set[UUID] = set()
+    routes_by_vehicle = {r["vehicle_id"]: r for r in sources["routes"]}
+    owned_by_rider: dict[UUID, list[dict[str, Any]]] = {}
+    for request in sources["requests"]:
+        for rider in {request["owner_id"], request["collector_id"]} - {None}:
+            owned_by_rider.setdefault(rider, []).append(request)
     for vehicle in sources["vehicles"]:
-        route = next(
-            (r for r in sources["routes"] if r["vehicle_id"] == vehicle["vehicle_id"]), None
-        )
+        route = routes_by_vehicle.get(vehicle["vehicle_id"])
         reason = None
         if config.confirmed_shifts and (
             (vehicle["resource_kind"] == "COMMITTED" and not vehicle.get("shift_confirmed"))
@@ -371,16 +378,10 @@ def ready_snapshot(
             else:
                 issues.extend(
                     (r["request_id"], None, reason)
-                    for r in sources["requests"]
-                    if r["owner_id"] == vehicle["rider_id"]
-                    or r["collector_id"] == vehicle["rider_id"]
+                    for r in owned_by_rider.get(vehicle["rider_id"], ())
                 )
             continue
-        owned = [
-            r
-            for r in sources["requests"]
-            if r["owner_id"] == vehicle["rider_id"] or r["collector_id"] == vehicle["rider_id"]
-        ]
+        owned = owned_by_rider.get(vehicle["rider_id"], [])
         onboard = [r for r in owned if r["pickup_status"] == "COLLECTED"]
         if any(r["load_uncertain"] for r in owned):
             reason = "AUDITED_LOAD_CORRECTION_REQUIRED"

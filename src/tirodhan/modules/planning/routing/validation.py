@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from uuid import UUID
 
 from .contracts import (
     ROUTING_CONTRACT_V1,
     ROUTING_CONTRACT_V2,
+    ROUTING_CONTRACT_V3,
+    CargoLot,
     OptimizerEngine,
+    ReceivingPointSnapshot,
     ResourceKind,
     RoadMatrix,
     RouteProposal,
     RoutingProblem,
+    RoutingStop,
     SelectionEngine,
     StopKind,
     TimeWindow,
@@ -56,7 +60,7 @@ def _vector(vector: tuple[int, ...], dimensions: int) -> bool:
 def validate_problem(problem: RoutingProblem) -> None:
     """Validate complete immutable inputs before an adapter or validator consumes them."""
     _require(
-        problem.contract_version in (ROUTING_CONTRACT_V1, ROUTING_CONTRACT_V2),
+        problem.contract_version in (ROUTING_CONTRACT_V1, ROUTING_CONTRACT_V2, ROUTING_CONTRACT_V3),
         "UNSUPPORTED_CONTRACT",
     )
     _require(bool(problem.policy_version), "MISSING_POLICY_VERSION")
@@ -108,12 +112,17 @@ def validate_problem(problem: RoutingProblem) -> None:
         _require(_unique(ids), "DUPLICATE_INPUT_ID")
     _require(len(problem.receiving_points) <= limits.max_nodes, "WORKING_SET_LIMIT")
     matrices = {item.matrix_id: item for item in problem.matrices}
+    matrix_nodes = {key: set(m.node_ids) for key, m in matrices.items()}
     vehicles = {item.vehicle_id: item for item in problem.vehicles}
     facilities = {item.receiving_point_id: item for item in problem.receiving_points}
     lots = {item.lot_id: item for item in problem.lots}
     stops = {item.stop_id: item for item in problem.stops}
     dimensions = len(problem.load_dimensions)
     for matrix in problem.matrices:
+        _require(
+            matrix.sparse_arcs is None or problem.contract_version == ROUTING_CONTRACT_V3,
+            "SPARSE_MATRIX_REQUIRES_CONTRACT_V3",
+        )
         _validate_matrix(matrix, limits.max_nodes)
     for facility in problem.receiving_points:
         _require(_integer(facility.state_version), "INVALID_STATE_VERSION")
@@ -141,7 +150,7 @@ def validate_problem(problem: RoutingProblem) -> None:
         )
         _require(_vector(vehicle.capacity, dimensions), "INVALID_CAPACITY")
         _require(vehicle.matrix_id in matrices, "UNKNOWN_MATRIX")
-        nodes = set(matrices[vehicle.matrix_id].node_ids)
+        nodes = matrix_nodes[vehicle.matrix_id]
         _require(
             vehicle.start_node_id in nodes and vehicle.end_node_id in nodes,
             "UNKNOWN_VEHICLE_NODE",
@@ -150,7 +159,8 @@ def validate_problem(problem: RoutingProblem) -> None:
             type(vehicle.initial_cargo) is tuple and type(vehicle.breaks) is tuple, "MUTABLE_INPUT"
         )
         _require(
-            not vehicle.breaks or problem.contract_version == ROUTING_CONTRACT_V2,
+            not vehicle.breaks
+            or problem.contract_version in (ROUTING_CONTRACT_V2, ROUTING_CONTRACT_V3),
             "BREAKS_REQUIRE_CONTRACT_V2",
         )
         _require(
@@ -223,7 +233,7 @@ def validate_problem(problem: RoutingProblem) -> None:
         )
         for vehicle_id in stop.eligible_vehicle_ids:
             _require(
-                stop.node_id in matrices[vehicles[vehicle_id].matrix_id].node_ids,
+                stop.node_id in matrix_nodes[vehicles[vehicle_id].matrix_id],
                 "UNKNOWN_STOP_NODE",
             )
         lot = lots[stop.lot_id]
@@ -246,7 +256,13 @@ def validate_problem(problem: RoutingProblem) -> None:
             _require(stop.node_id == facility.node_id, "WRONG_DISCHARGE_NODE")
     for vehicle in problem.vehicles:
         _check_capacity(
-            _load(problem, {item.lot_id: item.quantity for item in vehicle.initial_cargo}), vehicle
+            tuple(
+                sum(
+                    item.quantity * lots[item.lot_id].unit_load[d] for item in vehicle.initial_cargo
+                )
+                for d in range(dimensions)
+            ),
+            vehicle,
         )
 
 
@@ -254,6 +270,28 @@ def _validate_matrix(matrix: RoadMatrix, max_nodes: int) -> None:
     n = len(matrix.node_ids)
     _require(0 < n <= max_nodes and _unique(matrix.node_ids), "INVALID_MATRIX_NODES")
     _require(bool(matrix.graph_version) and bool(matrix.profile_version), "MISSING_MATRIX_VERSION")
+    if matrix.sparse_arcs is not None:
+        _require(not matrix.travel_seconds and not matrix.distance_m, "INVALID_MATRIX_SHAPE")
+        nodes = set(matrix.node_ids)
+        previous = (-1, -1)
+        for arc in matrix.sparse_arcs:
+            key = (arc.origin.int, arc.destination.int)
+            _require(key > previous, "DUPLICATE_MATRIX_ARC")
+            previous = key
+            _require(arc.origin in nodes and arc.destination in nodes, "INVALID_MATRIX_NODES")
+            _require(
+                (arc.seconds is None and arc.metres is None)
+                or (
+                    arc.seconds is not None
+                    and arc.metres is not None
+                    and _integer(arc.seconds)
+                    and _integer(arc.metres)
+                ),
+                "INVALID_MATRIX_VALUE",
+            )
+            if arc.origin == arc.destination:
+                _require(arc.seconds == arc.metres == 0, "INVALID_MATRIX_DIAGONAL")
+        return
     for values in (matrix.travel_seconds, matrix.distance_m):
         _require(type(values) is tuple and len(values) == n, "INVALID_MATRIX_SHAPE")
         for i, row in enumerate(values):
@@ -303,19 +341,43 @@ def validate_proposal(problem: RoutingProblem, proposal: RouteProposal) -> Propo
 
 
 @dataclass(frozen=True, slots=True)
+class ValidationContext:
+    stops: dict[UUID, RoutingStop]
+    lots: dict[UUID, CargoLot]
+    facilities: dict[UUID, ReceivingPointSnapshot]
+    matrices: dict[UUID, RoadMatrix]
+    indices: dict[UUID, dict[UUID, int]]
+
+    @classmethod
+    def compile(cls, problem: RoutingProblem) -> ValidationContext:
+        return cls(
+            {s.stop_id: s for s in problem.stops},
+            {lot.lot_id: lot for lot in problem.lots},
+            {p.receiving_point_id: p for p in problem.receiving_points},
+            {m.matrix_id: m for m in problem.matrices},
+            {m.matrix_id: {node: i for i, node in enumerate(m.node_ids)} for m in problem.matrices},
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class FeasibilityGate:
     """Validate immutable matrix/problem once when assessing many local-search proposals."""
 
     problem: RoutingProblem
+    context: ValidationContext = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         validate_problem(self.problem)
+        object.__setattr__(self, "context", ValidationContext.compile(self.problem))
 
     def assess(self, proposal: RouteProposal) -> ProposalAssessment:
-        return _validate_routes(self.problem, proposal)
+        return _validate_routes(self.problem, proposal, self.context)
 
 
-def _validate_routes(problem: RoutingProblem, proposal: RouteProposal) -> ProposalAssessment:
+def _validate_routes(
+    problem: RoutingProblem, proposal: RouteProposal, context: ValidationContext | None = None
+) -> ProposalAssessment:
+    context = context or ValidationContext.compile(problem)
     _require(
         proposal.contract_version == problem.contract_version
         and proposal.policy_version == problem.policy_version
@@ -356,7 +418,7 @@ def _validate_routes(problem: RoutingProblem, proposal: RouteProposal) -> Propos
             "COMMITTED_ROUTE_OMITTED",
         )
     assessments = tuple(
-        _assess_route(problem, vehicles[route.vehicle_id], route.stop_ids)
+        _assess_route(problem, vehicles[route.vehicle_id], route.stop_ids, context)
         for route in proposal.routes
     )
     return ProposalAssessment(assessments, proposal.unserved_stop_ids)
@@ -380,15 +442,21 @@ def _check_capacity(load: tuple[int, ...], vehicle: VehicleSnapshot) -> None:
 
 
 def _assess_route(
-    problem: RoutingProblem, vehicle: VehicleSnapshot, stop_ids: tuple[UUID, ...]
+    problem: RoutingProblem,
+    vehicle: VehicleSnapshot,
+    stop_ids: tuple[UUID, ...],
+    context: ValidationContext | None = None,
 ) -> RouteAssessment:
-    matrices = {item.matrix_id: item for item in problem.matrices}
-    stops = {item.stop_id: item for item in problem.stops}
-    lots = {item.lot_id: item for item in problem.lots}
-    facilities = {item.receiving_point_id: item for item in problem.receiving_points}
-    matrix = matrices[vehicle.matrix_id]
-    node_indexes = {node: i for i, node in enumerate(matrix.node_ids)}
+    context = context or ValidationContext.compile(problem)
+    stops, lots, facilities = context.stops, context.lots, context.facilities
+    matrix = context.matrices[vehicle.matrix_id]
+    node_indexes = context.indices[vehicle.matrix_id]
     balances = {item.lot_id: item.quantity for item in vehicle.initial_cargo}
+    load = tuple(
+        sum(q * lots[lot].unit_load[d] for lot, q in balances.items())
+        for d in range(len(problem.load_dimensions))
+    )
+    _check_capacity(load, vehicle)
     current_node = vehicle.start_node_id
     current_time = vehicle.available_at
     travel_seconds = distance_m = 0
@@ -431,7 +499,11 @@ def _assess_route(
             _require(balances.get(stop.lot_id, 0) >= stop.quantity, "CARGO_NOT_ONBOARD")
             _require(end <= lot.discharge_deadline, "CUSTODY_DEADLINE_MISSED")
             balances[stop.lot_id] -= stop.quantity
-        load = _load(problem, balances)
+        sign = 1 if stop.kind == StopKind.PICKUP else -1
+        load = tuple(
+            amount + sign * stop.quantity * unit
+            for amount, unit in zip(load, lot.unit_load, strict=True)
+        )
         _check_capacity(load, vehicle)
         assessments.append(StopAssessment(stop_id, arrival, start, end, load))
         current_node, current_time = stop.node_id, end
@@ -454,8 +526,10 @@ def _assess_route(
 def _arc(
     matrix: RoadMatrix, indexes: dict[UUID, int], origin: UUID, destination: UUID
 ) -> tuple[int, int]:
-    i, j = indexes[origin], indexes[destination]
-    seconds, meters = matrix.travel_seconds[i][j], matrix.distance_m[i][j]
+    try:
+        seconds, meters = matrix.arc(origin, destination, indexes)
+    except KeyError:
+        raise RoutingValidationError("ROAD_ARC_NOT_ACQUIRED") from None
     if seconds is None or meters is None:
         raise RoutingValidationError("UNREACHABLE_ARC")
     return seconds, meters

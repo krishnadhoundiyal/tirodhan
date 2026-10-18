@@ -303,3 +303,13 @@ undo business facts. Read-only retention inventory follows operational 90/30/7-d
 twelve-month recommendations while preserving live references. Financial/customer/custody/
 evidence retention and irreversible destruction require separate verified policy. PITR is
 unchanged. See [increment 7](V2_ROUTING_INCREMENT_7.md).
+
+## Commercial preparation cache and invalidations
+
+Migration 0030 dirty notices contain region/table/row identifiers only. Durable search cursors
+contain identifiers, versions, positions and fingerprints; they do not store coordinates.
+Finite process-local road/read caches contain private operational inputs and must never be
+logged or exported as diagnostics. OSRM snapping attestations are opaque hashes. Persistent
+route proofs remain access-controlled operational evidence with existing retention obligations;
+this increment adds no destruction policy. Benchmark artifacts contain aggregate public-fixture
+synthetic measurements only. See [implementation](COMMERCIAL_ADMISSION_SCALABILITY.md).

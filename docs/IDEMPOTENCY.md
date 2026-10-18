@@ -688,3 +688,25 @@ has a separate inbox identity and preserves original publication. Wake acknowled
 consume later generations. Cancellation is never reversed by failed route/refund/notification
 consequences. Road/solver calls have no external business effect. Processes/leases are bounded.
 See [implementation](V2_ROUTING_INCREMENT_7.md).
+
+## Commercial preparation — migration 0030
+
+The existing admission command UUID/fingerprint and unique reservation remain the business
+key. A regional preparation token/expiry fences successive intent claims; both intent and
+regional tokens must be live at publication. Each admission intent retains its own
+preparation_cursor across regional owner release; two yielded commands cannot overwrite
+one another. Checkpoint writes fence both tokens; terminal/expired intents clear progress.
+Expired owners cannot publish after takeover. Search progress is versioned by intent,
+source/region stamp and graph/profile; changed inputs restart search without releasing old
+accepted commitments. Exhaustion or execution budgets yield UNKNOWN/PENDING with backoff.
+
+MVCC source capture and its exact dirty-set fingerprint share one snapshot. SERIALIZABLE
+publication locks the separate source-head row and checks source identities/generation,
+then commits reservation, stable aliases, immutable proof history and acknowledgment of
+exactly the visible notices together. READ COMMITTED source writers also update that row;
+late commits cannot disappear behind an allocation-order watermark. Source notice upserts
+coalesce identifiers, not business commands or audit history. Region configuration remains
+immutable. Provider/native work is read-only and outside database locks. Crash after commit
+replays the existing result; cache loss reconstructs from PostgreSQL. Existing checkout,
+Payment-first cancellation and authoritative dispatch idempotency remain unchanged. See
+[protocol and two-session tests](COMMERCIAL_ADMISSION_SCALABILITY.md).

@@ -266,3 +266,31 @@ Break/extension/availability reference shift. Discharge amendments and load obse
 reference request/actor/evidence. Transfer intent names request/from-vehicle/to-shift/authorizer
 and write-once resolution. Receipts identify signer/witness and capture. Transfer retains
 donor/receiver vehicles/riders, evidence, authorizer and confirmer in monotonic custody order.
+
+## Migration 0030 commercial evidence
+
+```mermaid
+erDiagram
+    OPERATING_REGION ||--o{ ADMISSION_PLAN_REVISION : records
+    OPERATING_REGION ||--o| ADMISSION_PREPARATION_LEASE : prepares
+    OPERATING_REGION ||--o| ADMISSION_SOURCE_HEAD : fences
+    OPERATING_REGION ||--o{ ADMISSION_SOURCE_NOTICE : invalidates
+    OPERATING_REGION ||--o{ ADMISSION_OBLIGATION : promises
+    REGIONAL_CAPACITY_RESERVATION o|--o| ADMISSION_OBLIGATION : origin
+    COLLECTION_REQUEST o|--o| ADMISSION_OBLIGATION : booking_alias
+    OPERATING_VEHICLE ||--o{ ADMISSION_ROUTE_CERTIFICATE : witnesses
+    OPERATING_SHIFT ||--o{ ADMISSION_ROUTE_CERTIFICATE : bounds
+    ADMISSION_PLAN_REVISION ||--o{ ADMISSION_ROUTE_MEMBERSHIP : opens
+    ADMISSION_PLAN_REVISION o|--o{ ADMISSION_ROUTE_MEMBERSHIP : closes
+    ADMISSION_ROUTE_CERTIFICATE ||--o{ ADMISSION_ROUTE_MEMBERSHIP : included
+    ADMISSION_ROUTE_CERTIFICATE ||--o{ ADMISSION_PROOF_OBLIGATION : covers
+    ADMISSION_OBLIGATION ||--o{ ADMISSION_PROOF_OBLIGATION : appears_in
+    ADMISSION_OBLIGATION ||--o| ADMISSION_ALLOCATION : current_witness
+    OPERATING_VEHICLE ||--o{ ADMISSION_ALLOCATION : advisory_resource
+```
+
+Temporal membership carries region/vehicle ownership, with a composite proof-owner FK
+and at most one current membership per vehicle. Allocation confers no dispatch/custody
+authority. At least one obligation origin is required; reservation and booking endpoints
+are actual optional FKs, not generic polymorphic references. See
+[migration detail](COMMERCIAL_ADMISSION_SCALABILITY.md).

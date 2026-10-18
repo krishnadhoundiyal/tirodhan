@@ -1,9 +1,11 @@
 # Project Context
 
-The focused post-increment-8 reliability correction adds regional commercial preparation ownership,
-bounded incremental certificates and durable retry scheduling. It does not activate V2. OSRM's
-verified upstream negative-distance defect and large regional certificate limits remain release
-work. See [findings, measurements and remaining effort](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+Commercial preparation now uses exact resumable pair insertion, sparse directed road acquisition,
+independent shared route certificates, incremental source reads and a durable regional writer.
+Migration 0030 removes commercial population ceilings, including 128 bookings; byte/time budgets
+yield UNKNOWN and durable retry rather than rejecting capacity. This does not activate V2.
+OSRM's verified upstream negative-distance defect remains a release gate. See
+[implementation, validation and measured constraints](COMMERCIAL_ADMISSION_SCALABILITY.md).
 
 Current engineering increment 8 adds finite regional owners, explicit pre-shift rider
 confirmation, local per-profile OSRM, parallel native candidate workers, hybrid CP-SAT

@@ -13,6 +13,7 @@ from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.serviceability.models import ServiceabilityContext
 
+from .admission_queries import in_ids
 from .orchestration_models import (
     AppointmentConsent,
     CapacityReservation,
@@ -50,8 +51,9 @@ async def project(
                     select(RegionCell.cell_id, RegionCell.region_id).where(
                         RegionCell.cell_id.in_(
                             select(CollectionRequest.cell_id).where(
-                                CollectionRequest.request_id.in_(
-                                    [r["request_id"] for r in requests]
+                                in_ids(
+                                    CollectionRequest.request_id,
+                                    [r["request_id"] for r in requests],
                                 )
                             )
                         )
@@ -65,7 +67,7 @@ async def project(
             (
                 await session.execute(
                     select(RegionVehicle.vehicle_id, RegionVehicle.region_id).where(
-                        RegionVehicle.vehicle_id.in_([v["vehicle_id"] for v in vehicles])
+                        in_ids(RegionVehicle.vehicle_id, [v["vehicle_id"] for v in vehicles])
                     )
                 )
             )
@@ -81,7 +83,7 @@ async def project(
                 c.shift_id: c
                 for c in await session.scalars(
                     select(ShiftConfirmation).where(
-                        ShiftConfirmation.shift_id.in_([v["shift_id"] for v in vehicles])
+                        in_ids(ShiftConfirmation.shift_id, [v["shift_id"] for v in vehicles])
                     )
                 )
             }
@@ -92,7 +94,7 @@ async def project(
             (
                 await session.execute(
                     select(CollectionRequest.request_id, CollectionRequest.cell_id).where(
-                        CollectionRequest.request_id.in_([r["request_id"] for r in requests])
+                        in_ids(CollectionRequest.request_id, [r["request_id"] for r in requests])
                     )
                 )
             )
@@ -130,13 +132,19 @@ async def project(
                     CapacityReservation.region_id == config.region_id
                     if config.region_id
                     else true(),
+                    (
+                        in_ids(CapacityReservation.reservation_id, config.request_ids)
+                        | in_ids(CapacityReservation.request_id, config.request_ids)
+                    )
+                    if config.admission_mode and config.request_ids is not None
+                    else true(),
                     CapacityReservation.expires_at > (config.as_of or config.epoch),
                     CapacityReservation.slot_start
                     < (config.pickup_horizon_end or config.horizon_end),
                     CapacityReservation.slot_end >= config.epoch,
                 )
                 .order_by(CapacityReservation.reservation_id)
-                .limit(config.max_requests + 1)
+                .limit(None if config.admission_mode else config.max_requests + 1)
             )
         ).all()
         for reservation, lon, lat, booked_status, payment_expires_at in reservations:
@@ -187,7 +195,7 @@ async def project(
         rows = list(
             await session.scalars(
                 select(model)
-                .where(model.request_id.in_(ids))
+                .where(in_ids(model.request_id, ids))
                 .distinct(model.request_id)
                 .order_by(
                     model.request_id,
@@ -230,13 +238,13 @@ async def project(
                 PickupExecution,
                 PickupExecution.pickup_execution_id == PickupAttempt.pickup_execution_id,
             )
-            .where(PickupExecution.request_id.in_(ids))
+            .where(in_ids(PickupExecution.request_id, ids))
             .order_by(PickupAttempt.attempt_number)
         )
     ).all()
     authorizations = list(
         await session.scalars(
-            select(ReattemptAuthorization).where(ReattemptAuthorization.request_id.in_(ids))
+            select(ReattemptAuthorization).where(in_ids(ReattemptAuthorization.request_id, ids))
         )
     )
     inputs["reattempts"] = [
@@ -285,7 +293,7 @@ async def project(
             .join(VehicleRoute, VehicleRoute.route_id == RouteRevision.route_id)
             .where(
                 RouteRevision.version == VehicleRoute.version,
-                VehicleRoute.vehicle_id.in_([v["vehicle_id"] for v in vehicles]),
+                in_ids(VehicleRoute.vehicle_id, [v["vehicle_id"] for v in vehicles]),
             )
         )
     )
@@ -309,7 +317,7 @@ async def project(
     commitments = list(
         await session.scalars(
             select(FlexibleCommitment).where(
-                FlexibleCommitment.shift_id.in_([v["shift_id"] for v in vehicles])
+                in_ids(FlexibleCommitment.shift_id, [v["shift_id"] for v in vehicles])
             )
         )
     )
@@ -325,7 +333,7 @@ async def project(
         await session.scalars(
             select(
                 AdmissionFlexibleCommitment,
-            ).where(AdmissionFlexibleCommitment.shift_id.in_([v["shift_id"] for v in vehicles]))
+            ).where(in_ids(AdmissionFlexibleCommitment.shift_id, [v["shift_id"] for v in vehicles]))
         )
     )
     inputs["flexible_admissions"] = [
@@ -373,8 +381,12 @@ async def project(
                 .join(OperatingShift, OperatingShift.shift_id == CargoTransferIntent.to_shift_id)
                 .where(
                     CargoTransferIntent.resolved_at.is_(None),
-                    (CargoTransferIntent.from_vehicle_id.in_([v["vehicle_id"] for v in vehicles]))
-                    | (OperatingShift.vehicle_id.in_([v["vehicle_id"] for v in vehicles])),
+                    (
+                        in_ids(
+                            CargoTransferIntent.from_vehicle_id, [v["vehicle_id"] for v in vehicles]
+                        )
+                    )
+                    | (in_ids(OperatingShift.vehicle_id, [v["vehicle_id"] for v in vehicles])),
                 )
             )
         ).all()
@@ -390,7 +402,7 @@ async def project(
     recovered_cargo = list(
         await session.scalars(
             select(CargoTransfer)
-            .where(CargoTransfer.to_vehicle_id.in_([v["vehicle_id"] for v in vehicles]))
+            .where(in_ids(CargoTransfer.to_vehicle_id, [v["vehicle_id"] for v in vehicles]))
             .distinct(CargoTransfer.request_id)
             .order_by(CargoTransfer.request_id, CargoTransfer.sequence.desc())
         )
@@ -405,14 +417,14 @@ async def project(
     breaks = list(
         await session.scalars(
             select(OperatingBreak)
-            .where(OperatingBreak.shift_id.in_(shifts))
+            .where(in_ids(OperatingBreak.shift_id, shifts))
             .order_by(OperatingBreak.starts_at, OperatingBreak.break_id)
         )
     )
     extensions = list(
         await session.scalars(
             select(ShiftExtension)
-            .where(ShiftExtension.shift_id.in_(shifts))
+            .where(in_ids(ShiftExtension.shift_id, shifts))
             .order_by(ShiftExtension.ends_at, ShiftExtension.extension_id)
         )
     )
@@ -427,7 +439,7 @@ async def project(
         v["ends_at"] = max(
             [v["ends_at"]] + [e.ends_at for e in extensions if e.shift_id == v["shift_id"]]
         )
-    if len(requests) > config.max_requests:
+    if not config.admission_mode and len(requests) > config.max_requests:
         from .commands import OperationalInputError
 
         raise OperationalInputError("REQUEST_SCOPE_LIMIT")

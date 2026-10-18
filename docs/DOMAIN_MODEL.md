@@ -600,3 +600,15 @@ original successful pickup attribution remain. Transfer intent is a fenced workf
 custody is immutable and sequenced, with two-party evidence or an identified donor witness.
 Abort needs inspection evidence and records no handover. Cancellation remains final. See
 [V2 increment 7](V2_ROUTING_INCREMENT_7.md).
+
+## Shared commercial capacity witnesses
+
+AdmissionPlanRevision and AdmissionRouteCertificate are immutable feasibility evidence.
+AdmissionRouteMembership gives temporal regional membership; AdmissionObligation preserves
+reservation identity and a bind-once real booking alias. AdmissionProofObligation records
+exact proof coverage; AdmissionAllocation is only its current advisory vehicle witness.
+None grants route execution, assignment, custody or financial authority. Regional lease and
+source notice/head records are preparation/recovery controls, not operational commitments.
+Commercial proof composition assumes approved unlimited unloading throughput while retaining
+authorized facilities, openings, service times and deadlines. Legacy proof envelopes remain
+readable. See [model and correctness boundary](COMMERCIAL_ADMISSION_SCALABILITY.md).

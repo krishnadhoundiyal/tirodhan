@@ -171,3 +171,16 @@ validation establishes a race-safe reservation. Incremental certificates and coa
 reduce collective solves. Passive holds have no assignment authority; executable routes are
 independently validated again. Planning T−M remains independent of commercial N. Default
 activation stays false. See [increment 7](../V2_ROUTING_INCREMENT_7.md).
+
+## Commercial scalability implementation
+
+Commercial preparation replaces population-capped full certificates with exact fixed-order
+paired insertion using calendar-aware forward/backward summaries and durable yielding cursors.
+An independent compositional validator remains the correctness boundary. Sparse directed
+road acquisition and bounded dense complete-route repair retain both VROOM and OR-Tools.
+Failed bounded search is UNKNOWN, never proof of physical infeasibility. The approved unlimited
+commercial receiving-throughput assumption permits independent route composition; authorization,
+openings, service duration and deadlines remain hard constraints. Commercial 128-booking,
+32-vehicle, 512-node and 8-profile ceilings are removed; byte/time/native limits remain explicit
+retryable execution budgets. Operational legacy guards and production activation remain unchanged.
+See [algorithms, proofs, tests and benchmarks](../COMMERCIAL_ADMISSION_SCALABILITY.md).

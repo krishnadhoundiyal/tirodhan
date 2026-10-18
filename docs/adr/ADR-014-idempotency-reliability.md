@@ -122,3 +122,17 @@ activation. Authority and terminal cycle commit atomically; an expired worker ca
 publish after takeover. No Redis/distributed-lock service is added. New outbox event
 facts are implemented; notification consumer delivery remains an explicit release gap.
 See [Increment 5](../V2_ROUTING_INCREMENT_5.md).
+
+## Regional commercial preparation
+
+One PostgreSQL regional lease spans bounded FIFO eligible admission claims. Publication fences
+both worker tokens and the exact source set under SERIALIZABLE isolation. Transactional source
+triggers update a dedicated head row, including READ COMMITTED mutations; coalesced notices use
+identity-set acknowledgment instead of sequence/UUID watermarks. Proof history and reservation
+commit atomically. Yielding search checkpoints belong to individual durable admission intents,
+separate from the regional lease; A and B cannot overwrite one another when both yield.
+Checkpoint writes fence both tokens; terminal/expired commands clear computational progress.
+Provider/source backoff and checkpoints survive worker restarts;
+process-local caches may be discarded. Read-only native/road work runs outside locks. No new
+broker, distributed-lock service, production schedule or infrastructure is introduced. See
+[recovery protocol and actual concurrency tests](../COMMERCIAL_ADMISSION_SCALABILITY.md).

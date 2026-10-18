@@ -166,6 +166,7 @@ async def test_cancellation_during_roads_invalidates_certificate_without_losing_
 
 async def test_0029_roundtrip_preserves_intents_certificates_and_financial_history(
     database_session_factory,
+    monkeypatch,
 ):
     factory = database_session_factory
     data = await regional(factory)
@@ -177,6 +178,24 @@ async def test_0029_roundtrip_preserves_intents_certificates_and_financial_histo
         expires_at=data[6][0] + timedelta(hours=1),
         now=data[6][0],
     )
+    # Simulate the pre-0030 writer. New shared proof histories intentionally
+    # refuse destructive downgrade; this test continues covering the legacy format.
+    from tirodhan.modules.routing_operations import admission as admission_module
+    from tirodhan.modules.routing_operations.service import PROPOSAL_CODEC
+
+    def legacy(proposal, revision, incremental, safety_percent):
+        return {
+            "region_version": revision,
+            "proposal": PROPOSAL_CODEC.dump_python(proposal, mode="json"),
+            "incremental": incremental,
+            "safety_percent": safety_percent,
+        }
+
+    async def legacy_persist(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(admission_module, "certificate_document", legacy)
+    monkeypatch.setattr(admission_module, "persist_certificate", legacy_persist)
     await reserve(factory, data[8], command, data[6][0])
 
     async def facts():
@@ -277,11 +296,9 @@ async def test_two_admission_workers_contend_without_overselling(database_sessio
     assert await work(LineMatrix()) == 1
     async with factory() as session:
         rows = list(await session.scalars(select(CapacityAdmissionRequest)))
-        assert sorted(r.status for r in rows) == ["FAILED", "SUCCEEDED"]
-        assert (
-            next(r for r in rows if r.status == "FAILED").failure_code
-            == "NO_FEASIBLE_REGIONAL_CAPACITY"
-        )
+        assert sorted(r.status for r in rows) == ["PENDING", "SUCCEEDED"]
+        pending = next(r for r in rows if r.status == "PENDING")
+        assert pending.failure_code == "UNKNOWN_SEARCH_EXHAUSTED"
         assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 1
 
 
@@ -324,17 +341,17 @@ async def test_bound_paid_booking_reuses_certificate_without_reoptimizing_incumb
     factory = database_session_factory
     inputs, now = await population(factory, 2)
     solvers = engines()
-    for i, (customer, command) in enumerate(inputs):
+    for customer, command in inputs:
         result = await reserve(factory, customer, command, now, solvers=solvers)
         assert result == command.client_command_id
-        assert sum(s.calls for s in solvers.values()) == 2
+        assert sum(s.calls for s in solvers.values()) == 0
         booked = await purchase(factory, customer, command, now)
         async with factory() as session:
             assert (
                 await session.get(CollectionRequest, booked.request.request_id)
             ).status == "ACCEPTED"
             certificate = await session.get(CapacityReservation, result)
-            assert certificate.certificate["incremental"] == (i > 0)
+            assert certificate.certificate["incremental"] is True
     async with factory() as session:
         assert (
             await session.scalar(
@@ -368,7 +385,7 @@ async def test_slot_elapsed_during_retry_is_terminal_without_a_capacity_promise(
         assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 0
 
 
-async def test_technical_bound_fails_before_roads_without_discarding_existing_hold(
+async def test_legacy_neighbourhood_count_does_not_cap_commercial_admission(
     database_session_factory,
 ):
     from tirodhan.modules.routing_operations.fleet_models import FleetControl
@@ -383,11 +400,11 @@ async def test_technical_bound_fails_before_roads_without_discarding_existing_ho
     first = admission(context, now)
     await reserve(factory, customer, first, now, matrix=source)
     calls = source.calls
-    with pytest.raises(OperationalInputError, match="PLANNING_WORKING_SET_REQUIRES_PARTITION"):
-        await reserve(factory, customer, admission(context, now), now, matrix=source)
-    assert source.calls == calls
+    second = admission(context, now)
+    assert await reserve(factory, customer, second, now, matrix=source) == second.client_command_id
+    assert source.calls > calls
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 1
+        assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 2
         assert await session.get(CapacityReservation, first.client_command_id) is not None
 
 

@@ -34,3 +34,11 @@ class JobMatrixCache:
         while len(self.entries) > self.max_entries:
             self.entries.popitem(last=False)
         return matrix
+
+    @property
+    def cache_namespace(self) -> object:
+        return getattr(self.source, "cache_namespace", None)
+
+    @property
+    def max_nodes(self) -> int:
+        return int(getattr(self.source, "max_nodes", 32))

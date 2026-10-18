@@ -1,10 +1,14 @@
 # Architecture
 
-Commercial admission preparation now has a durable PostgreSQL regional owner and bounded new-lot
-certificate insertion, with full feasibility and live transactional source fencing retained.
-Provider/source failures retry durably; no road values are repaired. The verified OSRM phantom
-quantization defect and high-volume certificate limits remain explicit release gates.
-See [focused reliability/scalability evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+Commercial preparation uses a finite PostgreSQL-leased regional writer, exact calendar-aware
+resumable pair insertion, sparse directed road acquisition and independently composed route proofs.
+Identifier-only source invalidations maintain a bounded read cache; a separate source-head row
+fences publication against ordinary source transactions. Migration 0030 shares immutable proofs
+through temporal relational membership. Commercial booking/vehicle/node/profile count ceilings
+are removed; execution budgets yield UNKNOWN with durable retry. Both native engines remain
+available for complete-route repair. No production dispatch is enabled. OSRM's verified phantom
+quantization defect remains a release gate; strict provider validation remains unchanged.
+See [actual implementation and benchmark limits](COMMERCIAL_ADMISSION_SCALABILITY.md).
 
 ## Current regional replacement — increment 8
 

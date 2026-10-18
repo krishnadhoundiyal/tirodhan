@@ -39,6 +39,14 @@ class LazyMatrixSource:
         self.start()
         return await self.source.acquire(nodes)
 
+    @property
+    def cache_namespace(self) -> object:
+        return getattr(self.source, "cache_namespace", None)
+
+    @property
+    def max_nodes(self) -> int:
+        return int(getattr(self.source, "max_nodes", 32))
+
 
 class LocalRoadProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

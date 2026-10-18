@@ -7,6 +7,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -69,6 +70,16 @@ class OSRMMatrixProvider:
             timeout_seconds,
             max_response_bytes,
             routing_profile,
+        )
+
+    @property
+    def cache_namespace(self) -> tuple[str, str, str, str, float]:
+        return (
+            self.graph_version,
+            self.profile_version,
+            self.profile,
+            self.endpoint,
+            self.max_snap,
         )
 
     async def acquire(self, nodes: tuple[RoadNode, ...]) -> RoadMatrix:
@@ -165,6 +176,31 @@ class OSRMMatrixProvider:
             tuple(node.node_id for node in nodes),
             tuple(times),
             tuple(distances),
+            snap_tokens=tuple(
+                cast(
+                    tuple[str, str],
+                    tuple(
+                        hashlib.sha256(
+                            json.dumps(
+                                [data[name][i].get("hint"), data[name][i].get("location")],
+                                separators=(",", ":"),
+                            ).encode()
+                        ).hexdigest()
+                        for name in ("sources", "destinations")
+                    ),
+                )
+                for i in range(n)
+            )
+            if all(
+                isinstance(p.get("hint"), str)
+                and bool(p["hint"])
+                and isinstance(p.get("location"), list)
+                and len(p["location"]) == 2
+                and all(type(v) in (int, float) and math.isfinite(v) for v in p["location"])
+                for name in ("sources", "destinations")
+                for p in data[name]
+            )
+            else (),
         )
 
     async def _fetch(self, nodes: tuple[RoadNode, ...]) -> bytes:

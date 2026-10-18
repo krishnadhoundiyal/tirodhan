@@ -359,11 +359,15 @@ class CapacityAdmissionRequest(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    preparation_cursor: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     __table_args__ = (
         Index("ix_capacity_admission_due", "status", "created_at", "admission_id"),
         Index("ix_capacity_admission_lease", "status", "lease_until"),
         Index("ix_capacity_admission_retry", "status", "next_attempt_at"),
+        Index("ix_admission_regional_due", "region_id", "status", "created_at", "admission_id"),
         Index(
             "uq_capacity_admission_region_running",
             "region_id",

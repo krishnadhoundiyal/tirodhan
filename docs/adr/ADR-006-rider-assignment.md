@@ -215,3 +215,13 @@ Breaks retain cargo; extensions need fresh availability and safety authorization
 alternatives and the designated warehouse support recovery; late discharge has no 30-minute
 SLA. Current validation and Payment-first authority remain mandatory. See
 [increment 7](../V2_ROUTING_INCREMENT_7.md) and [mobile contract](../V2_ORCHESTRATION_API.md).
+
+## Commercial witness boundary
+
+Commercial insertion tries committed resources before supplementary resources, ordering
+otherwise eligible vehicles by existing route size and identity; it does not exclude resources
+by proximity or confer assignment authority. Shared admission allocations are advisory proof
+membership. Live transactional operational activation, rider acceptance where required,
+protected work, custody and Payment-first arbitration remain the sole authority. The finite
+regional admission worker cannot dispatch. See
+[commercial implementation](../COMMERCIAL_ADMISSION_SCALABILITY.md).
