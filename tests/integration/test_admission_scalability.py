@@ -388,19 +388,21 @@ async def test_finite_worker_without_work_never_loads_a_graph(
         routing_orchestration_enabled=True,
     )
     assert not settings.routing_dispatch_enabled
-    assert await execute(data[7], [profile], settings, max_intents=10000, max_wall_seconds=1) == 0
+    with pytest.raises(OperationalInputError, match="COMMERCIAL_ACCEPTANCE_RETIRED"):
+        await execute(data[7], [profile], settings, max_intents=10000, max_wall_seconds=1)
 
 
 @pytest.mark.routing_engine
 @pytest.mark.skipif(
     os.getenv("TIRODHAN_ROUTING_ENGINE_TESTS") != "1", reason="explicit real native runtime opt-in"
 )
-async def test_finite_local_runtime_certifies_and_customers_pay_without_dispatch(
+async def test_retired_worker_does_not_process_queued_commercial_intents(
     database_session_factory,
     migrated_database_url,
 ):
-    from test_commercial_admission_benchmark import population, purchase
+    from test_commercial_admission_benchmark import population
 
+    from tirodhan.modules.routing_operations.commands import OperationalInputError
     from tirodhan.modules.routing_operations.dispatch_models import VehicleRoute
     from tirodhan.modules.routing_operations.orchestration_models import CapacityAdmissionRequest
 
@@ -431,15 +433,10 @@ async def test_finite_local_runtime_certifies_and_customers_pay_without_dispatch
         block_nodes=32,
         max_pairs=1024,
     )
-    assert await execute(region, [profile], settings) == 3
-    assert await execute(region, [profile], settings) == 0
+    with pytest.raises(OperationalInputError, match="COMMERCIAL_ACCEPTANCE_RETIRED"):
+        await execute(region, [profile], settings)
     async with factory() as session:
-        prepared_rows = list(await session.scalars(select(CapacityAdmissionRequest)))
-        assert all(row.status == "SUCCEEDED" for row in prepared_rows), [
-            (row.status, row.failure_code) for row in prepared_rows
-        ]
-    for customer, command in inputs:
-        await purchase(factory, customer, command, now)
-    async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 3
+        rows = list(await session.scalars(select(CapacityAdmissionRequest)))
+        assert rows and all(row.status == "PENDING" for row in rows)
+        assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 0
         assert await session.scalar(select(func.count()).select_from(VehicleRoute)) == 0

@@ -1,5 +1,15 @@
 # ADR-006: Rider Assignment and Operational Escalation
 
+## Approved commercial admission change — 19 October 2026
+
+New customer bookings consume non-trained projected slot allowances through atomic PostgreSQL
+holds. Customer per-booking OSRM/solver feasibility preparation is retired. Projection source,
+policy, expiry and shared regional bucket budgets govern new holds; existing holds and accepted
+commitments survive later forecast changes. Operational route feasibility, authoritative dispatch,
+single-owner regional capacity, custody and payment-first guarantees remain. This supersedes the
+prior mandatory exact commercial-certificate prerequisite. No new infrastructure or production
+activation is authorized. See [implementation and limitations](../PROJECTED_SLOT_ALLOWANCES.md).
+
 ## Regional ownership and manager-approved rider replacement
 
 One live capacity owner is maintained through versioned regional vehicle membership and existing

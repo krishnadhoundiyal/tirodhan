@@ -1,5 +1,12 @@
 # Architecture
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
 Regional ownership/recovery adds atomic adjacent-region idle-resource transfers, manager-reviewed
 replacement recommendations and existing evidenced custody handoffs. PostgreSQL source heads also
 invalidate bounded advisory slot read models; finite workers refresh/reconcile them without new

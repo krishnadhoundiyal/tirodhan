@@ -1,5 +1,27 @@
 # Idempotency
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+## Projected slot holds
+
+- Business key: customer/client command UUID with exact request fingerprint. The reservation
+  UUID equals the command UUID; the existing command record returns the original result on replay.
+- Transaction: context ownership, regional/source fence, reservation, all immutable budget
+  debits, updated neighbouring allowances, wake/outbox and command result commit together.
+  A failed partial write consumes nothing. Replay never extends expiry.
+- Concurrency: region/source head precedes budget writes; SQL conditional debits reject a
+  changed generation or exhausted headroom. Publication uses a consistent snapshot and the
+  same head-before-budget order; concurrent source drift requires a new refresh attempt.
+- Recovery: expiry/cancellation/acceptance source changes invalidate inventory. Bounded
+  recomputation includes each live hold or accepted booking once; old debit history remains.
+- External effects: hold, policy update and projection refresh call no road/solver/provider.
+  Binding/payment retain their existing command/provider idempotency and Payment-first rules.
+
 ## Regional ownership, replacement and slot projection
 
 - Capacity transfer: existing actor/client command UUID + fingerprint, unique vehicle/membership

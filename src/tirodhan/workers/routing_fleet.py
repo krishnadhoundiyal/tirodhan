@@ -77,18 +77,6 @@ async def execute(profiles: list[RoadProfile], settings: Settings) -> str:
                     OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
                 },
             )
-            if policy.regional:
-                from tirodhan.modules.routing_operations.admission_jobs import run_admissions
-
-                await run_admissions(
-                    factory,
-                    providers=providers,
-                    optimizers={
-                        OptimizerEngine.VROOM: VroomOptimizer(),
-                        OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
-                    },
-                    lease_seconds=policy.lease_seconds,
-                )
             return cycle.status if cycle else "NOT_DUE_OR_OWNED"
     finally:
         await engine.dispose()

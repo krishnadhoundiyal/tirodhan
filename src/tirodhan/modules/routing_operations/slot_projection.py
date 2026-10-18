@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from bisect import bisect_right
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from itertools import accumulate
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -88,6 +86,12 @@ async def refresh_slots(
     days: int = 7,
     freshness_seconds: int = 60,
 ) -> int:
+    from sqlalchemy import func
+
+    from .allowance_projection import forecast
+    from .capacity_models import RegionalCapacityBudget
+    from .orchestration_models import OperatingRegion
+
     if not 1 <= days <= 7 or not 1 <= freshness_seconds <= 3600:
         raise ValueError("INVALID_SLOT_REFRESH_CONFIGURATION")
     today = now.astimezone(SERVICE_TIMEZONE).date()
@@ -102,177 +106,42 @@ async def refresh_slots(
     async with factory() as session:
         await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
         head = await session.get(AdmissionSourceHead, region_id)
-        if head is None:
+        region = await session.get(OperatingRegion, region_id)
+        if head is None or region is None:
             return 0
         version = head.version
-        # Aggregate on the database, not a complete booking/route/matrix snapshot.
-        pressure = (
-            (
-                await session.execute(
-                    text("""
-          SELECT slot_start, count(*) FILTER(WHERE NOT held) AS bookings,
-            count(*) FILTER(WHERE held) AS holds, sum(service) AS service FROM (
-            SELECT b.slot_start, false AS held, coalesce(m.pickup_seconds,
-              (r.policy->>'minimum_pickup_seconds')::int) AS service
-            FROM collection_request b JOIN operating_region_cell c USING(cell_id)
-            JOIN operating_region r ON r.region_id=c.region_id
-            LEFT JOIN routing_manifest m USING(request_id)
-            LEFT JOIN pickup_execution p USING(request_id)
-            WHERE c.region_id=:region AND b.status IN ('ACCEPTED','PRE_PLANNING','PLANNED')
-              AND (p.status IS NULL OR p.status<>'COLLECTED')
-              AND b.slot_start>=:start AND b.slot_start<:end
-            UNION ALL
-            SELECT h.slot_start, true, h.pickup_seconds
-            FROM regional_capacity_reservation h
-            LEFT JOIN collection_request b ON b.request_id=h.request_id
-            WHERE h.region_id=:region AND h.expires_at>:now AND
-              (h.request_id IS NULL OR (b.status='PENDING_PAYMENT' AND b.payment_expires_at>:now))
-              AND h.slot_start>=:start AND h.slot_start<:end
-          ) p GROUP BY slot_start
-        """),
-                    {
-                        "region": region_id,
-                        "start": slots[0].start,
-                        "end": slots[-1].end,
-                        "now": now,
-                    },
+        generation = 1 + (
+            await session.scalar(
+                select(func.max(RegionalSlotProjection.generation)).where(
+                    RegionalSlotProjection.region_id == region_id
                 )
             )
-            .mappings()
-            .all()
+            or 0
         )
-        by_start = {row["slot_start"]: row for row in pressure}
-        shifts = (
-            (
-                await session.execute(
-                    text("""
-          SELECT s.shift_id,s.vehicle_id,s.starts_at,
-            greatest(s.ends_at,coalesce((SELECT max(e.ends_at) FROM operating_shift_extension e
-              WHERE e.shift_id=s.shift_id),s.ends_at)) AS ends_at
-          FROM operating_shift s JOIN operating_region_vehicle rv USING(vehicle_id)
-          JOIN operating_vehicle v USING(vehicle_id) JOIN rider_profile p USING(rider_id)
-          JOIN app_user u ON u.user_id=s.rider_id
-          LEFT JOIN rider_availability a USING(rider_id)
-          WHERE rv.region_id=:region AND s.closed_at IS NULL AND s.resource_kind='COMMITTED'
-            AND v.blocked_reason IS NULL AND p.status='ACTIVE' AND u.status='ACTIVE'
-            AND EXISTS(SELECT 1 FROM user_role ur WHERE ur.user_id=s.rider_id
-              AND role_code='RIDER' AND ur.revoked_at IS NULL)
-            AND s.starts_at<=:end AND
-            (s.starts_at>:now OR a.availability_intent='AVAILABLE')
-        """),
-                    {"region": region_id, "end": slots[-1].end, "now": now},
-                )
-            )
-            .mappings()
-            .all()
+        rows, expiry, budgets = await forecast(
+            session, region, slots, now=now, generation=generation
         )
-        breaks = (
-            (
-                await session.execute(
-                    text("""
-          SELECT b.shift_id,b.starts_at,b.ends_at FROM operating_break b
-          JOIN operating_shift s USING(shift_id) JOIN operating_region_vehicle rv USING(vehicle_id)
-          WHERE rv.region_id=:region AND b.starts_at<:end AND b.ends_at>:start
-        """),
-                    {"region": region_id, "start": slots[0].start, "end": slots[-1].end},
-                )
-            )
-            .mappings()
-            .all()
-        )
-        by_shift: dict[UUID, list[tuple[datetime, datetime]]] = {}
-        for row in breaks:
-            by_shift.setdefault(row["shift_id"], []).append((row["starts_at"], row["ends_at"]))
-        rows = []
-        # Current execution spans and unhanded cargo are workload signals, not
-        # independently spendable capacity. No household coordinates are read.
-        occupied = (
-            (
-                await session.execute(
-                    text("""
-          SELECT vr.vehicle_id, min(rs.planned_start) AS starts_at, max(rs.planned_end) AS ends_at
-          FROM vehicle_route vr JOIN operating_region_vehicle rv USING(vehicle_id)
-          JOIN route_revision r ON r.route_id=vr.route_id AND r.version=vr.version
-          JOIN route_revision_stop rs USING(revision_id) JOIN route_task t USING(task_id)
-          WHERE rv.region_id=:region AND vr.status<>'CLOSED' AND t.state IN ('PENDING','STARTED')
-          GROUP BY vr.vehicle_id
-        """),
-                    {"region": region_id},
-                )
-            )
-            .mappings()
-            .all()
-        )
-        loaded = set(
-            await session.scalars(
-                text("""
-          WITH candidate AS (
-            SELECT cv.request_id FROM cargo_vehicle_observation cv
-              JOIN operating_region_vehicle rv USING(vehicle_id) WHERE rv.region_id=:region
-            UNION SELECT ct.request_id FROM cargo_transfer ct JOIN operating_region_vehicle rv
-              ON rv.vehicle_id=ct.to_vehicle_id WHERE rv.region_id=:region
-          ) SELECT DISTINCT coalesce((SELECT ct.to_vehicle_id FROM cargo_transfer ct
-            WHERE ct.request_id=cv.request_id ORDER BY ct.sequence DESC LIMIT 1),cv.vehicle_id)
-          FROM candidate JOIN cargo_vehicle_observation cv USING(request_id)
-          JOIN pickup_execution p USING(request_id)
-          WHERE NOT EXISTS(SELECT 1 FROM handover_event_item hi
-            WHERE hi.pickup_execution_id=p.pickup_execution_id AND hi.status='VALIDATED')
-          AND EXISTS(SELECT 1 FROM operating_region_vehicle rv WHERE rv.region_id=:region
-            AND rv.vehicle_id=coalesce((SELECT ct.to_vehicle_id FROM cargo_transfer ct
-              WHERE ct.request_id=cv.request_id ORDER BY ct.sequence DESC LIMIT 1),cv.vehicle_id))
-        """),
-                {"region": region_id},
-            )
-        )
-        spans = {r["vehicle_id"]: r for r in occupied}
-        busy = []
-        for shift in shifts:
-            span = spans.get(shift["vehicle_id"])
-            if span or shift["vehicle_id"] in loaded:
-                busy.append(
-                    dict(
-                        shift_id=shift["shift_id"],
-                        starts_at=max(now, shift["starts_at"]),
-                        ends_at=min(shift["ends_at"], span["ends_at"])
-                        if span and span["ends_at"] > now
-                        else shift["ends_at"],
-                    )
-                )
-        busy_by_start = calendar_supply(slots, busy, by_shift)
-        supply_by_start = calendar_supply(slots, shifts, by_shift)
-        duty_ranges = sorted((s["starts_at"], s["ends_at"]) for s in shifts)
-        duty_starts = [start for start, _ in duty_ranges]
-        latest_end = list(accumulate((end for _, end in duty_ranges), max))
-        for slot in slots:
-            supply = supply_by_start[slot.start]
-            boundary = bisect_right(duty_starts, slot.end)
-            boundary_candidate = boundary > 0 and latest_end[boundary - 1] > slot.start
-            p = by_start.get(slot.start)
-            demand = int(p["service"] or 0) if p else 0
-            rows.append(
-                dict(
-                    region_id=region_id,
-                    slot_start=slot.start,
-                    slot_end=slot.end,
-                    source_version=version,
-                    computed_at=now,
-                    valid_until=now + timedelta(seconds=freshness_seconds),
-                    status="FULL"
-                    if not supply and not boundary_candidate
-                    else "LIMITED"
-                    if max(demand, busy_by_start[slot.start]) >= supply
-                    else "AVAILABLE",
-                    bookings=int(p["bookings"]) if p else 0,
-                    holds=int(p["holds"]) if p else 0,
-                    vehicle_seconds=supply,
-                    pickup_seconds=demand,
-                    busy_seconds=busy_by_start[slot.start],
-                )
-            )
-        # Domain writers use the same head; a newer source cannot be overwritten.
+        expiry = min(expiry, now + timedelta(seconds=freshness_seconds))
         await session.refresh(head, with_for_update=True)
         if head.version != version:
             raise ValueError("SLOT_PROJECTION_STALE_RETRY")
+        # Publication follows head -> budget order, matching customer holds.
+        statement_budget = insert(RegionalCapacityBudget).values(budgets)
+        await session.execute(
+            statement_budget.on_conflict_do_update(
+                index_elements=[
+                    RegionalCapacityBudget.region_id,
+                    RegionalCapacityBudget.bucket_start,
+                    RegionalCapacityBudget.kind,
+                ],
+                set_={
+                    key: getattr(statement_budget.excluded, key)
+                    for key in ("generation", "capacity_seconds", "used_seconds")
+                },
+            )
+        )
+        for row in rows:
+            row.update(source_version=version, computed_at=now, valid_until=expiry)
         statement = insert(RegionalSlotProjection).values(rows)
         await session.execute(
             statement.on_conflict_do_update(
@@ -295,17 +164,10 @@ async def refresh_slots(
         )
         await session.execute(
             insert(RegionalSlotRefresh)
-            .values(
-                region_id=region_id,
-                source_version=version,
-                due_at=now + timedelta(seconds=freshness_seconds),
-            )
+            .values(region_id=region_id, source_version=version, due_at=expiry)
             .on_conflict_do_update(
                 index_elements=[RegionalSlotRefresh.region_id],
-                set_={
-                    "source_version": version,
-                    "due_at": now + timedelta(seconds=freshness_seconds),
-                },
+                set_={"source_version": version, "due_at": expiry},
             )
         )
         await session.commit()
@@ -348,6 +210,13 @@ async def read_slots(
             slot_start=r.slot_start,
             slot_end=r.slot_end,
             status=r.status if r.source_version == version and r.valid_until > now else "UNKNOWN",
+            remaining_bookings=r.remaining_bookings
+            if r.source_version == version and r.valid_until > now
+            else 0,
+            policy_version=r.policy_version,
+            generation=r.generation,
+            valid_until=r.valid_until,
+            admission_basis="PROJECTED_ALLOWANCE",
             source_version=r.source_version,
             computed_at=r.computed_at,
             capacity_certified=False,

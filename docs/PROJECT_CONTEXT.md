@@ -1,5 +1,12 @@
 # Project Context
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
 Regional capacity transfer now uses one versioned owner and refuses outstanding commitments,
 cargo and live holds. Rider replacement is manager-approved; custody moves only through existing
 evidenced transfers. Versioned advisory slot projections use database invalidation and finite

@@ -65,6 +65,8 @@ async def load_certificate(
     session: AsyncSession, reservation: CapacityReservation
 ) -> RouteProposal:
     document = reservation.certificate
+    if document is None:
+        raise ValueError("PROJECTION_HOLD_HAS_NO_ROUTE_CERTIFICATE")
     if document.get("format") != FORMAT:
         return PROPOSAL_CODEC.validate_python(document["proposal"])
     rows = (

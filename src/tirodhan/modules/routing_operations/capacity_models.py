@@ -1,9 +1,20 @@
 """Regional capacity ownership, replacement requests and advisory slot projections."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, String, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
@@ -88,6 +99,9 @@ class RegionalSlotProjection(Base):
     vehicle_seconds: Mapped[int] = mapped_column(BigInteger)
     pickup_seconds: Mapped[int] = mapped_column(BigInteger)
     busy_seconds: Mapped[int] = mapped_column(BigInteger)
+    generation: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    policy_version: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    remaining_bookings: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
     __table_args__ = (
         CheckConstraint(
             "status IN ('AVAILABLE','LIMITED','FULL','UNKNOWN')", name="ck_slot_status"
@@ -103,3 +117,58 @@ class RegionalSlotRefresh(Base):
     )
     source_version: Mapped[int] = mapped_column(BigInteger)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class RegionalCapacityBudget(Base):
+    __tablename__ = "regional_capacity_budget"
+    region_id: Mapped[UUID] = mapped_column(
+        ForeignKey("operating_region.region_id"), primary_key=True
+    )
+
+    bucket_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), primary_key=True)
+    generation: Mapped[int] = mapped_column(BigInteger)
+    capacity_seconds: Mapped[int] = mapped_column(BigInteger)
+    used_seconds: Mapped[int] = mapped_column(BigInteger)
+    __table_args__ = (
+        CheckConstraint("kind IN ('DUTY','PICKUP')", name="ck_budget_kind"),
+        CheckConstraint(
+            "generation > 0 AND capacity_seconds >= 0 AND used_seconds >= 0",
+            name="ck_budget_values",
+        ),
+    )
+
+
+class SlotAllowanceConfiguration(Base):
+    __tablename__ = "regional_slot_policy"
+    region_id: Mapped[UUID] = mapped_column(
+        ForeignKey("operating_region.region_id"), primary_key=True
+    )
+    version: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    authorized_by: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
+    configured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (CheckConstraint("version > 0", name="ck_slot_policy_version"),)
+
+
+class SlotReservationDebit(Base):
+    __tablename__ = "slot_reservation_debit"
+    reservation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("regional_capacity_reservation.reservation_id"), primary_key=True
+    )
+    bucket_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), primary_key=True)
+    region_id: Mapped[UUID] = mapped_column()
+    generation: Mapped[int] = mapped_column(BigInteger)
+    seconds: Mapped[int] = mapped_column(BigInteger)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["region_id", "bucket_start", "kind"],
+            [
+                "regional_capacity_budget.region_id",
+                "regional_capacity_budget.bucket_start",
+                "regional_capacity_budget.kind",
+            ],
+        ),
+        CheckConstraint("seconds > 0 AND generation > 0", name="ck_slot_debit_values"),
+    )

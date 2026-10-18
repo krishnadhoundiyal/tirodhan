@@ -1,5 +1,19 @@
 # Domain Model
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+A projected CapacityReservation is permission to bind one booking from shared estimated slot
+inventory. It records its exact forecast-policy version and immutable workload debits; it is
+neither an operational assignment nor a route certificate. Binding does not repeat routing
+feasibility, and later forecast changes do not revoke an existing hold or paid commitment.
+Cargo custody still changes only through the existing validated physical transfer/handover
+workflow. A loaded vehicle without a discharge task contributes no new projected capacity.
+
 Regional capacity/recovery introduces immutable RegionCapacityTransfer, versioned RiderReplacement
 and immutable ReplacementDecision, plus advisory RegionalSlotProjection/Refresh. RegionVehicle
 membership has a monotonic version; existing one-open-shift constraints retain one live rider capacity

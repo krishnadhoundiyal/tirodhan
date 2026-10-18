@@ -318,6 +318,7 @@ async def reserve_capacity(
         previous = await session.scalar(
             select(CapacityReservation)
             .where(CapacityReservation.region_id == region.region_id)
+            .where(CapacityReservation.admission_basis == "EXACT_CERTIFICATE")
             .order_by(CapacityReservation.region_version.desc())
             .limit(1)
         )

@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -92,9 +93,25 @@ class CapacityReservation(Base):
     discharge_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     fingerprint: Mapped[bytes] = mapped_column(LargeBinary)
-    certificate: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    certificate: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    admission_basis: Mapped[str] = mapped_column(
+        String(24), default="EXACT_CERTIFICATE", server_default="EXACT_CERTIFICATE"
+    )
+    estimated_duty_seconds: Mapped[int | None] = mapped_column(BigInteger)
+    estimator_policy_version: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     __table_args__ = (
+        CheckConstraint(
+            "(admission_basis='EXACT_CERTIFICATE' AND certificate IS NOT NULL) OR "
+            "(admission_basis='PROJECTED_ALLOWANCE' AND certificate IS NULL "
+            "AND estimated_duty_seconds IS NOT NULL AND estimator_policy_version IS NOT NULL "
+            "AND estimated_duty_seconds > 0 AND estimator_policy_version > 0)",
+            name="ck_reservation_basis",
+        ),
+        ForeignKeyConstraint(
+            ["region_id", "estimator_policy_version"],
+            ["regional_slot_policy.region_id", "regional_slot_policy.version"],
+        ),
         UniqueConstraint("region_id", "region_version", name="uq_region_capacity_version"),
         CheckConstraint("region_version > 0", name="ck_capacity_region_version"),
         CheckConstraint(

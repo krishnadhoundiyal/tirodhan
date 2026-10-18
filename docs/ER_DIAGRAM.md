@@ -1,5 +1,19 @@
 # ER Diagram
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+Migration 0032 adds `SlotAllowanceConfiguration -> OperatingRegion, AppUser` with immutable
+`(region_id, version)` identity; projected `CapacityReservation` references that exact policy
+version. `RegionalCapacityBudget -> OperatingRegion` has region/time/kind identity.
+`SlotReservationDebit -> CapacityReservation, RegionalCapacityBudget` is immutable audit,
+not a rider assignment or custody relationship. Existing reservation/booking/payment and
+route/custody relationships remain authoritative.
+
 Migration 0031: RegionVehicle gains version; RegionCapacityTransfer references its vehicle/rider,
 both OperatingRegions and authorizing AppUser. RiderReplacement references CollectionRequest,
 original RiderProfile, OperatingRegion, recommended OperatingShift and optional CargoTransferIntent.

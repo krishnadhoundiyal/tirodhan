@@ -1,0 +1,282 @@
+{
+  "base_commit": "7f3b19a11e2e216e8a806a529a9418a1b5a81281",
+  "comparison": "Serial same-build internal historical exact-certificate reference versus projected slot inventory; the public commercial-admission path stays retired. Different correctness semantics: a forecast is not a route certificate.",
+  "concurrent": {
+    "accepted": 192,
+    "application": {
+      "container_cpu_usec": 18013101,
+      "cpu_fraction_of_two_cores": 0.328972039263228,
+      "peak_process_rss_bytes": 203878400
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.07523288700031117,
+      "p95": 0.10541116498643532
+    },
+    "concurrency": 8,
+    "count": 192,
+    "database": {
+      "blks_hit": 5281770,
+      "blks_read": 28,
+      "container_cpu_usec": 7210644,
+      "cpu_fraction_of_two_cores": 0.13168750128482373,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 536322048,
+      "temp_bytes": 0,
+      "xact_commit": 937,
+      "xact_rollback": 374
+    },
+    "elapsed_seconds": 27.377860198001144,
+    "failure_fraction": 0.0,
+    "failures": {},
+    "hold_phase_seconds": 12.152125306020025,
+    "hold_seconds": {
+      "p50": 0.5239911249955185,
+      "p95": 0.8062116109940689
+    },
+    "hold_throughput_per_second": 15.799705414894412,
+    "initial_refresh_seconds": 0.22849026101175696,
+    "interleaved": false,
+    "optimizer_calls": 0,
+    "queued_decision_seconds": {
+      "p50": 5.934427058993606,
+      "p95": 11.281647594994865
+    },
+    "read_seconds": {
+      "p50": 0.007980510010384023,
+      "p95": 0.01458690600702539
+    },
+    "refresh_seconds": {
+      "p50": 0.2132114119885955,
+      "p95": 0.29116259500733577
+    },
+    "road_matrix_calls": 0,
+    "slots": 224,
+    "sql": {
+      "calls": 15379,
+      "max_seconds": 0.9172924169979524,
+      "seconds": 91.92624608826009
+    },
+    "synthetic_policy": {
+      "cluster_threshold": 2,
+      "clustered_travel_seconds": 60,
+      "facility_travel_seconds": 1500,
+      "limited_bookings": 1,
+      "local_travel_seconds": 120,
+      "pickup_start_offset_seconds": 900,
+      "stem_seconds": 0,
+      "travel_bands": [],
+      "version": 1
+    },
+    "throughput_per_second": 7.012965900600877,
+    "vehicles": 80
+  },
+  "environment": {
+    "application_cpus": 2,
+    "application_memory_gib": 4,
+    "database_cpus": 2,
+    "database_memory_gib": 1,
+    "graph_source_sha256": "4f36f7e749aef6f21128288ab8ca6447666a506a440d74db778a079974a71b49",
+    "ortools": "9.14.6206",
+    "osrm": "6.0.0",
+    "postgres_image": "postgis/postgis:17-3.5",
+    "python": "3.13.5",
+    "vroom": "1.15.0"
+  },
+  "limitations": [
+    "One run per mode, synthetic 192-booking/80-vehicle distribution, 64 public sites, 70% in first two slots.",
+    "All holds precede checkout; this is not a continuous interleaved-arrival or production SLA campaign.",
+    "Existing user containers stayed unchanged; full-suite and benchmark test loads ran serially.",
+    "Database warmed across modes; UUIDs and real clock progression vary. No statistical significance or prediction reliability percentage established.",
+    "Real application booking/payment services, synthetic authenticated capture; gateway and HTTP/mobile latency excluded.",
+    "SQL counts are instrumented application statements, not trigger-internal statement counts; PostgreSQL counters are asynchronous and rollback includes normal read cleanup."
+  ],
+  "reference": {
+    "accepted": 192,
+    "admission_worker_quantum": 1,
+    "adopted_policy": false,
+    "application": {
+      "container_cpu_usec": 71381471,
+      "cpu_fraction_of_two_cores": 0.3540258954599473,
+      "peak_process_rss_bytes": 206295040
+    },
+    "caches": {
+      "delta_reads": 0,
+      "full_reads": 1,
+      "hits": 191,
+      "retained_read_bytes_charged": 1695336,
+      "roads": {
+        "test-car": {
+          "arc_bytes_charged": 1742000,
+          "hits": 48174,
+          "provider_cells": 4499,
+          "queries": 197
+        }
+      }
+    },
+    "certification_attempt_seconds": {
+      "p50": 0.40823837398784235,
+      "p95": 0.6334008880075999
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.07598376300302334,
+      "p95": 0.11441730899969116
+    },
+    "concurrency": 1,
+    "count": 192,
+    "database": {
+      "blks_hit": 1459990,
+      "blks_read": 45,
+      "container_cpu_usec": 17223005,
+      "cpu_fraction_of_two_cores": 0.08541978306437743,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 418816000,
+      "temp_bytes": 0,
+      "xact_commit": 2035,
+      "xact_rollback": 1724
+    },
+    "decision_seconds": {
+      "p50": 35.92702141398331,
+      "p95": 76.67426098897704
+    },
+    "elapsed_seconds": 100.81391208298737,
+    "enqueue_seconds": {
+      "p50": 0.016132254007970914,
+      "p95": 0.030787581985350698
+    },
+    "failures": {},
+    "interleaved": false,
+    "matrix_mode": "adaptive_rectangular",
+    "pending_fraction": 0.0,
+    "sql": {
+      "calls": 71028,
+      "max_seconds": 0.12743527098791674,
+      "seconds": 35.768130556854885
+    },
+    "statuses": {
+      "SUCCEEDED": 192
+    },
+    "terminal_failure_fraction": 0.0,
+    "terminal_throughput_per_second": 1.904499052094622,
+    "throughput_per_second": 1.904499052094622,
+    "vehicles": 80
+  },
+  "sequential": {
+    "accepted": 192,
+    "application": {
+      "container_cpu_usec": 16662724,
+      "cpu_fraction_of_two_cores": 0.3412659176283901,
+      "peak_process_rss_bytes": 199372800
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.0706569240137469,
+      "p95": 0.09817409500828944
+    },
+    "concurrency": 1,
+    "count": 192,
+    "database": {
+      "blks_hit": 540631,
+      "blks_read": 28,
+      "container_cpu_usec": 4808667,
+      "cpu_fraction_of_two_cores": 0.09848534707316509,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 485715968,
+      "temp_bytes": 0,
+      "xact_commit": 1030,
+      "xact_rollback": 385
+    },
+    "elapsed_seconds": 24.413108868000563,
+    "failure_fraction": 0.0,
+    "failures": {},
+    "hold_phase_seconds": 10.186653893993935,
+    "hold_seconds": {
+      "p50": 0.04834008801844902,
+      "p95": 0.06331699001020752
+    },
+    "hold_throughput_per_second": 18.848191172294904,
+    "initial_refresh_seconds": 0.21312051700078882,
+    "interleaved": false,
+    "optimizer_calls": 0,
+    "queued_decision_seconds": {
+      "p50": 5.1461887400073465,
+      "p95": 9.521595464990241
+    },
+    "read_seconds": {
+      "p50": 0.006320219981716946,
+      "p95": 0.009204773989040405
+    },
+    "refresh_seconds": {
+      "p50": 0.1791664310148917,
+      "p95": 0.3070260010135826
+    },
+    "road_matrix_calls": 0,
+    "slots": 224,
+    "sql": {
+      "calls": 15379,
+      "max_seconds": 0.01610614897799678,
+      "seconds": 8.991610768804094
+    },
+    "synthetic_policy": {
+      "cluster_threshold": 2,
+      "clustered_travel_seconds": 60,
+      "facility_travel_seconds": 1500,
+      "limited_bookings": 1,
+      "local_travel_seconds": 120,
+      "pickup_start_offset_seconds": 900,
+      "stem_seconds": 0,
+      "travel_bands": [],
+      "version": 1
+    },
+    "throughput_per_second": 7.8646271983681535,
+    "vehicles": 80
+  },
+  "validation": {
+    "corrected_test_setup_failures": "Expanded run had two new transfer-overlap fixture failures because its shift was still in the future. With pre-shift confirmation and an active scenario clock, all four ownership races passed; no domain rule was weakened.",
+    "distinct_targeted_cases_passing_after_followups": 44,
+    "followups": {
+      "complete-regressions": {
+        "errors": "0",
+        "failures": "2",
+        "skipped": "0",
+        "tests": "44",
+        "time": "107.756"
+      },
+      "final-regressions": {
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "38",
+        "time": "106.122"
+      },
+      "migration-final": {
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "1",
+        "time": "8.077"
+      },
+      "ownership-final": {
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "4",
+        "time": "18.537"
+      }
+    },
+    "full_native": {
+      "failed": 3,
+      "note": "Broad run began before final refinements; targeted follow-ups cover final deltas.",
+      "passed": 1508,
+      "seconds": 2246.07,
+      "skipped": 12,
+      "warnings": 9
+    },
+    "full_run_timeout_failures": "Real OSRM matrix timeout and one-second broker-test timeout both passed isolated follow-up, without source/assertion changes.",
+    "quality": {
+      "format": "passed",
+      "git_diff_check": "passed",
+      "ruff": "passed",
+      "strict_mypy_source_files": 227
+    },
+    "remaining_native_failure": "Unchanged OTP traceback assertion under Python 3.13.5; passes under 3.10.5."
+  }
+}

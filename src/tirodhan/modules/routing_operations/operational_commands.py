@@ -23,6 +23,7 @@ from tirodhan.modules.reliability.primitives import (
     complete_idempotency_record,
 )
 
+from .allowance_estimator import AllowancePolicy
 from .authority import RouteAuthorityError, lock_booking_population, lock_resources
 from .commands import Command, OperationalInputError, require_live_role
 from .dispatch_models import RouteRevision, RouteTask, VehicleRoute
@@ -68,6 +69,14 @@ class ConfigureRegion(Command):
     safety_percent: int = Field(default=125, strict=True, ge=100, le=200)
     minimum_pickup_seconds: int = Field(default=180, strict=True, ge=1, le=3600)
     minimum_discharge_seconds: int = Field(default=60, strict=True, ge=1, le=3600)
+    slot_allowance: AllowancePolicy | None = None
+
+
+class ConfigureSlotAllowance(Command):
+    operation: Literal["SLOT_ALLOWANCE_POLICY"] = "SLOT_ALLOWANCE_POLICY"
+    region_id: UUID
+    expected_version: int = Field(strict=True, ge=1)
+    policy: AllowancePolicy
 
 
 class AcknowledgeRoute(Command):
@@ -180,6 +189,7 @@ class ObservePhysicalLoad(Command):
 
 OperationalCommand = Annotated[
     ConfigureRegion
+    | ConfigureSlotAllowance
     | AcknowledgeRoute
     | DeclareBreak
     | ConsentExtension
@@ -241,6 +251,7 @@ async def _execute_operation_once(
         command,
         (
             ConfigureRegion,
+            ConfigureSlotAllowance,
             TransferRegionalCapacity,
             RecommendReplacement,
             DecideReplacement,
@@ -289,7 +300,7 @@ async def _execute_operation_once(
         ):
             target_shift = getattr(command, "shift_id", None)
             target = await session.get(OperatingShift, target_shift) if target_shift else None
-            replacement_region = None
+            replacement_region = getattr(command, "region_id", None)
             if isinstance(command, (RecommendReplacement, DecideReplacement)):
                 from .capacity_models import RiderReplacement
 
@@ -375,6 +386,31 @@ async def _execute(
     result = command.client_command_id
     if isinstance(command, TransferRegionalCapacity):
         return await transfer_capacity(session, actor, command, now, clock)
+    if isinstance(command, ConfigureSlotAllowance):
+        region = await session.scalar(
+            select(OperatingRegion)
+            .where(OperatingRegion.region_id == command.region_id)
+            .with_for_update()
+        )
+        if region is None or region.version != command.expected_version:
+            raise OperationalInputError("REGION_VERSION_CHANGED")
+        from .allowance_policy import current_policy
+        from .capacity_models import SlotAllowanceConfiguration
+
+        previous = await current_policy(session, region.region_id)
+        if previous and command.policy.version <= previous.version:
+            raise OperationalInputError("ESTIMATOR_POLICY_VERSION_MUST_INCREASE")
+        session.add(
+            SlotAllowanceConfiguration(
+                region_id=region.region_id,
+                version=command.policy.version,
+                configuration=command.policy.model_dump(mode="json"),
+                authorized_by=actor,
+                configured_at=now,
+            )
+        )
+        region.version += 1
+        return region.region_id
     if isinstance(command, (RequestReplacement, RecommendReplacement, DecideReplacement)):
         return await replacement_command(session, actor, command, now, expires_at, clock)
     if isinstance(command, ConfirmShift):
@@ -435,6 +471,18 @@ async def _execute(
             )
         )
         await session.flush()
+        if command.slot_allowance:
+            from .capacity_models import SlotAllowanceConfiguration
+
+            session.add(
+                SlotAllowanceConfiguration(
+                    region_id=result,
+                    version=command.slot_allowance.version,
+                    configuration=command.slot_allowance.model_dump(mode="json"),
+                    authorized_by=actor,
+                    configured_at=now,
+                )
+            )
         session.add_all([RegionCell(cell_id=c, region_id=result) for c in set(command.cells)])
         session.add_all(
             [RegionVehicle(vehicle_id=v, region_id=result) for v in set(command.vehicle_ids)]

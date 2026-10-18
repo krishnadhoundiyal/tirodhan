@@ -1,4 +1,4 @@
-"""Finite event/reconciliation job for advisory slots; no road process is required."""
+"""Finite event/reconciliation job for projected slots; no road process is required."""
 
 import asyncio
 

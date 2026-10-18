@@ -211,6 +211,23 @@ async def test_slot_projection_invalidates_transactionally_and_reconciles(databa
     factory = database_session_factory
     data = await regional(factory, empty=True)
     now = data[6][0]
+    from test_slot_holds import policy
+
+    from tirodhan.modules.routing_operations.operational_commands import ConfigureSlotAllowance
+
+    async with factory() as session:
+        region = await session.get(OperatingRegion, data[7])
+    await operational(
+        factory,
+        data[0].manager_id,
+        ConfigureSlotAllowance(
+            client_command_id=new_uuid7(),
+            region_id=data[7],
+            expected_version=region.version,
+            policy=policy(),
+        ),
+        now,
+    )
     assert await refresh_slots(factory, data[7], now=now) > 0
     async with factory() as session:
         before = await read_slots(session, data[7], now=now)

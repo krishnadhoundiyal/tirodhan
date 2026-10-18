@@ -1,5 +1,25 @@
 # Schema Design
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+## Migration 0032 — projected slot allowances
+
+`regional_slot_policy(region_id, version)` retains immutable manager-attributed forecast
+configuration. `regional_capacity_budget(region_id, bucket_start, kind)` stores shared DUTY
+and PICKUP inventories; `slot_reservation_debit(reservation_id, bucket_start, kind)` retains
+immutable consumption with real reservation and composite budget FKs. Conditional SQL debits
+and a deferred complete-debit constraint protect new holds. Existing commitments may exceed
+a later lower forecast; this remains visible and prevents further spending rather than
+rejecting historical facts. Projections gain generation, policy version and remaining count.
+Reservations gain admission basis, estimated duty and policy FK; only PROJECTED_ALLOWANCE
+has SQL NULL certificate. Historical exact certificates remain unchanged. Downgrade refuses
+new policy/reservation history. The capacity-removal guard protects both admission bases.
+
 Migration 0031 adds versioned RegionVehicle membership, append-only capacity-transfer and replacement
 decision audits, relational replacement/retry state and versioned advisory slot projections with
 coalesced refresh rows. Region transfers and shift close cannot discard live certified commitments.
