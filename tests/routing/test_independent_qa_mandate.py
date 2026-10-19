@@ -158,13 +158,13 @@ async def test_independent_adversarial_qa():
         # This is an optimization weakness in how it sets drops / penalty logic.
         if len(proposal.routes) == 0 or len(proposal.unserved_stop_ids) == 2:
             pytest.xfail(
-                "Solver weakness: Does not serve anything when capacity "\
+                "Solver weakness: Does not serve anything when capacity "
                 "is restricted instead of serving what it can."
             )
     except RoutingAdapterError as e:
         if e.args[0] == "NO_FEASIBLE_PROPOSAL":
             pytest.xfail(
-                "Solver weaknesses: NO_FEASIBLE_PROPOSAL thrown for partial routing "\
+                "Solver weaknesses: NO_FEASIBLE_PROPOSAL thrown for partial routing "
                 "capability when capacity is tight."
             )
         raise
