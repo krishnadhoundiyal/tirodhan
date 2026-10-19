@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
@@ -44,6 +45,7 @@ from tirodhan.modules.planning.routing.osrm import RoadNode
 from tirodhan.modules.planning.routing.validation import validate_problem
 from tirodhan.modules.receiving_points.models import ReceivingPoint
 
+from .admission_queries import in_ids
 from .commands import OperationalInputError, Positive
 from .dispatch_models import RouteRevision, RouteRevisionStop, RouteTask, VehicleRoute
 from .fleet_models import FacilityRestriction, FleetException
@@ -64,10 +66,10 @@ class ShadowConfiguration(BaseModel):
     horizon_end: AwareDatetime
     policy_version: str = Field(min_length=1, max_length=100)
     max_position_age_seconds: Positive
-    max_requests: int = Field(strict=True, ge=1, le=100000)
-    max_vehicles: int = Field(strict=True, ge=1, le=32)
-    max_nodes: int = Field(strict=True, ge=1, le=512)
-    max_profiles: int = Field(strict=True, ge=1, le=8)
+    max_requests: int = Field(strict=True, ge=1)
+    max_vehicles: int = Field(strict=True, ge=1)
+    max_nodes: int = Field(strict=True, ge=1)
+    max_profiles: int = Field(strict=True, ge=1)
     search_seconds: int = Field(strict=True, ge=1, le=30)
     lease_seconds: int = Field(strict=True, ge=60, le=3600)
     fleet_mode: bool = False
@@ -97,7 +99,12 @@ class ShadowConfiguration(BaseModel):
 
     @model_validator(mode="after")
     def ordered(self) -> ShadowConfiguration:
-        if self.max_requests > 128 and not (self.confirmed_shifts and self.region_id is not None):
+        if (
+            self.max_requests > 128
+            or self.max_vehicles > 32
+            or self.max_nodes > 512
+            or self.max_profiles > 8
+        ) and not ((self.confirmed_shifts or self.admission_mode) and self.region_id is not None):
             raise ValueError("large discovery requires a regional owner")
         if (
             (self.pickup_horizon_end is not None and self.pickup_horizon_end > self.horizon_end)
@@ -317,11 +324,11 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     OperatingShift.starts_at < config.horizon_end,
                 )
                 .order_by(OperatingVehicle.vehicle_id)
-                .limit(config.max_vehicles + 1)
+                .limit(None if config.admission_mode else config.max_vehicles + 1)
             )
         ).mappings()
     ]
-    if len(vehicles) > config.max_vehicles:
+    if not config.admission_mode and len(vehicles) > config.max_vehicles:
         raise OperationalInputError("VEHICLE_SCOPE_LIMIT")
     riders = [v["rider_id"] for v in vehicles]
     collector = (
@@ -406,7 +413,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     or_(
                         CollectionRequest.status.in_(("ACCEPTED", "PRE_PLANNING", "PLANNED")),
                         PickupExecution.status == "COLLECTED",
-                        current.rider_id.in_(riders),
+                        in_ids(current.rider_id, riders),
                     ),
                     or_(
                         (
@@ -417,11 +424,11 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                             if config.region_id
                             else exists().where(RegionCell.cell_id == CollectionRequest.cell_id)
                         ),
-                        current.rider_id.in_(riders),
+                        in_ids(current.rider_id, riders),
                         regional_custody,
                         exists().where(
                             CargoTransfer.request_id == CollectionRequest.request_id,
-                            CargoTransfer.to_rider_id.in_(riders),
+                            in_ids(CargoTransfer.to_rider_id, riders),
                         ),
                     )
                     if config.regional
@@ -441,7 +448,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                                     if config.confirmed_shifts
                                     else CollectionRequest.slot_end >= config.epoch,
                                 ),
-                                current.rider_id.in_(riders),
+                                in_ids(current.rider_id, riders),
                                 exists().where(
                                     AppointmentConsent.request_id == CollectionRequest.request_id,
                                     AppointmentConsent.slot_end >= config.epoch,
@@ -453,14 +460,15 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                         and_(
                             PickupExecution.status == "COLLECTED",
                             or_(
-                                collector.c.collector_id.in_(riders),
+                                in_ids(collector.c.collector_id, riders),
                                 regional_custody,
                                 exists().where(
                                     CargoTransfer.request_id == CollectionRequest.request_id,
-                                    CargoTransfer.to_rider_id.in_(riders),
+                                    in_ids(CargoTransfer.to_rider_id, riders),
                                 ),
-                                CargoVehicleObservation.vehicle_id.in_(
-                                    [v["vehicle_id"] for v in vehicles]
+                                in_ids(
+                                    CargoVehicleObservation.vehicle_id,
+                                    [v["vehicle_id"] for v in vehicles],
                                 ),
                             ),
                         ),
@@ -468,21 +476,21 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 )
                 .where(
                     or_(
-                        CollectionRequest.request_id.in_(config.request_ids),
-                        current.rider_id.in_(riders),
+                        in_ids(CollectionRequest.request_id, config.request_ids),
+                        in_ids(current.rider_id, riders),
                         PickupExecution.status == "COLLECTED",
                     )
                     if config.confirmed_shifts and config.request_ids is not None
-                    else CollectionRequest.request_id.in_(config.request_ids)
+                    else in_ids(CollectionRequest.request_id, config.request_ids)
                     if config.request_ids is not None
                     else true()
                 )
                 .order_by(CollectionRequest.request_id)
-                .limit(config.max_requests + 1)
+                .limit(None if config.admission_mode else config.max_requests + 1)
             )
         ).mappings()
     ]
-    if len(requests) > config.max_requests:
+    if not config.admission_mode and len(requests) > config.max_requests:
         raise OperationalInputError("REQUEST_SCOPE_LIMIT")
     from .regional_projection import project
 
@@ -500,9 +508,10 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 )
                 if config.region_id
                 else select(RegionReceivingPoint.receiving_point_id).where(
-                    RegionReceivingPoint.region_id.in_(
+                    in_ids(
+                        RegionReceivingPoint.region_id,
                         {v.get("region_id") for v in vehicles}
-                        | {r.get("region_id") for r in requests}
+                        | {r.get("region_id") for r in requests},
                     )
                 )
             )
@@ -520,7 +529,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     ReceivingPoint.allowed_radius_m,
                     *_coordinates(ReceivingPoint.location),
                 )
-                .where(ReceivingPoint.receiving_point_id.in_(point_ids))
+                .where(in_ids(ReceivingPoint.receiving_point_id, point_ids))
                 .order_by(ReceivingPoint.receiving_point_id)
             )
         ).mappings()
@@ -536,7 +545,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     ReceivingWindow.ends_at,
                 )
                 .where(
-                    ReceivingWindow.receiving_point_id.in_(point_ids),
+                    in_ids(ReceivingWindow.receiving_point_id, point_ids),
                     ReceivingWindow.ends_at >= config.epoch,
                     ReceivingWindow.starts_at <= config.horizon_end,
                 )
@@ -545,11 +554,11 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     ReceivingWindow.starts_at,
                     ReceivingWindow.window_id,
                 )
-                .limit(config.max_nodes * 16 + 1)
+                .limit(None if config.admission_mode else config.max_nodes * 16 + 1)
             )
         ).mappings()
     ]
-    if len(windows) > config.max_nodes * 16:
+    if not config.admission_mode and len(windows) > config.max_nodes * 16:
         raise OperationalInputError("RECEIVING_WINDOW_SCOPE_LIMIT")
     routes = [
         dict(row)
@@ -564,7 +573,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     VehicleRoute.status,
                 )
                 .where(
-                    VehicleRoute.vehicle_id.in_([v["vehicle_id"] for v in vehicles]),
+                    in_ids(VehicleRoute.vehicle_id, [v["vehicle_id"] for v in vehicles]),
                     VehicleRoute.status != "CLOSED",
                 )
                 .order_by(VehicleRoute.vehicle_id)
@@ -589,7 +598,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                 .join(RouteRevision, RouteRevision.revision_id == RouteRevisionStop.revision_id)
                 .join(VehicleRoute, VehicleRoute.route_id == RouteRevision.route_id)
                 .where(
-                    VehicleRoute.route_id.in_([r["route_id"] for r in routes]),
+                    in_ids(VehicleRoute.route_id, [r["route_id"] for r in routes]),
                     RouteRevision.version == VehicleRoute.version,
                     RouteTask.state.in_(("PENDING", "STARTED")),
                 )
@@ -611,9 +620,9 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     PickupExecution.pickup_execution_id == RiderAssignmentItem.pickup_execution_id,
                 )
                 .where(
-                    VehicleRoute.route_id.in_([r["route_id"] for r in routes]),
+                    in_ids(VehicleRoute.route_id, [r["route_id"] for r in routes]),
                     RiderAssignmentItem.released_at.is_not(None),
-                    PickupExecution.request_id.in_([r["request_id"] for r in requests]),
+                    in_ids(PickupExecution.request_id, [r["request_id"] for r in requests]),
                 )
                 .order_by(VehicleRoute.vehicle_id, PickupExecution.request_id)
             )
@@ -631,7 +640,7 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     FacilityRestriction.reason,
                 )
                 .where(
-                    FacilityRestriction.receiving_point_id.in_(point_ids),
+                    in_ids(FacilityRestriction.receiving_point_id, point_ids),
                     FacilityRestriction.ends_at >= config.epoch,
                     FacilityRestriction.starts_at <= config.horizon_end,
                 )
@@ -665,11 +674,11 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                     ),
                 )
                 .order_by(VehicleRoute.route_id)
-                .limit(config.max_vehicles + 1)
+                .limit(None if config.admission_mode else config.max_vehicles + 1)
             )
         ).mappings()
     ]
-    if len(orphaned) > config.max_vehicles:
+    if not config.admission_mode and len(orphaned) > config.max_vehicles:
         raise OperationalInputError("RECOVERY_SCOPE_LIMIT")
     external_facility_visits = []
     if config.confirmed_shifts:
@@ -691,12 +700,13 @@ async def _read_sources(session: AsyncSession, config: ShadowConfiguration) -> d
                         VehicleRoute.status != "CLOSED",
                         VehicleRoute.vehicle_id.not_in([v["vehicle_id"] for v in vehicles]),
                         VehicleRoute.version == RouteRevision.version,
-                        RouteTask.receiving_point_id.in_(
+                        in_ids(
+                            RouteTask.receiving_point_id,
                             [
                                 point["receiving_point_id"]
                                 for point in points
                                 if point.get("unloading_capacity") is not None
-                            ]
+                            ],
                         ),
                         RouteRevisionStop.planned_end > config.epoch,
                     )
@@ -731,9 +741,11 @@ async def build_problem(
     snapshot: OperationalSnapshot,
     config: ShadowConfiguration,
     run_id: UUID,
-    providers: dict[str, MatrixSource],
+    providers: Mapping[str, MatrixSource],
     *,
     now: datetime,
+    route_orders: dict[UUID, tuple[UUID, ...]] | None = None,
+    insertion_lot: UUID | None = None,
 ) -> RoutingProblem:
     epoch = config.epoch.astimezone(timezone.utc)
     if epoch.microsecond or config.horizon_end.microsecond:
@@ -744,7 +756,7 @@ async def build_problem(
         raise OperationalInputError("NO_COMMITTED_CAPACITY")
     by_rider = {v["rider_id"]: v["vehicle_id"] for v in vehicles}
     profiles = sorted({v["profile_version"] for v in vehicles})
-    if len(profiles) > config.max_profiles:
+    if not config.admission_mode and len(profiles) > config.max_profiles:
         raise OperationalInputError("PROFILE_SCOPE_LIMIT")
     nodes: dict[UUID, RoadNode] = {}
     for v in vehicles:
@@ -763,16 +775,21 @@ async def build_problem(
     lots: list[CargoLot] = []
     stops: list[RoutingStop] = []
     cargo: dict[UUID, list[CargoBalance]] = {v["vehicle_id"]: [] for v in vehicles}
+    by_vehicle = {v["vehicle_id"]: v for v in vehicles}
+    recovery = {r["vehicle_id"] for r in data["routes"] if r["status"] == "RECOVERY_REQUIRED"}
+    tasks_by_stop = {t["stop_id"]: t for t in data["tasks"]}
+    protected = {
+        t["stop_id"]
+        for t in data["tasks"]
+        if t["state"] == "STARTED" or t["committed_at"] is not None
+    }
+    released_pairs = {(r["vehicle_id"], r["request_id"]) for r in data["released"]}
+    accepted = {v["vehicle_id"]: set(v.get("accepted_requests", ())) for v in vehicles}
     eligible = tuple(
         v["vehicle_id"]
         for v in vehicles
         if v["blocked_reason"] is None
-        and not any(
-            route["vehicle_id"] == v["vehicle_id"]
-            and route["status"] == "RECOVERY_REQUIRED"
-            and not v.get("resume_authorized")
-            for route in data["routes"]
-        )
+        and (v["vehicle_id"] not in recovery or v.get("resume_authorized"))
     )
     for r in requests:
         if r["load_uncertain"]:
@@ -798,19 +815,16 @@ async def build_problem(
             cargo[bound].append(CargoBalance(request_id, 1))
         elif r["owner_id"] is not None and bound is None:
             raise OperationalInputError("INCUMBENT_RESOURCE_OUTSIDE_SCOPE")
-        protected_lot = any(
-            t["stop_id"] in (discharge_id, uuid5(NAMESPACE_URL, f"tirodhan:pickup:{request_id}"))
-            and (t["state"] == "STARTED" or t["committed_at"] is not None)
-            for t in data["tasks"]
+        protected_lot = (
+            discharge_id in protected
+            or uuid5(NAMESPACE_URL, f"tirodhan:pickup:{request_id}") in protected
         )
         if config.fleet_mode and not collected and not protected_lot:
             bound = None  # Future uncommitted ownership may move only in activation's transaction.
         pickup_id = None if collected else uuid5(NAMESPACE_URL, f"tirodhan:pickup:{request_id}")
         deadline = _seconds(r["discharge_deadline"], epoch)
-        started = next(
-            (t for t in data["tasks"] if t["stop_id"] == pickup_id and t["state"] == "STARTED"),
-            None,
-        )
+        task = tasks_by_stop.get(pickup_id)
+        started = task if task and task["state"] == "STARTED" else None
         if deadline < 0 or (not collected and r["slot_end"] < epoch and started is None):
             raise OperationalInputError("COMMITMENT_WINDOW_EXPIRED")
         lots.append(
@@ -829,28 +843,25 @@ async def build_problem(
             v
             for v in eligible
             if not config.regional
-            or any(
-                vehicle["vehicle_id"] == v
-                and vehicle.get("region_id") == r.get("region_id")
+            or (
+                by_vehicle[v].get("region_id") == r.get("region_id")
                 and r.get("region_id") is not None
                 and (
-                    vehicle["resource_kind"] == "COMMITTED"
-                    or r["request_id"] in vehicle.get("accepted_requests", ())
+                    by_vehicle[v]["resource_kind"] == "COMMITTED" or r["request_id"] in accepted[v]
                 )
-                for vehicle in vehicles
             )
         )
+        if r.get("replacement_shift_id") is not None and not collected:
+            region_eligible = tuple(
+                v for v in region_eligible if by_vehicle[v]["shift_id"] == r["replacement_shift_id"]
+            )
         allowed = (
             (bound,)
             if bound
             else tuple(
-                vehicle
-                for vehicle in region_eligible
-                if not any(
-                    release["vehicle_id"] == vehicle
-                    and release["request_id"] == (r.get("reattempt_of") or request_id)
-                    for release in data["released"]
-                )
+                v
+                for v in region_eligible
+                if (v, r.get("reattempt_of") or request_id) not in released_pairs
             )
         )
         if pickup_id:
@@ -910,14 +921,37 @@ async def build_problem(
                 r["receiving_point_id"],
             )
         )
-    if len(nodes) > config.max_nodes:
+    if not config.admission_mode and len(nodes) > config.max_nodes:
         raise OperationalInputError("NODE_SCOPE_LIMIT")
     matrices: list[RoadMatrix] = []
     ordered_nodes = tuple(nodes[key] for key in sorted(nodes, key=str))
     for profile in profiles:
         if profile not in providers:
             raise OperationalInputError("MATRIX_PROFILE_NOT_CONFIGURED")
-        matrix = await providers[profile].acquire(ordered_nodes)
+        source = providers[profile]
+        if route_orders is not None:
+            from .admission_roads import DirectedRoadCache
+
+            cache = source if isinstance(source, DirectedRoadCache) else DirectedRoadCache(source)
+            by_stop = {s.stop_id: s for s in stops}
+            new_nodes = {s.node_id for s in stops if s.lot_id == insertion_lot}
+            pairs: set[tuple[UUID, UUID]] = set()
+            for v in vehicles:
+                if v["profile_version"] != profile:
+                    continue
+                order = route_orders.get(v["vehicle_id"], ())
+                path = (
+                    (v["position_id"],)
+                    + tuple(by_stop[s].node_id for s in order if s in by_stop)
+                    + (v["end_receiving_point_id"],)
+                )
+                pairs.update(zip(path, path[1:], strict=False))
+                pairs.update((a, b) for a in path for b in new_nodes)
+                pairs.update((a, b) for a in new_nodes for b in path)
+            pairs.update((a, b) for a in new_nodes for b in new_nodes)
+            matrix = await cache.acquire_arcs(ordered_nodes, pairs)
+        else:
+            matrix = await source.acquire(ordered_nodes)
         if matrix.profile_version != profile or matrix.node_ids != tuple(
             n.node_id for n in ordered_nodes
         ):
@@ -927,9 +961,14 @@ async def build_problem(
     facility_snapshots = []
     for p in data["points"]:
         ranges = sorted(
-            (max(0, _seconds(w["starts_at"], epoch, start=True)), _seconds(w["ends_at"], epoch))
+            (
+                max(0, _seconds(w["starts_at"], epoch, start=True)),
+                min(_seconds(config.horizon_end, epoch), _seconds(w["ends_at"], epoch)),
+            )
             for w in data["windows"]
             if w["receiving_point_id"] == p["receiving_point_id"]
+            and w["ends_at"] >= epoch
+            and w["starts_at"] <= config.horizon_end
         )
         # Union overlapping operator-declared opening intervals; no fabricated 24-hour opening.
         merged: list[TimeWindow] = []
@@ -1003,12 +1042,19 @@ async def build_problem(
     problem = RoutingProblem(
         run_id,
         run_id,
-        ROUTING_CONTRACT_V2 if any(v.breaks for v in vehicle_snapshots) else ROUTING_CONTRACT_V1,
+        "DYNAMIC_COLLECTION_ROUTING_V3"
+        if any(m.sparse_arcs is not None for m in matrices)
+        else ROUTING_CONTRACT_V2
+        if any(v.breaks for v in vehicle_snapshots)
+        else ROUTING_CONTRACT_V1,
         config.policy_version,
         epoch,
         ("MASS_G", "VOLUME_ML"),
         RoutingLimits(
-            config.max_nodes, config.max_requests * 2, config.max_vehicles, config.max_profiles
+            max(1, len(nodes)) if config.admission_mode else config.max_nodes,
+            max(1, len(stops)) if config.admission_mode else config.max_requests * 2,
+            max(1, len(vehicles)) if config.admission_mode else config.max_vehicles,
+            max(1, len(matrices)) if config.admission_mode else config.max_profiles,
         ),
         tuple(matrices),
         tuple(vehicle_snapshots),

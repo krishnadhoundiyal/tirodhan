@@ -51,6 +51,44 @@ def test_missing_incumbent_cannot_be_hidden_as_incremental_certificate(routing_p
         insert_obligation(routing_problem, broken, UUID(int=42), max_evaluations=100)
 
 
+def test_unused_vehicle_without_time_to_return_does_not_block_healthy_vehicle(routing_problem):
+    first = replace(
+        routing_problem.vehicles[0],
+        initial_cargo=(),
+        protected_prefix=(),
+        end_node_id=UUID(int=3),
+        shift=TimeWindow(0, 1),
+    )
+    healthy = replace(
+        first,
+        vehicle_id=UUID(int=33),
+        rider_id=UUID(int=34),
+        operating_shift_id=UUID(int=35),
+        shift=TimeWindow(0, 1000),
+    )
+    problem = replace(
+        routing_problem,
+        vehicles=(first, healthy),
+        lots=tuple(lot for lot in routing_problem.lots if lot.lot_id == UUID(int=42)),
+        stops=tuple(
+            replace(
+                s,
+                eligible_vehicle_ids=(first.vehicle_id, healthy.vehicle_id),
+                bound_vehicle_id=None,
+            )
+            for s in routing_problem.stops
+            if s.lot_id == UUID(int=42)
+        ),
+    )
+    empty = replace(
+        seed(problem), routes=(), unserved_stop_ids=tuple(s.stop_id for s in problem.stops)
+    )
+    result = insert_obligation(problem, empty, UUID(int=42), max_evaluations=100)
+    assert result is not None
+    assert {r.vehicle_id for r in result.routes if r.stop_ids} == {healthy.vehicle_id}
+    validate_proposal(problem, result)
+
+
 def test_exhaustion_or_infeasible_new_window_never_certifies_capacity(routing_problem):
     assert (
         insert_obligation(routing_problem, seed(routing_problem), UUID(int=42), max_evaluations=0)

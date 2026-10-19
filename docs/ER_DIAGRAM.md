@@ -1,5 +1,26 @@
 # ER Diagram
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+Migration 0032 adds `SlotAllowanceConfiguration -> OperatingRegion, AppUser` with immutable
+`(region_id, version)` identity; projected `CapacityReservation` references that exact policy
+version. `RegionalCapacityBudget -> OperatingRegion` has region/time/kind identity.
+`SlotReservationDebit -> CapacityReservation, RegionalCapacityBudget` is immutable audit,
+not a rider assignment or custody relationship. Existing reservation/booking/payment and
+route/custody relationships remain authoritative.
+
+Migration 0031: RegionVehicle gains version; RegionCapacityTransfer references its vehicle/rider,
+both OperatingRegions and authorizing AppUser. RiderReplacement references CollectionRequest,
+original RiderProfile, OperatingRegion, recommended OperatingShift and optional CargoTransferIntent.
+ReplacementDecision references that request and manager AppUser. RegionalSlotProjection and
+RegionalSlotRefresh reference OperatingRegion. Existing custody/evidence/financial relationships
+remain. See [semantics](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 Commercial admission migration 0029 adds `CapacityAdmissionRequest.region_id -> OperatingRegion`
 for regional preparation ownership, plus retry scheduling. Existing reservation/customer/context/
 booking and financial relationships are unchanged. See
@@ -266,3 +287,31 @@ Break/extension/availability reference shift. Discharge amendments and load obse
 reference request/actor/evidence. Transfer intent names request/from-vehicle/to-shift/authorizer
 and write-once resolution. Receipts identify signer/witness and capture. Transfer retains
 donor/receiver vehicles/riders, evidence, authorizer and confirmer in monotonic custody order.
+
+## Migration 0030 commercial evidence
+
+```mermaid
+erDiagram
+    OPERATING_REGION ||--o{ ADMISSION_PLAN_REVISION : records
+    OPERATING_REGION ||--o| ADMISSION_PREPARATION_LEASE : prepares
+    OPERATING_REGION ||--o| ADMISSION_SOURCE_HEAD : fences
+    OPERATING_REGION ||--o{ ADMISSION_SOURCE_NOTICE : invalidates
+    OPERATING_REGION ||--o{ ADMISSION_OBLIGATION : promises
+    REGIONAL_CAPACITY_RESERVATION o|--o| ADMISSION_OBLIGATION : origin
+    COLLECTION_REQUEST o|--o| ADMISSION_OBLIGATION : booking_alias
+    OPERATING_VEHICLE ||--o{ ADMISSION_ROUTE_CERTIFICATE : witnesses
+    OPERATING_SHIFT ||--o{ ADMISSION_ROUTE_CERTIFICATE : bounds
+    ADMISSION_PLAN_REVISION ||--o{ ADMISSION_ROUTE_MEMBERSHIP : opens
+    ADMISSION_PLAN_REVISION o|--o{ ADMISSION_ROUTE_MEMBERSHIP : closes
+    ADMISSION_ROUTE_CERTIFICATE ||--o{ ADMISSION_ROUTE_MEMBERSHIP : included
+    ADMISSION_ROUTE_CERTIFICATE ||--o{ ADMISSION_PROOF_OBLIGATION : covers
+    ADMISSION_OBLIGATION ||--o{ ADMISSION_PROOF_OBLIGATION : appears_in
+    ADMISSION_OBLIGATION ||--o| ADMISSION_ALLOCATION : current_witness
+    OPERATING_VEHICLE ||--o{ ADMISSION_ALLOCATION : advisory_resource
+```
+
+Temporal membership carries region/vehicle ownership, with a composite proof-owner FK
+and at most one current membership per vehicle. Allocation confers no dispatch/custody
+authority. At least one obligation origin is required; reservation and booking endpoints
+are actual optional FKs, not generic polymorphic references. See
+[migration detail](COMMERCIAL_ADMISSION_SCALABILITY.md).

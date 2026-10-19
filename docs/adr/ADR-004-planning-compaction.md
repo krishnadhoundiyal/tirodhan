@@ -1,5 +1,25 @@
 # ADR-004: Geographic Planning and Compaction
 
+## Approved commercial admission change — 19 October 2026
+
+New customer bookings consume non-trained projected slot allowances through atomic PostgreSQL
+holds. Customer per-booking OSRM/solver feasibility preparation is retired. Projection source,
+policy, expiry and shared regional bucket budgets govern new holds; existing holds and accepted
+commitments survive later forecast changes. Operational route feasibility, authoritative dispatch,
+single-owner regional capacity, custody and payment-first guarantees remain. This supersedes the
+prior mandatory exact commercial-certificate prerequisite. No new infrastructure or production
+activation is authorized. See [implementation and limitations](../PROJECTED_SLOT_ALLOWANCES.md).
+
+## Regional capacity/recovery clarification
+
+Regions remain configurable groups of H3 cells; no fixed 20 km² boundary or hard rider wall is
+introduced. An idle resource can transfer atomically to an adjacent region under one versioned
+owner, after checking all promises and custody. Slot read models are advisory pressure estimates,
+invalidated by source events and reconciled in finite jobs; current exact certification remains
+mandatory. OSRM rectangles serve sparse stars and square blocks serve dense useful work. Dated
+calendar projection excludes disjoint intervals. Production remains disabled. See
+[actual implementation and limitations](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Commercial admission reliability refinement
 
 Regional capacity preparation serializes through a durable PostgreSQL intent owner per region,
@@ -171,3 +191,16 @@ validation establishes a race-safe reservation. Incremental certificates and coa
 reduce collective solves. Passive holds have no assignment authority; executable routes are
 independently validated again. Planning T−M remains independent of commercial N. Default
 activation stays false. See [increment 7](../V2_ROUTING_INCREMENT_7.md).
+
+## Commercial scalability implementation
+
+Commercial preparation replaces population-capped full certificates with exact fixed-order
+paired insertion using calendar-aware forward/backward summaries and durable yielding cursors.
+An independent compositional validator remains the correctness boundary. Sparse directed
+road acquisition and bounded dense complete-route repair retain both VROOM and OR-Tools.
+Failed bounded search is UNKNOWN, never proof of physical infeasibility. The approved unlimited
+commercial receiving-throughput assumption permits independent route composition; authorization,
+openings, service duration and deadlines remain hard constraints. Commercial 128-booking,
+32-vehicle, 512-node and 8-profile ceilings are removed; byte/time/native limits remain explicit
+retryable execution budgets. Operational legacy guards and production activation remain unchanged.
+See [algorithms, proofs, tests and benchmarks](../COMMERCIAL_ADMISSION_SCALABILITY.md).

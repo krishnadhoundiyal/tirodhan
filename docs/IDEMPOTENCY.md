@@ -1,5 +1,46 @@
 # Idempotency
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+## Projected slot holds
+
+- Business key: customer/client command UUID with exact request fingerprint. The reservation
+  UUID equals the command UUID; the existing command record returns the original result on replay.
+- Transaction: context ownership, regional/source fence, reservation, all immutable budget
+  debits, updated neighbouring allowances, wake/outbox and command result commit together.
+  A failed partial write consumes nothing. Replay never extends expiry.
+- Concurrency: region/source head precedes budget writes; SQL conditional debits reject a
+  changed generation or exhausted headroom. Publication uses a consistent snapshot and the
+  same head-before-budget order; concurrent source drift requires a new refresh attempt.
+- Recovery: expiry/cancellation/acceptance source changes invalidate inventory. Bounded
+  recomputation includes each live hold or accepted booking once; old debit history remains.
+- External effects: hold, policy update and projection refresh call no road/solver/provider.
+  Binding/payment retain their existing command/provider idempotency and Payment-first rules.
+
+## Regional ownership, replacement and slot projection
+
+- Capacity transfer: existing actor/client command UUID + fingerprint, unique vehicle/membership
+  audit version, SERIALIZABLE resource/region/source fences. Membership/audit/wakes commit together;
+  exact replay returns the original transfer, conflicts roll back and retry with current versions.
+- Replacement request/manager decision: same command convention, unique open request per household
+  and optimistic row version. Decisions are append-only. Advisory recommendations use source and row
+  versions; duplicate computation cannot approve/assign work. Failed computation backs off durably.
+- Pre-pickup activation remains the existing Payment-first composite transaction. After-pickup
+  replacement reuses transfer intent, attributable receipts and immutable CargoTransfer; approval
+  alone never changes custody. Transfer and operational recovery state commit together.
+- Slot invalidation is a coalesced per-region database work row, not order completion. REPEATABLE
+  READ calculation and source-head publication locking reject source drift. Duplicate refresh is
+  an idempotent upsert; a crash preserves pending work. Periodic due-time reconciliation recovers
+  missed/interrupted execution. Read-model freshness never replaces final certified admission.
+
+No solver/matrix call creates a business side effect or assignment authority. No new transport or
+paid infrastructure is introduced. See [commands and recovery](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Commercial admission reliability (0029)
 
 The existing customer/client intent UUID and fingerprint remain the replay key. Preparation
@@ -688,3 +729,25 @@ has a separate inbox identity and preserves original publication. Wake acknowled
 consume later generations. Cancellation is never reversed by failed route/refund/notification
 consequences. Road/solver calls have no external business effect. Processes/leases are bounded.
 See [implementation](V2_ROUTING_INCREMENT_7.md).
+
+## Commercial preparation — migration 0030
+
+The existing admission command UUID/fingerprint and unique reservation remain the business
+key. A regional preparation token/expiry fences successive intent claims; both intent and
+regional tokens must be live at publication. Each admission intent retains its own
+preparation_cursor across regional owner release; two yielded commands cannot overwrite
+one another. Checkpoint writes fence both tokens; terminal/expired intents clear progress.
+Expired owners cannot publish after takeover. Search progress is versioned by intent,
+source/region stamp and graph/profile; changed inputs restart search without releasing old
+accepted commitments. Exhaustion or execution budgets yield UNKNOWN/PENDING with backoff.
+
+MVCC source capture and its exact dirty-set fingerprint share one snapshot. SERIALIZABLE
+publication locks the separate source-head row and checks source identities/generation,
+then commits reservation, stable aliases, immutable proof history and acknowledgment of
+exactly the visible notices together. READ COMMITTED source writers also update that row;
+late commits cannot disappear behind an allocation-order watermark. Source notice upserts
+coalesce identifiers, not business commands or audit history. Region configuration remains
+immutable. Provider/native work is read-only and outside database locks. Crash after commit
+replays the existing result; cache loss reconstructs from PostgreSQL. Existing checkout,
+Payment-first cancellation and authoritative dispatch idempotency remain unchanged. See
+[protocol and two-session tests](COMMERCIAL_ADMISSION_SCALABILITY.md).

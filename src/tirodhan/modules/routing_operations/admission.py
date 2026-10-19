@@ -7,6 +7,7 @@ import math
 import time
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -17,15 +18,19 @@ from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.collection_requests.scheduling import validate_slot
 from tirodhan.modules.planning.routing.adapters import ORTOOLS_VERSION, VROOM_VERSION
+from tirodhan.modules.planning.routing.certificates import compose
 from tirodhan.modules.planning.routing.contracts import (
     OptimizerEngine,
+    ProposedRoute,
     ResourceKind,
     RouteOptimizer,
     RouteProposal,
     RoutingProblem,
+    SelectionEngine,
     StopKind,
 )
 from tirodhan.modules.planning.routing.execution import RoutingAdapterError
+from tirodhan.modules.planning.routing.scheduling import InsertionCursor, RouteSchedule
 from tirodhan.modules.planning.routing.validation import (
     FeasibilityGate,
     RoutingValidationError,
@@ -33,21 +38,24 @@ from tirodhan.modules.planning.routing.validation import (
 )
 from tirodhan.modules.serviceability.models import ServiceabilityContext
 
+from .admission_store import (
+    certificate_document,
+    current_proofs,
+    load_certificate,
+    notice_stamp,
+    persist_certificate,
+)
 from .commands import OperationalInputError
 from .economics import make_candidate, measure
 from .fleet_priority import propose_prioritized
 from .models import RoutingManifest
 from .orchestration import wake
 from .orchestration_models import CapacityReservation, OperatingRegion, RegionCell
-from .rolling import FleetPolicy, incumbent_orders, ready_snapshot
-from .service import PROPOSAL_CODEC
+from .rolling import FleetPolicy, incumbent_orders
 from .snapshot import (
     MatrixSource,
     OperationalSnapshot,
-    _read_sources,
     build_problem,
-    capture_snapshot,
-    source_digest,
 )
 
 
@@ -71,6 +79,7 @@ def insert_obligation(
     *,
     max_evaluations: int,
     max_wall_seconds: float = 10,
+    progress: dict[str, Any] | None = None,
 ) -> RouteProposal | None:
     """Certify one new household, preserving every existing sequence and obligation.
 
@@ -91,32 +100,53 @@ def insert_obligation(
     gate = FeasibilityGate(problem)
     orders = {r.vehicle_id: r.stop_ids for r in seed.routes}
     deadline, evaluations = time.monotonic() + max_wall_seconds, 0
+    resume_vehicle = progress.get("vehicle") if progress else None
+    resuming = resume_vehicle is not None
     for vehicle in sorted(
         problem.vehicles,
-        key=lambda v: (v.resource_kind != ResourceKind.COMMITTED, str(v.vehicle_id)),
+        key=lambda v: (
+            v.resource_kind != ResourceKind.COMMITTED,
+            len(orders.get(v.vehicle_id, ())),
+            str(v.vehicle_id),
+        ),
     ):
         if vehicle.vehicle_id not in pickup.eligible_vehicle_ids:
             continue
+        if resuming and str(vehicle.vehicle_id) != resume_vehicle:
+            continue
+        resuming = False
+        cursor = (
+            InsertionCursor(progress["pickup"], progress["discharge"])
+            if progress and str(vehicle.vehicle_id) == resume_vehicle
+            else None
+        )
         old = orders.get(vehicle.vehicle_id, ())
-        for i in range(len(vehicle.protected_prefix), len(old) + 1):
-            with_pickup = old[:i] + (pickup.stop_id,) + old[i:]
-            for j in range(i + 1, len(with_pickup) + 1):
-                if evaluations >= max_evaluations or time.monotonic() >= deadline:
-                    return None
-                evaluations += 1
-                candidate = make_candidate(
-                    seed,
-                    problem,
-                    orders
-                    | {
-                        vehicle.vehicle_id: with_pickup[:j] + (discharge.stop_id,) + with_pickup[j:]
-                    },
+        result = RouteSchedule(problem, vehicle, old, gate.context).insert(
+            pickup,
+            discharge,
+            max_evaluations=max(0, max_evaluations - evaluations),
+            deadline=deadline,
+            cursor=cursor,
+        )
+        evaluations += result.evaluations
+        if result.order is not None:
+            candidate = replace(
+                make_candidate(seed, problem, orders | {vehicle.vehicle_id: result.order}),
+                engine=SelectionEngine.COMPOSITE,
+                engine_version="ADMISSION_INSERTION_V2",
+            )
+            gate.assess(candidate)
+            return candidate
+        if not result.exhausted:
+            if progress is not None:
+                assert result.cursor is not None
+                progress.update(
+                    vehicle=str(vehicle.vehicle_id),
+                    pickup=result.cursor.pickup_gap,
+                    discharge=result.cursor.discharge_gap,
                 )
-                try:
-                    gate.assess(candidate)
-                    return candidate
-                except RoutingValidationError:
-                    continue
+                raise RoutingAdapterError("UNKNOWN_SEARCH_QUANTUM")
+            return None
     return None
 
 
@@ -130,6 +160,8 @@ async def reserve_capacity(
     expires_at: datetime,
     now: datetime | None = None,
     lease_token: UUID | None = None,
+    regional_lease_token: UUID | None = None,
+    projection_time: datetime | None = None,
 ) -> UUID:
     now = now or utc_now()
     fingerprint = hashlib.sha256(command.model_dump_json().encode()).digest()
@@ -187,7 +219,6 @@ async def reserve_capacity(
         from .fleet_models import FleetControl
 
         control = await session.get(FleetControl, f"REGION:{region.region_id}")
-        regional_owner = control is not None
         if control is None:
             control = await session.get(FleetControl, "COMMITTED_FLEET")
         configuration = control.configuration.get("fleet", control.configuration) if control else {}
@@ -201,8 +232,12 @@ async def reserve_capacity(
         )
         version = region.version
     # Future bookings use declared future shifts, never a requirement for a current rider.
-    epoch = max(now.replace(microsecond=0), command.slot_start - timedelta(hours=12))
-    config = policy.snapshot_configuration(epoch).model_copy(
+    epoch = max(
+        (projection_time or now).replace(microsecond=0), command.slot_start - timedelta(hours=12)
+    )
+    config = policy.snapshot_configuration(
+        epoch, region_id=region.region_id, admission_mode=True
+    ).model_copy(
         update={
             "region_id": region.region_id,
             "regional": True,
@@ -212,10 +247,23 @@ async def reserve_capacity(
             "as_of": now,
         }
     )
-    snapshot = await capture_snapshot(factory, config)
-    ready, issues = ready_snapshot(snapshot, config, now)
-    if issues:
+    from .admission_state import read_cache
+
+    cache = read_cache(factory)
+    snapshot, source_stamp = await cache.capture(factory, config, version)
+    from .regional_planner import regional_ready
+
+    ready, issues = regional_ready(snapshot, config, now)
+    quarantined = {row["route_id"] for row in snapshot.sources["routes"]} | {
+        row["route_id"] for row in snapshot.sources["orphaned_routes"]
+    }
+    quarantined -= {row["route_id"] for row in ready.sources["routes"]}
+    if any(route not in quarantined for _, route, _ in issues):
         raise OperationalInputError("REGIONAL_INPUTS_REQUIRE_ATTENTION")
+    active_profiles = {v["profile_version"] for v in ready.sources["vehicles"]}
+    roads = cache.roads(
+        {key: source for key, source in providers.items() if key in active_profiles}
+    )
     mass = (command.mass_g * safety_percent + 99) // 100
     volume = (command.volume_ml * safety_percent + 99) // 100
     # Location is server-owned; never accept a second client coordinate for the context.
@@ -266,101 +314,189 @@ async def reserve_capacity(
             "observed_attempt_id": None,
         }
     ]
-    # Never truncate promises or acquire a matrix for a known technical overflow.
-    if len(candidate_sources["requests"]) > config.max_requests:
-        raise OperationalInputError("PLANNING_WORKING_SET_REQUIRES_PARTITION")
-    problem = await build_problem(
-        OperationalSnapshot(candidate_sources, b""), config, new_uuid7(), providers, now=now
-    )
-    orders = incumbent_orders(ready)
-    candidates: list[RouteProposal] = []
-    incremental = False
-    # Exact-source incremental certificates avoid rerunning two solvers for every admission.
     async with factory() as session:
         previous = await session.scalar(
             select(CapacityReservation)
             .where(CapacityReservation.region_id == region.region_id)
+            .where(CapacityReservation.admission_basis == "EXACT_CERTIFICATE")
             .order_by(CapacityReservation.region_version.desc())
             .limit(1)
         )
-    if previous is not None and previous.region_version == version:
-        seed = PROPOSAL_CODEC.validate_python(previous.certificate["proposal"])
-        valid_stops = {s.stop_id for s in problem.stops}
-        if any(s not in valid_stops for r in seed.routes for s in r.stop_ids):
-            # Checkout changes a passive reservation's projection identity into its
-            # real booking ID. Rebind only proven relational aliases, then validate
-            # every current obligation/term below. No old certificate authorizes work.
-            async with factory() as session:
-                aliases = (
-                    await session.execute(
-                        select(
-                            CapacityReservation.reservation_id, CapacityReservation.request_id
-                        ).where(
-                            CapacityReservation.region_id == region.region_id,
-                            CapacityReservation.request_id.in_(
-                                [r["request_id"] for r in ready.sources["requests"]]
-                            ),
-                        )
+        seed = await load_certificate(session, previous) if previous else None
+        aliases = (
+            await session.execute(
+                select(CapacityReservation.reservation_id, CapacityReservation.request_id).where(
+                    CapacityReservation.region_id == region.region_id,
+                    CapacityReservation.request_id.is_not(None),
+                )
+            )
+        ).all()
+    if seed is not None:
+        accepted_bookings = {
+            r["request_id"] for r in ready.sources["requests"] if not r.get("hold", False)
+        }
+        stop_aliases = {
+            uuid5(NAMESPACE_URL, f"tirodhan:{kind}:{reserved}"): uuid5(
+                NAMESPACE_URL, f"tirodhan:{kind}:{booked}"
+            )
+            for reserved, booked in aliases
+            if booked in accepted_bookings
+            for kind in ("pickup", "discharge")
+        }
+        seed = replace(
+            seed,
+            routes=tuple(
+                replace(r, stop_ids=tuple(stop_aliases.get(s, s) for s in r.stop_ids))
+                for r in seed.routes
+            ),
+        )
+    orders = incumbent_orders(ready)
+    seed_orders = {r.vehicle_id: r.stop_ids for r in seed.routes} if seed else orders
+    problem = await build_problem(
+        OperationalSnapshot(candidate_sources, b""),
+        config,
+        new_uuid7(),
+        roads,
+        now=now,
+        route_orders=seed_orders,
+        insertion_lot=command.client_command_id,
+    )
+    if seed is None:
+        seed = RouteProposal(
+            problem.problem_id,
+            problem.snapshot_id,
+            problem.contract_version,
+            problem.policy_version,
+            SelectionEngine.COMPOSITE,
+            "ADMISSION_EMPTY_SEED_V2",
+            # A cold commercial writer can still have live operational routes.
+            # Keep those outside any native repair neighbourhood as well as in
+            # its closure; an empty seed would omit their required obligations.
+            tuple(ProposedRoute(vehicle, order) for vehicle, order in orders.items() if order),
+            (),
+        )
+    valid_stops = {s.stop_id for s in problem.stops}
+    # Removed/cancelled obligations are not carried forward. The new connecting
+    # directed arcs were acquired above; this modified seed must pass the gate.
+    seed = replace(
+        seed,
+        problem_id=problem.problem_id,
+        snapshot_id=problem.snapshot_id,
+        contract_version=problem.contract_version,
+        policy_version=problem.policy_version,
+        routes=tuple(
+            replace(r, stop_ids=tuple(s for s in r.stop_ids if s in valid_stops))
+            for r in seed.routes
+            if r.vehicle_id in {v.vehicle_id for v in problem.vehicles}
+        ),
+        unserved_stop_ids=tuple(
+            valid_stops - {s for r in seed.routes for s in r.stop_ids if s in valid_stops}
+        ),
+    )
+    candidates: list[RouteProposal] = []
+    incremental = False
+    progress_key = {
+        "intent": str(command.client_command_id),
+        "region_version": version,
+        "source": source_stamp.hex(),
+        "epoch": problem.epoch.isoformat(),
+        "graphs": [[m.graph_version, m.profile_version] for m in problem.matrices],
+    }
+    progress: dict[str, Any] = {}
+    if regional_lease_token is not None:
+        from .orchestration_models import CapacityAdmissionRequest
+
+        async with factory() as session:
+            preparation = await session.scalar(
+                select(CapacityAdmissionRequest.preparation_cursor).where(
+                    CapacityAdmissionRequest.admission_id == command.client_command_id
+                )
+            )
+            if preparation and preparation.get("key") == progress_key:
+                progress = dict(preparation.get("search", {}))
+    try:
+        improved = insert_obligation(
+            problem,
+            seed,
+            command.client_command_id,
+            max_evaluations=policy.economics.max_candidate_evaluations,
+            max_wall_seconds=2,
+            progress=progress if regional_lease_token else None,
+        )
+        if improved is not None:
+            candidates.append(improved)
+            incremental = True
+    except RoutingAdapterError as error:
+        if error.code == "UNKNOWN_SEARCH_QUANTUM" and regional_lease_token is not None:
+            from .admission_leases import progress as save_progress
+
+            assert lease_token is not None
+            await save_progress(
+                factory,
+                region.region_id,
+                regional_lease_token,
+                command.client_command_id,
+                lease_token,
+                max(now, utc_now()),
+                {"key": progress_key, "search": progress},
+            )
+        raise
+    except RoutingValidationError:
+        pass
+    if not candidates:
+        from .admission_native import native_neighbourhoods
+
+        async for augmented, local, chosen in native_neighbourhoods(
+            problem,
+            seed_orders,
+            command.client_command_id,
+            candidate_sources,
+            roads,
+        ):
+            for engine in OptimizerEngine:
+                try:
+                    result = await propose_prioritized(
+                        optimizers[engine],
+                        local,
+                        search_seconds=policy.search_seconds,
+                        economics=policy.economics,
                     )
-                ).all()
-            stop_aliases = {
-                uuid5(NAMESPACE_URL, f"tirodhan:{kind}:{reserved}"): uuid5(
-                    NAMESPACE_URL, f"tirodhan:{kind}:{booked}"
-                )
-                for reserved, booked in aliases
-                for kind in ("pickup", "discharge")
-            }
-            seed = replace(
-                seed,
-                routes=tuple(
-                    replace(r, stop_ids=tuple(stop_aliases.get(s, s) for s in r.stop_ids))
-                    for r in seed.routes
-                ),
-            )
-        if all(s in valid_stops for r in seed.routes for s in r.stop_ids):
-            seed = replace(
-                seed,
-                problem_id=problem.problem_id,
-                snapshot_id=problem.snapshot_id,
-                unserved_stop_ids=tuple(valid_stops - {s for r in seed.routes for s in r.stop_ids}),
-            )
-            try:
-                improved = insert_obligation(
-                    problem,
-                    seed,
-                    command.client_command_id,
-                    max_evaluations=policy.economics.max_candidate_evaluations,
-                )
-                if improved is not None:
-                    candidates.append(improved)
-                    incremental = True
-            except RoutingValidationError:
-                pass
+                    if (
+                        result.engine != engine
+                        or result.engine_version
+                        != {
+                            OptimizerEngine.VROOM: VROOM_VERSION,
+                            OptimizerEngine.OR_TOOLS: ORTOOLS_VERSION,
+                        }[engine]
+                    ):
+                        raise RoutingValidationError("ENGINE_IDENTITY_MISMATCH")
+                    outside = {
+                        r.vehicle_id: r.stop_ids for r in seed.routes if r.vehicle_id not in chosen
+                    }
+                    candidate = make_candidate(
+                        result,
+                        augmented,
+                        outside | {r.vehicle_id: r.stop_ids for r in result.routes},
+                    )
+                    candidate = replace(
+                        candidate,
+                        engine=SelectionEngine.COMPOSITE,
+                        engine_version=f"ADMISSION_NATIVE_V2:{engine.value}:{result.engine_version}",
+                    )
+                    validate_proposal(augmented, candidate)
+                    candidates.append(candidate)
+                except (RoutingAdapterError, RoutingValidationError):
+                    continue
+            if candidates:
+                problem = augmented
+                break
     if not candidates:
-        for engine in OptimizerEngine:
-            try:
-                candidate = await propose_prioritized(
-                    optimizers[engine],
-                    problem,
-                    search_seconds=policy.search_seconds,
-                    economics=policy.economics,
-                )
-                if (
-                    candidate.engine != engine
-                    or candidate.engine_version
-                    != {
-                        OptimizerEngine.VROOM: VROOM_VERSION,
-                        OptimizerEngine.OR_TOOLS: ORTOOLS_VERSION,
-                    }[engine]
-                ):
-                    raise RoutingValidationError("ENGINE_IDENTITY_MISMATCH")
-                validate_proposal(problem, candidate)
-                candidates.append(candidate)
-            except (RoutingAdapterError, RoutingValidationError):
-                continue
-    if not candidates:
-        raise OperationalInputError("NO_FEASIBLE_REGIONAL_CAPACITY")
-    selected = min(candidates, key=lambda p: measure(problem, p, policy.economics, orders).rank)
+        raise OperationalInputError("UNKNOWN_SEARCH_EXHAUSTED")
+    selected = (
+        candidates[0]
+        if len(candidates) == 1
+        else min(candidates, key=lambda p: measure(problem, p, policy.economics, orders).rank)
+    )
     async with factory() as session:
         await session.connection(execution_options={"isolation_level": "SERIALIZABLE"})
         async with session.begin_nested():
@@ -370,26 +506,30 @@ async def reserve_capacity(
                 .with_for_update()
             )
             assert locked is not None
+            # Source writers lock only this separate head, after their domain rows;
+            # they never acquire operating-region authority from an invalidation trigger.
+            from .admission_models import AdmissionSourceHead
+
+            await session.scalar(
+                select(AdmissionSourceHead)
+                .where(AdmissionSourceHead.region_id == region.region_id)
+                .with_for_update()
+            )
             replay = await session.get(CapacityReservation, command.client_command_id)
             if replay is not None:
                 if replay.customer_id != customer_id or replay.fingerprint != fingerprint:
                     raise OperationalInputError("RESERVATION_REPLAY_CONFLICT")
                 return replay.reservation_id
-            current = await _read_sources(session, config)
-            if locked.version != version or source_digest(current) != source_digest(
-                snapshot.sources
+            if (
+                locked.version != version
+                or await notice_stamp(session, region.region_id) != source_stamp
             ):
                 raise OperationalInputError("CAPACITY_PROJECTION_STALE_RETRY")
-            # A certificate must also fit the pilot coordinator's technical working set.
-            # This is an infrastructure limit, not a cell booking-count capacity quota.
-            working_sources = (
-                current
-                if regional_owner
-                else await _read_sources(session, config.model_copy(update={"region_id": None}))
-            )
-            if len(working_sources["requests"]) + 1 > config.max_requests:
-                raise OperationalInputError("PLANNING_WORKING_SET_REQUIRES_PARTITION")
             current_time = max(now, utc_now())
+            if regional_lease_token is not None:
+                from .admission_leases import fence
+
+                await fence(session, region.region_id, regional_lease_token, current_time)
             if lease_token is not None:
                 from .orchestration_models import CapacityAdmissionRequest
 
@@ -443,7 +583,7 @@ async def reserve_capacity(
                     for v in problem.vehicles
                 ),
             )
-            validate_proposal(live, selected)
+            proofs = compose(live, selected, await current_proofs(session, region.region_id))
             locked.version += 1
             await session.flush([locked])
             from geoalchemy2.elements import WKTElement
@@ -466,16 +606,36 @@ async def reserve_capacity(
                 expires_at=expires_at,
                 fingerprint=fingerprint,
                 created_at=now,
-                certificate={
-                    "region_version": locked.version,
-                    "proposal": PROPOSAL_CODEC.dump_python(selected, mode="json"),
-                    "incremental": incremental,
-                    "safety_percent": safety_percent,
-                },
+                certificate=certificate_document(
+                    selected, locked.version, incremental, safety_percent
+                ),
             )
             session.add(reservation)
+            await session.flush([reservation])
+            await persist_certificate(
+                session,
+                reservation,
+                live,
+                selected,
+                proofs,
+                candidate_sources,
+                await notice_stamp(session, region.region_id),
+            )
             await wake(session, "CAPACITY_RESERVED", now, region_id=region.region_id)
         await session.commit()
+    cached = cache.states.get(region.region_id)
+    if cached is not None and cached.version == version:
+        sources = dict(cached.sources)
+        sources["requests"] = list(cached.sources["requests"]) + [
+            r for r in candidate_sources["requests"] if r["request_id"] == command.client_command_id
+        ]
+        cache.put(
+            region.region_id,
+            locked.version,
+            cached.signature,
+            sources,
+            min(expires_at, cached.expires_at) if cached.expires_at else expires_at,
+        )
     return command.client_command_id
 
 

@@ -7,6 +7,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -69,6 +70,16 @@ class OSRMMatrixProvider:
             timeout_seconds,
             max_response_bytes,
             routing_profile,
+        )
+
+    @property
+    def cache_namespace(self) -> tuple[str, str, str, str, float]:
+        return (
+            self.graph_version,
+            self.profile_version,
+            self.profile,
+            self.endpoint,
+            self.max_snap,
         )
 
     async def acquire(self, nodes: tuple[RoadNode, ...]) -> RoadMatrix:
@@ -165,15 +176,56 @@ class OSRMMatrixProvider:
             tuple(node.node_id for node in nodes),
             tuple(times),
             tuple(distances),
+            snap_tokens=tuple(
+                cast(
+                    tuple[str, str],
+                    tuple(
+                        hashlib.sha256(
+                            json.dumps(
+                                [data[name][i].get("hint"), data[name][i].get("location")],
+                                separators=(",", ":"),
+                            ).encode()
+                        ).hexdigest()
+                        for name in ("sources", "destinations")
+                    ),
+                )
+                for i in range(n)
+            )
+            if all(
+                isinstance(p.get("hint"), str)
+                and bool(p["hint"])
+                and isinstance(p.get("location"), list)
+                and len(p["location"]) == 2
+                and all(type(v) in (int, float) and math.isfinite(v) for v in p["location"])
+                for name in ("sources", "destinations")
+                for p in data[name]
+            )
+            else (),
         )
 
-    async def _fetch(self, nodes: tuple[RoadNode, ...]) -> bytes:
+    async def acquire_star(self, nodes: tuple[RoadNode, ...]) -> RoadMatrix:
+        from .osrm_rectangular import acquire_star
+
+        return await acquire_star(self, nodes)
+
+    async def _fetch(
+        self,
+        nodes: tuple[RoadNode, ...],
+        *,
+        sources: tuple[int, ...] | None = None,
+        destinations: tuple[int, ...] | None = None,
+    ) -> bytes:
         coordinates = ";".join(f"{node.longitude},{node.latitude}" for node in nodes)
         url = f"{self.endpoint}/table/v1/{self.profile}/{coordinates}"
+        params = {"annotations": "duration,distance"}
+        if sources is not None:
+            params["sources"] = ";".join(map(str, sources))
+        if destinations is not None:
+            params["destinations"] = ";".join(map(str, destinations))
         async with self.client.stream(
             "GET",
             url,
-            params={"annotations": "duration,distance"},
+            params=params,
             timeout=self.timeout,
             follow_redirects=False,
         ) as response:

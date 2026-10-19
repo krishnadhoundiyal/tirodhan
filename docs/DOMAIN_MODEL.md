@@ -1,5 +1,26 @@
 # Domain Model
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+A projected CapacityReservation is permission to bind one booking from shared estimated slot
+inventory. It records its exact forecast-policy version and immutable workload debits; it is
+neither an operational assignment nor a route certificate. Binding does not repeat routing
+feasibility, and later forecast changes do not revoke an existing hold or paid commitment.
+Cargo custody still changes only through the existing validated physical transfer/handover
+workflow. A loaded vehicle without a discharge task contributes no new projected capacity.
+
+Regional capacity/recovery introduces immutable RegionCapacityTransfer, versioned RiderReplacement
+and immutable ReplacementDecision, plus advisory RegionalSlotProjection/Refresh. RegionVehicle
+membership has a monotonic version; existing one-open-shift constraints retain one live rider capacity
+owner. Existing CargoTransfer/PickupExecution remain custody/fulfilment authority. Approval before
+pickup enables normal reassignment; after pickup it only prepares evidenced transfer. See
+[lifecycle and limits](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 Commercial capacity preparation retains the customer intent and region-owned certificate model.
 Migration 0029 attaches a region to preparation intents for one durable RUNNING owner per region,
 and adds retry scheduling. The preparation owner is neither a route assignment nor a capacity
@@ -600,3 +621,15 @@ original successful pickup attribution remain. Transfer intent is a fenced workf
 custody is immutable and sequenced, with two-party evidence or an identified donor witness.
 Abort needs inspection evidence and records no handover. Cancellation remains final. See
 [V2 increment 7](V2_ROUTING_INCREMENT_7.md).
+
+## Shared commercial capacity witnesses
+
+AdmissionPlanRevision and AdmissionRouteCertificate are immutable feasibility evidence.
+AdmissionRouteMembership gives temporal regional membership; AdmissionObligation preserves
+reservation identity and a bind-once real booking alias. AdmissionProofObligation records
+exact proof coverage; AdmissionAllocation is only its current advisory vehicle witness.
+None grants route execution, assignment, custody or financial authority. Regional lease and
+source notice/head records are preparation/recovery controls, not operational commitments.
+Commercial proof composition assumes approved unlimited unloading throughput while retaining
+authorized facilities, openings, service times and deadlines. Legacy proof envelopes remain
+readable. See [model and correctness boundary](COMMERCIAL_ADMISSION_SCALABILITY.md).

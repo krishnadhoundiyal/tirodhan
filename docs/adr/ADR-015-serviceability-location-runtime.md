@@ -1,5 +1,20 @@
 # ADR-015: Serviceability Location and Messaging Runtime
 
+## Approved commercial admission change — 19 October 2026
+
+New customer bookings consume non-trained projected slot allowances through atomic PostgreSQL
+holds. Customer per-booking OSRM/solver feasibility preparation is retired. Projection source,
+policy, expiry and shared regional bucket budgets govern new holds; existing holds and accepted
+commitments survive later forecast changes. Operational route feasibility, authoritative dispatch,
+single-owner regional capacity, custody and payment-first guarantees remain. This supersedes the
+prior mandatory exact commercial-certificate prerequisite. No new infrastructure or production
+activation is authorized. See [implementation and limitations](../PROJECTED_SLOT_ALLOWANCES.md).
+
+Regional advisory slot reads resolve an owned, unexpired server serviceability context to its
+existing region. They do not alter canonical H3 resolution, address/pin authority or serviceability.
+Source version/timestamp/expiry govern freshness; only exact transactional admission creates a
+capacity reservation. [Implementation](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 **Status:** Accepted for MVP (Phase 1T)
 
 ## Decision

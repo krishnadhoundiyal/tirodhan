@@ -711,7 +711,7 @@ async def test_regional_reservation_replay_and_no_assignment(database_session_fa
         )
         == result
     )
-    assert sum(s.calls for s in solvers.values()) == count == 2
+    assert sum(s.calls for s in solvers.values()) == count == 0
     async with factory() as session:
         assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 1
         assert await session.scalar(select(func.count()).select_from(VehicleRoute)) == 0
@@ -765,7 +765,7 @@ async def test_two_overlapping_admissions_have_one_scarce_capacity_winner(databa
     async with factory() as session:
         assert await session.scalar(select(func.count()).select_from(CapacityReservation)) == 1
     loser = commands[results.index(next(r for r in results if isinstance(r, BaseException)))]
-    with pytest.raises(OperationalInputError, match="NO_FEASIBLE_REGIONAL_CAPACITY"):
+    with pytest.raises(OperationalInputError, match="UNKNOWN_SEARCH_EXHAUSTED"):
         await reserve(factory, customer, loser, clock[0])
 
 

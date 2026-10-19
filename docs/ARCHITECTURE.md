@@ -1,10 +1,28 @@
 # Architecture
 
-Commercial admission preparation now has a durable PostgreSQL regional owner and bounded new-lot
-certificate insertion, with full feasibility and live transactional source fencing retained.
-Provider/source failures retry durably; no road values are repaired. The verified OSRM phantom
-quantization defect and high-volume certificate limits remain explicit release gates.
-See [focused reliability/scalability evidence](ROUTING_RELIABILITY_AND_ADMISSION_SCALABILITY.md).
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+Regional ownership/recovery adds atomic adjacent-region idle-resource transfers, manager-reviewed
+replacement recommendations and existing evidenced custody handoffs. PostgreSQL source heads also
+invalidate bounded advisory slot read models; finite workers refresh/reconcile them without new
+infrastructure. A projection never grants a commercial reservation. Sparse stars can use verified
+OSRM rectangles while dense local problems retain square requests. See
+[implemented boundaries](REGIONAL_CAPACITY_AND_RECOVERY.md). No production flag is enabled.
+
+Commercial preparation uses a finite PostgreSQL-leased regional writer, exact calendar-aware
+resumable pair insertion, sparse directed road acquisition and independently composed route proofs.
+Identifier-only source invalidations maintain a bounded read cache; a separate source-head row
+fences publication against ordinary source transactions. Migration 0030 shares immutable proofs
+through temporal relational membership. Commercial booking/vehicle/node/profile count ceilings
+are removed; execution budgets yield UNKNOWN with durable retry. Both native engines remain
+available for complete-route repair. No production dispatch is enabled. OSRM's verified phantom
+quantization defect remains a release gate; strict provider validation remains unchanged.
+See [actual implementation and benchmark limits](COMMERCIAL_ADMISSION_SCALABILITY.md).
 
 ## Current regional replacement — increment 8
 

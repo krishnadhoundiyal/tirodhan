@@ -41,3 +41,13 @@ actual FKs and SQL immutable-history guards. Typed policy/measurement JSON is no
 replacement for core entities. GPS and physical manifests are append-only; disputed
 manifest holds survive ownership release. Downgrade refuses adopted history rather
 than manufacturing legacy groups. See [Increment 5](../V2_ROUTING_INCREMENT_5.md).
+
+## Commercial proof sharing — migration 0030
+
+Keep the existing PostgreSQL database. Store stable commercial obligations, immutable
+per-route proofs, temporal membership and advisory allocations relationally; retain a small
+versioned reservation envelope and legacy decoder. Use identifier-only coalesced source
+notices and a separate transactional source-head fence. Bounded process-local caches are
+disposable accelerators, not authoritative storage. No Redis/new database is introduced.
+Drain preparation before upgrade; populated new proof history blocks lossy downgrade. See
+[implementation and measured limits](../COMMERCIAL_ADMISSION_SCALABILITY.md).

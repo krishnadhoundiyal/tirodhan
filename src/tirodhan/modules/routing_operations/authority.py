@@ -280,6 +280,15 @@ async def _activate(
     await lock_resources(
         session, [v.rider_id for v in problem.vehicles], [v.vehicle_id for v in problem.vehicles]
     )
+    from .admission_queries import in_ids
+    from .capacity_models import RiderReplacement
+
+    await session.execute(
+        select(RiderReplacement)
+        .where(in_ids(RiderReplacement.request_id, list(requests)))
+        .order_by(RiderReplacement.replacement_id)
+        .with_for_update()
+    )
     from tirodhan.modules.receiving_points.models import ReceivingPoint
 
     await session.execute(
@@ -707,6 +716,37 @@ async def _activate(
                 "rider_id": str(v.rider_id),
             },
         )
+    from .capacity_models import RiderReplacement
+
+    for replacement in await session.scalars(
+        select(RiderReplacement).where(
+            in_ids(RiderReplacement.request_id, [s.lot_id for s in actual_problem.stops]),
+            RiderReplacement.status == "APPROVED",
+            RiderReplacement.transfer_intent_id.is_(None),
+        )
+    ):
+        pickup_stop = next(
+            (
+                s
+                for s in actual_problem.stops
+                if s.lot_id == replacement.request_id and s.kind.value == "PICKUP"
+            ),
+            None,
+        )
+        replacement_owner = next(
+            (
+                r.vehicle_id
+                for r in proposal.routes
+                if pickup_stop and pickup_stop.stop_id in r.stop_ids
+            ),
+            None,
+        )
+        if (
+            replacement_owner is not None
+            and by_vehicle[replacement_owner].operating_shift_id == replacement.recommended_shift_id
+        ):
+            replacement.status = "COMPLETED"
+            replacement.version += 1
     await complete_idempotency_record(
         session,
         claim.record,

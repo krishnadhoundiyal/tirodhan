@@ -101,7 +101,7 @@ def measure(
         activated += not bool(incumbent.get(route.vehicle_id)) and not bool(vehicle.initial_cargo)
         for scheduled in route.stops:
             stop = stops[scheduled.stop_id]
-            seconds = matrix.travel_seconds[indexes[node]][indexes[stop.node_id]]
+            seconds, _ = matrix.arc(node, stop.node_id, indexes)
             assert seconds is not None
             if not any(balances.values()):
                 empty += seconds
@@ -113,7 +113,7 @@ def measure(
                 balances[stop.lot_id] -= stop.quantity
             node = stop.node_id
         # Explicitly include the mandatory end journey in empty travel too.
-        seconds = matrix.travel_seconds[indexes[node]][indexes[vehicle.end_node_id]]
+        seconds, _ = matrix.arc(node, vehicle.end_node_id, indexes)
         assert seconds is not None
         empty += seconds
     # Compare incumbent relative order/owner, ignoring pure additions and completed history.
@@ -161,6 +161,8 @@ def make_candidate(
         template,
         problem_id=problem.problem_id,
         snapshot_id=problem.snapshot_id,
+        contract_version=problem.contract_version,
+        policy_version=problem.policy_version,
         routes=tuple(
             ProposedRoute(v, order)
             for v, order in sorted(orders.items(), key=lambda r: str(r[0]))

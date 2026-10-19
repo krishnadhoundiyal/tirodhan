@@ -1,5 +1,32 @@
 # Schema Design
 
+Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
+replace the customer per-booking routing feasibility prerequisite. The old customer preparation
+API/worker are retired. No trained model or new infrastructure is introduced; operational route
+validation, payment-first rules and custody guarantees remain. This supersedes earlier statements
+requiring exact commercial certificates for every new booking. See
+[implemented boundary](PROJECTED_SLOT_ALLOWANCES.md). Production activation remains disabled.
+
+## Migration 0032 — projected slot allowances
+
+`regional_slot_policy(region_id, version)` retains immutable manager-attributed forecast
+configuration. `regional_capacity_budget(region_id, bucket_start, kind)` stores shared DUTY
+and PICKUP inventories; `slot_reservation_debit(reservation_id, bucket_start, kind)` retains
+immutable consumption with real reservation and composite budget FKs. Conditional SQL debits
+and a deferred complete-debit constraint protect new holds. Existing commitments may exceed
+a later lower forecast; this remains visible and prevents further spending rather than
+rejecting historical facts. Projections gain generation, policy version and remaining count.
+Reservations gain admission basis, estimated duty and policy FK; only PROJECTED_ALLOWANCE
+has SQL NULL certificate. Historical exact certificates remain unchanged. Downgrade refuses
+new policy/reservation history. The capacity-removal guard protects both admission bases.
+
+Migration 0031 adds versioned RegionVehicle membership, append-only capacity-transfer and replacement
+decision audits, relational replacement/retry state and versioned advisory slot projections with
+coalesced refresh rows. Region transfers and shift close cannot discard live certified commitments.
+Source-head changes invalidate projections transactionally. Historical financial/custody entities and
+all initiation-term triggers remain. Downgrade refuses populated new audit history. See
+[schema and authority](REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Migration 0029 — commercial preparation ownership and retry
 
 CapacityAdmissionRequest gains a real nullable historical OperatingRegion FK and nullable
@@ -1240,3 +1267,23 @@ authorization, PHOTO attribution and effective measured capacity. Vehicle safety
 is separate from GPS. The indexed financial-outbox bridge leaves publication/producer intact.
 Empty-adoption downgrade preserves earlier finance/V1 data; new populated history makes
 downgrade refuse before destruction. See [validation](V2_ROUTING_INCREMENT_7.md).
+
+## Migration 0030 — shared commercial proofs
+
+Adds nine relational tables: admission_plan_revision, admission_route_certificate,
+admission_route_membership, admission_obligation, admission_allocation,
+admission_proof_obligation, admission_preparation_lease, admission_source_notice and
+admission_source_head. Stable obligation aliases reference real reservations/requests;
+proofs reference vehicles/shifts, and temporal membership uses composite ownership FKs
+and one active membership per vehicle. Immutable proof/revision coverage, close-once
+membership and bind-once aliases are enforced in PostgreSQL. Allocation is advisory.
+Versioned route proof JSON contains contract evidence, not core ownership relationships.
+
+Transactional triggers coalesce source invalidations by region/table/identifier and update
+a separate source-head fence. They carry no coordinates or customer payloads. The existing admission intent gains a per-command preparation_cursor JSONB field for
+identifier-only resumable computation; it is not shared on the regional lease. The regional
+intent due index supports bounded FIFO claims; large identity predicates use PostgreSQL
+arrays. Upgrade requires draining RUNNING admission preparation. Legacy certificates remain
+readable; downgrade preserves populated legacy data but refuses populated new proof history.
+No financial schema or initiation-term trigger changes. See
+[schema, recovery and validation](COMMERCIAL_ADMISSION_SCALABILITY.md).

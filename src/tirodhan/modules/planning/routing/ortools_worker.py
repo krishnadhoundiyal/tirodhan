@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import sys
+import time as wall_time
 from typing import Any
 
 
@@ -106,25 +107,45 @@ def solve(p: dict[str, Any]) -> dict[str, Any]:
                     time.CumulVar(index).RemoveInterval(previous_end + 1, next_start - 1)
         if not job["required"]:
             routing.AddDisjunction([index], p["penalty"])
-    # Whole new lots have native shipment pairs, improving insertion construction.
-    # Split new lots use per-lot nonnegative load dimensions and empty ends instead.
-    for lot in sorted({j["lot"] for j in jobs}):
-        pickups = [i for i, j in enumerate(jobs) if j["lot"] == lot and j["kind"] == "PICKUP"]
-        drops = [i for i, j in enumerate(jobs) if j["lot"] == lot and j["kind"] == "DISCHARGE"]
-        if len(pickups) == len(drops) == 1:
-            a, b = manager.NodeToIndex(pickups[0]), manager.NodeToIndex(drops[0])
-            routing.AddPickupAndDelivery(a, b)
-            routing.solver().Add(routing.VehicleVar(a) == routing.VehicleVar(b))
-            routing.solver().Add(time.CumulVar(a) <= time.CumulVar(b))
-            routing.solver().Add(routing.ActiveVar(a) == routing.ActiveVar(b))
+    # Identity is enforced by explicit pairing/ownership, not L extra load dimensions.
+    # A rank dimension enforces strict precedence even for zero-time journeys.
+    routing.AddConstantDimension(1, n + k + 1, True, "VisitOrder")
+    rank = routing.GetDimensionOrDie("VisitOrder")
+    groups: dict[int, list[int]] = {}
+    for i, job in enumerate(jobs):
+        groups.setdefault(job["lot"], []).append(i)
+    for members in groups.values():
+        pickups = [i for i in members if jobs[i]["kind"] == "PICKUP"]
+        drops = [i for i in members if jobs[i]["kind"] == "DISCHARGE"]
+        for pickup in pickups:
+            for drop in drops:
+                a, b = manager.NodeToIndex(pickup), manager.NodeToIndex(drop)
+                if len(drops) == 1:
+                    routing.AddPickupAndDelivery(a, b)
+                routing.solver().Add(routing.VehicleVar(a) == routing.VehicleVar(b))
+                routing.solver().Add(rank.CumulVar(a) < rank.CumulVar(b))
+                routing.solver().Add(routing.ActiveVar(a) == routing.ActiveVar(b))
     params = pywrapcp.DefaultRoutingSearchParameters()
-    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     params.local_search_metaheuristic = (
         routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     )
-    params.time_limit.FromSeconds(p["search_seconds"])
     params.sat_parameters.random_seed = 1729
-    solution = routing.SolveWithParameters(params)
+    # Insertion filters may fail to construct a zero-cost paired route despite a
+    # feasible CP model. A second standard constructor shares the original budget.
+    deadline = wall_time.monotonic() + p["search_seconds"]
+    solution = None
+    for strategy in (
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION,
+        routing_enums_pb2.FirstSolutionStrategy.GLOBAL_CHEAPEST_ARC,
+    ):
+        milliseconds = int((deadline - wall_time.monotonic()) * 1000)
+        if milliseconds <= 0:
+            break
+        params.first_solution_strategy = strategy
+        params.time_limit.FromMilliseconds(milliseconds)
+        solution = routing.SolveWithParameters(params)
+        if solution is not None:
+            break
     if solution is None:
         return {"error": "NO_FEASIBLE_PROPOSAL"}
     routes = []

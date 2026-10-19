@@ -1,0 +1,1043 @@
+{
+  "base_commit": "a090f0fa3b450e71e0311023af33c32e45767219",
+  "branch": "codex/commercial-admission-scalability",
+  "environment": {
+    "application": {
+      "cpus": 2,
+      "image_id": "sha256:c0422f71d51d3a41363086fc6ecc5957ef67921266b9907d698872d587cc6604",
+      "memory_limit_bytes": 4294967296
+    },
+    "database": {
+      "cpus": 2,
+      "memory_limit_bytes": 1073741824,
+      "postgis": "3.5.2",
+      "postgresql": "17.5"
+    },
+    "distinct_public_road_sites": 64,
+    "fixture_sha256": "4f36f7e749aef6f21128288ab8ca6447666a506a440d74db778a079974a71b49",
+    "notes": [
+      "Shared Windows desktop; sequential campaigns; shared warm disposable PostgreSQL instance.",
+      "Fixture setup and road startup excluded from timed workflow; first commercial certificate cold.",
+      "Base backend is exact base commit; only benchmark harness copied from current tree for matching workload knobs and telemetry.",
+      "Four concurrent consumers; quantum one; declared committed capacity; varied load; 70% demand concentrated in first two 30-minute slots.",
+      "Real domain admission, checkout and authenticated synthetic payment capture; no remote gateway/HTTP network latency.",
+      "DB statistics can lag asynchronous flush; read transaction rollbacks are not failed admissions.",
+      "Application RSS is parent Python process, not all graph/solver child RSS. CPU is container-wide.",
+      "Intermediate PG counters are cumulative; final counters are deltas. Do not compare those counter fields.",
+      "Final failure fractions count terminal FAILED and remaining PENDING/RUNNING states; transient attempt failures are not separately counted.",
+      "Database CPU is whole disposable-instance cgroup CPU, including background activity in other idle test databases; memory includes reclaimable file cache.",
+      "Final application/migration sources match the completed validation snapshot; a measurement-only async filesystem probe was corrected in the opt-in harness."
+    ],
+    "solvers": {
+      "OR_TOOLS": "9.14.6206",
+      "OSRM": "6.0.0",
+      "VROOM": "1.15.0"
+    }
+  },
+  "final_campaign": [
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 34978408,
+        "cpu_fraction_of_two_cores": 0.42755394898538396,
+        "peak_process_rss_bytes": 210190336
+      },
+      "caches": null,
+      "campaign": "base64-final",
+      "certification_attempt_seconds": {
+        "p50": 0.35897450998891145,
+        "p95": 1.59970613400219
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06702258400036953,
+        "p95": 0.08776838300400414
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 129187,
+        "blks_read": 55,
+        "container_cpu_usec": 2808477,
+        "cpu_fraction_of_two_cores": 0.03432904756513287,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 838721536,
+        "temp_bytes": 0,
+        "xact_commit": 995,
+        "xact_rollback": 676
+      },
+      "decision_seconds": {
+        "p50": 9.690697081998223,
+        "p95": 30.28140094401897
+      },
+      "elapsed_seconds": 40.90525661499123,
+      "enqueue_seconds": {
+        "p50": 0.01059145899489522,
+        "p95": 0.013044238992733881
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 48.42s",
+      "sql": {
+        "calls": 10645,
+        "max_seconds": 1.349146660999395,
+        "seconds": 12.716949078108883
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.5645910891693282,
+      "throughput_per_second": 1.5645910891693282,
+      "vehicles": 20
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 106880105,
+        "cpu_fraction_of_two_cores": 0.45013622384266744,
+        "peak_process_rss_bytes": 217001984
+      },
+      "caches": null,
+      "campaign": "base128-final",
+      "certification_attempt_seconds": {
+        "p50": 0.5474360740045086,
+        "p95": 2.208944854006404
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07805842100060545,
+        "p95": 0.1013628350046929
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 254751,
+        "blks_read": 31,
+        "container_cpu_usec": 6244723,
+        "cpu_fraction_of_two_cores": 0.026300273845758792,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 865550336,
+        "temp_bytes": 0,
+        "xact_commit": 2178,
+        "xact_rollback": 1478
+      },
+      "decision_seconds": {
+        "p50": 37.36568138099392,
+        "p95": 97.52182012898265
+      },
+      "elapsed_seconds": 118.71973342602723,
+      "enqueue_seconds": {
+        "p50": 0.010973388998536393,
+        "p95": 0.014014913002029061
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 126.58s (0:02:06)",
+      "sql": {
+        "calls": 21490,
+        "max_seconds": 2.3571852689783555,
+        "seconds": 28.815858119778568
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.0781695368256128,
+      "throughput_per_second": 1.0781695368256128,
+      "vehicles": 20
+    },
+    {
+      "accepted": 0,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 8127764,
+        "cpu_fraction_of_two_cores": 0.3040793661508431,
+        "peak_process_rss_bytes": 197525504
+      },
+      "caches": null,
+      "campaign": "base256-final",
+      "certification_attempt_seconds": {
+        "p50": 0.032210827979724854,
+        "p95": 0.05032183401635848
+      },
+      "checkout_capture_seconds": null,
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 252289,
+        "blks_read": 10,
+        "container_cpu_usec": 2989096,
+        "cpu_fraction_of_two_cores": 0.11182933178719515,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 834191360,
+        "temp_bytes": 0,
+        "xact_commit": 1245,
+        "xact_rollback": 1055
+      },
+      "decision_seconds": {
+        "p50": 6.544009122007992,
+        "p95": 9.288548366021132
+      },
+      "elapsed_seconds": 13.364543775009224,
+      "enqueue_seconds": {
+        "p50": 0.011239219980780035,
+        "p95": 0.014367995987413451
+      },
+      "failures": {
+        "VEHICLE_SCOPE_LIMIT": 256
+      },
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed in 23.29s",
+      "sql": {
+        "calls": 7017,
+        "max_seconds": 0.11104138399241492,
+        "seconds": 6.266980826650979
+      },
+      "statuses": {
+        "FAILED": 256
+      },
+      "terminal_failure_fraction": 1.0,
+      "terminal_throughput_per_second": 19.155161920207284,
+      "throughput_per_second": 0.0,
+      "vehicles": 40
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 12064482,
+        "cpu_fraction_of_two_cores": 0.3201621519656138,
+        "peak_process_rss_bytes": 206381056
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 63,
+        "retained_read_bytes_charged": 521792,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 5476,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after64-final",
+      "certification_attempt_seconds": {
+        "p50": 0.1905783490219619,
+        "p95": 0.2994260350242257
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06874501900165342,
+        "p95": 0.09588326798984781
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 206855,
+        "blks_read": 46,
+        "container_cpu_usec": 2765079,
+        "cpu_fraction_of_two_cores": 0.07337850419064221,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 942960640,
+        "temp_bytes": 0,
+        "xact_commit": 1076,
+        "xact_rollback": 682
+      },
+      "decision_seconds": {
+        "p50": 5.9769331389979925,
+        "p95": 12.292680818005465
+      },
+      "elapsed_seconds": 18.841205817006994,
+      "enqueue_seconds": {
+        "p50": 0.011761342990212142,
+        "p95": 0.031061500980285928
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 26.74s",
+      "sql": {
+        "calls": 12569,
+        "max_seconds": 0.04066287601017393,
+        "seconds": 7.979989921237575
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.3968101947185603,
+      "throughput_per_second": 3.3968101947185603,
+      "vehicles": 20
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 23614631,
+        "cpu_fraction_of_two_cores": 0.340064120572732,
+        "peak_process_rss_bytes": 209690624
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 127,
+        "retained_read_bytes_charged": 867512,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 24691,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after128-final",
+      "certification_attempt_seconds": {
+        "p50": 0.17441855699871667,
+        "p95": 0.271691979985917
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06788447799044661,
+        "p95": 0.08760943001834676
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 546541,
+        "blks_read": 42,
+        "container_cpu_usec": 5574333,
+        "cpu_fraction_of_two_cores": 0.0802735663929942,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 958160896,
+        "temp_bytes": 0,
+        "xact_commit": 2137,
+        "xact_rollback": 1390
+      },
+      "decision_seconds": {
+        "p50": 13.211767775996123,
+        "p95": 22.781928624986904
+      },
+      "elapsed_seconds": 34.72085052699549,
+      "enqueue_seconds": {
+        "p50": 0.011054514005081728,
+        "p95": 0.013190861005568877
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 42.80s",
+      "sql": {
+        "calls": 25780,
+        "max_seconds": 0.04503713597659953,
+        "seconds": 14.933276034600567
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.6865456363311115,
+      "throughput_per_second": 3.6865456363311115,
+      "vehicles": 20
+    },
+    {
+      "accepted": 256,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 67607184,
+        "cpu_fraction_of_two_cores": 0.32609552865240327,
+        "peak_process_rss_bytes": 212017152
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 255,
+        "retained_read_bytes_charged": 1720232,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 67283,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after256-final",
+      "certification_attempt_seconds": {
+        "p50": 0.2992244490014855,
+        "p95": 0.5202863090089522
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06698635697830468,
+        "p95": 0.0836805829894729
+      },
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 13067191,
+        "blks_read": 42,
+        "container_cpu_usec": 28084617,
+        "cpu_fraction_of_two_cores": 0.13546294174322174,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 1073741824,
+        "temp_bytes": 0,
+        "xact_commit": 5217,
+        "xact_rollback": 3142
+      },
+      "decision_seconds": {
+        "p50": 37.17758486099774,
+        "p95": 78.48804492800264
+      },
+      "elapsed_seconds": 103.66162375698332,
+      "enqueue_seconds": {
+        "p50": 0.010853293992113322,
+        "p95": 0.0139063140086364
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 113.11s (0:01:53)",
+      "sql": {
+        "calls": 71788,
+        "max_seconds": 0.25513489797594957,
+        "seconds": 56.87231828973745
+      },
+      "statuses": {
+        "SUCCEEDED": 256
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 2.4695735096736238,
+      "throughput_per_second": 2.4695735096736238,
+      "vehicles": 40
+    },
+    {
+      "accepted": 512,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 222634046,
+        "cpu_fraction_of_two_cores": 0.39043382162627477,
+        "peak_process_rss_bytes": 213483520
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 511,
+        "retained_read_bytes_charged": 3425672,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 167091,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after512-final",
+      "certification_attempt_seconds": {
+        "p50": 0.4754832499893382,
+        "p95": 0.7167127470020205
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.0669756050046999,
+        "p95": 0.08791062698583119
+      },
+      "concurrency": 4,
+      "count": 512,
+      "database": {
+        "blks_hit": 6332983,
+        "blks_read": 66,
+        "container_cpu_usec": 53732340,
+        "cpu_fraction_of_two_cores": 0.09423052416305791,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 1041330176,
+        "temp_bytes": 0,
+        "xact_commit": 12651,
+        "xact_rollback": 7056
+      },
+      "decision_seconds": {
+        "p50": 98.77155517201754,
+        "p95": 227.2046853240172
+      },
+      "elapsed_seconds": 285.1111170039803,
+      "enqueue_seconds": {
+        "p50": 0.010898132983129472,
+        "p95": 0.013276799989398569
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 296.83s (0:04:56)",
+      "sql": {
+        "calls": 222133,
+        "max_seconds": 0.1499383540067356,
+        "seconds": 143.6895804682572
+      },
+      "statuses": {
+        "SUCCEEDED": 512
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.7957910774585901,
+      "throughput_per_second": 1.7957910774585901,
+      "vehicles": 80
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 15173629,
+        "cpu_fraction_of_two_cores": 0.29807830497699017,
+        "peak_process_rss_bytes": 213467136
+      },
+      "caches": {
+        "delta_reads": 74,
+        "full_reads": 1,
+        "hits": 4,
+        "retained_read_bytes_charged": 506600,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 7185,
+            "provider_cells": 56098,
+            "queries": 112
+          }
+        }
+      },
+      "campaign": "after64-interleaved",
+      "certification_attempt_seconds": {
+        "p50": 0.20941079998738132,
+        "p95": 0.28763887600507587
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07070213198312558,
+        "p95": 0.13844644601340406
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 269731,
+        "blks_read": 187,
+        "container_cpu_usec": 3735006,
+        "cpu_fraction_of_two_cores": 0.0733723130807329,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 981315584,
+        "temp_bytes": 0,
+        "xact_commit": 1618,
+        "xact_rollback": 954
+      },
+      "decision_seconds": {
+        "p50": 10.336059820023365,
+        "p95": 21.38631327499752
+      },
+      "elapsed_seconds": 25.452420968998922,
+      "enqueue_seconds": {
+        "p50": 0.01114043898996897,
+        "p95": 0.012994994001928717
+      },
+      "failures": {},
+      "interleaved": true,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 33.30s",
+      "sql": {
+        "calls": 15509,
+        "max_seconds": 0.17894664098275825,
+        "seconds": 11.802525761188008
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 2.5144955789452044,
+      "throughput_per_second": 2.5144955789452044,
+      "vehicles": 20
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 34069271,
+        "cpu_fraction_of_two_cores": 0.42451063832698804,
+        "peak_process_rss_bytes": 213692416
+      },
+      "caches": null,
+      "campaign": "base64-interleaved",
+      "certification_attempt_seconds": {
+        "p50": 0.3386995949840639,
+        "p95": 1.5959172690054402
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06486036701244302,
+        "p95": 0.11830365299829282
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 171089,
+        "blks_read": 96,
+        "container_cpu_usec": 3397616,
+        "cpu_fraction_of_two_cores": 0.042335045471034234,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 963465216,
+        "temp_bytes": 0,
+        "xact_commit": 1208,
+        "xact_rollback": 851
+      },
+      "decision_seconds": {
+        "p50": 12.569069391000085,
+        "p95": 34.1576409600093
+      },
+      "elapsed_seconds": 40.12769990201923,
+      "enqueue_seconds": {
+        "p50": 0.010951332980766892,
+        "p95": 0.013839849998475984
+      },
+      "failures": {},
+      "interleaved": true,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 47.85s",
+      "sql": {
+        "calls": 11276,
+        "max_seconds": 0.8570808850054163,
+        "seconds": 15.345682452607434
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 1.5949082592889785,
+      "throughput_per_second": 1.5949082592889785,
+      "vehicles": 20
+    }
+  ],
+  "intermediate_development_runs": [
+    {
+      "accepted": 64,
+      "adopted_policy": true,
+      "campaign": "base64",
+      "certification_attempt_seconds": {
+        "p50": 0.4511455720057711,
+        "p95": 1.8104185240226798
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07488202798413113,
+        "p95": 0.12604750599712133
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 365989,
+        "blks_read": 196,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 1163,
+        "xact_rollback": 725
+      },
+      "decision_seconds": {
+        "p50": 13.322503601986682,
+        "p95": 38.52425294398563
+      },
+      "elapsed_seconds": 50.436728571978165,
+      "enqueue_seconds": {
+        "p50": 0.013250307005364448,
+        "p95": 0.019550783996237442
+      },
+      "failures": {},
+      "interleaved": false,
+      "pytest_summary": "1 passed, 1 warning in 65.01s (0:01:05)",
+      "sql": {
+        "calls": 10703,
+        "max_seconds": 0.12833095199312083,
+        "seconds": 11.250146623438923
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "throughput_per_second": 1.268916557676133
+    },
+    {
+      "accepted": 128,
+      "adopted_policy": true,
+      "campaign": "base128",
+      "certification_attempt_seconds": {
+        "p50": 0.7947615919983946,
+        "p95": 3.8136450670135673
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.0764195489755366,
+        "p95": 0.11413313800585456
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 699170,
+        "blks_read": 337,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 3727,
+        "xact_rollback": 2358
+      },
+      "decision_seconds": {
+        "p50": 48.80398903298192,
+        "p95": 139.00930593299563
+      },
+      "elapsed_seconds": 160.8146522770112,
+      "enqueue_seconds": {
+        "p50": 0.014621704001910985,
+        "p95": 0.019608527014497668
+      },
+      "failures": {},
+      "interleaved": false,
+      "pytest_summary": "1 passed, 1 warning in 169.41s (0:02:49)",
+      "sql": {
+        "calls": 21928,
+        "max_seconds": 2.3681549709872343,
+        "seconds": 42.11444277543342
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "throughput_per_second": 0.7959473728769048
+    },
+    {
+      "accepted": 64,
+      "adopted_policy": true,
+      "campaign": "after64",
+      "certification_attempt_seconds": {
+        "p50": 0.24099018599372357,
+        "p95": 0.4084663089888636
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07829584900173359,
+        "p95": 0.1505535270262044
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 390966,
+        "blks_read": 215,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 1317,
+        "xact_rollback": 742
+      },
+      "decision_seconds": {
+        "p50": 7.402600135974353,
+        "p95": 16.233951260976028
+      },
+      "elapsed_seconds": 23.982704153022496,
+      "enqueue_seconds": {
+        "p50": 0.011192747013410553,
+        "p95": 0.01423947699368
+      },
+      "failures": {},
+      "interleaved": false,
+      "pytest_summary": "1 passed, 1 warning in 33.84s",
+      "sql": {
+        "calls": 10956,
+        "max_seconds": 0.051679790019989014,
+        "seconds": 11.388508883683244
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "throughput_per_second": 2.6685898133774124
+    },
+    {
+      "accepted": 128,
+      "adopted_policy": true,
+      "campaign": "after128",
+      "certification_attempt_seconds": {
+        "p50": 0.1679328590107616,
+        "p95": 0.2731627550092526
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.06943551599397324,
+        "p95": 0.10392770598991774
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 817373,
+        "blks_read": 377,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "xact_commit": 3575,
+        "xact_rollback": 2145
+      },
+      "decision_seconds": {
+        "p50": 13.39841506999801,
+        "p95": 22.940785535000032
+      },
+      "elapsed_seconds": 34.952655245986534,
+      "enqueue_seconds": {
+        "p50": 0.009287114982726052,
+        "p95": 0.011100251984316856
+      },
+      "failures": {},
+      "interleaved": false,
+      "pytest_summary": "1 passed, 1 warning in 43.10s",
+      "sql": {
+        "calls": 19260,
+        "max_seconds": 0.04415727098239586,
+        "seconds": 15.759328861255199
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "throughput_per_second": 3.6620966017938708
+    },
+    {
+      "accepted": 64,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 12338773,
+        "cpu_fraction_of_two_cores": 0.32478545239697154,
+        "peak_process_rss_bytes": 207892480
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 63,
+        "retained_read_bytes_charged": 521792,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 5476,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after64-pre-checkpoint",
+      "certification_attempt_seconds": {
+        "p50": 0.20315574601409025,
+        "p95": 0.2762399179919157
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.0670567250053864,
+        "p95": 0.08741565499803983
+      },
+      "concurrency": 4,
+      "count": 64,
+      "database": {
+        "blks_hit": 211138,
+        "blks_read": 43,
+        "container_cpu_usec": 3641206,
+        "cpu_fraction_of_two_cores": 0.0958450842705808,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 809861120,
+        "temp_bytes": 0,
+        "xact_commit": 1107,
+        "xact_rollback": 708
+      },
+      "decision_seconds": {
+        "p50": 6.319952370016836,
+        "p95": 12.272914189001312
+      },
+      "elapsed_seconds": 18.995267351012444,
+      "enqueue_seconds": {
+        "p50": 0.013989953004056588,
+        "p95": 0.03274273601709865
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 27.77s",
+      "sql": {
+        "calls": 12567,
+        "max_seconds": 0.12975774199003354,
+        "seconds": 8.294060000625905
+      },
+      "statuses": {
+        "SUCCEEDED": 64
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.369260290858123,
+      "throughput_per_second": 3.369260290858123,
+      "vehicles": 20
+    },
+    {
+      "accepted": 128,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 24676450,
+        "cpu_fraction_of_two_cores": 0.3458555730662079,
+        "peak_process_rss_bytes": 209973248
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 127,
+        "retained_read_bytes_charged": 867512,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 24691,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after128-pre-checkpoint",
+      "certification_attempt_seconds": {
+        "p50": 0.17530917600379325,
+        "p95": 0.2529552350169979
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.07393065598444082,
+        "p95": 0.09560823498759419
+      },
+      "concurrency": 4,
+      "count": 128,
+      "database": {
+        "blks_hit": 540606,
+        "blks_read": 42,
+        "container_cpu_usec": 5831007,
+        "cpu_fraction_of_two_cores": 0.08172513743014372,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 830390272,
+        "temp_bytes": 0,
+        "xact_commit": 2135,
+        "xact_rollback": 1386
+      },
+      "decision_seconds": {
+        "p50": 13.389192141010426,
+        "p95": 22.630942297982983
+      },
+      "elapsed_seconds": 35.6745010369923,
+      "enqueue_seconds": {
+        "p50": 0.010932362987659872,
+        "p95": 0.013267094996990636
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 43.80s",
+      "sql": {
+        "calls": 25798,
+        "max_seconds": 0.12252921500476077,
+        "seconds": 15.463865170808276
+      },
+      "statuses": {
+        "SUCCEEDED": 128
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 3.5879969243934697,
+      "throughput_per_second": 3.5879969243934697,
+      "vehicles": 20
+    },
+    {
+      "accepted": 256,
+      "admission_worker_quantum": 1,
+      "adopted_policy": true,
+      "application": {
+        "container_cpu_usec": 68889854,
+        "cpu_fraction_of_two_cores": 0.3703767872812784,
+        "peak_process_rss_bytes": 212180992
+      },
+      "caches": {
+        "delta_reads": 0,
+        "full_reads": 1,
+        "hits": 255,
+        "retained_read_bytes_charged": 1720232,
+        "roads": {
+          "test-car": {
+            "arc_bytes_charged": 1742000,
+            "hits": 67283,
+            "provider_cells": 59941,
+            "queries": 103
+          }
+        }
+      },
+      "campaign": "after256-pre-checkpoint",
+      "certification_attempt_seconds": {
+        "p50": 0.2684874249971472,
+        "p95": 0.4571532219997607
+      },
+      "checkout_capture_seconds": {
+        "p50": 0.0670749029959552,
+        "p95": 0.0743328719981946
+      },
+      "concurrency": 4,
+      "count": 256,
+      "database": {
+        "blks_hit": 2058896,
+        "blks_read": 42,
+        "container_cpu_usec": 16238569,
+        "cpu_fraction_of_two_cores": 0.08730442390348746,
+        "deadlocks": 0,
+        "memory_bytes_at_end": 879173632,
+        "temp_bytes": 0,
+        "xact_commit": 4889,
+        "xact_rollback": 3037
+      },
+      "decision_seconds": {
+        "p50": 31.41028213800746,
+        "p95": 68.32851136298268
+      },
+      "elapsed_seconds": 92.9996916190139,
+      "enqueue_seconds": {
+        "p50": 0.011045836989069358,
+        "p95": 0.01347361400257796
+      },
+      "failures": {},
+      "interleaved": false,
+      "pending_fraction": 0.0,
+      "pytest_summary": "1 passed, 1 warning in 102.31s (0:01:42)",
+      "sql": {
+        "calls": 71342,
+        "max_seconds": 0.20985118599492125,
+        "seconds": 44.88864677853417
+      },
+      "statuses": {
+        "SUCCEEDED": 256
+      },
+      "terminal_failure_fraction": 0.0,
+      "terminal_throughput_per_second": 2.752697299779653,
+      "throughput_per_second": 2.752697299779653,
+      "vehicles": 40
+    }
+  ],
+  "measured_date": "2026-10-18",
+  "validation": {
+    "benchmark_cases_passed": 9,
+    "expanded_routing": {
+      "hypothesis_seed": 61010,
+      "passed": 226,
+      "seconds": 216.97,
+      "skipped": 0,
+      "warnings": 2
+    },
+    "format_files": 436,
+    "full": {
+      "passed": 1395,
+      "seconds": 770.95,
+      "skipped": 53,
+      "warnings": 5
+    },
+    "mypy_source_files": 214,
+    "ruff": "passed",
+    "schema_baseline_application_differences": 2,
+    "targeted_checkpoint": {
+      "passed": 50,
+      "seconds": 93.14,
+      "skipped": 1,
+      "warnings": 1
+    }
+  }
+}

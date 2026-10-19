@@ -1,5 +1,28 @@
 # ADR-006: Rider Assignment and Operational Escalation
 
+## Approved commercial admission change — 19 October 2026
+
+New customer bookings consume non-trained projected slot allowances through atomic PostgreSQL
+holds. Customer per-booking OSRM/solver feasibility preparation is retired. Projection source,
+policy, expiry and shared regional bucket budgets govern new holds; existing holds and accepted
+commitments survive later forecast changes. Operational route feasibility, authoritative dispatch,
+single-owner regional capacity, custody and payment-first guarantees remain. This supersedes the
+prior mandatory exact commercial-certificate prerequisite. No new infrastructure or production
+activation is authorized. See [implementation and limitations](../PROJECTED_SLOT_ALLOWANCES.md).
+
+## Regional ownership and manager-approved rider replacement
+
+One live capacity owner is maintained through versioned regional vehicle membership and existing
+unique open rider/vehicle shifts. Idle adjacent-region transfers cannot abandon assignments,
+certified holds or cargo; closing/reopening duty cannot bypass those guards. Rider replacement
+requests require a manager decision. Before pickup, approved replacement uses ordinary validated
+route activation; started service requires explicit recovery. After pickup, approval only prepares
+existing evidenced CargoTransfer. Actual custody and affected operational state change together;
+both regional planners are woken for mandatory continuation. Expiry retains custody and excludes
+the old resource from supply, while isolated healthy capacity can continue admission. No automatic
+same-vehicle shift rebinding, production enablement or new custody system is introduced. See
+[commands, audit and recovery](../REGIONAL_CAPACITY_AND_RECOVERY.md).
+
 ## Increment 8 — rider commitment and regional authority
 
 Committed riders explicitly confirm availability before shift start. Confirmation is rider-owned
@@ -215,3 +238,13 @@ Breaks retain cargo; extensions need fresh availability and safety authorization
 alternatives and the designated warehouse support recovery; late discharge has no 30-minute
 SLA. Current validation and Payment-first authority remain mandatory. See
 [increment 7](../V2_ROUTING_INCREMENT_7.md) and [mobile contract](../V2_ORCHESTRATION_API.md).
+
+## Commercial witness boundary
+
+Commercial insertion tries committed resources before supplementary resources, ordering
+otherwise eligible vehicles by existing route size and identity; it does not exclude resources
+by proximity or confer assignment authority. Shared admission allocations are advisory proof
+membership. Live transactional operational activation, rider acceptance where required,
+protected work, custody and Payment-first arbitration remain the sole authority. The finite
+regional admission worker cannot dispatch. See
+[commercial implementation](../COMMERCIAL_ADMISSION_SCALABILITY.md).

@@ -1,0 +1,266 @@
+{
+  "base_commit": "d9b676d74fd84394789b1909c2afa0335f5b69a9",
+  "comparison": "Final implementation, square-only provider capability versus adaptive rectangular capability; not a checkout comparison",
+  "environment": {
+    "postgres_image": "postgis/postgis:17-3.5",
+    "database_cpus": 2,
+    "database_memory_gib": 1,
+    "application_cpus": 2,
+    "application_memory_gib": 4,
+    "python": "3.13.5",
+    "osrm": "6.0.0",
+    "vroom": "1.15.0",
+    "ortools": "9.14.6206",
+    "public_graph_sha256": "4f36f7e749aef6f21128288ab8ca6447666a506a440d74db778a079974a71b49"
+  },
+  "workload": {
+    "count": 192,
+    "new_declared_committed_vehicles": 80,
+    "public_road_sites": 64,
+    "clustered_fraction": 0.7,
+    "pickup_seconds": 180,
+    "discharge_seconds": 60,
+    "mass_g_range": [
+      1000,
+      2500
+    ],
+    "volume_ml_range": [
+      1000,
+      2000
+    ],
+    "vehicle_mass_g": 10000,
+    "vehicle_volume_ml": 10000,
+    "concurrency": 1,
+    "repeats": 1
+  },
+  "limitations": [
+    "Synthetic small clipped Delhi graph, not whole-city routing",
+    "Single sequential run per mode; second mode reuses database shared buffers",
+    "Random resource UUIDs and real wall-clock progression can affect candidate order and refresh frequency",
+    "No production SLA or statistical significance established",
+    "Database xact_rollback includes normal read-session cleanup, not business failure count"
+  ],
+  "square": {
+    "accepted": 192,
+    "admission_worker_quantum": 1,
+    "adopted_policy": false,
+    "application": {
+      "container_cpu_usec": 72465639,
+      "cpu_fraction_of_two_cores": 0.3633506230852355,
+      "peak_process_rss_bytes": 208715776
+    },
+    "caches": {
+      "delta_reads": 0,
+      "full_reads": 1,
+      "hits": 191,
+      "retained_read_bytes_charged": 1704928,
+      "roads": {
+        "test-car": {
+          "arc_bytes_charged": 1742000,
+          "hits": 48174,
+          "provider_cells": 60791,
+          "queries": 101
+        }
+      }
+    },
+    "certification_attempt_seconds": {
+      "p50": 0.4139836550166365,
+      "p95": 0.6437643380195368
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.07370273800916038,
+      "p95": 0.1002380840072874
+    },
+    "concurrency": 1,
+    "count": 192,
+    "database": {
+      "blks_hit": 1416965,
+      "blks_read": 67,
+      "container_cpu_usec": 17854188,
+      "cpu_fraction_of_two_cores": 0.08952284729706084,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 1050226688,
+      "temp_bytes": 0,
+      "xact_commit": 1997,
+      "xact_rollback": 1698
+    },
+    "decision_seconds": {
+      "p50": 34.710658259980846,
+      "p95": 76.64509775600163
+    },
+    "elapsed_seconds": 99.71861116500804,
+    "enqueue_seconds": {
+      "p50": 0.012613534985575825,
+      "p95": 0.018919252004707232
+    },
+    "failures": {},
+    "interleaved": false,
+    "matrix_mode": "square",
+    "pending_fraction": 0.0,
+    "sql": {
+      "calls": 71028,
+      "max_seconds": 0.14768131598248146,
+      "seconds": 36.437483522022376
+    },
+    "statuses": {
+      "SUCCEEDED": 192
+    },
+    "terminal_failure_fraction": 0.0,
+    "terminal_throughput_per_second": 1.9254179110285699,
+    "throughput_per_second": 1.9254179110285699,
+    "vehicles": 80
+  },
+  "adaptive": {
+    "accepted": 192,
+    "admission_worker_quantum": 1,
+    "adopted_policy": false,
+    "application": {
+      "container_cpu_usec": 39729041,
+      "cpu_fraction_of_two_cores": 0.35177099643462917,
+      "peak_process_rss_bytes": 206397440
+    },
+    "caches": {
+      "delta_reads": 0,
+      "full_reads": 1,
+      "hits": 191,
+      "retained_read_bytes_charged": 1704928,
+      "roads": {
+        "test-car": {
+          "arc_bytes_charged": 1742000,
+          "hits": 48174,
+          "provider_cells": 4499,
+          "queries": 197
+        }
+      }
+    },
+    "certification_attempt_seconds": {
+      "p50": 0.17245325600379147,
+      "p95": 0.4059379429963883
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.05545107100624591,
+      "p95": 0.06561583100119606
+    },
+    "concurrency": 1,
+    "count": 192,
+    "database": {
+      "blks_hit": 753530,
+      "blks_read": 54,
+      "container_cpu_usec": 10312594,
+      "cpu_fraction_of_two_cores": 0.0913103205085111,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 981053440,
+      "temp_bytes": 0,
+      "xact_commit": 1998,
+      "xact_rollback": 1727
+    },
+    "decision_seconds": {
+      "p50": 21.757435170991812,
+      "p95": 41.33091135197901
+    },
+    "elapsed_seconds": 56.47003505501198,
+    "enqueue_seconds": {
+      "p50": 0.008858057990437374,
+      "p95": 0.011258066020673141
+    },
+    "failures": {},
+    "interleaved": false,
+    "matrix_mode": "adaptive_rectangular",
+    "pending_fraction": 0.0,
+    "sql": {
+      "calls": 42464,
+      "max_seconds": 0.03504841501126066,
+      "seconds": 18.318209507036954
+    },
+    "statuses": {
+      "SUCCEEDED": 192
+    },
+    "terminal_failure_fraction": 0.0,
+    "terminal_throughput_per_second": 3.4000333063890866,
+    "throughput_per_second": 3.4000333063890866,
+    "vehicles": 80
+  },
+  "slot_projection": {
+    "accepted": 192,
+    "read_seconds": {
+      "p50": 0.003847741987556219,
+      "p95": 0.005350519000785425
+    },
+    "refresh_seconds": {
+      "p50": 0.045050607004668564,
+      "p95": 0.061836185021093115
+    },
+    "refreshes": 30,
+    "slots": 193
+  },
+  "concurrent_interleaved": {
+    "accepted": 64,
+    "admission_worker_quantum": 1,
+    "adopted_policy": false,
+    "application": {
+      "container_cpu_usec": 16881113,
+      "cpu_fraction_of_two_cores": 0.22074789492080377,
+      "peak_process_rss_bytes": 214581248
+    },
+    "caches": {
+      "delta_reads": 80,
+      "full_reads": 1,
+      "hits": 11,
+      "retained_read_bytes_charged": 514456,
+      "roads": {
+        "test-car": {
+          "arc_bytes_charged": 1742000,
+          "hits": 9069,
+          "provider_cells": 4531,
+          "queries": 230
+        }
+      }
+    },
+    "certification_attempt_seconds": {
+      "p50": 0.1973365829908289,
+      "p95": 0.36932308500399813
+    },
+    "checkout_capture_seconds": {
+      "p50": 0.06691185699310154,
+      "p95": 0.1748074329807423
+    },
+    "concurrency": 4,
+    "count": 64,
+    "database": {
+      "blks_hit": 224372,
+      "blks_read": 44,
+      "container_cpu_usec": 5811227,
+      "cpu_fraction_of_two_cores": 0.07599120550623278,
+      "deadlocks": 0,
+      "memory_bytes_at_end": 1071874048,
+      "temp_bytes": 0,
+      "xact_commit": 2164,
+      "xact_rollback": 1222
+    },
+    "decision_seconds": {
+      "p50": 12.217098684981465,
+      "p95": 28.697196218010504
+    },
+    "elapsed_seconds": 38.2361811560113,
+    "enqueue_seconds": {
+      "p50": 0.00920871298876591,
+      "p95": 0.011897515010787174
+    },
+    "failures": {},
+    "interleaved": true,
+    "matrix_mode": "adaptive_rectangular",
+    "pending_fraction": 0.0,
+    "sql": {
+      "calls": 14926,
+      "max_seconds": 1.0848313400056213,
+      "seconds": 15.657494217914063
+    },
+    "statuses": {
+      "SUCCEEDED": 64
+    },
+    "terminal_failure_fraction": 0.0,
+    "terminal_throughput_per_second": 1.6738073224119099,
+    "throughput_per_second": 1.6738073224119099,
+    "vehicles": 20
+  }
+}

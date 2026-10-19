@@ -1,0 +1,85 @@
+{
+  "base_commit": "d9b676d74fd84394789b1909c2afa0335f5b69a9",
+  "coverage": "All collected test IDs covered by split runs; latest outcome per ID, native image Python 3.13.5; not one uninterrupted green full run",
+  "collected": 1504,
+  "latest_outcomes": {
+    "passed": 1491,
+    "skipped": 12,
+    "failed": 1
+  },
+  "runs": [
+    {
+      "name": "full-final",
+      "results": {
+        "passed": 772,
+        "skipped": 12,
+        "failed": 1
+      }
+    },
+    {
+      "name": "focused-final",
+      "results": {
+        "passed": 41
+      }
+    },
+    {
+      "name": "remainder",
+      "results": {
+        "passed": 697,
+        "failed": 1
+      }
+    },
+    {
+      "name": "final-regressions",
+      "results": {
+        "passed": 36,
+        "failed": 1
+      }
+    },
+    {
+      "name": "http-final",
+      "results": {
+        "passed": 2
+      }
+    },
+    {
+      "name": "last-check",
+      "results": {
+        "passed": 16
+      }
+    },
+    {
+      "name": "fleet-reliability",
+      "results": {
+        "passed": 17
+      }
+    }
+  ],
+  "remaining_failures": [
+    "tests.unit.test_twofactor::test_timeout_traceback_and_http_logging_hide_sensitive_url"
+  ],
+  "default_skips": [
+    "tests.integration.test_commercial_admission_benchmark::test_real_commercial_workflow",
+    "tests.integration.test_orchestration_batch_benchmark::test_batching_measurements[False-False]",
+    "tests.integration.test_orchestration_batch_benchmark::test_batching_measurements[False-True]",
+    "tests.integration.test_orchestration_batch_benchmark::test_batching_measurements[True-False]",
+    "tests.integration.test_orchestration_batch_benchmark::test_batching_measurements[True-True]",
+    "tests.integration.test_orchestration_benchmark::test_end_to_end[4-8]",
+    "tests.integration.test_orchestration_benchmark::test_end_to_end[8-32]",
+    "tests.integration.test_orchestration_benchmark::test_end_to_end[16-64]",
+    "tests.integration.test_orchestration_benchmark::test_end_to_end[32-127]",
+    "tests.integration.test_regional_parallel_benchmark::test_complete_regional_2000_bookings_20_riders[0-global]",
+    "tests.integration.test_regional_parallel_benchmark::test_complete_regional_2000_bookings_20_riders[0-zonal]",
+    "tests.integration.test_regional_parallel_benchmark::test_complete_regional_2000_bookings_20_riders[0-on_demand]"
+  ],
+  "explicit_benchmark_runs_passed": 3,
+  "explicit_benchmark_workflows_accepted": 448,
+  "host_python_310_otp_isolated": "passed",
+  "otp_trace_probe": "Only synthetic OTP literal in traceback callsite source context matched; key/session/phone absent",
+  "quality": {
+    "ruff": "passed",
+    "format_files": 451,
+    "mypy_source_files": 223,
+    "diff_check": "passed"
+  }
+}

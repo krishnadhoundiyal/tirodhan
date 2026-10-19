@@ -8,6 +8,7 @@ import asyncio
 import json
 import math
 import os
+import resource
 import time
 from collections import Counter
 from datetime import timedelta
@@ -71,6 +72,23 @@ def quantiles(values):
     return {f"p{p}": ordered[max(0, math.ceil(p / 100 * len(ordered)) - 1)] for p in (50, 95)}
 
 
+def cpu_usage_usec(value):
+    # Docker Desktop here uses cgroup v1 (nanoseconds); Linux CI may use v2.
+    return (
+        int(value.split("usage_usec ")[1].split()[0])
+        if "usage_usec " in value
+        else int(value) // 1000
+    )
+
+
+async def application_cpu_usec():
+    for name in ("/sys/fs/cgroup/cpu.stat", "/sys/fs/cgroup/cpuacct/cpuacct.usage"):
+        path = Path(name)
+        if await asyncio.to_thread(path.exists):
+            return cpu_usage_usec(await asyncio.to_thread(path.read_text))
+    raise RuntimeError("CPU counter unavailable in disposable benchmark environment")
+
+
 async def population(factory, count, *, adopted=False):
     values = await regional(factory, empty=True)
     f, _, point, _, _, resource, clock, region_id, *_ = values
@@ -85,7 +103,7 @@ async def population(factory, count, *, adopted=False):
             ends_at=start + timedelta(hours=12),
         )
     )
-    riders = [new_uuid7() for _ in range(20)]
+    riders = [new_uuid7() for _ in range(int(os.getenv("TIRODHAN_ADMISSION_VEHICLES", "20")))]
     async with factory() as session, session.begin():
         await session.execute(insert(AppUser), [dict(user_id=r, status="ACTIVE") for r in riders])
         await session.execute(
@@ -273,6 +291,43 @@ async def test_real_commercial_workflow(database_session_factory):
 
     event.listen(bind.sync_engine, "before_cursor_execute", before)
     event.listen(bind.sync_engine, "after_cursor_execute", after)
+
+    async def database_metrics():
+        async with factory() as session:
+            counters = dict(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT xact_commit,xact_rollback,blks_read,blks_hit,"
+                            "temp_bytes,deadlocks "
+                            "FROM pg_stat_database WHERE datname=current_database()"
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            # Disposable PostgreSQL superuser instrumentation only; not runtime privileges.
+            counters["container_cpu_usec"] = cpu_usage_usec(
+                await session.scalar(
+                    text(
+                        "SELECT coalesce(pg_read_file('/sys/fs/cgroup/cpu.stat',0,8192,true),"
+                        "pg_read_file('/sys/fs/cgroup/cpuacct/cpuacct.usage',0,8192,true))"
+                    )
+                )
+            )
+            counters["container_memory_bytes"] = int(
+                await session.scalar(
+                    text(
+                        "SELECT coalesce(pg_read_file('/sys/fs/cgroup/memory.current',0,8192,true),"
+                        "pg_read_file('/sys/fs/cgroup/memory/memory.usage_in_bytes',0,8192,true))"
+                    )
+                )
+            )
+            return counters
+
+    db_before = await database_metrics()
+    app_cpu_before = await application_cpu_usec()
     begun = time.perf_counter()
     for customer, command in inputs:
         stamp = time.perf_counter()
@@ -294,6 +349,19 @@ async def test_real_commercial_workflow(database_session_factory):
             max_nodes=256,
             max_snap_distance_m=300,
         )
+        if os.getenv("TIRODHAN_ADMISSION_MATRIX_MODE") == "square":
+            # Controlled before/after comparison: same workflow, graph and budgets.
+            # Hide the new optional rectangle operation; retain identical provenance.
+            class SquareSource:
+                cache_namespace = provider.cache_namespace
+                max_nodes = provider.max_nodes
+
+                async def acquire(self, nodes):
+                    return await provider.acquire(nodes)
+
+            road_source = SquareSource()
+        else:
+            road_source = provider
         solvers = {
             OptimizerEngine.VROOM: VroomOptimizer(),
             OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
@@ -305,9 +373,9 @@ async def test_real_commercial_workflow(database_session_factory):
                 stamp = time.perf_counter()
                 processed = await run_admissions(
                     factory,
-                    providers={"test-car": provider},
+                    providers={"test-car": road_source},
                     optimizers=solvers,
-                    limit=1,
+                    limit=int(os.getenv("TIRODHAN_ADMISSION_QUANTUM", "1")),
                     clock=lambda: max(now, utc_now()),
                 )
                 if not processed:
@@ -366,7 +434,6 @@ async def test_real_commercial_workflow(database_session_factory):
             checkout.append(time.perf_counter() - stamp)
         accepted += 1
     elapsed = time.perf_counter() - begun
-    assert accepted > 0, dict(failures)
     event.remove(bind.sync_engine, "before_cursor_execute", before)
     event.remove(bind.sync_engine, "after_cursor_execute", after)
     async with factory() as session:
@@ -381,25 +448,44 @@ async def test_real_commercial_workflow(database_session_factory):
         assert (
             await session.scalar(select(func.count()).select_from(CapacityReservation)) == accepted
         )
-        db = (
-            (
-                await session.execute(
-                    text(
-                        "SELECT xact_commit,xact_rollback,blks_read,blks_hit,temp_bytes,deadlocks "
-                        "FROM pg_stat_database WHERE datname=current_database()"
-                    )
-                )
-            )
-            .mappings()
-            .one()
-        )
+    db_after = await database_metrics()
+    db_delta = {k: db_after[k] - db_before[k] for k in db_before if k != "container_memory_bytes"}
+    db_delta["cpu_fraction_of_two_cores"] = db_delta["container_cpu_usec"] / 1e6 / elapsed / 2
+    db_delta["memory_bytes_at_end"] = db_after["container_memory_bytes"]
+    app_cpu = await application_cpu_usec() - app_cpu_before
+    caches = None
+    try:
+        from tirodhan.modules.routing_operations.admission_state import read_cache
+    except ImportError:
+        pass  # The exact-main baseline does not contain the new read/cache implementation.
+    else:
+        cache = read_cache(factory)
+        caches = {
+            "full_reads": cache.full_reads,
+            "delta_reads": cache.delta_reads,
+            "hits": cache.hits,
+            "retained_read_bytes_charged": cache.bytes,
+            "roads": {
+                profile: {
+                    "queries": roads.queries,
+                    "provider_cells": roads.provider_cells,
+                    "hits": roads.hits,
+                    "arc_bytes_charged": roads.bytes,
+                }
+                for profile, roads in cache.road_sources.items()
+            },
+        }
     result = dict(
+        matrix_mode=os.getenv("TIRODHAN_ADMISSION_MATRIX_MODE", "adaptive_rectangular"),
         count=count,
         concurrency=concurrency,
         interleaved=interleaved,
         adopted_policy=adopted,
         elapsed_seconds=elapsed,
-        throughput_per_second=len(completed) / elapsed,
+        throughput_per_second=accepted / elapsed,
+        terminal_throughput_per_second=len(completed) / elapsed,
+        vehicles=int(os.getenv("TIRODHAN_ADMISSION_VEHICLES", "20")),
+        admission_worker_quantum=int(os.getenv("TIRODHAN_ADMISSION_QUANTUM", "1")),
         decision_seconds=quantiles(list(completed.values())) if completed else None,
         enqueue_seconds=quantiles(enqueue),
         certification_attempt_seconds=quantiles(timings),
@@ -408,6 +494,46 @@ async def test_real_commercial_workflow(database_session_factory):
         failures=dict(failures),
         accepted=accepted,
         sql=sql,
-        database=dict(db),
+        database=db_delta,
+        application={
+            "container_cpu_usec": app_cpu,
+            "cpu_fraction_of_two_cores": app_cpu / 1e6 / elapsed / 2,
+            "peak_process_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
+        },
+        caches=caches,
+        terminal_failure_fraction=sum(v for k, v in statuses.items() if k == "FAILED") / count,
+        pending_fraction=sum(v for k, v in statuses.items() if k in ("PENDING", "RUNNING")) / count,
     )
     print("COMMERCIAL_ADMISSION_RESULT=" + json.dumps(result, sort_keys=True))
+
+    if os.getenv("TIRODHAN_SLOT_PROJECTION_BENCHMARK") == "1":
+        from tirodhan.modules.routing_operations.orchestration_models import OperatingRegion
+        from tirodhan.modules.routing_operations.slot_projection import read_slots, refresh_slots
+
+        async with factory() as session:
+            region_id = await session.scalar(select(OperatingRegion.region_id))
+        refresh_times, read_times = [], []
+        for _ in range(30):
+            stamp = time.perf_counter()
+            size = await refresh_slots(factory, region_id, now=now)
+            refresh_times.append(time.perf_counter() - stamp)
+            stamp = time.perf_counter()
+            async with factory() as session:
+                await read_slots(session, region_id, now=now)
+            read_times.append(time.perf_counter() - stamp)
+        print(
+            "SLOT_PROJECTION_RESULT="
+            + json.dumps(
+                dict(
+                    accepted=accepted,
+                    slots=size,
+                    refresh_seconds=quantiles(refresh_times),
+                    read_seconds=quantiles(read_times),
+                    refreshes=30,
+                ),
+                sort_keys=True,
+            )
+        )
+
+    if os.getenv("TIRODHAN_ADMISSION_EXPECT_ALL", "1") == "1":
+        assert accepted == count, {"statuses": dict(statuses), "failures": dict(failures)}
