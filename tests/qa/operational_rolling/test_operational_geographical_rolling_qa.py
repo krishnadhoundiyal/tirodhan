@@ -121,7 +121,7 @@ class OperationalRollingQA(RuleBasedStateMachine):
                     graph_version=TIRODHAN_OSRM_GRAPH_VERSION,
                     profile_version="car",
                     max_nodes=128,
-                    max_snap_distance_m=300
+                    max_snap_distance_m=300,
                 )
             }
 
@@ -130,7 +130,7 @@ class OperationalRollingQA(RuleBasedStateMachine):
                 "threshold": count,
                 "horizon": horizon_hours * 3600,
                 "timestamp": now.isoformat(),
-                "status": "ATTEMPTED"
+                "status": "ATTEMPTED",
             }
 
             try:
@@ -156,13 +156,15 @@ class OperationalRollingQA(RuleBasedStateMachine):
         try:
             loop.run_until_complete(_run_planner())
         except Exception as e:
-            self.executions.append({
-                "region": region_name,
-                "threshold": count,
-                "horizon": horizon_hours * 3600,
-                "timestamp": self.clock().isoformat(),
-                "status": f"FAILED: {str(e)}"
-            })
+            self.executions.append(
+                {
+                    "region": region_name,
+                    "threshold": count,
+                    "horizon": horizon_hours * 3600,
+                    "timestamp": self.clock().isoformat(),
+                    "status": f"FAILED: {str(e)}",
+                }
+            )
             if "Connect call failed" in str(e):
                 pytest.skip(f"Operational Execution Failed due to actual env state: {str(e)}")
             raise e
@@ -252,7 +254,7 @@ async def test_deterministic_primary_scenario():
                 graph_version=TIRODHAN_OSRM_GRAPH_VERSION,
                 profile_version="car",
                 max_nodes=128,
-                max_snap_distance_m=300
+                max_snap_distance_m=300,
             )
         }
         try:
