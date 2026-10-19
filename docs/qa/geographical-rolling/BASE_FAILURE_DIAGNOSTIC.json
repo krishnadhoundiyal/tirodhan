@@ -1,0 +1,10 @@
+{
+  "api_key_present": false,
+  "session_present": false,
+  "phone_present": false,
+  "code_literal_present": true,
+  "all_code_occurrences_in_test_call_source": true,
+  "test_outcome": "ASSERTION_FAILED",
+  "base": "eefabf5c2174533653f71bdf7e961a039c46b261",
+  "python": "3.13.5"
+}

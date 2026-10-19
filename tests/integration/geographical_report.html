@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Tirodhan geographical rolling QA</title>
+<style>
+body{font:15px system-ui;margin:24px;background:#f4f6f8;color:#172530}h1{margin-bottom:4px}
+section{background:white;border:1px solid #ccd7df;padding:18px;margin:16px 0;border-radius:8px}
+select,button{padding:8px}svg{background:#f8fafc;width:100%;border:1px solid #dde4ea}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{text-align:left;border-bottom:1px solid #ddd;padding:6px}.bad{color:#a11;font-weight:bold}.ok{color:#175c3b}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:420px;overflow:auto}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+<h1>Geographical operational planning QA</h1>
+<p>Recorded production-path execution. Public OpenStreetMap road coordinates with synthetic bookings and declared resources.
+Map connectors are <b>schematic stop sequences</b>, not road polylines. Distances/times come from actual OSRM matrices.</p>
+<section><h2>Execution results</h2><div id="summary"></div><select id="cycle"></select></section>
+<section><h2>Delhi overview and accumulation</h2><div class="grid"><svg id="overview" viewBox="0 0 680 450"></svg><div id="accumulation"></div></div></section>
+<section><h2 id="heading"></h2><div class="grid"><div><h3>Before arrivals</h3><svg id="before" viewBox="0 0 680 450"></svg></div><div><h3>After execution</h3><svg id="after" viewBox="0 0 680 450"></svg></div></div><p>Orange outlines identify new arrivals. Purple squares identify the declared authorized facility. Lines connect ordered stops schematically; road geometry is not drawn.</p><p id="diff"></p><div id="metrics"></div><svg id="gantt" viewBox="0 0 1000 380"></svg></section>
+<section><h2>Actual solver activity</h2><div id="solvers"></div><details><summary>Raw cycle evidence</summary><pre id="raw"></pre></details></section>
+<section><h2>Preservation checks</h2><pre id="invariants"></pre></section>
+<script>
+const D=__QA_DATA__;
+const colors=['#126e82','#a25211','#783c9e','#277740','#c32646','#594dad'];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId=Object.fromEntries(D.bookings.map(b=>[b.booking_id,b]));
+function map(id,bookings,routes=[],box){
+const e=document.getElementById(id);if(!bookings.length){e.innerHTML='<text x="30" y="50">No recorded bookings / routes</text>';return}
+const regions=D.operating_regions||[],region=regions.find(r=>r.region_id===bookings[0]?.region_id),facility=region?.origins[0];
+const mapPoints=facility&&id!=='overview'?[...bookings,facility]:bookings;
+const xs=mapPoints.map(b=>b.longitude),ys=mapPoints.map(b=>b.latitude);
+const a=box||[Math.min(...xs)-.004,Math.min(...ys)-.004,Math.max(...xs)+.004,Math.max(...ys)+.004];
+const xy=b=>[30+(b.longitude-a[0])/(a[2]-a[0])*620,420-(b.latitude-a[1])/(a[3]-a[1])*390];
+let s='';if(id==='overview')D.operating_regions?.forEach((region,i)=>{region.service_boundaries.forEach(boundary=>{s+=`<polygon points="${boundary.map(([latitude,longitude])=>xy({longitude,latitude}).join(',')).join(' ')}" fill="${colors[i]}" fill-opacity=".05" stroke="${colors[i]}" stroke-width=".5"/>`});region.origins.forEach(o=>{const[x,y]=xy(o);s+=`<rect x="${x-2}" y="${y-2}" width="5" height="5" fill="black"><title>${esc(region.name+' fleet origin')}</title></rect>`})});routes.filter(r=>r.status!=='CLOSED').forEach((r,i)=>{const stops=r.stops.filter(t=>['PENDING','STARTED'].includes(t.state)).map(t=>t.kind==='DISCHARGE'?facility:byId[t.booking_id]).filter(Boolean);s+=`<polyline points="${stops.map(xy).map(p=>p.join(',')).join(' ')}" fill="none" stroke="${colors[i%colors.length]}" opacity=".6"/>`});
+if(facility&&id!=='overview'){const[x,y]=xy(facility);s+=`<rect x="${x-5}" y="${y-5}" width="10" height="10" fill="#783c9e"><title>Declared authorized facility</title></rect>`}
+bookings.forEach(b=>{const[x,y]=xy(b);const fresh=id==='after'&&b.cycle===E[+document.getElementById('cycle').value]?.cycle;s+=`<circle cx="${x}" cy="${y}" r="3" stroke="${fresh?'#e87913':'none'}" stroke-width="2" fill="${colors[['West','North','South','East'].indexOf(b.region)]}"><title>${esc(b.region+' '+b.booking_id+' '+b.slot_start)}</title></circle>`});
+e.innerHTML=s;
+}
+const E=D.executions;
+document.getElementById('summary').innerHTML=`<b>${E.filter(e=>e.status==='ACTIVATED').length}/${E.length} authoritative cycles activated</b>; ${D.bookings.length} paid bookings recorded. <span class="bad">${E.filter(e=>e.status!=='ACTIVATED').length} incomplete/failed cycles</span>. No absent metrics are treated as zero-cost success.`;
+map('overview',D.bookings,[],[77.02,28.46,77.35,28.80]);
+document.getElementById('accumulation').innerHTML='<p>Logical service H3 cells; black squares are declared fleet origins. Accumulation threshold is the QA driver. Appointment eligibility is separate.</p><svg id="arrival-chart" viewBox="0 0 600 240"></svg><table><tr><th>Region / cycle</th><th>New / threshold</th><th>Horizon</th><th>Result</th></tr>'+E.map(e=>`<tr><td>${esc(e.region)} / ${e.cycle}</td><td>${e.new_bookings} / ${e.threshold}</td><td>${e.horizon_seconds}s</td><td class="${e.status==='ACTIVATED'?'ok':'bad'}">${esc(e.status)} ${esc(e.failure)}</td></tr>`).join('')+'</table>';
+let chart='';['West','North','South','East'].forEach((name,j)=>{const es=E.filter(e=>e.region===name);if(!es.length)return;const y=30+j*50;chart+=`<text x="0" y="${y}">${name}</text>`;es.forEach((e,k)=>{const x=95+k*120;chart+=`<line x1="${x}" x2="${x}" y1="${y-14}" y2="${y+8}" stroke="${colors[j]}"/><text x="${x+4}" y="${y}" font-size="11">+${e.new_bookings} → R${e.cycle}</text>`})});document.getElementById('arrival-chart').innerHTML=chart;
+const sel=document.getElementById('cycle');E.forEach((e,i)=>sel.add(new Option(`${e.region} R${e.cycle} ${e.status}`,i)));
+function render(){const i=+sel.value,e=E[i],p=D.snapshots[i];if(!e||!p)return;
+document.getElementById('heading').textContent=`${e.region} — rolling execution ${e.cycle}`;
+const bs=D.bookings.filter(b=>b.region_id===e.region_id&&b.cycle<=e.cycle);
+map('before',bs.filter(b=>b.cycle<e.cycle),p.before.routes);map('after',bs,p.after.routes);
+document.getElementById('diff').textContent=`New ${p.diff?.added?.length||0}; retained ${p.diff?.retained?.length||0}; revised ${p.diff?.revised?.length||0}; transferred ${p.diff?.transferred?.length||0}; historical commitments preserved ${p.diff?.historical_preserved||0}; lost ${p.diff?.lost?.length||0}.`;
+const m=e.production_measurements?.routing_metrics||{},beforeM=p.before.routes.filter(r=>r.status!=='CLOSED'),afterM=p.after.routes.filter(r=>r.status!=='CLOSED');
+const distance=rs=>rs.reduce((sum,r)=>sum+r.distance_m,0),travel=rs=>rs.reduce((sum,r)=>sum+r.travel_seconds,0);
+const bpub=p.publication_before||{distance_m:distance(beforeM),travel_seconds:travel(beforeM)},apub=p.publication_after||{distance_m:distance(afterM),travel_seconds:travel(afterM)};
+document.getElementById('metrics').innerHTML=`<table><tr><th>Recorded plan</th><th>Distance</th><th>Travel</th><th>Assigned bookings</th></tr><tr><td>Before arrivals</td><td>${(bpub.distance_m/1000).toFixed(2)} km</td><td>${(bpub.travel_seconds/60).toFixed(1)} min</td><td>${p.before.assignments.length}</td></tr><tr><td>After publication</td><td>${(apub.distance_m/1000).toFixed(2)} km</td><td>${(apub.travel_seconds/60).toFixed(1)} min</td><td>${p.after.assignments.length}</td></tr></table><p>Used riders ${m.used_riders??'unavailable'} / ${e.fleet_size}; waiting ${m.waiting_seconds??'unavailable'} s; recorded fleet cost ${m.fleet_cost_seconds??'unavailable'} s; candidate pool ${m.candidate_count??'unavailable'}. Remaining accepted bookings include appointments outside the current horizon. Costs are from independently validated current publications; the before value is the preceding publication, before any later physical progress. Retained revision models and the Gantt retain immutable historical stops and their original estimates. Workloads differ; these costs do not establish common-input optimality. Maps connect only pending/started stops.</p>`;
+const rows=p.after.routes.filter(r=>r.status!=='CLOSED');const times=rows.flatMap(r=>r.stops.flatMap(s=>[Date.parse(s.planned_start),Date.parse(s.planned_end)]));
+const lo=Math.min(...times),hi=Math.max(...times);let bars='';
+rows.forEach((r,j)=>{const y=18+j*340/Math.max(1,rows.length);bars+=`<text x="4" y="${y+8}" font-size="10">${esc(r.rider_id.slice(-8))}</text>`;r.stops.forEach(s=>{const x=90+860*(Date.parse(s.planned_start)-lo)/Math.max(1,hi-lo),w=Math.max(2,860*(Date.parse(s.planned_end)-Date.parse(s.planned_start))/Math.max(1,hi-lo));bars+=`<rect x="${x}" y="${y}" width="${w}" height="10" opacity="${['PENDING','STARTED'].includes(s.state)?1:.3}" fill="${s.kind==='PICKUP'?'#126e82':'#a25211'}"><title>${esc(s.kind+' '+s.booking_id+' '+s.planned_start+' '+s.state)}</title></rect>`})});document.getElementById('gantt').innerHTML=bars;
+const dispatch=D.solver_trace.filter(t=>t.kind==='worker_dispatch'&&t.cycle===e.label),ids=new Set(dispatch.flatMap(d=>d.tasks.map(t=>t.task_id)));
+const workers=D.solver_trace.filter(t=>t.kind==='native_worker'&&ids.has(t.task_id));
+const coordinators=D.solver_trace.filter(t=>t.kind==='coordinator'&&t.cycle===e.label);
+document.getElementById('solvers').innerHTML='<table><tr><th>Engine</th><th>Actual calls</th><th>Result</th><th>Seconds</th></tr>'+['VROOM','OR_TOOLS'].map(engine=>{const calls=workers.filter(w=>w.engine===engine).flatMap(w=>w.observations),counts=calls.reduce((s,c)=>(s[c.status]=(s[c.status]||0)+1,s),{});return `<tr><td>${engine}</td><td>${calls.length}</td><td>${calls.length?esc(JSON.stringify(counts)):'NOT_INVOKED: '+esc(e.failure||'no recorded native dispatch')}</td><td>${calls.reduce((s,c)=>s+c.elapsed_seconds,0).toFixed(3)}</td></tr>`}).join('')+`<tr><td>CP-SAT coordinator</td><td>${coordinators.length}</td><td>${esc(coordinators.map(c=>c.selection?.stage_statuses).join('; ')||'NOT_INVOKED: '+(e.failure||'no candidate selection'))}</td><td>${coordinators.reduce((s,c)=>s+c.elapsed_seconds,0).toFixed(3)}</td></tr></table>`;
+document.getElementById('raw').textContent=JSON.stringify({execution:e,metrics:D.metrics[i],plan_diff:p.derived_diff||p.diff,coordinators},null,2);
+document.getElementById('invariants').textContent=JSON.stringify(D.invariants[i],null,2);
+}sel.onchange=render;render();
+</script></html>

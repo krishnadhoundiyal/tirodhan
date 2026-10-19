@@ -1,0 +1,1543 @@
+{
+  "scenario": "North-20-14400",
+  "cycles": 4,
+  "activated": 4,
+  "bookings": 80,
+  "calls": {
+    "VROOM": 104,
+    "OR_TOOLS": 104,
+    "CP_SAT_COORDINATOR": 8,
+    "CP_SAT_STAGES": 32
+  },
+  "native_candidate_failures": {},
+  "violations": [],
+  "matrix_max_nodes": 67,
+  "matrix_shapes_by_persisted_problem": {
+    "01a1535d-edf4-7e1a-bb8b-4b4a657d0629": [
+      25
+    ],
+    "01a1535e-771e-7a58-89ce-722afed54e77": [
+      39
+    ],
+    "01a1535e-fbee-74b2-8980-93d9d2e93206": [
+      51
+    ],
+    "01a1535f-8778-7e24-bd0d-46968abbc5b6": [
+      67
+    ]
+  },
+  "cycles_metrics": [
+    {
+      "label": "North-20-14400:North:R1",
+      "actual_native_calls": {
+        "VROOM": 26,
+        "OR_TOOLS": 26
+      },
+      "actual_coordinator_calls": 2,
+      "production": {
+        "distance_m": 21888,
+        "task_count": 52,
+        "used_riders": 6,
+        "travel_seconds": 2849,
+        "candidate_count": 20,
+        "solver_timeouts": 0,
+        "waiting_seconds": 60269,
+        "selection_bounds": [
+          0.0,
+          14.0,
+          14.0,
+          -4649.0
+        ],
+        "selection_values": [
+          0,
+          14,
+          14,
+          -4649
+        ],
+        "fleet_cost_seconds": 4649,
+        "selection_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "seed_candidate_count": 174,
+        "occupied_route_seconds": 66478
+      },
+      "native_failures": {}
+    },
+    {
+      "label": "North-20-14400:North:R2",
+      "actual_native_calls": {
+        "VROOM": 26,
+        "OR_TOOLS": 26
+      },
+      "actual_coordinator_calls": 2,
+      "production": {
+        "distance_m": 27828,
+        "task_count": 52,
+        "used_riders": 6,
+        "travel_seconds": 3617,
+        "candidate_count": 20,
+        "solver_timeouts": 0,
+        "waiting_seconds": 61072,
+        "selection_bounds": [
+          0.0,
+          25.0,
+          25.0,
+          -3637.0
+        ],
+        "selection_values": [
+          0,
+          25,
+          25,
+          -3637
+        ],
+        "fleet_cost_seconds": 3637,
+        "selection_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "seed_candidate_count": 162,
+        "occupied_route_seconds": 70689
+      },
+      "native_failures": {}
+    },
+    {
+      "label": "North-20-14400:North:R3",
+      "actual_native_calls": {
+        "VROOM": 26,
+        "OR_TOOLS": 26
+      },
+      "actual_coordinator_calls": 2,
+      "production": {
+        "distance_m": 31670,
+        "task_count": 52,
+        "used_riders": 7,
+        "travel_seconds": 4166,
+        "candidate_count": 20,
+        "solver_timeouts": 0,
+        "waiting_seconds": 69181,
+        "selection_bounds": [
+          0.0,
+          35.0,
+          35.0,
+          -4536.0
+        ],
+        "selection_values": [
+          0,
+          35,
+          35,
+          -4536
+        ],
+        "fleet_cost_seconds": 4616,
+        "selection_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "seed_candidate_count": 150,
+        "occupied_route_seconds": 81747
+      },
+      "native_failures": {}
+    },
+    {
+      "label": "North-20-14400:North:R4",
+      "actual_native_calls": {
+        "VROOM": 26,
+        "OR_TOOLS": 26
+      },
+      "actual_coordinator_calls": 2,
+      "production": {
+        "distance_m": 39490,
+        "task_count": 52,
+        "used_riders": 7,
+        "travel_seconds": 5177,
+        "candidate_count": 20,
+        "solver_timeouts": 0,
+        "waiting_seconds": 70633,
+        "selection_bounds": [
+          0.0,
+          49.0,
+          49.0,
+          -5367.0
+        ],
+        "selection_values": [
+          0,
+          49,
+          49,
+          -5367
+        ],
+        "fleet_cost_seconds": 5367,
+        "selection_statuses": [
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL",
+          "OPTIMAL"
+        ],
+        "seed_candidate_count": 164,
+        "occupied_route_seconds": 87570
+      },
+      "native_failures": {}
+    }
+  ],
+  "final_assignments": {
+    "North": 49
+  },
+  "final_used_riders": {
+    "North": 7
+  },
+  "executions": [
+    {
+      "label": "North-20-14400:North:R1",
+      "region": "North",
+      "region_id": "01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle": 1,
+      "threshold": 20,
+      "new_bookings": 20,
+      "total_bookings": 20,
+      "previously_assigned": 0,
+      "horizon_seconds": 14400,
+      "fleet_size": 10,
+      "trigger": "QA_THRESHOLD_DRIVER",
+      "trigger_reason": "20 new paid accepted bookings accumulated",
+      "invoked_at": "2026-10-20T09:00:00+05:30",
+      "executor": "REGION:01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle_id": "01a1535d-8097-7879-a8df-6ec0a76fc8c6",
+      "status": "ACTIVATED",
+      "failure": null,
+      "elapsed_seconds": 29.447975368006155,
+      "actual_new_assignments": 14,
+      "measured_generation": 61,
+      "production_measurements": {
+        "inputs": [
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-76ad-7776-9975-6577aa44f5f4"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-773f-7912-ba5b-51311f1176ad"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-779f-7b55-b7dc-84b517d95324"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7802-74c8-83ed-6e45f2f8d846"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7878-7b85-8f51-53d8fbc5342a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7908-7eb4-a115-8a80b3b73cf9"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-79aa-7d80-966e-570adb6b797d"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7c75-710f-ac22-1b1b35639e8e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7cd8-7775-9e2a-b7f2318d47bc"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7d39-7053-bf4a-e408102cc417"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7d95-7f39-8310-6f2293669d77"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7e22-7947-ad6f-4442a4cc5ffa"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7ea8-7f6c-ac73-31430facff4a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7f05-737b-9e26-5929e656674c"
+          }
+        ],
+        "policy": {
+          "version": "FLEET_TEST_1",
+          "regional": true,
+          "economics": {
+            "version": "SYNTHETIC_SECONDS_1",
+            "waiting_weight": 0,
+            "disruption_seconds": 10,
+            "window_risk_weight": 1,
+            "max_candidate_evaluations": 3000,
+            "additional_vehicle_seconds": 300,
+            "window_risk_buffer_seconds": 300
+          },
+          "max_nodes": 512,
+          "telemetry": {
+            "max_accuracy_m": 30,
+            "max_age_seconds": 3600,
+            "max_speed_m_per_second": 30
+          },
+          "max_profiles": 1,
+          "max_requests": 128,
+          "max_vehicles": 32,
+          "lease_seconds": 3600,
+          "displacement_m": 200,
+          "search_seconds": 1,
+          "horizon_seconds": 14400,
+          "delivery_ack_seconds": 600,
+          "publication_attempts": 3,
+          "planning_lead_seconds": 14400,
+          "pickup_horizon_seconds": null,
+          "destination_divergence_m": 100,
+          "maximum_interval_seconds": 3600,
+          "minimum_interval_seconds": 1,
+          "dispatch_readiness_seconds": 0
+        },
+        "timings": {
+          "worker_seconds": 26.973776512022596,
+          "matrix_build_seconds": 0.2855409359908663,
+          "conflict_selection_seconds": 0.2656203790102154,
+          "snapshot_admission_seconds": 0.4714067950262688,
+          "publication_refresh_seconds": 0.33801832201424986
+        },
+        "assigned": [
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-7f05-737b-9e26-5929e656674c"
+        ],
+        "generation": 61,
+        "retry_seconds": 1,
+        "routing_metrics": {
+          "distance_m": 21888,
+          "task_count": 52,
+          "used_riders": 6,
+          "travel_seconds": 2849,
+          "candidate_count": 20,
+          "solver_timeouts": 0,
+          "waiting_seconds": 60269,
+          "selection_bounds": [
+            0.0,
+            14.0,
+            14.0,
+            -4649.0
+          ],
+          "selection_values": [
+            0,
+            14,
+            14,
+            -4649
+          ],
+          "fleet_cost_seconds": 4649,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 174,
+          "occupied_route_seconds": 66478
+        },
+        "worker_failures": 0,
+        "discovery_fingerprint": "a925ecf9112bb63619a71b6173d52389f15dd7792cab39ca7a78b0739a025224"
+      }
+    },
+    {
+      "label": "North-20-14400:North:R2",
+      "region": "North",
+      "region_id": "01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle": 2,
+      "threshold": 20,
+      "new_bookings": 20,
+      "total_bookings": 40,
+      "previously_assigned": 14,
+      "horizon_seconds": 14400,
+      "fleet_size": 10,
+      "trigger": "QA_THRESHOLD_DRIVER",
+      "trigger_reason": "20 new paid accepted bookings accumulated",
+      "invoked_at": "2026-10-20T09:01:00+05:30",
+      "executor": "REGION:01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle_id": "01a1535e-0585-7e1c-a03a-7e5037185e4e",
+      "status": "ACTIVATED",
+      "failure": null,
+      "elapsed_seconds": 30.877358175988775,
+      "actual_new_assignments": 11,
+      "measured_generation": 121,
+      "production_measurements": {
+        "inputs": [
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-76ad-7776-9975-6577aa44f5f4"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-773f-7912-ba5b-51311f1176ad"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-779f-7b55-b7dc-84b517d95324"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7802-74c8-83ed-6e45f2f8d846"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7878-7b85-8f51-53d8fbc5342a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7908-7eb4-a115-8a80b3b73cf9"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-79aa-7d80-966e-570adb6b797d"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7a19-70e3-a201-cd21a405b91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7c75-710f-ac22-1b1b35639e8e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7cd8-7775-9e2a-b7f2318d47bc"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d39-7053-bf4a-e408102cc417"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d95-7f39-8310-6f2293669d77"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7e22-7947-ad6f-4442a4cc5ffa"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7ea8-7f6c-ac73-31430facff4a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7f05-737b-9e26-5929e656674c"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7f65-7495-8452-541b04918084"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-fd8c-7acc-8a69-ff7e485d0117"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-fe00-7c47-a24d-731125e6c859"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-fe7e-7d0e-b563-6ef68f2984ca"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-fefc-71c3-a9ed-cc8f663fa26e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-ff76-7a48-8645-42b56118eac2"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-ffee-72be-8bd9-31c7efe73839"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-0065-7dfc-a6dd-31923e5ae91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-0100-72d4-a4e6-139f65e36a82"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-0343-7588-a585-d5261192c888"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-03a7-73f7-a5ee-fb4598dd77d8"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-040e-7cc6-baf5-0641fb5c03d7"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-046d-7c97-a435-3f1b91823577"
+          }
+        ],
+        "policy": {
+          "version": "FLEET_TEST_1",
+          "regional": true,
+          "economics": {
+            "version": "SYNTHETIC_SECONDS_1",
+            "waiting_weight": 0,
+            "disruption_seconds": 10,
+            "window_risk_weight": 1,
+            "max_candidate_evaluations": 3000,
+            "additional_vehicle_seconds": 300,
+            "window_risk_buffer_seconds": 300
+          },
+          "max_nodes": 512,
+          "telemetry": {
+            "max_accuracy_m": 30,
+            "max_age_seconds": 3600,
+            "max_speed_m_per_second": 30
+          },
+          "max_profiles": 1,
+          "max_requests": 128,
+          "max_vehicles": 32,
+          "lease_seconds": 3600,
+          "displacement_m": 200,
+          "search_seconds": 1,
+          "horizon_seconds": 14400,
+          "delivery_ack_seconds": 600,
+          "publication_attempts": 3,
+          "planning_lead_seconds": 14400,
+          "pickup_horizon_seconds": null,
+          "destination_divergence_m": 100,
+          "maximum_interval_seconds": 3600,
+          "minimum_interval_seconds": 1,
+          "dispatch_readiness_seconds": 0
+        },
+        "timings": {
+          "worker_seconds": 27.961976562044583,
+          "matrix_build_seconds": 0.2822748830076307,
+          "conflict_selection_seconds": 0.33266423095483333,
+          "snapshot_admission_seconds": 0.49859363300492987,
+          "publication_refresh_seconds": 0.32440581102855504
+        },
+        "assigned": [
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-046d-7c97-a435-3f1b91823577",
+          "01a1535e-046d-7c97-a435-3f1b91823577"
+        ],
+        "generation": 121,
+        "retry_seconds": 1,
+        "routing_metrics": {
+          "distance_m": 27828,
+          "task_count": 52,
+          "used_riders": 6,
+          "travel_seconds": 3617,
+          "candidate_count": 20,
+          "solver_timeouts": 0,
+          "waiting_seconds": 61072,
+          "selection_bounds": [
+            0.0,
+            25.0,
+            25.0,
+            -3637.0
+          ],
+          "selection_values": [
+            0,
+            25,
+            25,
+            -3637
+          ],
+          "fleet_cost_seconds": 3637,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 162,
+          "occupied_route_seconds": 70689
+        },
+        "worker_failures": 0,
+        "discovery_fingerprint": "de64a10822bc7e06e429a9440901e8aaa1932fed88850198f56dab7513fd728f"
+      }
+    },
+    {
+      "label": "North-20-14400:North:R3",
+      "region": "North",
+      "region_id": "01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle": 3,
+      "threshold": 20,
+      "new_bookings": 20,
+      "total_bookings": 60,
+      "previously_assigned": 25,
+      "horizon_seconds": 14400,
+      "fleet_size": 10,
+      "trigger": "QA_THRESHOLD_DRIVER",
+      "trigger_reason": "20 new paid accepted bookings accumulated",
+      "invoked_at": "2026-10-20T09:02:00+05:30",
+      "executor": "REGION:01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle_id": "01a1535e-91b7-7c58-86b0-30d762738f13",
+      "status": "ACTIVATED",
+      "failure": null,
+      "elapsed_seconds": 28.931670819001738,
+      "actual_new_assignments": 10,
+      "measured_generation": 181,
+      "production_measurements": {
+        "inputs": [
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-76ad-7776-9975-6577aa44f5f4"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-773f-7912-ba5b-51311f1176ad"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-779f-7b55-b7dc-84b517d95324"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7802-74c8-83ed-6e45f2f8d846"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7878-7b85-8f51-53d8fbc5342a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7908-7eb4-a115-8a80b3b73cf9"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-79aa-7d80-966e-570adb6b797d"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7a19-70e3-a201-cd21a405b91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7c75-710f-ac22-1b1b35639e8e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7cd8-7775-9e2a-b7f2318d47bc"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d39-7053-bf4a-e408102cc417"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d95-7f39-8310-6f2293669d77"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7e22-7947-ad6f-4442a4cc5ffa"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7ea8-7f6c-ac73-31430facff4a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7f05-737b-9e26-5929e656674c"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7f65-7495-8452-541b04918084"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fd8c-7acc-8a69-ff7e485d0117"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fe00-7c47-a24d-731125e6c859"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fe7e-7d0e-b563-6ef68f2984ca"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fefc-71c3-a9ed-cc8f663fa26e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-ff76-7a48-8645-42b56118eac2"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-ffee-72be-8bd9-31c7efe73839"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-0065-7dfc-a6dd-31923e5ae91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-0100-72d4-a4e6-139f65e36a82"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-0343-7588-a585-d5261192c888"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-03a7-73f7-a5ee-fb4598dd77d8"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-040e-7cc6-baf5-0641fb5c03d7"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-046d-7c97-a435-3f1b91823577"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-88bc-7d1e-9163-bcff1c2dee86"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8977-7f0d-bb9d-bf963c22e9c5"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-89ef-7588-b033-4ebe98b99da1"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8a73-7d88-8c2e-f257b8aa3af0"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8c53-752c-83bf-f345cc8401e3"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8cae-70c7-a10c-3722eb21433a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8d81-7929-aeec-2ef1bb79cb33"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8dea-74b3-b4b6-00312ebd5ce1"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8e4b-763a-897c-a8b7e75c5fc5"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8ead-73c5-b5d5-e55c206dcebb"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8f0f-73de-b8e6-3e2879cc5adb"
+          }
+        ],
+        "policy": {
+          "version": "FLEET_TEST_1",
+          "regional": true,
+          "economics": {
+            "version": "SYNTHETIC_SECONDS_1",
+            "waiting_weight": 0,
+            "disruption_seconds": 10,
+            "window_risk_weight": 1,
+            "max_candidate_evaluations": 3000,
+            "additional_vehicle_seconds": 300,
+            "window_risk_buffer_seconds": 300
+          },
+          "max_nodes": 512,
+          "telemetry": {
+            "max_accuracy_m": 30,
+            "max_age_seconds": 3600,
+            "max_speed_m_per_second": 30
+          },
+          "max_profiles": 1,
+          "max_requests": 128,
+          "max_vehicles": 32,
+          "lease_seconds": 3600,
+          "displacement_m": 200,
+          "search_seconds": 1,
+          "horizon_seconds": 14400,
+          "delivery_ack_seconds": 600,
+          "publication_attempts": 3,
+          "planning_lead_seconds": 14400,
+          "pickup_horizon_seconds": null,
+          "destination_divergence_m": 100,
+          "maximum_interval_seconds": 3600,
+          "minimum_interval_seconds": 1,
+          "dispatch_readiness_seconds": 0
+        },
+        "timings": {
+          "worker_seconds": 26.10783644299954,
+          "matrix_build_seconds": 0.30215243698330596,
+          "conflict_selection_seconds": 0.2917861870373599,
+          "snapshot_admission_seconds": 0.5917468820116483,
+          "publication_refresh_seconds": 0.20751520298654214
+        },
+        "assigned": [
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-046d-7c97-a435-3f1b91823577",
+          "01a1535e-046d-7c97-a435-3f1b91823577",
+          "01a1535e-88bc-7d1e-9163-bcff1c2dee86",
+          "01a1535e-88bc-7d1e-9163-bcff1c2dee86",
+          "01a1535e-8977-7f0d-bb9d-bf963c22e9c5",
+          "01a1535e-8977-7f0d-bb9d-bf963c22e9c5",
+          "01a1535e-89ef-7588-b033-4ebe98b99da1",
+          "01a1535e-89ef-7588-b033-4ebe98b99da1",
+          "01a1535e-8c53-752c-83bf-f345cc8401e3",
+          "01a1535e-8c53-752c-83bf-f345cc8401e3",
+          "01a1535e-8cae-70c7-a10c-3722eb21433a",
+          "01a1535e-8cae-70c7-a10c-3722eb21433a",
+          "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0",
+          "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0",
+          "01a1535e-8d81-7929-aeec-2ef1bb79cb33",
+          "01a1535e-8d81-7929-aeec-2ef1bb79cb33",
+          "01a1535e-8dea-74b3-b4b6-00312ebd5ce1",
+          "01a1535e-8dea-74b3-b4b6-00312ebd5ce1",
+          "01a1535e-8e4b-763a-897c-a8b7e75c5fc5",
+          "01a1535e-8e4b-763a-897c-a8b7e75c5fc5",
+          "01a1535e-8ead-73c5-b5d5-e55c206dcebb",
+          "01a1535e-8ead-73c5-b5d5-e55c206dcebb"
+        ],
+        "generation": 181,
+        "retry_seconds": 1,
+        "routing_metrics": {
+          "distance_m": 31670,
+          "task_count": 52,
+          "used_riders": 7,
+          "travel_seconds": 4166,
+          "candidate_count": 20,
+          "solver_timeouts": 0,
+          "waiting_seconds": 69181,
+          "selection_bounds": [
+            0.0,
+            35.0,
+            35.0,
+            -4536.0
+          ],
+          "selection_values": [
+            0,
+            35,
+            35,
+            -4536
+          ],
+          "fleet_cost_seconds": 4616,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 150,
+          "occupied_route_seconds": 81747
+        },
+        "worker_failures": 0,
+        "discovery_fingerprint": "5d4bce4d820fac2afb57f6ff07405ae97f5894ef6441ce891284a050f1bfed27"
+      }
+    },
+    {
+      "label": "North-20-14400:North:R4",
+      "region": "North",
+      "region_id": "01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle": 4,
+      "threshold": 20,
+      "new_bookings": 20,
+      "total_bookings": 80,
+      "previously_assigned": 35,
+      "horizon_seconds": 14400,
+      "fleet_size": 10,
+      "trigger": "QA_THRESHOLD_DRIVER",
+      "trigger_reason": "20 new paid accepted bookings accumulated",
+      "invoked_at": "2026-10-20T09:03:00+05:30",
+      "executor": "REGION:01a1535d-717b-782d-be74-d664034b28ae",
+      "cycle_id": "01a1535f-17d5-7ba7-ad99-c84ebce89414",
+      "status": "ACTIVATED",
+      "failure": null,
+      "elapsed_seconds": 31.077518828969914,
+      "actual_new_assignments": 14,
+      "measured_generation": 241,
+      "production_measurements": {
+        "inputs": [
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-76ad-7776-9975-6577aa44f5f4"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-773f-7912-ba5b-51311f1176ad"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-779f-7b55-b7dc-84b517d95324"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7802-74c8-83ed-6e45f2f8d846"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7878-7b85-8f51-53d8fbc5342a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7908-7eb4-a115-8a80b3b73cf9"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-79aa-7d80-966e-570adb6b797d"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7a19-70e3-a201-cd21a405b91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7c75-710f-ac22-1b1b35639e8e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7cd8-7775-9e2a-b7f2318d47bc"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d39-7053-bf4a-e408102cc417"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7d95-7f39-8310-6f2293669d77"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7e22-7947-ad6f-4442a4cc5ffa"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7ea8-7f6c-ac73-31430facff4a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-7f05-737b-9e26-5929e656674c"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535d-7f65-7495-8452-541b04918084"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fd8c-7acc-8a69-ff7e485d0117"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fe00-7c47-a24d-731125e6c859"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fe7e-7d0e-b563-6ef68f2984ca"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-fefc-71c3-a9ed-cc8f663fa26e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-ff76-7a48-8645-42b56118eac2"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535d-ffee-72be-8bd9-31c7efe73839"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-0065-7dfc-a6dd-31923e5ae91a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-0100-72d4-a4e6-139f65e36a82"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-0343-7588-a585-d5261192c888"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-03a7-73f7-a5ee-fb4598dd77d8"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-040e-7cc6-baf5-0641fb5c03d7"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-046d-7c97-a435-3f1b91823577"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-88bc-7d1e-9163-bcff1c2dee86"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8977-7f0d-bb9d-bf963c22e9c5"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-89ef-7588-b033-4ebe98b99da1"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8a73-7d88-8c2e-f257b8aa3af0"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8c53-752c-83bf-f345cc8401e3"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8cae-70c7-a10c-3722eb21433a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8d81-7929-aeec-2ef1bb79cb33"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8dea-74b3-b4b6-00312ebd5ce1"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8e4b-763a-897c-a8b7e75c5fc5"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": true,
+            "request_id": "01a1535e-8ead-73c5-b5d5-e55c206dcebb"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535e-8f0f-73de-b8e6-3e2879cc5adb"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-0f0d-7581-bc37-aea255c90bea"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-0fae-7c4d-9aa4-64639246641a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-101a-7029-b678-9c0cb236734f"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1072-74ca-b645-3c1f050bce0e"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-10cc-7efd-8b56-488e37f7c97f"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1125-7224-9021-46dc9a22230a"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1178-7417-b115-7539c8be3da9"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-11ca-7d8d-9cb2-3e71751d9a84"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-13b2-72d8-9333-1afc11ed01ab"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1406-7d2c-bb38-7e5054e66ca8"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1456-797d-aa21-b39fbf082373"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-14a7-75f2-ada3-46179b862ec5"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-14ff-7caf-baa0-ec069800c319"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1556-7dc6-accd-bc04df0a8819"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-15b9-71d7-9e8e-2875de2c3959"
+          },
+          {
+            "reason": "NOT_SELECTED_IN_CANDIDATE_POOL",
+            "existing": false,
+            "request_id": "01a1535f-1650-7b08-a9ab-9e04ef841a96"
+          }
+        ],
+        "policy": {
+          "version": "FLEET_TEST_1",
+          "regional": true,
+          "economics": {
+            "version": "SYNTHETIC_SECONDS_1",
+            "waiting_weight": 0,
+            "disruption_seconds": 10,
+            "window_risk_weight": 1,
+            "max_candidate_evaluations": 3000,
+            "additional_vehicle_seconds": 300,
+            "window_risk_buffer_seconds": 300
+          },
+          "max_nodes": 512,
+          "telemetry": {
+            "max_accuracy_m": 30,
+            "max_age_seconds": 3600,
+            "max_speed_m_per_second": 30
+          },
+          "max_profiles": 1,
+          "max_requests": 128,
+          "max_vehicles": 32,
+          "lease_seconds": 3600,
+          "displacement_m": 200,
+          "search_seconds": 1,
+          "horizon_seconds": 14400,
+          "delivery_ack_seconds": 600,
+          "publication_attempts": 3,
+          "planning_lead_seconds": 14400,
+          "pickup_horizon_seconds": null,
+          "destination_divergence_m": 100,
+          "maximum_interval_seconds": 3600,
+          "minimum_interval_seconds": 1,
+          "dispatch_readiness_seconds": 0
+        },
+        "timings": {
+          "worker_seconds": 27.545293715025764,
+          "matrix_build_seconds": 0.3927762929815799,
+          "conflict_selection_seconds": 0.3169661890133284,
+          "snapshot_admission_seconds": 0.49395382299553603,
+          "publication_refresh_seconds": 0.20672734099207446
+        },
+        "assigned": [
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-76ad-7776-9975-6577aa44f5f4",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-773f-7912-ba5b-51311f1176ad",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-779f-7b55-b7dc-84b517d95324",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7802-74c8-83ed-6e45f2f8d846",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7878-7b85-8f51-53d8fbc5342a",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-7908-7eb4-a115-8a80b3b73cf9",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-79aa-7d80-966e-570adb6b797d",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7c75-710f-ac22-1b1b35639e8e",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7cd8-7775-9e2a-b7f2318d47bc",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d39-7053-bf4a-e408102cc417",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7d95-7f39-8310-6f2293669d77",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7e22-7947-ad6f-4442a4cc5ffa",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7ea8-7f6c-ac73-31430facff4a",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-7f05-737b-9e26-5929e656674c",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fd8c-7acc-8a69-ff7e485d0117",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe00-7c47-a24d-731125e6c859",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fe7e-7d0e-b563-6ef68f2984ca",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-fefc-71c3-a9ed-cc8f663fa26e",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ff76-7a48-8645-42b56118eac2",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535d-ffee-72be-8bd9-31c7efe73839",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0065-7dfc-a6dd-31923e5ae91a",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-0343-7588-a585-d5261192c888",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-03a7-73f7-a5ee-fb4598dd77d8",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-040e-7cc6-baf5-0641fb5c03d7",
+          "01a1535e-046d-7c97-a435-3f1b91823577",
+          "01a1535e-046d-7c97-a435-3f1b91823577",
+          "01a1535e-88bc-7d1e-9163-bcff1c2dee86",
+          "01a1535e-88bc-7d1e-9163-bcff1c2dee86",
+          "01a1535e-8977-7f0d-bb9d-bf963c22e9c5",
+          "01a1535e-8977-7f0d-bb9d-bf963c22e9c5",
+          "01a1535e-89ef-7588-b033-4ebe98b99da1",
+          "01a1535e-89ef-7588-b033-4ebe98b99da1",
+          "01a1535e-8c53-752c-83bf-f345cc8401e3",
+          "01a1535e-8c53-752c-83bf-f345cc8401e3",
+          "01a1535e-8cae-70c7-a10c-3722eb21433a",
+          "01a1535e-8cae-70c7-a10c-3722eb21433a",
+          "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0",
+          "01a1535e-8d0b-76ac-a5e5-c75b4bdac1b0",
+          "01a1535e-8d81-7929-aeec-2ef1bb79cb33",
+          "01a1535e-8d81-7929-aeec-2ef1bb79cb33",
+          "01a1535e-8dea-74b3-b4b6-00312ebd5ce1",
+          "01a1535e-8dea-74b3-b4b6-00312ebd5ce1",
+          "01a1535e-8e4b-763a-897c-a8b7e75c5fc5",
+          "01a1535e-8e4b-763a-897c-a8b7e75c5fc5",
+          "01a1535e-8ead-73c5-b5d5-e55c206dcebb",
+          "01a1535e-8ead-73c5-b5d5-e55c206dcebb",
+          "01a1535f-0f0d-7581-bc37-aea255c90bea",
+          "01a1535f-0f0d-7581-bc37-aea255c90bea",
+          "01a1535f-0fae-7c4d-9aa4-64639246641a",
+          "01a1535f-0fae-7c4d-9aa4-64639246641a",
+          "01a1535f-101a-7029-b678-9c0cb236734f",
+          "01a1535f-101a-7029-b678-9c0cb236734f",
+          "01a1535f-1072-74ca-b645-3c1f050bce0e",
+          "01a1535f-1072-74ca-b645-3c1f050bce0e",
+          "01a1535f-10cc-7efd-8b56-488e37f7c97f",
+          "01a1535f-10cc-7efd-8b56-488e37f7c97f",
+          "01a1535f-1125-7224-9021-46dc9a22230a",
+          "01a1535f-1125-7224-9021-46dc9a22230a",
+          "01a1535f-1178-7417-b115-7539c8be3da9",
+          "01a1535f-1178-7417-b115-7539c8be3da9",
+          "01a1535f-13b2-72d8-9333-1afc11ed01ab",
+          "01a1535f-13b2-72d8-9333-1afc11ed01ab",
+          "01a1535f-1406-7d2c-bb38-7e5054e66ca8",
+          "01a1535f-1406-7d2c-bb38-7e5054e66ca8",
+          "01a1535f-1456-797d-aa21-b39fbf082373",
+          "01a1535f-1456-797d-aa21-b39fbf082373",
+          "01a1535f-14a7-75f2-ada3-46179b862ec5",
+          "01a1535f-14a7-75f2-ada3-46179b862ec5",
+          "01a1535f-14ff-7caf-baa0-ec069800c319",
+          "01a1535f-14ff-7caf-baa0-ec069800c319",
+          "01a1535f-1556-7dc6-accd-bc04df0a8819",
+          "01a1535f-1556-7dc6-accd-bc04df0a8819",
+          "01a1535f-15b9-71d7-9e8e-2875de2c3959",
+          "01a1535f-15b9-71d7-9e8e-2875de2c3959"
+        ],
+        "generation": 241,
+        "retry_seconds": 1,
+        "routing_metrics": {
+          "distance_m": 39490,
+          "task_count": 52,
+          "used_riders": 7,
+          "travel_seconds": 5177,
+          "candidate_count": 20,
+          "solver_timeouts": 0,
+          "waiting_seconds": 70633,
+          "selection_bounds": [
+            0.0,
+            49.0,
+            49.0,
+            -5367.0
+          ],
+          "selection_values": [
+            0,
+            49,
+            49,
+            -5367
+          ],
+          "fleet_cost_seconds": 5367,
+          "selection_statuses": [
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL",
+            "OPTIMAL"
+          ],
+          "seed_candidate_count": 164,
+          "occupied_route_seconds": 87570
+        },
+        "worker_failures": 0,
+        "discovery_fingerprint": "febc74e89aeb8742e6a17f2dbb35961f330b962c9559bddeb750355386ad1e30"
+      }
+    }
+  ]
+}

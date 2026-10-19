@@ -1,0 +1,5653 @@
+{
+  "source": "https://download.bbbike.org/osm/bbbike/NewDelhi/NewDelhi.osm.pbf",
+  "source_sha256": "10aa4a42d362a8435b2825220ed448e8c3c45f2a44ce2ac3b487a44a07b9d54b",
+  "osm_timestamp": "2026-10-16T23:00:00Z",
+  "license": "OpenStreetMap contributors, ODbL 1.0",
+  "selection": "public way vertices; deterministic farthest-point dispersion",
+  "regions": {
+    "West": {
+      "bbox": [
+        77.04,
+        28.61,
+        77.14,
+        28.69
+      ],
+      "distribution": "two clusters plus sparse",
+      "nodes": [
+        {
+          "longitude": 77.0865717,
+          "latitude": 28.6637751,
+          "osm_node_id": 350514535
+        },
+        {
+          "longitude": 77.1149753,
+          "latitude": 28.6269445,
+          "osm_node_id": 2347264094
+        },
+        {
+          "longitude": 77.1121156,
+          "latitude": 28.611508,
+          "osm_node_id": 316376894
+        },
+        {
+          "longitude": 77.0725188,
+          "latitude": 28.6521515,
+          "osm_node_id": 4221576998
+        },
+        {
+          "longitude": 77.1274123,
+          "latitude": 28.6370417,
+          "osm_node_id": 6730233317
+        },
+        {
+          "longitude": 77.0406135,
+          "latitude": 28.6896595,
+          "osm_node_id": 9911526786
+        },
+        {
+          "longitude": 77.0722119,
+          "latitude": 28.6678058,
+          "osm_node_id": 4229914136
+        },
+        {
+          "longitude": 77.126552,
+          "latitude": 28.6256223,
+          "osm_node_id": 12101699520
+        },
+        {
+          "longitude": 77.1398863,
+          "latitude": 28.6898651,
+          "osm_node_id": 9570126175
+        },
+        {
+          "longitude": 77.0872354,
+          "latitude": 28.652003,
+          "osm_node_id": 5066781574
+        },
+        {
+          "longitude": 77.1122593,
+          "latitude": 28.6378694,
+          "osm_node_id": 6395746334
+        },
+        {
+          "longitude": 77.040016,
+          "latitude": 28.6134819,
+          "osm_node_id": 9913691899
+        },
+        {
+          "longitude": 77.0798863,
+          "latitude": 28.6575206,
+          "osm_node_id": 6669909560
+        },
+        {
+          "longitude": 77.119761,
+          "latitude": 28.6336568,
+          "osm_node_id": 11622240163
+        },
+        {
+          "longitude": 77.0916476,
+          "latitude": 28.6631383,
+          "osm_node_id": 4233155299
+        },
+        {
+          "longitude": 77.0798699,
+          "latitude": 28.6672998,
+          "osm_node_id": 9909289382
+        },
+        {
+          "longitude": 77.1203622,
+          "latitude": 28.6221006,
+          "osm_node_id": 6734606108
+        },
+        {
+          "longitude": 77.1399479,
+          "latitude": 28.6458655,
+          "osm_node_id": 9865164655
+        },
+        {
+          "longitude": 77.0878107,
+          "latitude": 28.657882,
+          "osm_node_id": 4233154968
+        },
+        {
+          "longitude": 77.1207874,
+          "latitude": 28.6278296,
+          "osm_node_id": 9699805572
+        },
+        {
+          "longitude": 77.0521915,
+          "latitude": 28.6514476,
+          "osm_node_id": 9711380754
+        },
+        {
+          "longitude": 77.0781898,
+          "latitude": 28.6623938,
+          "osm_node_id": 6673232840
+        },
+        {
+          "longitude": 77.126259,
+          "latitude": 28.6313403,
+          "osm_node_id": 11357413788
+        },
+        {
+          "longitude": 77.0763906,
+          "latitude": 28.6223371,
+          "osm_node_id": 3773126922
+        },
+        {
+          "longitude": 77.0750593,
+          "latitude": 28.6563139,
+          "osm_node_id": 2432087779
+        },
+        {
+          "longitude": 77.1123073,
+          "latitude": 28.6321927,
+          "osm_node_id": 11621554769
+        },
+        {
+          "longitude": 77.0731318,
+          "latitude": 28.6899764,
+          "osm_node_id": 4231594562
+        },
+        {
+          "longitude": 77.07351,
+          "latitude": 28.6633207,
+          "osm_node_id": 4229549498
+        },
+        {
+          "longitude": 77.1124256,
+          "latitude": 28.6225903,
+          "osm_node_id": 6726503545
+        },
+        {
+          "longitude": 77.1091775,
+          "latitude": 28.6884015,
+          "osm_node_id": 1825205601
+        },
+        {
+          "longitude": 77.0828757,
+          "latitude": 28.6610475,
+          "osm_node_id": 4233155259
+        },
+        {
+          "longitude": 77.1224752,
+          "latitude": 28.6376082,
+          "osm_node_id": 10258446577
+        },
+        {
+          "longitude": 77.1115112,
+          "latitude": 28.6424959,
+          "osm_node_id": 9602262532
+        },
+        {
+          "longitude": 77.0843676,
+          "latitude": 28.6677679,
+          "osm_node_id": 4233155432
+        },
+        {
+          "longitude": 77.1174273,
+          "latitude": 28.6378139,
+          "osm_node_id": 9873598137
+        },
+        {
+          "longitude": 77.139941,
+          "latitude": 28.6177589,
+          "osm_node_id": 6438181257
+        },
+        {
+          "longitude": 77.0843016,
+          "latitude": 28.6553176,
+          "osm_node_id": 600648473
+        },
+        {
+          "longitude": 77.1162559,
+          "latitude": 28.6308694,
+          "osm_node_id": 6385410392
+        },
+        {
+          "longitude": 77.1234469,
+          "latitude": 28.6663569,
+          "osm_node_id": 10108052267
+        },
+        {
+          "longitude": 77.0759591,
+          "latitude": 28.6666806,
+          "osm_node_id": 4229913974
+        },
+        {
+          "longitude": 77.1164924,
+          "latitude": 28.622949,
+          "osm_node_id": 9699801664
+        },
+        {
+          "longitude": 77.0751407,
+          "latitude": 28.6458975,
+          "osm_node_id": 4231416905
+        },
+        {
+          "longitude": 77.0779185,
+          "latitude": 28.6538529,
+          "osm_node_id": 600648464
+        },
+        {
+          "longitude": 77.1235397,
+          "latitude": 28.6339926,
+          "osm_node_id": 11572002788
+        },
+        {
+          "longitude": 77.0685768,
+          "latitude": 28.6675675,
+          "osm_node_id": 4229914121
+        },
+        {
+          "longitude": 77.0825042,
+          "latitude": 28.6648848,
+          "osm_node_id": 11287950078
+        },
+        {
+          "longitude": 77.1154243,
+          "latitude": 28.6346348,
+          "osm_node_id": 4101041996
+        },
+        {
+          "longitude": 77.0553409,
+          "latitude": 28.6293475,
+          "osm_node_id": 4233634314
+        },
+        {
+          "longitude": 77.0860597,
+          "latitude": 28.6607385,
+          "osm_node_id": 4233155245
+        },
+        {
+          "longitude": 77.1232335,
+          "latitude": 28.624382,
+          "osm_node_id": 7211608725
+        },
+        {
+          "longitude": 77.0971582,
+          "latitude": 28.6266458,
+          "osm_node_id": 6735093301
+        },
+        {
+          "longitude": 77.0721652,
+          "latitude": 28.6553049,
+          "osm_node_id": 2431986444
+        },
+        {
+          "longitude": 77.1226445,
+          "latitude": 28.6306844,
+          "osm_node_id": 11622136374
+        },
+        {
+          "longitude": 77.0419049,
+          "latitude": 28.6691476,
+          "osm_node_id": 9901210422
+        },
+        {
+          "longitude": 77.083227,
+          "latitude": 28.6580867,
+          "osm_node_id": 6648624045
+        },
+        {
+          "longitude": 77.1241131,
+          "latitude": 28.6278194,
+          "osm_node_id": 6737847153
+        },
+        {
+          "longitude": 77.0604609,
+          "latitude": 28.6102194,
+          "osm_node_id": 12114784776
+        },
+        {
+          "longitude": 77.0873142,
+          "latitude": 28.6679929,
+          "osm_node_id": 12151256886
+        },
+        {
+          "longitude": 77.1192545,
+          "latitude": 28.6303961,
+          "osm_node_id": 12105529896
+        },
+        {
+          "longitude": 77.0913626,
+          "latitude": 28.6839951,
+          "osm_node_id": 9901231388
+        },
+        {
+          "longitude": 77.081099,
+          "latitude": 28.6550641,
+          "osm_node_id": 600648469
+        },
+        {
+          "longitude": 77.1179509,
+          "latitude": 28.6272061,
+          "osm_node_id": 7227339367
+        },
+        {
+          "longitude": 77.0934143,
+          "latitude": 28.6450173,
+          "osm_node_id": 6386259558
+        },
+        {
+          "longitude": 77.0781233,
+          "latitude": 28.6650974,
+          "osm_node_id": 10274953206
+        },
+        {
+          "longitude": 77.1122874,
+          "latitude": 28.625478,
+          "osm_node_id": 7227263498
+        },
+        {
+          "longitude": 77.0897881,
+          "latitude": 28.6100408,
+          "osm_node_id": 4230177931
+        },
+        {
+          "longitude": 77.0800996,
+          "latitude": 28.6605196,
+          "osm_node_id": 9803135542
+        },
+        {
+          "longitude": 77.1137,
+          "latitude": 28.6296014,
+          "osm_node_id": 9699801683
+        },
+        {
+          "longitude": 77.1283594,
+          "latitude": 28.6315963,
+          "osm_node_id": 9568046163
+        },
+        {
+          "longitude": 77.0745166,
+          "latitude": 28.6538054,
+          "osm_node_id": 6669909583
+        },
+        {
+          "longitude": 77.1120343,
+          "latitude": 28.6350363,
+          "osm_node_id": 9872249906
+        },
+        {
+          "longitude": 77.0566774,
+          "latitude": 28.6810871,
+          "osm_node_id": 4231693202
+        },
+        {
+          "longitude": 77.0875422,
+          "latitude": 28.6543552,
+          "osm_node_id": 600648475
+        },
+        {
+          "longitude": 77.119252,
+          "latitude": 28.6247008,
+          "osm_node_id": 6385409974
+        },
+        {
+          "longitude": 77.0400205,
+          "latitude": 28.6385707,
+          "osm_node_id": 9916639942
+        },
+        {
+          "longitude": 77.0738412,
+          "latitude": 28.665636,
+          "osm_node_id": 4229631695
+        },
+        {
+          "longitude": 77.1271965,
+          "latitude": 28.6339945,
+          "osm_node_id": 4101041373
+        },
+        {
+          "longitude": 77.1397618,
+          "latitude": 28.672524,
+          "osm_node_id": 4235054541
+        },
+        {
+          "longitude": 77.077558,
+          "latitude": 28.6573727,
+          "osm_node_id": 6673232854
+        },
+        {
+          "longitude": 77.1274712,
+          "latitude": 28.6281196,
+          "osm_node_id": 11357427733
+        },
+        {
+          "longitude": 77.1060223,
+          "latitude": 28.6716458,
+          "osm_node_id": 600648528
+        },
+        {
+          "longitude": 77.0855389,
+          "latitude": 28.6576542,
+          "osm_node_id": 9909510936
+        },
+        {
+          "longitude": 77.1199894,
+          "latitude": 28.6362875,
+          "osm_node_id": 6438475035
+        },
+        {
+          "longitude": 77.1247393,
+          "latitude": 28.6847235,
+          "osm_node_id": 1826143816
+        },
+        {
+          "longitude": 77.0800739,
+          "latitude": 28.6640096,
+          "osm_node_id": 9909289371
+        },
+        {
+          "longitude": 77.1148302,
+          "latitude": 28.6373717,
+          "osm_node_id": 6738054879
+        },
+        {
+          "longitude": 77.1249848,
+          "latitude": 28.6507509,
+          "osm_node_id": 1825530389
+        },
+        {
+          "longitude": 77.0821814,
+          "latitude": 28.6670104,
+          "osm_node_id": 4233155414
+        },
+        {
+          "longitude": 77.1145441,
+          "latitude": 28.6244233,
+          "osm_node_id": 9699816474
+        },
+        {
+          "longitude": 77.1049784,
+          "latitude": 28.656018,
+          "osm_node_id": 4233874876
+        },
+        {
+          "longitude": 77.0756239,
+          "latitude": 28.6644972,
+          "osm_node_id": 3735782160
+        },
+        {
+          "longitude": 77.1251249,
+          "latitude": 28.6363377,
+          "osm_node_id": 6730233313
+        },
+        {
+          "longitude": 77.1119321,
+          "latitude": 28.6269959,
+          "osm_node_id": 9699816423
+        },
+        {
+          "longitude": 77.0845079,
+          "latitude": 28.6652767,
+          "osm_node_id": 3238990115
+        },
+        {
+          "longitude": 77.1176371,
+          "latitude": 28.6354658,
+          "osm_node_id": 4101041887
+        },
+        {
+          "longitude": 77.0842554,
+          "latitude": 28.6341567,
+          "osm_node_id": 3739133464
+        },
+        {
+          "longitude": 77.0759276,
+          "latitude": 28.6523572,
+          "osm_node_id": 600648461
+        },
+        {
+          "longitude": 77.1168687,
+          "latitude": 28.6251257,
+          "osm_node_id": 9624530183
+        },
+        {
+          "longitude": 77.0809762,
+          "latitude": 28.6743226,
+          "osm_node_id": 4233042099
+        },
+        {
+          "longitude": 77.0869811,
+          "latitude": 28.6660082,
+          "osm_node_id": 11668872666
+        },
+        {
+          "longitude": 77.1174276,
+          "latitude": 28.633362,
+          "osm_node_id": 11622025346
+        },
+        {
+          "longitude": 77.1362409,
+          "latitude": 28.6591553,
+          "osm_node_id": 6737950095
+        },
+        {
+          "longitude": 77.0779672,
+          "latitude": 28.6679409,
+          "osm_node_id": 9909262076
+        },
+        {
+          "longitude": 77.1219434,
+          "latitude": 28.6260254,
+          "osm_node_id": 6731739828
+        },
+        {
+          "longitude": 77.055013,
+          "latitude": 28.6647683,
+          "osm_node_id": 4229549783
+        },
+        {
+          "longitude": 77.0843949,
+          "latitude": 28.6597224,
+          "osm_node_id": 9909537956
+        },
+        {
+          "longitude": 77.1163711,
+          "latitude": 28.6285468,
+          "osm_node_id": 6385410389
+        },
+        {
+          "longitude": 77.0687904,
+          "latitude": 28.6335003,
+          "osm_node_id": 694018784
+        },
+        {
+          "longitude": 77.0767374,
+          "latitude": 28.6553729,
+          "osm_node_id": 6669909575
+        },
+        {
+          "longitude": 77.1217254,
+          "latitude": 28.6352042,
+          "osm_node_id": 10255025843
+        },
+        {
+          "longitude": 77.0652719,
+          "latitude": 28.6546273,
+          "osm_node_id": 4229473166
+        },
+        {
+          "longitude": 77.0745407,
+          "latitude": 28.6679297,
+          "osm_node_id": 4229914124
+        },
+        {
+          "longitude": 77.1279274,
+          "latitude": 28.6302278,
+          "osm_node_id": 6438009831
+        },
+        {
+          "longitude": 77.0400535,
+          "latitude": 28.6556183,
+          "osm_node_id": 9901041898
+        },
+        {
+          "longitude": 77.0821998,
+          "latitude": 28.6630267,
+          "osm_node_id": 11027287621
+        },
+        {
+          "longitude": 77.1212822,
+          "latitude": 28.6321408,
+          "osm_node_id": 6731709150
+        },
+        {
+          "longitude": 77.0735961,
+          "latitude": 28.6100232,
+          "osm_node_id": 6396174490
+        },
+        {
+          "longitude": 77.0721671,
+          "latitude": 28.6648288,
+          "osm_node_id": 9803123298
+        },
+        {
+          "longitude": 77.1147551,
+          "latitude": 28.6220005,
+          "osm_node_id": 6728981822
+        },
+        {
+          "longitude": 77.0418199,
+          "latitude": 28.626078,
+          "osm_node_id": 4233701191
+        },
+        {
+          "longitude": 77.0878401,
+          "latitude": 28.6611309,
+          "osm_node_id": 9803031606
+        },
+        {
+          "longitude": 77.1238035,
+          "latitude": 28.6225079,
+          "osm_node_id": 6728922165
+        },
+        {
+          "longitude": 77.0589241,
+          "latitude": 28.6410789,
+          "osm_node_id": 4235036141
+        },
+        {
+          "longitude": 77.0847916,
+          "latitude": 28.6634938,
+          "osm_node_id": 9909289330
+        },
+        {
+          "longitude": 77.1252985,
+          "latitude": 28.6331474,
+          "osm_node_id": 11571979225
+        },
+        {
+          "longitude": 77.0511967,
+          "latitude": 28.61801,
+          "osm_node_id": 4233121475
+        },
+        {
+          "longitude": 77.0809886,
+          "latitude": 28.6656718,
+          "osm_node_id": 4233155366
+        },
+        {
+          "longitude": 77.1245009,
+          "latitude": 28.6259076,
+          "osm_node_id": 7211608733
+        },
+        {
+          "longitude": 77.122586,
+          "latitude": 28.6211286,
+          "osm_node_id": 13997218982
+        },
+        {
+          "longitude": 77.0822205,
+          "latitude": 28.6594803,
+          "osm_node_id": 3739156778
+        },
+        {
+          "longitude": 77.1182819,
+          "latitude": 28.622217,
+          "osm_node_id": 9699768488
+        },
+        {
+          "longitude": 77.0644796,
+          "latitude": 28.621606,
+          "osm_node_id": 4231760432
+        },
+        {
+          "longitude": 77.0807996,
+          "latitude": 28.6620807,
+          "osm_node_id": 6648522339
+        },
+        {
+          "longitude": 77.1141249,
+          "latitude": 28.6332661,
+          "osm_node_id": 10536378823
+        },
+        {
+          "longitude": 77.1399503,
+          "latitude": 28.6337635,
+          "osm_node_id": 6734500036
+        },
+        {
+          "longitude": 77.0844175,
+          "latitude": 28.6616149,
+          "osm_node_id": 9909508478
+        },
+        {
+          "longitude": 77.1245022,
+          "latitude": 28.6308422,
+          "osm_node_id": 6438217023
+        },
+        {
+          "longitude": 77.0683487,
+          "latitude": 28.6791857,
+          "osm_node_id": 4230127734
+        },
+        {
+          "longitude": 77.0724614,
+          "latitude": 28.6537465,
+          "osm_node_id": 4229473110
+        },
+        {
+          "longitude": 77.1134919,
+          "latitude": 28.6361029,
+          "osm_node_id": 10255270848
+        },
+        {
+          "longitude": 77.1014732,
+          "latitude": 28.6370839,
+          "osm_node_id": 10254980123
+        },
+        {
+          "longitude": 77.0827898,
+          "latitude": 28.6555871,
+          "osm_node_id": 9909262070
+        },
+        {
+          "longitude": 77.1222518,
+          "latitude": 28.6288282,
+          "osm_node_id": 9859723108
+        },
+        {
+          "longitude": 77.1170959,
+          "latitude": 28.6764781,
+          "osm_node_id": 10274883456
+        },
+        {
+          "longitude": 77.0793136,
+          "latitude": 28.65449,
+          "osm_node_id": 9909262074
+        },
+        {
+          "longitude": 77.1242129,
+          "latitude": 28.6378697,
+          "osm_node_id": 2432087732
+        },
+        {
+          "longitude": 77.1160302,
+          "latitude": 28.657885,
+          "osm_node_id": 4233875129
+        },
+        {
+          "longitude": 77.0795605,
+          "latitude": 28.6591199,
+          "osm_node_id": 6673232852
+        },
+        {
+          "longitude": 77.1189976,
+          "latitude": 28.6285961,
+          "osm_node_id": 9699805569
+        },
+        {
+          "longitude": 77.087451,
+          "latitude": 28.6211313,
+          "osm_node_id": 9916279933
+        },
+        {
+          "longitude": 77.0786874,
+          "latitude": 28.6563956,
+          "osm_node_id": 6669909566
+        },
+        {
+          "longitude": 77.1176899,
+          "latitude": 28.6297068,
+          "osm_node_id": 14237813721
+        },
+        {
+          "longitude": 77.1222814,
+          "latitude": 28.6402769,
+          "osm_node_id": 9865436976
+        },
+        {
+          "longitude": 77.0857511,
+          "latitude": 28.6591249,
+          "osm_node_id": 9909510927
+        },
+        {
+          "longitude": 77.116097,
+          "latitude": 28.636242,
+          "osm_node_id": 10255391614
+        },
+        {
+          "longitude": 77.1292453,
+          "latitude": 28.6752594,
+          "osm_node_id": 12094924592
+        },
+        {
+          "longitude": 77.0736163,
+          "latitude": 28.6555757,
+          "osm_node_id": 2432087776
+        },
+        {
+          "longitude": 77.1210351,
+          "latitude": 28.630154,
+          "osm_node_id": 12105595121
+        },
+        {
+          "longitude": 77.0464814,
+          "latitude": 28.6786961,
+          "osm_node_id": 4231693094
+        },
+        {
+          "longitude": 77.0775062,
+          "latitude": 28.663783,
+          "osm_node_id": 6673232835
+        },
+        {
+          "longitude": 77.1209976,
+          "latitude": 28.623653,
+          "osm_node_id": 9699780581
+        },
+        {
+          "longitude": 77.0510671,
+          "latitude": 28.6899612,
+          "osm_node_id": 9803076303
+        },
+        {
+          "longitude": 77.0875014,
+          "latitude": 28.6592405,
+          "osm_node_id": 11288074277
+        },
+        {
+          "longitude": 77.1278968,
+          "latitude": 28.6318978,
+          "osm_node_id": 9568046159
+        },
+        {
+          "longitude": 77.1014205,
+          "latitude": 28.6810344,
+          "osm_node_id": 9849814847
+        },
+        {
+          "longitude": 77.0774114,
+          "latitude": 28.6666727,
+          "osm_node_id": 4229913968
+        },
+        {
+          "longitude": 77.1234796,
+          "latitude": 28.6360837,
+          "osm_node_id": 10248730508
+        },
+        {
+          "longitude": 77.0913212,
+          "latitude": 28.6735391,
+          "osm_node_id": 4233041377
+        },
+        {
+          "longitude": 77.0765318,
+          "latitude": 28.6679223,
+          "osm_node_id": 4229914145
+        },
+        {
+          "longitude": 77.1154217,
+          "latitude": 28.6322795,
+          "osm_node_id": 11622028592
+        },
+        {
+          "longitude": 77.1044415,
+          "latitude": 28.6194568,
+          "osm_node_id": 316376910
+        },
+        {
+          "longitude": 77.0721222,
+          "latitude": 28.6634703,
+          "osm_node_id": 4229549522
+        },
+        {
+          "longitude": 77.1196823,
+          "latitude": 28.6320476,
+          "osm_node_id": 6438357793
+        },
+        {
+          "longitude": 77.0614576,
+          "latitude": 28.689894,
+          "osm_node_id": 4231594545
+        },
+        {
+          "longitude": 77.0863715,
+          "latitude": 28.6624381,
+          "osm_node_id": 4233155287
+        },
+        {
+          "longitude": 77.1261897,
+          "latitude": 28.629747,
+          "osm_node_id": 9568046157
+        },
+        {
+          "longitude": 77.0831488,
+          "latitude": 28.6898406,
+          "osm_node_id": 1826185186
+        },
+        {
+          "longitude": 77.0789489,
+          "latitude": 28.661184,
+          "osm_node_id": 6673232845
+        },
+        {
+          "longitude": 77.112726,
+          "latitude": 28.6269833,
+          "osm_node_id": 9699816433
+        },
+        {
+          "longitude": 77.1330802,
+          "latitude": 28.6105679,
+          "osm_node_id": 10593500108
+        },
+        {
+          "longitude": 77.0860697,
+          "latitude": 28.6675349,
+          "osm_node_id": 4233155426
+        },
+        {
+          "longitude": 77.1219444,
+          "latitude": 28.6336564,
+          "osm_node_id": 9865408782
+        },
+        {
+          "longitude": 77.0881987,
+          "latitude": 28.653875,
+          "osm_node_id": 5066780813
+        },
+        {
+          "longitude": 77.086302,
+          "latitude": 28.6547778,
+          "osm_node_id": 600648474
+        },
+        {
+          "longitude": 77.1198643,
+          "latitude": 28.6378226,
+          "osm_node_id": 9873598153
+        },
+        {
+          "longitude": 77.0490978,
+          "latitude": 28.6420047,
+          "osm_node_id": 4235194872
+        },
+        {
+          "longitude": 77.0768186,
+          "latitude": 28.6651228,
+          "osm_node_id": 9909262090
+        },
+        {
+          "longitude": 77.1277946,
+          "latitude": 28.6353776,
+          "osm_node_id": 4101041878
+        },
+        {
+          "longitude": 77.1029801,
+          "latitude": 28.6466987,
+          "osm_node_id": 10248479160
+        },
+        {
+          "longitude": 77.0731467,
+          "latitude": 28.6667101,
+          "osm_node_id": 4229914000
+        },
+        {
+          "longitude": 77.1204589,
+          "latitude": 28.6260908,
+          "osm_node_id": 9857645721
+        },
+        {
+          "longitude": 77.1316463,
+          "latitude": 28.641407,
+          "osm_node_id": 2954561533
+        },
+        {
+          "longitude": 77.0815883,
+          "latitude": 28.6610782,
+          "osm_node_id": 9909537939
+        },
+        {
+          "longitude": 77.1259908,
+          "latitude": 28.6282136,
+          "osm_node_id": 6225764847
+        },
+        {
+          "longitude": 77.0988789,
+          "latitude": 28.6120302,
+          "osm_node_id": 427834048
+        },
+        {
+          "longitude": 77.0830173,
+          "latitude": 28.6679564,
+          "osm_node_id": 4233155436
+        },
+        {
+          "longitude": 77.1131806,
+          "latitude": 28.6309976,
+          "osm_node_id": 6225764829
+        },
+        {
+          "longitude": 77.1365522,
+          "latitude": 28.681208,
+          "osm_node_id": 1826143201
+        },
+        {
+          "longitude": 77.0819637,
+          "latitude": 28.6582479,
+          "osm_node_id": 9909510951
+        },
+        {
+          "longitude": 77.1142012,
+          "latitude": 28.6282219,
+          "osm_node_id": 6385409965
+        },
+        {
+          "longitude": 77.1142762,
+          "latitude": 28.6669625,
+          "osm_node_id": 4233875329
+        },
+        {
+          "longitude": 77.0734767,
+          "latitude": 28.6529624,
+          "osm_node_id": 4229472941
+        },
+        {
+          "longitude": 77.1127472,
+          "latitude": 28.6337456,
+          "osm_node_id": 10254999748
+        },
+        {
+          "longitude": 77.0611977,
+          "latitude": 28.6730435,
+          "osm_node_id": 9918295031
+        },
+        {
+          "longitude": 77.0754822,
+          "latitude": 28.6546033,
+          "osm_node_id": 6669909579
+        },
+        {
+          "longitude": 77.1137452,
+          "latitude": 28.6231924,
+          "osm_node_id": 6726503549
+        },
+        {
+          "longitude": 77.0842374,
+          "latitude": 28.6453178,
+          "osm_node_id": 6408651590
+        },
+        {
+          "longitude": 77.0797281,
+          "latitude": 28.6652076,
+          "osm_node_id": 9579880935
+        },
+        {
+          "longitude": 77.116347,
+          "latitude": 28.6265291,
+          "osm_node_id": 6385410387
+        },
+        {
+          "longitude": 77.0992848,
+          "latitude": 28.6898616,
+          "osm_node_id": 1825205710
+        },
+        {
+          "longitude": 77.07905,
+          "latitude": 28.6663632,
+          "osm_node_id": 4233155396
+        },
+        {
+          "longitude": 77.1191115,
+          "latitude": 28.6352032,
+          "osm_node_id": 6755706462
+        },
+        {
+          "longitude": 77.1339786,
+          "latitude": 28.6245696,
+          "osm_node_id": 6622490397
+        },
+        {
+          "longitude": 77.0837945,
+          "latitude": 28.664236,
+          "osm_node_id": 4233155329
+        },
+        {
+          "longitude": 77.1223222,
+          "latitude": 28.627368,
+          "osm_node_id": 6737847154
+        },
+        {
+          "longitude": 77.0817976,
+          "latitude": 28.614059,
+          "osm_node_id": 9570172938
+        },
+        {
+          "longitude": 77.0745142,
+          "latitude": 28.666695,
+          "osm_node_id": 4229913988
+        },
+        {
+          "longitude": 77.1226716,
+          "latitude": 28.6321182,
+          "osm_node_id": 6726192812
+        },
+        {
+          "longitude": 77.1004863,
+          "latitude": 28.6642315,
+          "osm_node_id": 4233155326
+        },
+        {
+          "longitude": 77.0877165,
+          "latitude": 28.6531596,
+          "osm_node_id": 6734432431
+        },
+        {
+          "longitude": 77.1257599,
+          "latitude": 28.6375718,
+          "osm_node_id": 6730233315
+        },
+        {
+          "longitude": 77.0471533,
+          "latitude": 28.6331965,
+          "osm_node_id": 9916365583
+        },
+        {
+          "longitude": 77.0788751,
+          "latitude": 28.6641542,
+          "osm_node_id": 9579880924
+        },
+        {
+          "longitude": 77.1186196,
+          "latitude": 28.6365084,
+          "osm_node_id": 10255274527
+        },
+        {
+          "longitude": 77.0470333,
+          "latitude": 28.6610649,
+          "osm_node_id": 9901137305
+        },
+        {
+          "longitude": 77.07514,
+          "latitude": 28.6655974,
+          "osm_node_id": 4229631690
+        },
+        {
+          "longitude": 77.1195553,
+          "latitude": 28.6271939,
+          "osm_node_id": 9699805579
+        },
+        {
+          "longitude": 77.093001,
+          "latitude": 28.6343778,
+          "osm_node_id": 9699752247
+        },
+        {
+          "longitude": 77.0733223,
+          "latitude": 28.6645281,
+          "osm_node_id": 4229549747
+        },
+        {
+          "longitude": 77.113594,
+          "latitude": 28.6259176,
+          "osm_node_id": 6385409979
+        },
+        {
+          "longitude": 77.1323248,
+          "latitude": 28.6669126,
+          "osm_node_id": 2507927282
+        },
+        {
+          "longitude": 77.0840843,
+          "latitude": 28.657278,
+          "osm_node_id": 9909510940
+        },
+        {
+          "longitude": 77.112635,
+          "latitude": 28.6241548,
+          "osm_node_id": 7248131955
+        },
+        {
+          "longitude": 77.04199,
+          "latitude": 28.6471498,
+          "osm_node_id": 4235336449
+        },
+        {
+          "longitude": 77.080719,
+          "latitude": 28.6593358,
+          "osm_node_id": 12096801019
+        },
+        {
+          "longitude": 77.1267659,
+          "latitude": 28.6269656,
+          "osm_node_id": 11357417279
+        },
+        {
+          "longitude": 77.0660947,
+          "latitude": 28.6460131,
+          "osm_node_id": 4235036333
+        },
+        {
+          "longitude": 77.0769212,
+          "latitude": 28.6532421,
+          "osm_node_id": 600648463
+        },
+        {
+          "longitude": 77.1237107,
+          "latitude": 28.6297509,
+          "osm_node_id": 2431986297
+        },
+        {
+          "longitude": 77.0966755,
+          "latitude": 28.6532876,
+          "osm_node_id": 4233312198
+        },
+        {
+          "longitude": 77.0856504,
+          "latitude": 28.6651288,
+          "osm_node_id": 3238990118
+        },
+        {
+          "longitude": 77.1245746,
+          "latitude": 28.6243714,
+          "osm_node_id": 7211608728
+        },
+        {
+          "longitude": 77.1178586,
+          "latitude": 28.6897062,
+          "osm_node_id": 11052780632
+        },
+        {
+          "longitude": 77.0765003,
+          "latitude": 28.6569168,
+          "osm_node_id": 9909486209
+        },
+        {
+          "longitude": 77.1160995,
+          "latitude": 28.6378324,
+          "osm_node_id": 6738054871
+        },
+        {
+          "longitude": 77.1164247,
+          "latitude": 28.6494558,
+          "osm_node_id": 6395873504
+        },
+        {
+          "longitude": 77.0744547,
+          "latitude": 28.6645129,
+          "osm_node_id": 4229631630
+        },
+        {
+          "longitude": 77.1136509,
+          "latitude": 28.6347858,
+          "osm_node_id": 9873552251
+        },
+        {
+          "longitude": 77.1333997,
+          "latitude": 28.6512527,
+          "osm_node_id": 11576049460
+        },
+        {
+          "longitude": 77.0793061,
+          "latitude": 28.6622645,
+          "osm_node_id": 1645533946
+        },
+        {
+          "longitude": 77.1213449,
+          "latitude": 28.6364666,
+          "osm_node_id": 10248637251
+        },
+        {
+          "longitude": 77.0765514,
+          "latitude": 28.6376256,
+          "osm_node_id": 10264225763
+        },
+        {
+          "longitude": 77.0808697,
+          "latitude": 28.6667831,
+          "osm_node_id": 9909289380
+        },
+        {
+          "longitude": 77.1234355,
+          "latitude": 28.6266286,
+          "osm_node_id": 11978346418
+        },
+        {
+          "longitude": 77.1312252,
+          "latitude": 28.6899341,
+          "osm_node_id": 9855363957
+        },
+        {
+          "longitude": 77.0832856,
+          "latitude": 28.6598015,
+          "osm_node_id": 9909508490
+        },
+        {
+          "longitude": 77.1193015,
+          "latitude": 28.6234177,
+          "osm_node_id": 9699768487
+        },
+        {
+          "longitude": 77.1280819,
+          "latitude": 28.6584599,
+          "osm_node_id": 6734266767
+        },
+        {
+          "longitude": 77.0745249,
+          "latitude": 28.6527352,
+          "osm_node_id": 9903324744
+        },
+        {
+          "longitude": 77.1149549,
+          "latitude": 28.6256298,
+          "osm_node_id": 7227248601
+        },
+        {
+          "longitude": 77.0487313,
+          "latitude": 28.6102565,
+          "osm_node_id": 9708750864
+        },
+        {
+          "longitude": 77.0867959,
+          "latitude": 28.6649578,
+          "osm_node_id": 4233155346
+        },
+        {
+          "longitude": 77.1211212,
+          "latitude": 28.6378214,
+          "osm_node_id": 6438792625
+        },
+        {
+          "longitude": 77.109274,
+          "latitude": 28.6346825,
+          "osm_node_id": 6395746323
+        },
+        {
+          "longitude": 77.0820105,
+          "latitude": 28.665955,
+          "osm_node_id": 4233155378
+        },
+        {
+          "longitude": 77.1183992,
+          "latitude": 28.6341452,
+          "osm_node_id": 9872228159
+        },
+        {
+          "longitude": 77.076074,
+          "latitude": 28.6814982,
+          "osm_node_id": 9920299286
+        },
+        {
+          "longitude": 77.087184,
+          "latitude": 28.6570267,
+          "osm_node_id": 3780715277
+        },
+        {
+          "longitude": 77.1161972,
+          "latitude": 28.633655,
+          "osm_node_id": 10255386605
+        },
+        {
+          "longitude": 77.1142226,
+          "latitude": 28.6192564,
+          "osm_node_id": 6385244261
+        },
+        {
+          "longitude": 77.0838909,
+          "latitude": 28.6606227,
+          "osm_node_id": 9909508513
+        },
+        {
+          "longitude": 77.1122805,
+          "latitude": 28.6366402,
+          "osm_node_id": 11572061795
+        },
+        {
+          "longitude": 77.0625716,
+          "latitude": 28.662076,
+          "osm_node_id": 4229549253
+        },
+        {
+          "longitude": 77.0851018,
+          "latitude": 28.6604251,
+          "osm_node_id": 4233155232
+        },
+        {
+          "longitude": 77.1156181,
+          "latitude": 28.6238056,
+          "osm_node_id": 9699816470
+        },
+        {
+          "longitude": 77.0533589,
+          "latitude": 28.6724271,
+          "osm_node_id": 6393508316
+        },
+        {
+          "longitude": 77.084222,
+          "latitude": 28.6582443,
+          "osm_node_id": 9909510932
+        },
+        {
+          "longitude": 77.1207789,
+          "latitude": 28.6343351,
+          "osm_node_id": 10255176354
+        },
+        {
+          "longitude": 77.0950132,
+          "latitude": 28.61909,
+          "osm_node_id": 427834030
+        },
+        {
+          "longitude": 77.0823843,
+          "latitude": 28.6618731,
+          "osm_node_id": 11027278048
+        }
+      ]
+    },
+    "North": {
+      "bbox": [
+        77.17,
+        28.72,
+        77.23,
+        28.78
+      ],
+      "distribution": "clustered",
+      "nodes": [
+        {
+          "longitude": 77.1981563,
+          "latitude": 28.7455161,
+          "osm_node_id": 9736307591
+        },
+        {
+          "longitude": 77.2179443,
+          "latitude": 28.7433005,
+          "osm_node_id": 10706201541
+        },
+        {
+          "longitude": 77.2065339,
+          "latitude": 28.7319383,
+          "osm_node_id": 9849672451
+        },
+        {
+          "longitude": 77.183315,
+          "latitude": 28.7401547,
+          "osm_node_id": 6197358247
+        },
+        {
+          "longitude": 77.1930024,
+          "latitude": 28.7348144,
+          "osm_node_id": 6197358246
+        },
+        {
+          "longitude": 77.2088613,
+          "latitude": 28.7404389,
+          "osm_node_id": 9835318105
+        },
+        {
+          "longitude": 77.200954,
+          "latitude": 28.737907,
+          "osm_node_id": 9660044422
+        },
+        {
+          "longitude": 77.1984576,
+          "latitude": 28.730743,
+          "osm_node_id": 9828147869
+        },
+        {
+          "longitude": 77.1894188,
+          "latitude": 28.7397463,
+          "osm_node_id": 9851270847
+        },
+        {
+          "longitude": 77.1879524,
+          "latitude": 28.7351525,
+          "osm_node_id": 9742684357
+        },
+        {
+          "longitude": 77.2058035,
+          "latitude": 28.7367366,
+          "osm_node_id": 9849953115
+        },
+        {
+          "longitude": 77.1957189,
+          "latitude": 28.7385241,
+          "osm_node_id": 5725170141
+        },
+        {
+          "longitude": 77.2138464,
+          "latitude": 28.7421661,
+          "osm_node_id": 4231798600
+        },
+        {
+          "longitude": 77.2096327,
+          "latitude": 28.7349191,
+          "osm_node_id": 9849754336
+        },
+        {
+          "longitude": 77.1980421,
+          "latitude": 28.7350001,
+          "osm_node_id": 11270889534
+        },
+        {
+          "longitude": 77.1978051,
+          "latitude": 28.741645,
+          "osm_node_id": 5725191071
+        },
+        {
+          "longitude": 77.211792,
+          "latitude": 28.7383489,
+          "osm_node_id": 9803636673
+        },
+        {
+          "longitude": 77.2039356,
+          "latitude": 28.7398453,
+          "osm_node_id": 6197323326
+        },
+        {
+          "longitude": 77.2031089,
+          "latitude": 28.7310486,
+          "osm_node_id": 4231798738
+        },
+        {
+          "longitude": 77.1860459,
+          "latitude": 28.7380376,
+          "osm_node_id": 9835713816
+        },
+        {
+          "longitude": 77.1927701,
+          "latitude": 28.7403355,
+          "osm_node_id": 6195140557
+        },
+        {
+          "longitude": 77.2020138,
+          "latitude": 28.7348302,
+          "osm_node_id": 3738879530
+        },
+        {
+          "longitude": 77.1906861,
+          "latitude": 28.7368605,
+          "osm_node_id": 9725938513
+        },
+        {
+          "longitude": 77.1904213,
+          "latitude": 28.7333402,
+          "osm_node_id": 11505236302
+        },
+        {
+          "longitude": 77.2089448,
+          "latitude": 28.7377104,
+          "osm_node_id": 9849614502
+        },
+        {
+          "longitude": 77.1982475,
+          "latitude": 28.737736,
+          "osm_node_id": 9850116192
+        },
+        {
+          "longitude": 77.1931574,
+          "latitude": 28.7377644,
+          "osm_node_id": 6649451060
+        },
+        {
+          "longitude": 77.1955474,
+          "latitude": 28.7359369,
+          "osm_node_id": 9851199316
+        },
+        {
+          "longitude": 77.2069196,
+          "latitude": 28.7344298,
+          "osm_node_id": 4231826081
+        },
+        {
+          "longitude": 77.2033358,
+          "latitude": 28.7370567,
+          "osm_node_id": 9849993755
+        },
+        {
+          "longitude": 77.211788,
+          "latitude": 28.7408688,
+          "osm_node_id": 9803419348
+        },
+        {
+          "longitude": 77.1883078,
+          "latitude": 28.73769,
+          "osm_node_id": 9851951751
+        },
+        {
+          "longitude": 77.2088963,
+          "latitude": 28.7328489,
+          "osm_node_id": 9849649624
+        },
+        {
+          "longitude": 77.2000535,
+          "latitude": 28.7356775,
+          "osm_node_id": 11270889515
+        },
+        {
+          "longitude": 77.1980364,
+          "latitude": 28.7329094,
+          "osm_node_id": 12245169388
+        },
+        {
+          "longitude": 77.2070241,
+          "latitude": 28.7382866,
+          "osm_node_id": 9850367221
+        },
+        {
+          "longitude": 77.1976021,
+          "latitude": 28.7395983,
+          "osm_node_id": 1801365470
+        },
+        {
+          "longitude": 77.2080228,
+          "latitude": 28.736103,
+          "osm_node_id": 9849993731
+        },
+        {
+          "longitude": 77.1979652,
+          "latitude": 28.7434433,
+          "osm_node_id": 6197319653
+        },
+        {
+          "longitude": 77.1864572,
+          "latitude": 28.7362957,
+          "osm_node_id": 9837884923
+        },
+        {
+          "longitude": 77.2048723,
+          "latitude": 28.7382144,
+          "osm_node_id": 9850060691
+        },
+        {
+          "longitude": 77.1896839,
+          "latitude": 28.7351586,
+          "osm_node_id": 9837787912
+        },
+        {
+          "longitude": 77.204665,
+          "latitude": 28.7317729,
+          "osm_node_id": 4231798771
+        },
+        {
+          "longitude": 77.2162457,
+          "latitude": 28.7430591,
+          "osm_node_id": 9803515801
+        },
+        {
+          "longitude": 77.2071693,
+          "latitude": 28.7401771,
+          "osm_node_id": 3738876268
+        },
+        {
+          "longitude": 77.1918156,
+          "latitude": 28.7389736,
+          "osm_node_id": 9851161742
+        },
+        {
+          "longitude": 77.1912802,
+          "latitude": 28.7348722,
+          "osm_node_id": 9851972049
+        },
+        {
+          "longitude": 77.1922528,
+          "latitude": 28.7364236,
+          "osm_node_id": 9851972065
+        },
+        {
+          "longitude": 77.1965093,
+          "latitude": 28.734629,
+          "osm_node_id": 9651353162
+        },
+        {
+          "longitude": 77.1972972,
+          "latitude": 28.7365357,
+          "osm_node_id": 11836585888
+        },
+        {
+          "longitude": 77.1864458,
+          "latitude": 28.7395113,
+          "osm_node_id": 9838742916
+        },
+        {
+          "longitude": 77.194139,
+          "latitude": 28.736435,
+          "osm_node_id": 6649451063
+        },
+        {
+          "longitude": 77.1903635,
+          "latitude": 28.7385932,
+          "osm_node_id": 9851276820
+        },
+        {
+          "longitude": 77.19958,
+          "latitude": 28.7384152,
+          "osm_node_id": 3738879583
+        },
+        {
+          "longitude": 77.2048982,
+          "latitude": 28.7355943,
+          "osm_node_id": 9849954540
+        },
+        {
+          "longitude": 77.1847159,
+          "latitude": 28.7385944,
+          "osm_node_id": 3738879582
+        },
+        {
+          "longitude": 77.1920744,
+          "latitude": 28.733685,
+          "osm_node_id": 9851972368
+        },
+        {
+          "longitude": 77.2103597,
+          "latitude": 28.7376257,
+          "osm_node_id": 9803636668
+        },
+        {
+          "longitude": 77.208418,
+          "latitude": 28.7342232,
+          "osm_node_id": 9849672430
+        },
+        {
+          "longitude": 77.1942983,
+          "latitude": 28.7385576,
+          "osm_node_id": 9851017979
+        },
+        {
+          "longitude": 77.1890211,
+          "latitude": 28.7365144,
+          "osm_node_id": 9851951766
+        },
+        {
+          "longitude": 77.2075571,
+          "latitude": 28.7330147,
+          "osm_node_id": 4231798795
+        },
+        {
+          "longitude": 77.2101653,
+          "latitude": 28.7406407,
+          "osm_node_id": 9803419350
+        },
+        {
+          "longitude": 77.1985885,
+          "latitude": 28.736336,
+          "osm_node_id": 10292519067
+        },
+        {
+          "longitude": 77.2089203,
+          "latitude": 28.7389935,
+          "osm_node_id": 9835318099
+        },
+        {
+          "longitude": 77.1958739,
+          "latitude": 28.7372553,
+          "osm_node_id": 9851199267
+        },
+        {
+          "longitude": 77.1880263,
+          "latitude": 28.7389262,
+          "osm_node_id": 6195140547
+        },
+        {
+          "longitude": 77.2099905,
+          "latitude": 28.7337031,
+          "osm_node_id": 9849754329
+        },
+        {
+          "longitude": 77.1877189,
+          "latitude": 28.7365952,
+          "osm_node_id": 9837853400
+        },
+        {
+          "longitude": 77.2062971,
+          "latitude": 28.7355039,
+          "osm_node_id": 9849672439
+        },
+        {
+          "longitude": 77.2020972,
+          "latitude": 28.7374446,
+          "osm_node_id": 6645633091
+        },
+        {
+          "longitude": 77.2004503,
+          "latitude": 28.7368213,
+          "osm_node_id": 6197323309
+        },
+        {
+          "longitude": 77.2118175,
+          "latitude": 28.7396812,
+          "osm_node_id": 9803636678
+        },
+        {
+          "longitude": 77.2031046,
+          "latitude": 28.7406742,
+          "osm_node_id": 9850367238
+        },
+        {
+          "longitude": 77.1992929,
+          "latitude": 28.734798,
+          "osm_node_id": 3738879527
+        },
+        {
+          "longitude": 77.207834,
+          "latitude": 28.7373768,
+          "osm_node_id": 2149585932
+        },
+        {
+          "longitude": 77.2128671,
+          "latitude": 28.7412131,
+          "osm_node_id": 3738876271
+        },
+        {
+          "longitude": 77.1898261,
+          "latitude": 28.7375692,
+          "osm_node_id": 6195140545
+        },
+        {
+          "longitude": 77.1945237,
+          "latitude": 28.7374726,
+          "osm_node_id": 6649451047
+        },
+        {
+          "longitude": 77.1981196,
+          "latitude": 28.7318076,
+          "osm_node_id": 4231798767
+        },
+        {
+          "longitude": 77.2059483,
+          "latitude": 28.7384725,
+          "osm_node_id": 9850393812
+        },
+        {
+          "longitude": 77.1896052,
+          "latitude": 28.7340749,
+          "osm_node_id": 9742684330
+        },
+        {
+          "longitude": 77.1871285,
+          "latitude": 28.7380857,
+          "osm_node_id": 9835713796
+        },
+        {
+          "longitude": 77.1945373,
+          "latitude": 28.735432,
+          "osm_node_id": 9851199283
+        },
+        {
+          "longitude": 77.1995085,
+          "latitude": 28.7373469,
+          "osm_node_id": 9665838304
+        },
+        {
+          "longitude": 77.197527,
+          "latitude": 28.7385259,
+          "osm_node_id": 1801365436
+        },
+        {
+          "longitude": 77.2068704,
+          "latitude": 28.7363955,
+          "osm_node_id": 9849954532
+        },
+        {
+          "longitude": 77.2006865,
+          "latitude": 28.7348299,
+          "osm_node_id": 11270889512
+        },
+        {
+          "longitude": 77.1910972,
+          "latitude": 28.737822,
+          "osm_node_id": 9728884138
+        },
+        {
+          "longitude": 77.2038272,
+          "latitude": 28.7382074,
+          "osm_node_id": 9850060695
+        },
+        {
+          "longitude": 77.201421,
+          "latitude": 28.7356878,
+          "osm_node_id": 3738879538
+        },
+        {
+          "longitude": 77.2040537,
+          "latitude": 28.7363113,
+          "osm_node_id": 9849954571
+        },
+        {
+          "longitude": 77.2065595,
+          "latitude": 28.7334644,
+          "osm_node_id": 9849672450
+        },
+        {
+          "longitude": 77.204843,
+          "latitude": 28.7370939,
+          "osm_node_id": 9849993729
+        },
+        {
+          "longitude": 77.1890533,
+          "latitude": 28.7383918,
+          "osm_node_id": 9851276824
+        },
+        {
+          "longitude": 77.1921559,
+          "latitude": 28.7375542,
+          "osm_node_id": 3738879568
+        },
+        {
+          "longitude": 77.1854394,
+          "latitude": 28.7372188,
+          "osm_node_id": 9837914134
+        },
+        {
+          "longitude": 77.1976492,
+          "latitude": 28.7340619,
+          "osm_node_id": 11270889561
+        },
+        {
+          "longitude": 77.1980483,
+          "latitude": 28.7445061,
+          "osm_node_id": 3738879653
+        },
+        {
+          "longitude": 77.2146311,
+          "latitude": 28.742809,
+          "osm_node_id": 9803515781
+        },
+        {
+          "longitude": 77.1914304,
+          "latitude": 28.735868,
+          "osm_node_id": 6197358271
+        },
+        {
+          "longitude": 77.1900102,
+          "latitude": 28.7361429,
+          "osm_node_id": 9851951789
+        },
+        {
+          "longitude": 77.2074031,
+          "latitude": 28.7391923,
+          "osm_node_id": 9850367230
+        },
+        {
+          "longitude": 77.1972583,
+          "latitude": 28.7355691,
+          "osm_node_id": 1801365439
+        },
+        {
+          "longitude": 77.1927054,
+          "latitude": 28.7386121,
+          "osm_node_id": 6645589315
+        },
+        {
+          "longitude": 77.1976987,
+          "latitude": 28.7405515,
+          "osm_node_id": 6197320889
+        },
+        {
+          "longitude": 77.1865727,
+          "latitude": 28.7372475,
+          "osm_node_id": 9837884957
+        },
+        {
+          "longitude": 77.2055881,
+          "latitude": 28.7315589,
+          "osm_node_id": 6640322263
+        },
+        {
+          "longitude": 77.2040706,
+          "latitude": 28.7310356,
+          "osm_node_id": 4231798735
+        },
+        {
+          "longitude": 77.2062904,
+          "latitude": 28.7375434,
+          "osm_node_id": 9850060675
+        },
+        {
+          "longitude": 77.2020715,
+          "latitude": 28.7383815,
+          "osm_node_id": 3738879580
+        },
+        {
+          "longitude": 77.2089153,
+          "latitude": 28.7355202,
+          "osm_node_id": 9849754342
+        },
+        {
+          "longitude": 77.187156,
+          "latitude": 28.7356335,
+          "osm_node_id": 9837787894
+        },
+        {
+          "longitude": 77.1905305,
+          "latitude": 28.7342603,
+          "osm_node_id": 11505252240
+        },
+        {
+          "longitude": 77.1919382,
+          "latitude": 28.7399456,
+          "osm_node_id": 9851135571
+        },
+        {
+          "longitude": 77.19366,
+          "latitude": 28.7355324,
+          "osm_node_id": 3738879534
+        },
+        {
+          "longitude": 77.2047199,
+          "latitude": 28.7390825,
+          "osm_node_id": 9850099284
+        },
+        {
+          "longitude": 77.1887722,
+          "latitude": 28.7356695,
+          "osm_node_id": 9851951786
+        },
+        {
+          "longitude": 77.2088864,
+          "latitude": 28.7368344,
+          "osm_node_id": 9835318090
+        },
+        {
+          "longitude": 77.2075663,
+          "latitude": 28.7353577,
+          "osm_node_id": 3738879533
+        },
+        {
+          "longitude": 77.185838,
+          "latitude": 28.738889,
+          "osm_node_id": 9835713802
+        },
+        {
+          "longitude": 77.1889014,
+          "latitude": 28.7345853,
+          "osm_node_id": 6637183140
+        },
+        {
+          "longitude": 77.1871762,
+          "latitude": 28.7390008,
+          "osm_node_id": 9837884939
+        },
+        {
+          "longitude": 77.1986939,
+          "latitude": 28.7384599,
+          "osm_node_id": 9850097311
+        },
+        {
+          "longitude": 77.1934444,
+          "latitude": 28.7369037,
+          "osm_node_id": 6649451065
+        },
+        {
+          "longitude": 77.2075138,
+          "latitude": 28.7321846,
+          "osm_node_id": 3738878395
+        },
+        {
+          "longitude": 77.1954301,
+          "latitude": 28.735128,
+          "osm_node_id": 9651353165
+        },
+        {
+          "longitude": 77.1987608,
+          "latitude": 28.7354139,
+          "osm_node_id": 11270889520
+        },
+        {
+          "longitude": 77.1978815,
+          "latitude": 28.7424508,
+          "osm_node_id": 11270926109
+        },
+        {
+          "longitude": 77.196203,
+          "latitude": 28.7353731,
+          "osm_node_id": 9851199291
+        },
+        {
+          "longitude": 77.1913704,
+          "latitude": 28.7333043,
+          "osm_node_id": 9742684335
+        },
+        {
+          "longitude": 77.2075479,
+          "latitude": 28.7339342,
+          "osm_node_id": 4231826077
+        },
+        {
+          "longitude": 77.1890386,
+          "latitude": 28.7373665,
+          "osm_node_id": 12833648994
+        },
+        {
+          "longitude": 77.1906445,
+          "latitude": 28.7353416,
+          "osm_node_id": 3567906365
+        },
+        {
+          "longitude": 77.1916694,
+          "latitude": 28.7369426,
+          "osm_node_id": 9851972067
+        },
+        {
+          "longitude": 77.2110772,
+          "latitude": 28.7379314,
+          "osm_node_id": 9803636670
+        },
+        {
+          "longitude": 77.1974443,
+          "latitude": 28.7377626,
+          "osm_node_id": 9828147857
+        },
+        {
+          "longitude": 77.2001683,
+          "latitude": 28.7379251,
+          "osm_node_id": 9850116169
+        },
+        {
+          "longitude": 77.1935351,
+          "latitude": 28.7385825,
+          "osm_node_id": 9851161776
+        },
+        {
+          "longitude": 77.1920453,
+          "latitude": 28.7354179,
+          "osm_node_id": 6197358245
+        },
+        {
+          "longitude": 77.2093877,
+          "latitude": 28.7341665,
+          "osm_node_id": 9849754351
+        },
+        {
+          "longitude": 77.2041501,
+          "latitude": 28.7373958,
+          "osm_node_id": 9850060704
+        },
+        {
+          "longitude": 77.2032091,
+          "latitude": 28.7317965,
+          "osm_node_id": 9849768550
+        },
+        {
+          "longitude": 77.2061836,
+          "latitude": 28.7326046,
+          "osm_node_id": 9849672449
+        },
+        {
+          "longitude": 77.2048195,
+          "latitude": 28.736351,
+          "osm_node_id": 9849954555
+        },
+        {
+          "longitude": 77.1948392,
+          "latitude": 28.7366662,
+          "osm_node_id": 6197358232
+        },
+        {
+          "longitude": 77.1897282,
+          "latitude": 28.7368425,
+          "osm_node_id": 9851951752
+        },
+        {
+          "longitude": 77.2097034,
+          "latitude": 28.7379449,
+          "osm_node_id": 9835322653
+        },
+        {
+          "longitude": 77.1907429,
+          "latitude": 28.7361001,
+          "osm_node_id": 9851972039
+        },
+        {
+          "longitude": 77.2008741,
+          "latitude": 28.736237,
+          "osm_node_id": 11270889535
+        },
+        {
+          "longitude": 77.1966456,
+          "latitude": 28.7362263,
+          "osm_node_id": 6573953876
+        },
+        {
+          "longitude": 77.1878376,
+          "latitude": 28.7358879,
+          "osm_node_id": 9837884962
+        },
+        {
+          "longitude": 77.191286,
+          "latitude": 28.7396574,
+          "osm_node_id": 6195140559
+        },
+        {
+          "longitude": 77.2084696,
+          "latitude": 28.7349645,
+          "osm_node_id": 4231826591
+        },
+        {
+          "longitude": 77.1850402,
+          "latitude": 28.7378048,
+          "osm_node_id": 9837914130
+        },
+        {
+          "longitude": 77.1920966,
+          "latitude": 28.7343895,
+          "osm_node_id": 6642441224
+        },
+        {
+          "longitude": 77.2057421,
+          "latitude": 28.7359351,
+          "osm_node_id": 9849954553
+        },
+        {
+          "longitude": 77.1953297,
+          "latitude": 28.7376929,
+          "osm_node_id": 9851017986
+        },
+        {
+          "longitude": 77.2013891,
+          "latitude": 28.737362,
+          "osm_node_id": 9850116165
+        },
+        {
+          "longitude": 77.2075795,
+          "latitude": 28.7346615,
+          "osm_node_id": 4231826086
+        },
+        {
+          "longitude": 77.2094112,
+          "latitude": 28.7333278,
+          "osm_node_id": 9849754333
+        },
+        {
+          "longitude": 77.2087763,
+          "latitude": 28.7336336,
+          "osm_node_id": 9849672422
+        },
+        {
+          "longitude": 77.1913388,
+          "latitude": 28.7341856,
+          "osm_node_id": 9851972025
+        },
+        {
+          "longitude": 77.1859315,
+          "latitude": 28.7367386,
+          "osm_node_id": 9835604547
+        },
+        {
+          "longitude": 77.1873073,
+          "latitude": 28.737141,
+          "osm_node_id": 9837853410
+        },
+        {
+          "longitude": 77.2081249,
+          "latitude": 28.7326364,
+          "osm_node_id": 9849649622
+        },
+        {
+          "longitude": 77.2026934,
+          "latitude": 28.7377658,
+          "osm_node_id": 9850060714
+        },
+        {
+          "longitude": 77.2069558,
+          "latitude": 28.7374276,
+          "osm_node_id": 9850330807
+        },
+        {
+          "longitude": 77.199209,
+          "latitude": 28.7360735,
+          "osm_node_id": 11270889530
+        },
+        {
+          "longitude": 77.2076599,
+          "latitude": 28.738108,
+          "osm_node_id": 9835322649
+        },
+        {
+          "longitude": 77.2068898,
+          "latitude": 28.7352221,
+          "osm_node_id": 9849672446
+        },
+        {
+          "longitude": 77.1999629,
+          "latitude": 28.7363267,
+          "osm_node_id": 6748948474
+        },
+        {
+          "longitude": 77.2088774,
+          "latitude": 28.7397884,
+          "osm_node_id": 9835318102
+        },
+        {
+          "longitude": 77.1965014,
+          "latitude": 28.7370953,
+          "osm_node_id": 9851199274
+        },
+        {
+          "longitude": 77.1998872,
+          "latitude": 28.7350471,
+          "osm_node_id": 11270889505
+        },
+        {
+          "longitude": 77.1871014,
+          "latitude": 28.7364155,
+          "osm_node_id": 9837884927
+        },
+        {
+          "longitude": 77.2089042,
+          "latitude": 28.7383491,
+          "osm_node_id": 9835318096
+        },
+        {
+          "longitude": 77.1974733,
+          "latitude": 28.7347116,
+          "osm_node_id": 3738878423
+        },
+        {
+          "longitude": 77.1981654,
+          "latitude": 28.7356303,
+          "osm_node_id": 11270889532
+        },
+        {
+          "longitude": 77.2068113,
+          "latitude": 28.7325198,
+          "osm_node_id": 9849672460
+        },
+        {
+          "longitude": 77.1882536,
+          "latitude": 28.7383449,
+          "osm_node_id": 9851951748
+        },
+        {
+          "longitude": 77.1991629,
+          "latitude": 28.7368326,
+          "osm_node_id": 6748948477
+        },
+        {
+          "longitude": 77.1987678,
+          "latitude": 28.737402,
+          "osm_node_id": 9665838306
+        },
+        {
+          "longitude": 77.1938628,
+          "latitude": 28.7380584,
+          "osm_node_id": 6649451048
+        },
+        {
+          "longitude": 77.207803,
+          "latitude": 28.7367617,
+          "osm_node_id": 9850330800
+        },
+        {
+          "longitude": 77.2006382,
+          "latitude": 28.7354845,
+          "osm_node_id": 11270889508
+        },
+        {
+          "longitude": 77.2034151,
+          "latitude": 28.73775,
+          "osm_node_id": 9850060703
+        },
+        {
+          "longitude": 77.2028183,
+          "latitude": 28.7367426,
+          "osm_node_id": 9849993734
+        },
+        {
+          "longitude": 77.1852976,
+          "latitude": 28.7384436,
+          "osm_node_id": 9835713803
+        },
+        {
+          "longitude": 77.1961954,
+          "latitude": 28.7377597,
+          "osm_node_id": 9851199272
+        },
+        {
+          "longitude": 77.1895656,
+          "latitude": 28.7357433,
+          "osm_node_id": 9851951783
+        },
+        {
+          "longitude": 77.2111979,
+          "latitude": 28.7407936,
+          "osm_node_id": 9803419349
+        },
+        {
+          "longitude": 77.2014421,
+          "latitude": 28.7350941,
+          "osm_node_id": 11270889495
+        },
+        {
+          "longitude": 77.1935804,
+          "latitude": 28.7362353,
+          "osm_node_id": 6197358239
+        },
+        {
+          "longitude": 77.1880057,
+          "latitude": 28.7371811,
+          "osm_node_id": 9837884969
+        },
+        {
+          "longitude": 77.1903413,
+          "latitude": 28.7378506,
+          "osm_node_id": 9851276832
+        },
+        {
+          "longitude": 77.1885892,
+          "latitude": 28.7369947,
+          "osm_node_id": 9851951761
+        },
+        {
+          "longitude": 77.1940916,
+          "latitude": 28.7370828,
+          "osm_node_id": 6649451058
+        },
+        {
+          "longitude": 77.2020006,
+          "latitude": 28.7357102,
+          "osm_node_id": 11270889514
+        },
+        {
+          "longitude": 77.2118193,
+          "latitude": 28.7391026,
+          "osm_node_id": 9803636633
+        },
+        {
+          "longitude": 77.1875399,
+          "latitude": 28.7376618,
+          "osm_node_id": 9837853409
+        },
+        {
+          "longitude": 77.1902418,
+          "latitude": 28.7347517,
+          "osm_node_id": 9742684348
+        },
+        {
+          "longitude": 77.2001552,
+          "latitude": 28.7373067,
+          "osm_node_id": 9665838303
+        },
+        {
+          "longitude": 77.2035007,
+          "latitude": 28.7402683,
+          "osm_node_id": 9850367232
+        },
+        {
+          "longitude": 77.2049922,
+          "latitude": 28.7313108,
+          "osm_node_id": 6640322266
+        },
+        {
+          "longitude": 77.2062452,
+          "latitude": 28.7363903,
+          "osm_node_id": 9849954531
+        },
+        {
+          "longitude": 77.1950644,
+          "latitude": 28.7356195,
+          "osm_node_id": 6197358236
+        },
+        {
+          "longitude": 77.205523,
+          "latitude": 28.7354232,
+          "osm_node_id": 6749150351
+        },
+        {
+          "longitude": 77.1897115,
+          "latitude": 28.7381103,
+          "osm_node_id": 9851276821
+        },
+        {
+          "longitude": 77.20818,
+          "latitude": 28.7379261,
+          "osm_node_id": 9835322655
+        },
+        {
+          "longitude": 77.1890761,
+          "latitude": 28.7401774,
+          "osm_node_id": 9851270853
+        },
+        {
+          "longitude": 77.2065432,
+          "latitude": 28.7370555,
+          "osm_node_id": 9849993727
+        },
+        {
+          "longitude": 77.2004851,
+          "latitude": 28.7383706,
+          "osm_node_id": 13086228768
+        },
+        {
+          "longitude": 77.1899307,
+          "latitude": 28.7336363,
+          "osm_node_id": 9742684318
+        },
+        {
+          "longitude": 77.1863807,
+          "latitude": 28.7388305,
+          "osm_node_id": 9835713799
+        },
+        {
+          "longitude": 77.1885073,
+          "latitude": 28.7361462,
+          "osm_node_id": 9851951767
+        },
+        {
+          "longitude": 77.201296,
+          "latitude": 28.7383312,
+          "osm_node_id": 9850178323
+        },
+        {
+          "longitude": 77.1950007,
+          "latitude": 28.7371859,
+          "osm_node_id": 6649451045
+        },
+        {
+          "longitude": 77.1978958,
+          "latitude": 28.7335771,
+          "osm_node_id": 12281778931
+        },
+        {
+          "longitude": 77.2055631,
+          "latitude": 28.7388504,
+          "osm_node_id": 6197323333
+        },
+        {
+          "longitude": 77.2123109,
+          "latitude": 28.7409986,
+          "osm_node_id": 3738876270
+        },
+        {
+          "longitude": 77.2041817,
+          "latitude": 28.7368333,
+          "osm_node_id": 9849993743
+        },
+        {
+          "longitude": 77.1884443,
+          "latitude": 28.7348614,
+          "osm_node_id": 9742684350
+        },
+        {
+          "longitude": 77.2084307,
+          "latitude": 28.7357587,
+          "osm_node_id": 6749150344
+        },
+        {
+          "longitude": 77.1968263,
+          "latitude": 28.7352595,
+          "osm_node_id": 9851199304
+        },
+        {
+          "longitude": 77.2070904,
+          "latitude": 28.733441,
+          "osm_node_id": 9849672454
+        },
+        {
+          "longitude": 77.1943234,
+          "latitude": 28.7359181,
+          "osm_node_id": 9851225619
+        },
+        {
+          "longitude": 77.199544,
+          "latitude": 28.7354516,
+          "osm_node_id": 11270889518
+        },
+        {
+          "longitude": 77.1875245,
+          "latitude": 28.7384375,
+          "osm_node_id": 9837884937
+        },
+        {
+          "longitude": 77.1886231,
+          "latitude": 28.7387242,
+          "osm_node_id": 9851276825
+        },
+        {
+          "longitude": 77.1985889,
+          "latitude": 28.7368636,
+          "osm_node_id": 6197323310
+        },
+        {
+          "longitude": 77.211796,
+          "latitude": 28.7403467,
+          "osm_node_id": 9803636679
+        },
+        {
+          "longitude": 77.1865061,
+          "latitude": 28.7382748,
+          "osm_node_id": 9835713810
+        },
+        {
+          "longitude": 77.2048545,
+          "latitude": 28.7376986,
+          "osm_node_id": 6197358227
+        },
+        {
+          "longitude": 77.2075453,
+          "latitude": 28.7362948,
+          "osm_node_id": 9850060673
+        },
+        {
+          "longitude": 77.1960354,
+          "latitude": 28.7348867,
+          "osm_node_id": 9651353164
+        },
+        {
+          "longitude": 77.1926746,
+          "latitude": 28.7375918,
+          "osm_node_id": 6649451066
+        },
+        {
+          "longitude": 77.1982561,
+          "latitude": 28.7312133,
+          "osm_node_id": 1801365462
+        },
+        {
+          "longitude": 77.1888788,
+          "latitude": 28.7351739,
+          "osm_node_id": 9851951794
+        },
+        {
+          "longitude": 77.1971796,
+          "latitude": 28.7342526,
+          "osm_node_id": 9851199286
+        },
+        {
+          "longitude": 77.1869716,
+          "latitude": 28.7375567,
+          "osm_node_id": 9837853408
+        },
+        {
+          "longitude": 77.1911441,
+          "latitude": 28.7370603,
+          "osm_node_id": 9725963919
+        },
+        {
+          "longitude": 77.1906868,
+          "latitude": 28.7382053,
+          "osm_node_id": 9728884137
+        },
+        {
+          "longitude": 77.2024374,
+          "latitude": 28.7370885,
+          "osm_node_id": 9849993753
+        },
+        {
+          "longitude": 77.1995436,
+          "latitude": 28.7379246,
+          "osm_node_id": 9850097308
+        },
+        {
+          "longitude": 77.1922607,
+          "latitude": 28.7391811,
+          "osm_node_id": 9851161741
+        },
+        {
+          "longitude": 77.1917653,
+          "latitude": 28.7363839,
+          "osm_node_id": 6197358242
+        },
+        {
+          "longitude": 77.2036086,
+          "latitude": 28.7366511,
+          "osm_node_id": 9849993738
+        },
+        {
+          "longitude": 77.1902552,
+          "latitude": 28.735636,
+          "osm_node_id": 6197358274
+        },
+        {
+          "longitude": 77.1981034,
+          "latitude": 28.736351,
+          "osm_node_id": 6748948473
+        },
+        {
+          "longitude": 77.1867067,
+          "latitude": 28.7367814,
+          "osm_node_id": 9837853414
+        },
+        {
+          "longitude": 77.1886661,
+          "latitude": 28.738016,
+          "osm_node_id": 9851951746
+        },
+        {
+          "longitude": 77.2052532,
+          "latitude": 28.7359238,
+          "osm_node_id": 9849954554
+        },
+        {
+          "longitude": 77.1895364,
+          "latitude": 28.7362413,
+          "osm_node_id": 9851951792
+        },
+        {
+          "longitude": 77.1943288,
+          "latitude": 28.7379464,
+          "osm_node_id": 6649451044
+        },
+        {
+          "longitude": 77.191081,
+          "latitude": 28.7355379,
+          "osm_node_id": 9851972040
+        },
+        {
+          "longitude": 77.1902907,
+          "latitude": 28.7371301,
+          "osm_node_id": 9725938514
+        },
+        {
+          "longitude": 77.1977479,
+          "latitude": 28.7410263,
+          "osm_node_id": 9851017990
+        },
+        {
+          "longitude": 77.1947723,
+          "latitude": 28.7385408,
+          "osm_node_id": 9851017988
+        },
+        {
+          "longitude": 77.1897105,
+          "latitude": 28.7393766,
+          "osm_node_id": 9851276817
+        },
+        {
+          "longitude": 77.2054932,
+          "latitude": 28.7363346,
+          "osm_node_id": 9849954556
+        },
+        {
+          "longitude": 77.1972529,
+          "latitude": 28.7360395,
+          "osm_node_id": 1801365477
+        },
+        {
+          "longitude": 77.2092374,
+          "latitude": 28.7351788,
+          "osm_node_id": 9849754346
+        },
+        {
+          "longitude": 77.1950689,
+          "latitude": 28.7362578,
+          "osm_node_id": 9851199315
+        },
+        {
+          "longitude": 77.2075449,
+          "latitude": 28.735824,
+          "osm_node_id": 3738879541
+        },
+        {
+          "longitude": 77.1977751,
+          "latitude": 28.7380917,
+          "osm_node_id": 9850116184
+        },
+        {
+          "longitude": 77.1883541,
+          "latitude": 28.7354648,
+          "osm_node_id": 6197358269
+        },
+        {
+          "longitude": 77.197328,
+          "latitude": 28.736999,
+          "osm_node_id": 1801365431
+        },
+        {
+          "longitude": 77.206035,
+          "latitude": 28.7316723,
+          "osm_node_id": 4231798750
+        },
+        {
+          "longitude": 77.1910678,
+          "latitude": 28.7329573,
+          "osm_node_id": 3738878399
+        },
+        {
+          "longitude": 77.1905087,
+          "latitude": 28.7338015,
+          "osm_node_id": 11505210062
+        },
+        {
+          "longitude": 77.1853975,
+          "latitude": 28.7390135,
+          "osm_node_id": 9837905911
+        },
+        {
+          "longitude": 77.2006099,
+          "latitude": 28.7372938,
+          "osm_node_id": 9665838302
+        },
+        {
+          "longitude": 77.2075072,
+          "latitude": 28.7387536,
+          "osm_node_id": 9835322626
+        },
+        {
+          "longitude": 77.2106109,
+          "latitude": 28.7407067,
+          "osm_node_id": 9803636666
+        },
+        {
+          "longitude": 77.1846914,
+          "latitude": 28.7380875,
+          "osm_node_id": 9837914128
+        },
+        {
+          "longitude": 77.1921974,
+          "latitude": 28.73584,
+          "osm_node_id": 6642441232
+        },
+        {
+          "longitude": 77.2064504,
+          "latitude": 28.7379619,
+          "osm_node_id": 9850330812
+        },
+        {
+          "longitude": 77.1969893,
+          "latitude": 28.7348431,
+          "osm_node_id": 9851199310
+        },
+        {
+          "longitude": 77.1982484,
+          "latitude": 28.7384772,
+          "osm_node_id": 9850097309
+        }
+      ]
+    },
+    "South": {
+      "bbox": [
+        77.17,
+        28.48,
+        77.27,
+        28.56
+      ],
+      "distribution": "sparse",
+      "nodes": [
+        {
+          "longitude": 77.1710004,
+          "latitude": 28.5593895,
+          "osm_node_id": 58056528
+        },
+        {
+          "longitude": 77.2697786,
+          "latitude": 28.4900992,
+          "osm_node_id": 9827557982
+        },
+        {
+          "longitude": 77.1872243,
+          "latitude": 28.480355,
+          "osm_node_id": 6412446505
+        },
+        {
+          "longitude": 77.246151,
+          "latitude": 28.5599355,
+          "osm_node_id": 9708311694
+        },
+        {
+          "longitude": 77.2242793,
+          "latitude": 28.514567,
+          "osm_node_id": 4167453894
+        },
+        {
+          "longitude": 77.170311,
+          "latitude": 28.5180757,
+          "osm_node_id": 9854902542
+        },
+        {
+          "longitude": 77.2697275,
+          "latitude": 28.5293078,
+          "osm_node_id": 2629740480
+        },
+        {
+          "longitude": 77.2081275,
+          "latitude": 28.5494787,
+          "osm_node_id": 4233809452
+        },
+        {
+          "longitude": 77.2322002,
+          "latitude": 28.4861444,
+          "osm_node_id": 4214831440
+        },
+        {
+          "longitude": 77.1968535,
+          "latitude": 28.5072295,
+          "osm_node_id": 5675789511
+        },
+        {
+          "longitude": 77.2511829,
+          "latitude": 28.5095335,
+          "osm_node_id": 4212207635
+        },
+        {
+          "longitude": 77.241476,
+          "latitude": 28.534239,
+          "osm_node_id": 9867252065
+        },
+        {
+          "longitude": 77.1856952,
+          "latitude": 28.5380729,
+          "osm_node_id": 4233654333
+        },
+        {
+          "longitude": 77.2688007,
+          "latitude": 28.5564412,
+          "osm_node_id": 910450581
+        },
+        {
+          "longitude": 77.205953,
+          "latitude": 28.5274411,
+          "osm_node_id": 5735710984
+        },
+        {
+          "longitude": 77.2110094,
+          "latitude": 28.4914807,
+          "osm_node_id": 4175246525
+        },
+        {
+          "longitude": 77.2256231,
+          "latitude": 28.5598989,
+          "osm_node_id": 11622089675
+        },
+        {
+          "longitude": 77.1911583,
+          "latitude": 28.5599065,
+          "osm_node_id": 11009972519
+        },
+        {
+          "longitude": 77.1798986,
+          "latitude": 28.498086,
+          "osm_node_id": 9868124736
+        },
+        {
+          "longitude": 77.2226356,
+          "latitude": 28.5368469,
+          "osm_node_id": 5966848228
+        },
+        {
+          "longitude": 77.2698931,
+          "latitude": 28.5101479,
+          "osm_node_id": 9819193614
+        },
+        {
+          "longitude": 77.2496444,
+          "latitude": 28.4900587,
+          "osm_node_id": 10836814079
+        },
+        {
+          "longitude": 77.2574313,
+          "latitude": 28.5422863,
+          "osm_node_id": 9720412160
+        },
+        {
+          "longitude": 77.2362624,
+          "latitude": 28.5022435,
+          "osm_node_id": 4212207347
+        },
+        {
+          "longitude": 77.189641,
+          "latitude": 28.5222468,
+          "osm_node_id": 5488156091
+        },
+        {
+          "longitude": 77.2539512,
+          "latitude": 28.5249421,
+          "osm_node_id": 8017163345
+        },
+        {
+          "longitude": 77.2387707,
+          "latitude": 28.5192282,
+          "osm_node_id": 4215248424
+        },
+        {
+          "longitude": 77.2359595,
+          "latitude": 28.5486358,
+          "osm_node_id": 11747689106
+        },
+        {
+          "longitude": 77.1717761,
+          "latitude": 28.5328416,
+          "osm_node_id": 9843848170
+        },
+        {
+          "longitude": 77.2121468,
+          "latitude": 28.5063583,
+          "osm_node_id": 9743533909
+        },
+        {
+          "longitude": 77.1940186,
+          "latitude": 28.4931869,
+          "osm_node_id": 4175246645
+        },
+        {
+          "longitude": 77.2234977,
+          "latitude": 28.4968836,
+          "osm_node_id": 4167250090
+        },
+        {
+          "longitude": 77.1990944,
+          "latitude": 28.5393248,
+          "osm_node_id": 388048380
+        },
+        {
+          "longitude": 77.1815408,
+          "latitude": 28.5508232,
+          "osm_node_id": 2009503250
+        },
+        {
+          "longitude": 77.1840276,
+          "latitude": 28.5105776,
+          "osm_node_id": 3188318593
+        },
+        {
+          "longitude": 77.2181853,
+          "latitude": 28.5252515,
+          "osm_node_id": 9868200954
+        },
+        {
+          "longitude": 77.2303516,
+          "latitude": 28.5277465,
+          "osm_node_id": 6738690802
+        },
+        {
+          "longitude": 77.2110443,
+          "latitude": 28.5380264,
+          "osm_node_id": 4233713689
+        },
+        {
+          "longitude": 77.2131409,
+          "latitude": 28.5599799,
+          "osm_node_id": 11618462471
+        },
+        {
+          "longitude": 77.2048316,
+          "latitude": 28.5159775,
+          "osm_node_id": 6559448069
+        },
+        {
+          "longitude": 77.2576849,
+          "latitude": 28.5591955,
+          "osm_node_id": 7213541111
+        },
+        {
+          "longitude": 77.2642356,
+          "latitude": 28.500278,
+          "osm_node_id": 9825034521
+        },
+        {
+          "longitude": 77.2479911,
+          "latitude": 28.5487165,
+          "osm_node_id": 7222736998
+        },
+        {
+          "longitude": 77.2684837,
+          "latitude": 28.5446604,
+          "osm_node_id": 10206577829
+        },
+        {
+          "longitude": 77.1991325,
+          "latitude": 28.4831441,
+          "osm_node_id": 9822274267
+        },
+        {
+          "longitude": 77.2638527,
+          "latitude": 28.5197189,
+          "osm_node_id": 4214821714
+        },
+        {
+          "longitude": 77.1704027,
+          "latitude": 28.5070484,
+          "osm_node_id": 9870023447
+        },
+        {
+          "longitude": 77.2201584,
+          "latitude": 28.5475501,
+          "osm_node_id": 10595272389
+        },
+        {
+          "longitude": 77.2022692,
+          "latitude": 28.5598777,
+          "osm_node_id": 1999482430
+        },
+        {
+          "longitude": 77.1920293,
+          "latitude": 28.5473127,
+          "osm_node_id": 910664987
+        },
+        {
+          "longitude": 77.1785808,
+          "latitude": 28.5245139,
+          "osm_node_id": 6657312847
+        },
+        {
+          "longitude": 77.2043286,
+          "latitude": 28.4996934,
+          "osm_node_id": 9743557264
+        },
+        {
+          "longitude": 77.235902,
+          "latitude": 28.5597548,
+          "osm_node_id": 9871676380
+        },
+        {
+          "longitude": 77.2537525,
+          "latitude": 28.4994299,
+          "osm_node_id": 9861706650
+        },
+        {
+          "longitude": 77.1763627,
+          "latitude": 28.5418285,
+          "osm_node_id": 9835418083
+        },
+        {
+          "longitude": 77.2605291,
+          "latitude": 28.5328283,
+          "osm_node_id": 9855346915
+        },
+        {
+          "longitude": 77.2402972,
+          "latitude": 28.4933187,
+          "osm_node_id": 4215043921
+        },
+        {
+          "longitude": 77.2320861,
+          "latitude": 28.539318,
+          "osm_node_id": 6356035475
+        },
+        {
+          "longitude": 77.214653,
+          "latitude": 28.5161565,
+          "osm_node_id": 6064361377
+        },
+        {
+          "longitude": 77.2510707,
+          "latitude": 28.5351169,
+          "osm_node_id": 1041069738
+        },
+        {
+          "longitude": 77.1888053,
+          "latitude": 28.5016182,
+          "osm_node_id": 3742567034
+        },
+        {
+          "longitude": 77.2334391,
+          "latitude": 28.5111651,
+          "osm_node_id": 9859683527
+        },
+        {
+          "longitude": 77.2607572,
+          "latitude": 28.5093242,
+          "osm_node_id": 582533680
+        },
+        {
+          "longitude": 77.1803505,
+          "latitude": 28.559881,
+          "osm_node_id": 4233041428
+        },
+        {
+          "longitude": 77.1725514,
+          "latitude": 28.5501003,
+          "osm_node_id": 3190845363
+        },
+        {
+          "longitude": 77.1859336,
+          "latitude": 28.4892773,
+          "osm_node_id": 6094626725
+        },
+        {
+          "longitude": 77.2422335,
+          "latitude": 28.5091449,
+          "osm_node_id": 4216970043
+        },
+        {
+          "longitude": 77.2212343,
+          "latitude": 28.5062265,
+          "osm_node_id": 9832447568
+        },
+        {
+          "longitude": 77.2235468,
+          "latitude": 28.487661,
+          "osm_node_id": 4057919851
+        },
+        {
+          "longitude": 77.2450559,
+          "latitude": 28.5006517,
+          "osm_node_id": 10302645042
+        },
+        {
+          "longitude": 77.1948383,
+          "latitude": 28.5317349,
+          "osm_node_id": 277420020
+        },
+        {
+          "longitude": 77.1961878,
+          "latitude": 28.5162104,
+          "osm_node_id": 11027126158
+        },
+        {
+          "longitude": 77.2319,
+          "latitude": 28.4947937,
+          "osm_node_id": 4214887961
+        },
+        {
+          "longitude": 77.1998454,
+          "latitude": 28.5512016,
+          "osm_node_id": 2431985698
+        },
+        {
+          "longitude": 77.1756821,
+          "latitude": 28.490881,
+          "osm_node_id": 9743145862
+        },
+        {
+          "longitude": 77.2421062,
+          "latitude": 28.5427985,
+          "osm_node_id": 910664988
+        },
+        {
+          "longitude": 77.2283274,
+          "latitude": 28.5518409,
+          "osm_node_id": 6967983811
+        },
+        {
+          "longitude": 77.2616915,
+          "latitude": 28.5493371,
+          "osm_node_id": 7246522179
+        },
+        {
+          "longitude": 77.2552098,
+          "latitude": 28.5167182,
+          "osm_node_id": 9648282027
+        },
+        {
+          "longitude": 77.1979183,
+          "latitude": 28.524181,
+          "osm_node_id": 5821353028
+        },
+        {
+          "longitude": 77.1784421,
+          "latitude": 28.5164289,
+          "osm_node_id": 2507400445
+        },
+        {
+          "longitude": 77.2157183,
+          "latitude": 28.4989395,
+          "osm_node_id": 4167259291
+        },
+        {
+          "longitude": 77.246385,
+          "latitude": 28.5278813,
+          "osm_node_id": 2787694801
+        },
+        {
+          "longitude": 77.230694,
+          "latitude": 28.5193613,
+          "osm_node_id": 4217290648
+        },
+        {
+          "longitude": 77.2673279,
+          "latitude": 28.5368591,
+          "osm_node_id": 9869478130
+        },
+        {
+          "longitude": 77.2284499,
+          "latitude": 28.5030805,
+          "osm_node_id": 9838322083
+        },
+        {
+          "longitude": 77.2193212,
+          "latitude": 28.5553963,
+          "osm_node_id": 5539463437
+        },
+        {
+          "longitude": 77.1780056,
+          "latitude": 28.5058212,
+          "osm_node_id": 9869678343
+        },
+        {
+          "longitude": 77.2046305,
+          "latitude": 28.5077669,
+          "osm_node_id": 9865307751
+        },
+        {
+          "longitude": 77.2412194,
+          "latitude": 28.5541509,
+          "osm_node_id": 1796110239
+        },
+        {
+          "longitude": 77.2127227,
+          "latitude": 28.5307581,
+          "osm_node_id": 9867913105
+        },
+        {
+          "longitude": 77.2377022,
+          "latitude": 28.5266766,
+          "osm_node_id": 4215248964
+        },
+        {
+          "longitude": 77.180268,
+          "latitude": 28.482841,
+          "osm_node_id": 9828195875
+        },
+        {
+          "longitude": 77.2515682,
+          "latitude": 28.5551034,
+          "osm_node_id": 9720390709
+        },
+        {
+          "longitude": 77.1967012,
+          "latitude": 28.4999892,
+          "osm_node_id": 5541806706
+        },
+        {
+          "longitude": 77.2267143,
+          "latitude": 28.5441566,
+          "osm_node_id": 5120047112
+        },
+        {
+          "longitude": 77.210692,
+          "latitude": 28.522083,
+          "osm_node_id": 11171585754
+        },
+        {
+          "longitude": 77.2054268,
+          "latitude": 28.5425558,
+          "osm_node_id": 3735988692
+        },
+        {
+          "longitude": 77.2034654,
+          "latitude": 28.5339205,
+          "osm_node_id": 9867476456
+        },
+        {
+          "longitude": 77.1920354,
+          "latitude": 28.4859701,
+          "osm_node_id": 9821731679
+        },
+        {
+          "longitude": 77.2233895,
+          "latitude": 28.5299906,
+          "osm_node_id": 4231809730
+        },
+        {
+          "longitude": 77.2141568,
+          "latitude": 28.5441303,
+          "osm_node_id": 9700553631
+        },
+        {
+          "longitude": 77.2607324,
+          "latitude": 28.5260102,
+          "osm_node_id": 1765176709
+        },
+        {
+          "longitude": 77.2506113,
+          "latitude": 28.5424213,
+          "osm_node_id": 1040895846
+        },
+        {
+          "longitude": 77.2245526,
+          "latitude": 28.5221378,
+          "osm_node_id": 7209849354
+        },
+        {
+          "longitude": 77.2461875,
+          "latitude": 28.5145418,
+          "osm_node_id": 1806611010
+        },
+        {
+          "longitude": 77.1923675,
+          "latitude": 28.5382267,
+          "osm_node_id": 5457772562
+        },
+        {
+          "longitude": 77.1719528,
+          "latitude": 28.5245263,
+          "osm_node_id": 9852963382
+        },
+        {
+          "longitude": 77.1861139,
+          "latitude": 28.555675,
+          "osm_node_id": 5464573060
+        },
+        {
+          "longitude": 77.1704012,
+          "latitude": 28.5005531,
+          "osm_node_id": 317149227
+        },
+        {
+          "longitude": 77.1847642,
+          "latitude": 28.5265188,
+          "osm_node_id": 939328806
+        },
+        {
+          "longitude": 77.2145123,
+          "latitude": 28.5507318,
+          "osm_node_id": 13164713078
+        },
+        {
+          "longitude": 77.2695275,
+          "latitude": 28.5166052,
+          "osm_node_id": 9648222418
+        },
+        {
+          "longitude": 77.1859441,
+          "latitude": 28.4958209,
+          "osm_node_id": 4219241655
+        },
+        {
+          "longitude": 77.1860801,
+          "latitude": 28.5444642,
+          "osm_node_id": 10049605855
+        },
+        {
+          "longitude": 77.2286515,
+          "latitude": 28.5339737,
+          "osm_node_id": 10262229939
+        },
+        {
+          "longitude": 77.2096502,
+          "latitude": 28.5120844,
+          "osm_node_id": 11350410191
+        },
+        {
+          "longitude": 77.2561276,
+          "latitude": 28.5052083,
+          "osm_node_id": 9648282098
+        },
+        {
+          "longitude": 77.1743156,
+          "latitude": 28.511829,
+          "osm_node_id": 9869921844
+        },
+        {
+          "longitude": 77.176462,
+          "latitude": 28.5548716,
+          "osm_node_id": 528541710
+        },
+        {
+          "longitude": 77.2551279,
+          "latitude": 28.5479482,
+          "osm_node_id": 7831463583
+        },
+        {
+          "longitude": 77.2167019,
+          "latitude": 28.5354113,
+          "osm_node_id": 6748834489
+        },
+        {
+          "longitude": 77.1982544,
+          "latitude": 28.5453675,
+          "osm_node_id": 910664813
+        },
+        {
+          "longitude": 77.226559,
+          "latitude": 28.5088772,
+          "osm_node_id": 9837646447
+        },
+        {
+          "longitude": 77.263446,
+          "latitude": 28.5413628,
+          "osm_node_id": 6734843763
+        },
+        {
+          "longitude": 77.2487432,
+          "latitude": 28.4960031,
+          "osm_node_id": 4065531475
+        },
+        {
+          "longitude": 77.1952084,
+          "latitude": 28.554901,
+          "osm_node_id": 12384195937
+        },
+        {
+          "longitude": 77.2091774,
+          "latitude": 28.5552907,
+          "osm_node_id": 9870218645
+        },
+        {
+          "longitude": 77.2461557,
+          "latitude": 28.5383757,
+          "osm_node_id": 1040925057
+        },
+        {
+          "longitude": 77.2166881,
+          "latitude": 28.5101046,
+          "osm_node_id": 4167165031
+        },
+        {
+          "longitude": 77.2353222,
+          "latitude": 28.5344111,
+          "osm_node_id": 2798104879
+        },
+        {
+          "longitude": 77.2035263,
+          "latitude": 28.5221074,
+          "osm_node_id": 13805620941
+        },
+        {
+          "longitude": 77.2100408,
+          "latitude": 28.5009075,
+          "osm_node_id": 4217296934
+        },
+        {
+          "longitude": 77.216577,
+          "latitude": 28.4931843,
+          "osm_node_id": 4057920130
+        },
+        {
+          "longitude": 77.1835502,
+          "latitude": 28.5041713,
+          "osm_node_id": 9869620387
+        },
+        {
+          "longitude": 77.2196497,
+          "latitude": 28.54174,
+          "osm_node_id": 6436095853
+        },
+        {
+          "longitude": 77.2548342,
+          "latitude": 28.5308068,
+          "osm_node_id": 9720397563
+        },
+        {
+          "longitude": 77.2498848,
+          "latitude": 28.5036822,
+          "osm_node_id": 3742626113
+        },
+        {
+          "longitude": 77.1811803,
+          "latitude": 28.4924183,
+          "osm_node_id": 9826882768
+        },
+        {
+          "longitude": 77.2338621,
+          "latitude": 28.553856,
+          "osm_node_id": 11265485100
+        },
+        {
+          "longitude": 77.2643068,
+          "latitude": 28.5597955,
+          "osm_node_id": 4212076724
+        },
+        {
+          "longitude": 77.1909177,
+          "latitude": 28.5277677,
+          "osm_node_id": 6639632842
+        },
+        {
+          "longitude": 77.2672847,
+          "latitude": 28.4950845,
+          "osm_node_id": 9824990391
+        },
+        {
+          "longitude": 77.2424522,
+          "latitude": 28.5483692,
+          "osm_node_id": 1041939599
+        },
+        {
+          "longitude": 77.2270267,
+          "latitude": 28.4921469,
+          "osm_node_id": 4066878781
+        },
+        {
+          "longitude": 77.1999419,
+          "latitude": 28.5118324,
+          "osm_node_id": 5581205926
+        },
+        {
+          "longitude": 77.2562852,
+          "latitude": 28.5368454,
+          "osm_node_id": 2756094820
+        },
+        {
+          "longitude": 77.2422814,
+          "latitude": 28.5234428,
+          "osm_node_id": 4215248810
+        },
+        {
+          "longitude": 77.1975677,
+          "latitude": 28.4883304,
+          "osm_node_id": 5953827167
+        },
+        {
+          "longitude": 77.2585443,
+          "latitude": 28.5210892,
+          "osm_node_id": 1806381032
+        },
+        {
+          "longitude": 77.2649319,
+          "latitude": 28.5138195,
+          "osm_node_id": 6745598089
+        },
+        {
+          "longitude": 77.2355117,
+          "latitude": 28.4908867,
+          "osm_node_id": 9821445875
+        },
+        {
+          "longitude": 77.2009599,
+          "latitude": 28.5038531,
+          "osm_node_id": 6656633528
+        },
+        {
+          "longitude": 77.1870394,
+          "latitude": 28.514914,
+          "osm_node_id": 3742612540
+        },
+        {
+          "longitude": 77.1801055,
+          "latitude": 28.5457466,
+          "osm_node_id": 6095495876
+        },
+        {
+          "longitude": 77.2640871,
+          "latitude": 28.5541874,
+          "osm_node_id": 562621313
+        },
+        {
+          "longitude": 77.238581,
+          "latitude": 28.5128736,
+          "osm_node_id": 582529588
+        },
+        {
+          "longitude": 77.2401973,
+          "latitude": 28.4988082,
+          "osm_node_id": 4212207157
+        },
+        {
+          "longitude": 77.2036263,
+          "latitude": 28.5548782,
+          "osm_node_id": 1834069071
+        },
+        {
+          "longitude": 77.2307572,
+          "latitude": 28.5593452,
+          "osm_node_id": 3178456080
+        },
+        {
+          "longitude": 77.2560541,
+          "latitude": 28.5114342,
+          "osm_node_id": 442873508
+        },
+        {
+          "longitude": 77.2387559,
+          "latitude": 28.5388853,
+          "osm_node_id": 11486209295
+        },
+        {
+          "longitude": 77.2466004,
+          "latitude": 28.5537431,
+          "osm_node_id": 6436016232
+        },
+        {
+          "longitude": 77.2370515,
+          "latitude": 28.507328,
+          "osm_node_id": 4216812667
+        },
+        {
+          "longitude": 77.203292,
+          "latitude": 28.5474449,
+          "osm_node_id": 4233809420
+        },
+        {
+          "longitude": 77.1748826,
+          "latitude": 28.5203167,
+          "osm_node_id": 9852864039
+        },
+        {
+          "longitude": 77.2337729,
+          "latitude": 28.5233864,
+          "osm_node_id": 10261735622
+        },
+        {
+          "longitude": 77.180857,
+          "latitude": 28.5395282,
+          "osm_node_id": 9834969305
+        },
+        {
+          "longitude": 77.173648,
+          "latitude": 28.5375879,
+          "osm_node_id": 2009503119
+        },
+        {
+          "longitude": 77.2655018,
+          "latitude": 28.5320163,
+          "osm_node_id": 9720422531
+        },
+        {
+          "longitude": 77.2179385,
+          "latitude": 28.53055,
+          "osm_node_id": 9700443583
+        },
+        {
+          "longitude": 77.1816091,
+          "latitude": 28.5203135,
+          "osm_node_id": 6649047361
+        },
+        {
+          "longitude": 77.2463539,
+          "latitude": 28.533097,
+          "osm_node_id": 1040924961
+        },
+        {
+          "longitude": 77.2346275,
+          "latitude": 28.5162686,
+          "osm_node_id": 4215363131
+        },
+        {
+          "longitude": 77.2294711,
+          "latitude": 28.5142109,
+          "osm_node_id": 4217106949
+        },
+        {
+          "longitude": 77.1996235,
+          "latitude": 28.5302879,
+          "osm_node_id": 6233162638
+        },
+        {
+          "longitude": 77.2411384,
+          "latitude": 28.5591385,
+          "osm_node_id": 10267141387
+        },
+        {
+          "longitude": 77.2446638,
+          "latitude": 28.4900839,
+          "osm_node_id": 9843466395
+        },
+        {
+          "longitude": 77.1921419,
+          "latitude": 28.4979248,
+          "osm_node_id": 9743545351
+        },
+        {
+          "longitude": 77.219521,
+          "latitude": 28.5169897,
+          "osm_node_id": 4167258604
+        },
+        {
+          "longitude": 77.1973546,
+          "latitude": 28.5593436,
+          "osm_node_id": 2953785310
+        },
+        {
+          "longitude": 77.2210326,
+          "latitude": 28.5012968,
+          "osm_node_id": 9838203340
+        },
+        {
+          "longitude": 77.2320798,
+          "latitude": 28.5064379,
+          "osm_node_id": 10036562143
+        },
+        {
+          "longitude": 77.2082199,
+          "latitude": 28.5327132,
+          "osm_node_id": 9186387121
+        },
+        {
+          "longitude": 77.1791684,
+          "latitude": 28.5111643,
+          "osm_node_id": 9869896198
+        },
+        {
+          "longitude": 77.2436577,
+          "latitude": 28.5187258,
+          "osm_node_id": 4216749246
+        },
+        {
+          "longitude": 77.2241847,
+          "latitude": 28.5549124,
+          "osm_node_id": 6531397465
+        },
+        {
+          "longitude": 77.1862743,
+          "latitude": 28.549617,
+          "osm_node_id": 910665005
+        },
+        {
+          "longitude": 77.2413418,
+          "latitude": 28.5038071,
+          "osm_node_id": 4216812645
+        },
+        {
+          "longitude": 77.2269756,
+          "latitude": 28.5390624,
+          "osm_node_id": 9894420245
+        },
+        {
+          "longitude": 77.1706419,
+          "latitude": 28.5545539,
+          "osm_node_id": 7082499275
+        },
+        {
+          "longitude": 77.2525248,
+          "latitude": 28.5598515,
+          "osm_node_id": 11668415896
+        },
+        {
+          "longitude": 77.2004663,
+          "latitude": 28.4967913,
+          "osm_node_id": 4175247014
+        },
+        {
+          "longitude": 77.2212467,
+          "latitude": 28.4920642,
+          "osm_node_id": 12640019922
+        },
+        {
+          "longitude": 77.1887438,
+          "latitude": 28.5096785,
+          "osm_node_id": 9865413325
+        },
+        {
+          "longitude": 77.2287394,
+          "latitude": 28.4983248,
+          "osm_node_id": 4167165511
+        },
+        {
+          "longitude": 77.2070064,
+          "latitude": 28.5599898,
+          "osm_node_id": 14152962038
+        },
+        {
+          "longitude": 77.2167963,
+          "latitude": 28.5046306,
+          "osm_node_id": 9833100439
+        },
+        {
+          "longitude": 77.2458777,
+          "latitude": 28.5061622,
+          "osm_node_id": 11266431652
+        },
+        {
+          "longitude": 77.2144581,
+          "latitude": 28.5554323,
+          "osm_node_id": 5445739537
+        },
+        {
+          "longitude": 77.2609167,
+          "latitude": 28.5036065,
+          "osm_node_id": 582533673
+        },
+        {
+          "longitude": 77.2364412,
+          "latitude": 28.4960296,
+          "osm_node_id": 4065665472
+        },
+        {
+          "longitude": 77.2161202,
+          "latitude": 28.5205872,
+          "osm_node_id": 2699746497
+        },
+        {
+          "longitude": 77.1757059,
+          "latitude": 28.5595024,
+          "osm_node_id": 4233041410
+        },
+        {
+          "longitude": 77.2313717,
+          "latitude": 28.5478443,
+          "osm_node_id": 939271318
+        },
+        {
+          "longitude": 77.2203333,
+          "latitude": 28.5598842,
+          "osm_node_id": 3825037557
+        },
+        {
+          "longitude": 77.2608259,
+          "latitude": 28.5374994,
+          "osm_node_id": 7232717322
+        },
+        {
+          "longitude": 77.257509,
+          "latitude": 28.5518538,
+          "osm_node_id": 910665231
+        },
+        {
+          "longitude": 77.1894326,
+          "latitude": 28.4922064,
+          "osm_node_id": 9821648189
+        },
+        {
+          "longitude": 77.2501049,
+          "latitude": 28.5305146,
+          "osm_node_id": 3486509788
+        },
+        {
+          "longitude": 77.2661274,
+          "latitude": 28.5265439,
+          "osm_node_id": 2018206438
+        },
+        {
+          "longitude": 77.2441254,
+          "latitude": 28.4957196,
+          "osm_node_id": 4065665450
+        },
+        {
+          "longitude": 77.1997503,
+          "latitude": 28.5196291,
+          "osm_node_id": 4154942085
+        },
+        {
+          "longitude": 77.2422186,
+          "latitude": 28.5297933,
+          "osm_node_id": 7640317808
+        },
+        {
+          "longitude": 77.1809551,
+          "latitude": 28.5552669,
+          "osm_node_id": 4233127002
+        },
+        {
+          "longitude": 77.2462614,
+          "latitude": 28.5444048,
+          "osm_node_id": 1040896613
+        },
+        {
+          "longitude": 77.2098106,
+          "latitude": 28.5432076,
+          "osm_node_id": 12639954093
+        },
+        {
+          "longitude": 77.2156367,
+          "latitude": 28.5396906,
+          "osm_node_id": 7183725326
+        },
+        {
+          "longitude": 77.2261351,
+          "latitude": 28.5265409,
+          "osm_node_id": 9700429763
+        },
+        {
+          "longitude": 77.2066894,
+          "latitude": 28.5375589,
+          "osm_node_id": 2018025737
+        },
+        {
+          "longitude": 77.1939446,
+          "latitude": 28.5039591,
+          "osm_node_id": 4217296973
+        },
+        {
+          "longitude": 77.2062973,
+          "latitude": 28.5037234,
+          "osm_node_id": 2884641168
+        },
+        {
+          "longitude": 77.1915331,
+          "latitude": 28.4810015,
+          "osm_node_id": 13976593093
+        },
+        {
+          "longitude": 77.1935639,
+          "latitude": 28.5242243,
+          "osm_node_id": 9186369498
+        },
+        {
+          "longitude": 77.2609122,
+          "latitude": 28.5448962,
+          "osm_node_id": 9869626382
+        },
+        {
+          "longitude": 77.212638,
+          "latitude": 28.4958781,
+          "osm_node_id": 4057920207
+        },
+        {
+          "longitude": 77.2333222,
+          "latitude": 28.4990615,
+          "osm_node_id": 4167165525
+        },
+        {
+          "longitude": 77.186947,
+          "latitude": 28.4846676,
+          "osm_node_id": 6191328027
+        },
+        {
+          "longitude": 77.1829243,
+          "latitude": 28.5161878,
+          "osm_node_id": 9849426342
+        },
+        {
+          "longitude": 77.1840243,
+          "latitude": 28.4996662,
+          "osm_node_id": 9868128325
+        },
+        {
+          "longitude": 77.170282,
+          "latitude": 28.5288159,
+          "osm_node_id": 11393733147
+        },
+        {
+          "longitude": 77.2548988,
+          "latitude": 28.4952958,
+          "osm_node_id": 9859525242
+        },
+        {
+          "longitude": 77.1889309,
+          "latitude": 28.5412616,
+          "osm_node_id": 4233654461
+        },
+        {
+          "longitude": 77.2519824,
+          "latitude": 28.5508421,
+          "osm_node_id": 14031040416
+        },
+        {
+          "longitude": 77.213662,
+          "latitude": 28.5251204,
+          "osm_node_id": 11029534088
+        },
+        {
+          "longitude": 77.1987124,
+          "latitude": 28.5351203,
+          "osm_node_id": 12119768602
+        },
+        {
+          "longitude": 77.1766966,
+          "latitude": 28.54823,
+          "osm_node_id": 3190845372
+        },
+        {
+          "longitude": 77.2069419,
+          "latitude": 28.5196392,
+          "osm_node_id": 1999040286
+        },
+        {
+          "longitude": 77.1862561,
+          "latitude": 28.5598526,
+          "osm_node_id": 9871833220
+        },
+        {
+          "longitude": 77.2294852,
+          "latitude": 28.5233279,
+          "osm_node_id": 5553734995
+        },
+        {
+          "longitude": 77.2208176,
+          "latitude": 28.5103534,
+          "osm_node_id": 9833018169
+        },
+        {
+          "longitude": 77.2320427,
+          "latitude": 28.531615,
+          "osm_node_id": 2018025678
+        },
+        {
+          "longitude": 77.1701906,
+          "latitude": 28.5111562,
+          "osm_node_id": 6639748130
+        },
+        {
+          "longitude": 77.231289,
+          "latitude": 28.4901391,
+          "osm_node_id": 4214831457
+        },
+        {
+          "longitude": 77.2250542,
+          "latitude": 28.5007008,
+          "osm_node_id": 6738659085
+        },
+        {
+          "longitude": 77.195881,
+          "latitude": 28.5119465,
+          "osm_node_id": 13805692119
+        },
+        {
+          "longitude": 77.2306135,
+          "latitude": 28.5431491,
+          "osm_node_id": 7652376844
+        },
+        {
+          "longitude": 77.2377238,
+          "latitude": 28.5561386,
+          "osm_node_id": 1041939083
+        },
+        {
+          "longitude": 77.2195491,
+          "latitude": 28.4962252,
+          "osm_node_id": 9832118907
+        },
+        {
+          "longitude": 77.222168,
+          "latitude": 28.5256132,
+          "osm_node_id": 11171619419
+        },
+        {
+          "longitude": 77.2209827,
+          "latitude": 28.5331702,
+          "osm_node_id": 10262186448
+        },
+        {
+          "longitude": 77.2270507,
+          "latitude": 28.5177532,
+          "osm_node_id": 4167478190
+        },
+        {
+          "longitude": 77.203909,
+          "latitude": 28.5120872,
+          "osm_node_id": 2883101342
+        },
+        {
+          "longitude": 77.1848899,
+          "latitude": 28.5225659,
+          "osm_node_id": 9852196078
+        },
+        {
+          "longitude": 77.211501,
+          "latitude": 28.5474337,
+          "osm_node_id": 6734361004
+        },
+        {
+          "longitude": 77.2592045,
+          "latitude": 28.5555592,
+          "osm_node_id": 4212076697
+        },
+        {
+          "longitude": 77.1779034,
+          "latitude": 28.4946949,
+          "osm_node_id": 9743141687
+        },
+        {
+          "longitude": 77.2008546,
+          "latitude": 28.5158569,
+          "osm_node_id": 9857211164
+        },
+        {
+          "longitude": 77.2014997,
+          "latitude": 28.5426457,
+          "osm_node_id": 4233713931
+        },
+        {
+          "longitude": 77.2231644,
+          "latitude": 28.5184446,
+          "osm_node_id": 9868123077
+        },
+        {
+          "longitude": 77.1896511,
+          "latitude": 28.5354109,
+          "osm_node_id": 9867951904
+        },
+        {
+          "longitude": 77.256942,
+          "latitude": 28.5275111,
+          "osm_node_id": 6837519205
+        },
+        {
+          "longitude": 77.2680311,
+          "latitude": 28.5202117,
+          "osm_node_id": 9854797684
+        },
+        {
+          "longitude": 77.1875824,
+          "latitude": 28.5053156,
+          "osm_node_id": 4218568039
+        },
+        {
+          "longitude": 77.2542029,
+          "latitude": 28.5401289,
+          "osm_node_id": 9867461280
+        },
+        {
+          "longitude": 77.2488568,
+          "latitude": 28.4998828,
+          "osm_node_id": 9861639649
+        },
+        {
+          "longitude": 77.2087064,
+          "latitude": 28.5161316,
+          "osm_node_id": 2883101444
+        },
+        {
+          "longitude": 77.2646298,
+          "latitude": 28.5093432,
+          "osm_node_id": 1815960939
+        },
+        {
+          "longitude": 77.228838,
+          "latitude": 28.5556756,
+          "osm_node_id": 11621673196
+        },
+        {
+          "longitude": 77.2098254,
+          "latitude": 28.5281968,
+          "osm_node_id": 2018025624
+        },
+        {
+          "longitude": 77.2391524,
+          "latitude": 28.5508929,
+          "osm_node_id": 7222845606
+        },
+        {
+          "longitude": 77.2509891,
+          "latitude": 28.5463155,
+          "osm_node_id": 910665316
+        },
+        {
+          "longitude": 77.2547436,
+          "latitude": 28.5206224,
+          "osm_node_id": 5665848137
+        },
+        {
+          "longitude": 77.1727774,
+          "latitude": 28.5040648,
+          "osm_node_id": 271335954
+        },
+        {
+          "longitude": 77.2233054,
+          "latitude": 28.5406667,
+          "osm_node_id": 6436095844
+        },
+        {
+          "longitude": 77.196752,
+          "latitude": 28.4959825,
+          "osm_node_id": 4219241663
+        },
+        {
+          "longitude": 77.2624348,
+          "latitude": 28.5295514,
+          "osm_node_id": 1486836340
+        },
+        {
+          "longitude": 77.2045335,
+          "latitude": 28.551198,
+          "osm_node_id": 12147793563
+        },
+        {
+          "longitude": 77.2006379,
+          "latitude": 28.5076286,
+          "osm_node_id": 9898788683
+        },
+        {
+          "longitude": 77.2088619,
+          "latitude": 28.5084005,
+          "osm_node_id": 2884641225
+        }
+      ]
+    },
+    "East": {
+      "bbox": [
+        77.28,
+        28.6,
+        77.33,
+        28.66
+      ],
+      "distribution": "clustered",
+      "nodes": [
+        {
+          "longitude": 77.3046307,
+          "latitude": 28.6300287,
+          "osm_node_id": 9932271565
+        },
+        {
+          "longitude": 77.313234,
+          "latitude": 28.6264032,
+          "osm_node_id": 903990208
+        },
+        {
+          "longitude": 77.311718,
+          "latitude": 28.6359497,
+          "osm_node_id": 903987357
+        },
+        {
+          "longitude": 77.3060384,
+          "latitude": 28.6212007,
+          "osm_node_id": 906539428
+        },
+        {
+          "longitude": 77.2972214,
+          "latitude": 28.6255399,
+          "osm_node_id": 5768521191
+        },
+        {
+          "longitude": 77.2976015,
+          "latitude": 28.6350057,
+          "osm_node_id": 9921847447
+        },
+        {
+          "longitude": 77.3045534,
+          "latitude": 28.6372068,
+          "osm_node_id": 9921903407
+        },
+        {
+          "longitude": 77.3080349,
+          "latitude": 28.6261702,
+          "osm_node_id": 5602934505
+        },
+        {
+          "longitude": 77.2993771,
+          "latitude": 28.6301862,
+          "osm_node_id": 9883043729
+        },
+        {
+          "longitude": 77.3020635,
+          "latitude": 28.6242525,
+          "osm_node_id": 6748445098
+        },
+        {
+          "longitude": 77.3105498,
+          "latitude": 28.630446,
+          "osm_node_id": 6642530075
+        },
+        {
+          "longitude": 77.3074161,
+          "latitude": 28.6337775,
+          "osm_node_id": 4212109492
+        },
+        {
+          "longitude": 77.3099859,
+          "latitude": 28.6225603,
+          "osm_node_id": 906539215
+        },
+        {
+          "longitude": 77.3016682,
+          "latitude": 28.6343655,
+          "osm_node_id": 9932267414
+        },
+        {
+          "longitude": 77.3086324,
+          "latitude": 28.6378091,
+          "osm_node_id": 903990204
+        },
+        {
+          "longitude": 77.301831,
+          "latitude": 28.6277905,
+          "osm_node_id": 904024556
+        },
+        {
+          "longitude": 77.296118,
+          "latitude": 28.6312278,
+          "osm_node_id": 904042522
+        },
+        {
+          "longitude": 77.3010552,
+          "latitude": 28.6375742,
+          "osm_node_id": 9921883727
+        },
+        {
+          "longitude": 77.3129493,
+          "latitude": 28.6326074,
+          "osm_node_id": 903987264
+        },
+        {
+          "longitude": 77.3048898,
+          "latitude": 28.6257111,
+          "osm_node_id": 12643147253
+        },
+        {
+          "longitude": 77.2992101,
+          "latitude": 28.6232475,
+          "osm_node_id": 5358200251
+        },
+        {
+          "longitude": 77.3077671,
+          "latitude": 28.6295058,
+          "osm_node_id": 3754484582
+        },
+        {
+          "longitude": 77.3021209,
+          "latitude": 28.6313699,
+          "osm_node_id": 4212231096
+        },
+        {
+          "longitude": 77.2966479,
+          "latitude": 28.6284702,
+          "osm_node_id": 4211800729
+        },
+        {
+          "longitude": 77.3101724,
+          "latitude": 28.6336035,
+          "osm_node_id": 6640133621
+        },
+        {
+          "longitude": 77.3047647,
+          "latitude": 28.6343686,
+          "osm_node_id": 11078901758
+        },
+        {
+          "longitude": 77.3072712,
+          "latitude": 28.62357,
+          "osm_node_id": 906538924
+        },
+        {
+          "longitude": 77.3034919,
+          "latitude": 28.6219503,
+          "osm_node_id": 906540123
+        },
+        {
+          "longitude": 77.2993699,
+          "latitude": 28.6330306,
+          "osm_node_id": 12010213690
+        },
+        {
+          "longitude": 77.2997551,
+          "latitude": 28.6260004,
+          "osm_node_id": 7810330674
+        },
+        {
+          "longitude": 77.3067741,
+          "latitude": 28.6361227,
+          "osm_node_id": 904024616
+        },
+        {
+          "longitude": 77.3057884,
+          "latitude": 28.6321446,
+          "osm_node_id": 13417975631
+        },
+        {
+          "longitude": 77.3064848,
+          "latitude": 28.6383823,
+          "osm_node_id": 903987484
+        },
+        {
+          "longitude": 77.3095876,
+          "latitude": 28.6283249,
+          "osm_node_id": 7173916330
+        },
+        {
+          "longitude": 77.3051101,
+          "latitude": 28.6234803,
+          "osm_node_id": 6872116140
+        },
+        {
+          "longitude": 77.3121976,
+          "latitude": 28.629077,
+          "osm_node_id": 12250115195
+        },
+        {
+          "longitude": 77.3054238,
+          "latitude": 28.6280401,
+          "osm_node_id": 9869837381
+        },
+        {
+          "longitude": 77.3095461,
+          "latitude": 28.6358954,
+          "osm_node_id": 903987447
+        },
+        {
+          "longitude": 77.29967,
+          "latitude": 28.6354058,
+          "osm_node_id": 9186628717
+        },
+        {
+          "longitude": 77.2993781,
+          "latitude": 28.6280518,
+          "osm_node_id": 9186576083
+        },
+        {
+          "longitude": 77.2972604,
+          "latitude": 28.6330167,
+          "osm_node_id": 904042434
+        },
+        {
+          "longitude": 77.3091571,
+          "latitude": 28.6243793,
+          "osm_node_id": 7594051438
+        },
+        {
+          "longitude": 77.3025376,
+          "latitude": 28.6361624,
+          "osm_node_id": 5763900545
+        },
+        {
+          "longitude": 77.3033891,
+          "latitude": 28.6329242,
+          "osm_node_id": 11095297530
+        },
+        {
+          "longitude": 77.3081211,
+          "latitude": 28.621766,
+          "osm_node_id": 906540405
+        },
+        {
+          "longitude": 77.3028022,
+          "latitude": 28.6295943,
+          "osm_node_id": 904029036
+        },
+        {
+          "longitude": 77.3016386,
+          "latitude": 28.6217048,
+          "osm_node_id": 9579651571
+        },
+        {
+          "longitude": 77.3031346,
+          "latitude": 28.6263003,
+          "osm_node_id": 9869837409
+        },
+        {
+          "longitude": 77.3115787,
+          "latitude": 28.6256958,
+          "osm_node_id": 905283563
+        },
+        {
+          "longitude": 77.3087571,
+          "latitude": 28.632503,
+          "osm_node_id": 13072266297
+        },
+        {
+          "longitude": 77.3120899,
+          "latitude": 28.6341288,
+          "osm_node_id": 903987770
+        },
+        {
+          "longitude": 77.2983223,
+          "latitude": 28.6315767,
+          "osm_node_id": 9932271531
+        },
+        {
+          "longitude": 77.3097352,
+          "latitude": 28.6266184,
+          "osm_node_id": 905281395
+        },
+        {
+          "longitude": 77.3073895,
+          "latitude": 28.6278547,
+          "osm_node_id": 3754484581
+        },
+        {
+          "longitude": 77.3014125,
+          "latitude": 28.6259101,
+          "osm_node_id": 3754484565
+        },
+        {
+          "longitude": 77.2974831,
+          "latitude": 28.6301484,
+          "osm_node_id": 4214836135
+        },
+        {
+          "longitude": 77.3064301,
+          "latitude": 28.6306221,
+          "osm_node_id": 2906748894
+        },
+        {
+          "longitude": 77.3034739,
+          "latitude": 28.6280903,
+          "osm_node_id": 2906748880
+        },
+        {
+          "longitude": 77.306489,
+          "latitude": 28.6255499,
+          "osm_node_id": 6200524150
+        },
+        {
+          "longitude": 77.297699,
+          "latitude": 28.627257,
+          "osm_node_id": 4211800727
+        },
+        {
+          "longitude": 77.3002435,
+          "latitude": 28.624503,
+          "osm_node_id": 11330736442
+        },
+        {
+          "longitude": 77.3110236,
+          "latitude": 28.6319153,
+          "osm_node_id": 903987841
+        },
+        {
+          "longitude": 77.3035374,
+          "latitude": 28.6246564,
+          "osm_node_id": 11507346519
+        },
+        {
+          "longitude": 77.3013108,
+          "latitude": 28.6326398,
+          "osm_node_id": 3754484585
+        },
+        {
+          "longitude": 77.3012535,
+          "latitude": 28.630142,
+          "osm_node_id": 4212228886
+        },
+        {
+          "longitude": 77.3041377,
+          "latitude": 28.6356999,
+          "osm_node_id": 904024684
+        },
+        {
+          "longitude": 77.3031802,
+          "latitude": 28.6376268,
+          "osm_node_id": 904024620
+        },
+        {
+          "longitude": 77.2981608,
+          "latitude": 28.6287918,
+          "osm_node_id": 9883043731
+        },
+        {
+          "longitude": 77.3062707,
+          "latitude": 28.6225895,
+          "osm_node_id": 906539463
+        },
+        {
+          "longitude": 77.3034745,
+          "latitude": 28.6308164,
+          "osm_node_id": 904024780
+        },
+        {
+          "longitude": 77.3048727,
+          "latitude": 28.6219734,
+          "osm_node_id": 9870043314
+        },
+        {
+          "longitude": 77.3086177,
+          "latitude": 28.6230518,
+          "osm_node_id": 906540180
+        },
+        {
+          "longitude": 77.3054973,
+          "latitude": 28.6355806,
+          "osm_node_id": 904024539
+        },
+        {
+          "longitude": 77.3006352,
+          "latitude": 28.6284962,
+          "osm_node_id": 904024701
+        },
+        {
+          "longitude": 77.3004455,
+          "latitude": 28.6338379,
+          "osm_node_id": 10885864256
+        },
+        {
+          "longitude": 77.3044634,
+          "latitude": 28.6321231,
+          "osm_node_id": 4212231104
+        },
+        {
+          "longitude": 77.2987268,
+          "latitude": 28.6343217,
+          "osm_node_id": 9186628706
+        },
+        {
+          "longitude": 77.2987569,
+          "latitude": 28.6251454,
+          "osm_node_id": 3754484290
+        },
+        {
+          "longitude": 77.305924,
+          "latitude": 28.6268717,
+          "osm_node_id": 9720405042
+        },
+        {
+          "longitude": 77.3031663,
+          "latitude": 28.6348898,
+          "osm_node_id": 6541827232
+        },
+        {
+          "longitude": 77.3109349,
+          "latitude": 28.6345858,
+          "osm_node_id": 903989448
+        },
+        {
+          "longitude": 77.3026552,
+          "latitude": 28.6228579,
+          "osm_node_id": 6872116146
+        },
+        {
+          "longitude": 77.2988473,
+          "latitude": 28.6268105,
+          "osm_node_id": 6642429901
+        },
+        {
+          "longitude": 77.3044883,
+          "latitude": 28.6288227,
+          "osm_node_id": 904024664
+        },
+        {
+          "longitude": 77.3079411,
+          "latitude": 28.635936,
+          "osm_node_id": 903987801
+        },
+        {
+          "longitude": 77.2965551,
+          "latitude": 28.626987,
+          "osm_node_id": 9883020800
+        },
+        {
+          "longitude": 77.3007253,
+          "latitude": 28.627327,
+          "osm_node_id": 3735878332
+        },
+        {
+          "longitude": 77.3097641,
+          "latitude": 28.6347461,
+          "osm_node_id": 6637145365
+        },
+        {
+          "longitude": 77.3007973,
+          "latitude": 28.6355419,
+          "osm_node_id": 10241558284
+        },
+        {
+          "longitude": 77.2985165,
+          "latitude": 28.635647,
+          "osm_node_id": 9922174959
+        },
+        {
+          "longitude": 77.3075327,
+          "latitude": 28.632675,
+          "osm_node_id": 9093848928
+        },
+        {
+          "longitude": 77.3099142,
+          "latitude": 28.636936,
+          "osm_node_id": 903988734
+        },
+        {
+          "longitude": 77.3003127,
+          "latitude": 28.6307687,
+          "osm_node_id": 10886060154
+        },
+        {
+          "longitude": 77.2996262,
+          "latitude": 28.6364961,
+          "osm_node_id": 904024771
+        },
+        {
+          "longitude": 77.3105981,
+          "latitude": 28.6361051,
+          "osm_node_id": 13404687885
+        },
+        {
+          "longitude": 77.310599,
+          "latitude": 28.6286581,
+          "osm_node_id": 6759262547
+        },
+        {
+          "longitude": 77.3060093,
+          "latitude": 28.6289283,
+          "osm_node_id": 10198940889
+        },
+        {
+          "longitude": 77.3126566,
+          "latitude": 28.6281195,
+          "osm_node_id": 903987658
+        },
+        {
+          "longitude": 77.2992143,
+          "latitude": 28.6291425,
+          "osm_node_id": 11050273843
+        },
+        {
+          "longitude": 77.2966469,
+          "latitude": 28.6321408,
+          "osm_node_id": 904042373
+        },
+        {
+          "longitude": 77.3055527,
+          "latitude": 28.6366333,
+          "osm_node_id": 904024687
+        },
+        {
+          "longitude": 77.308539,
+          "latitude": 28.6282442,
+          "osm_node_id": 5354315965
+        },
+        {
+          "longitude": 77.3070872,
+          "latitude": 28.6219223,
+          "osm_node_id": 906540266
+        },
+        {
+          "longitude": 77.3052079,
+          "latitude": 28.6334234,
+          "osm_node_id": 9920822111
+        },
+        {
+          "longitude": 77.3051561,
+          "latitude": 28.638053,
+          "osm_node_id": 903988511
+        },
+        {
+          "longitude": 77.300819,
+          "latitude": 28.6236417,
+          "osm_node_id": 7115919470
+        },
+        {
+          "longitude": 77.3125693,
+          "latitude": 28.6254273,
+          "osm_node_id": 6645599282
+        },
+        {
+          "longitude": 77.3038293,
+          "latitude": 28.6384188,
+          "osm_node_id": 904024690
+        },
+        {
+          "longitude": 77.3021597,
+          "latitude": 28.6375654,
+          "osm_node_id": 11145622345
+        },
+        {
+          "longitude": 77.3115189,
+          "latitude": 28.6307692,
+          "osm_node_id": 904024694
+        },
+        {
+          "longitude": 77.2984353,
+          "latitude": 28.6298086,
+          "osm_node_id": 12185790474
+        },
+        {
+          "longitude": 77.2970919,
+          "latitude": 28.634137,
+          "osm_node_id": 904042505
+        },
+        {
+          "longitude": 77.3101792,
+          "latitude": 28.6235471,
+          "osm_node_id": 905115823
+        },
+        {
+          "longitude": 77.301877,
+          "latitude": 28.6292018,
+          "osm_node_id": 904029009
+        },
+        {
+          "longitude": 77.3020917,
+          "latitude": 28.6266492,
+          "osm_node_id": 904024732
+        },
+        {
+          "longitude": 77.3064254,
+          "latitude": 28.6338254,
+          "osm_node_id": 9093894575
+        },
+        {
+          "longitude": 77.3087266,
+          "latitude": 28.6293604,
+          "osm_node_id": 11012314146
+        },
+        {
+          "longitude": 77.3091175,
+          "latitude": 28.6221356,
+          "osm_node_id": 906539087
+        },
+        {
+          "longitude": 77.3036042,
+          "latitude": 28.6229782,
+          "osm_node_id": 6454061008
+        },
+        {
+          "longitude": 77.298535,
+          "latitude": 28.6325051,
+          "osm_node_id": 9917047943
+        },
+        {
+          "longitude": 77.2997859,
+          "latitude": 28.627186,
+          "osm_node_id": 6642429899
+        },
+        {
+          "longitude": 77.2978224,
+          "latitude": 28.6248247,
+          "osm_node_id": 9882925978
+        },
+        {
+          "longitude": 77.2983636,
+          "latitude": 28.6260121,
+          "osm_node_id": 4211800721
+        },
+        {
+          "longitude": 77.3024972,
+          "latitude": 28.6304748,
+          "osm_node_id": 4212231089
+        },
+        {
+          "longitude": 77.303215,
+          "latitude": 28.631708,
+          "osm_node_id": 4212231099
+        },
+        {
+          "longitude": 77.3035675,
+          "latitude": 28.629007,
+          "osm_node_id": 904029054
+        },
+        {
+          "longitude": 77.3082505,
+          "latitude": 28.6238955,
+          "osm_node_id": 9870086898
+        },
+        {
+          "longitude": 77.3012458,
+          "latitude": 28.631105,
+          "osm_node_id": 3754484588
+        },
+        {
+          "longitude": 77.302844,
+          "latitude": 28.6336571,
+          "osm_node_id": 11959842009
+        },
+        {
+          "longitude": 77.3009688,
+          "latitude": 28.6250483,
+          "osm_node_id": 5768524453
+        },
+        {
+          "longitude": 77.3096945,
+          "latitude": 28.625105,
+          "osm_node_id": 7593791554
+        },
+        {
+          "longitude": 77.3083392,
+          "latitude": 28.6369656,
+          "osm_node_id": 903987193
+        },
+        {
+          "longitude": 77.3108915,
+          "latitude": 28.6327961,
+          "osm_node_id": 12785298283
+        },
+        {
+          "longitude": 77.3016988,
+          "latitude": 28.635864,
+          "osm_node_id": 9623534014
+        },
+        {
+          "longitude": 77.3127893,
+          "latitude": 28.6334813,
+          "osm_node_id": 9861724698
+        },
+        {
+          "longitude": 77.3045417,
+          "latitude": 28.6248943,
+          "osm_node_id": 9540218256
+        },
+        {
+          "longitude": 77.2979328,
+          "latitude": 28.6338589,
+          "osm_node_id": 904042609
+        },
+        {
+          "longitude": 77.3118667,
+          "latitude": 28.6298925,
+          "osm_node_id": 13236327105
+        },
+        {
+          "longitude": 77.3095191,
+          "latitude": 28.6274606,
+          "osm_node_id": 4212228866
+        },
+        {
+          "longitude": 77.3073217,
+          "latitude": 28.6381589,
+          "osm_node_id": 11502605117
+        },
+        {
+          "longitude": 77.2975064,
+          "latitude": 28.6318592,
+          "osm_node_id": 10548849883
+        },
+        {
+          "longitude": 77.3078581,
+          "latitude": 28.6226494,
+          "osm_node_id": 906540212
+        },
+        {
+          "longitude": 77.3020057,
+          "latitude": 28.6252929,
+          "osm_node_id": 6640098456
+        },
+        {
+          "longitude": 77.3068221,
+          "latitude": 28.6291962,
+          "osm_node_id": 9200039686
+        },
+        {
+          "longitude": 77.309746,
+          "latitude": 28.6301796,
+          "osm_node_id": 4212109436
+        },
+        {
+          "longitude": 77.3033769,
+          "latitude": 28.6368055,
+          "osm_node_id": 904024615
+        },
+        {
+          "longitude": 77.3055973,
+          "latitude": 28.6252507,
+          "osm_node_id": 905284906
+        },
+        {
+          "longitude": 77.304679,
+          "latitude": 28.6363741,
+          "osm_node_id": 904024702
+        },
+        {
+          "longitude": 77.2989827,
+          "latitude": 28.6310639,
+          "osm_node_id": 11955746977
+        },
+        {
+          "longitude": 77.2975064,
+          "latitude": 28.6293142,
+          "osm_node_id": 9883043720
+        },
+        {
+          "longitude": 77.2966582,
+          "latitude": 28.630193,
+          "osm_node_id": 904028998
+        },
+        {
+          "longitude": 77.30399,
+          "latitude": 28.6348615,
+          "osm_node_id": 5957748185
+        },
+        {
+          "longitude": 77.2970081,
+          "latitude": 28.6277002,
+          "osm_node_id": 9186576090
+        },
+        {
+          "longitude": 77.2976124,
+          "latitude": 28.6264472,
+          "osm_node_id": 11052050281
+        },
+        {
+          "longitude": 77.3027093,
+          "latitude": 28.6278376,
+          "osm_node_id": 9869663532
+        },
+        {
+          "longitude": 77.3003599,
+          "latitude": 28.6266116,
+          "osm_node_id": 6636558475
+        },
+        {
+          "longitude": 77.3061004,
+          "latitude": 28.6314066,
+          "osm_node_id": 9926474393
+        },
+        {
+          "longitude": 77.3121435,
+          "latitude": 28.6349269,
+          "osm_node_id": 903990117
+        },
+        {
+          "longitude": 77.2999984,
+          "latitude": 28.6233664,
+          "osm_node_id": 9186612084
+        },
+        {
+          "longitude": 77.3041864,
+          "latitude": 28.6224383,
+          "osm_node_id": 9579823611
+        },
+        {
+          "longitude": 77.3024028,
+          "latitude": 28.6347026,
+          "osm_node_id": 9865297004
+        },
+        {
+          "longitude": 77.3087231,
+          "latitude": 28.6358622,
+          "osm_node_id": 11594571150
+        },
+        {
+          "longitude": 77.2999069,
+          "latitude": 28.6252306,
+          "osm_node_id": 5768521192
+        },
+        {
+          "longitude": 77.30527,
+          "latitude": 28.6226482,
+          "osm_node_id": 9869923870
+        },
+        {
+          "longitude": 77.300106,
+          "latitude": 28.6290684,
+          "osm_node_id": 904024655
+        },
+        {
+          "longitude": 77.3037962,
+          "latitude": 28.6301067,
+          "osm_node_id": 904024557
+        },
+        {
+          "longitude": 77.3091436,
+          "latitude": 28.6369027,
+          "osm_node_id": 903987616
+        },
+        {
+          "longitude": 77.3027289,
+          "latitude": 28.6220907,
+          "osm_node_id": 6872116126
+        },
+        {
+          "longitude": 77.3083462,
+          "latitude": 28.6246449,
+          "osm_node_id": 7214263639
+        },
+        {
+          "longitude": 77.2961636,
+          "latitude": 28.6290497,
+          "osm_node_id": 4211800731
+        },
+        {
+          "longitude": 77.3103787,
+          "latitude": 28.6351638,
+          "osm_node_id": 9861820688
+        },
+        {
+          "longitude": 77.3026562,
+          "latitude": 28.6369442,
+          "osm_node_id": 904024731
+        },
+        {
+          "longitude": 77.3065829,
+          "latitude": 28.6233365,
+          "osm_node_id": 906538859
+        },
+        {
+          "longitude": 77.303823,
+          "latitude": 28.6260697,
+          "osm_node_id": 12643147254
+        },
+        {
+          "longitude": 77.3010746,
+          "latitude": 28.6265432,
+          "osm_node_id": 5768524457
+        },
+        {
+          "longitude": 77.3094339,
+          "latitude": 28.6327302,
+          "osm_node_id": 904024779
+        },
+        {
+          "longitude": 77.3081881,
+          "latitude": 28.6276299,
+          "osm_node_id": 5602878445
+        },
+        {
+          "longitude": 77.310047,
+          "latitude": 28.6244991,
+          "osm_node_id": 905281671
+        },
+        {
+          "longitude": 77.302236,
+          "latitude": 28.6259548,
+          "osm_node_id": 6640098459
+        },
+        {
+          "longitude": 77.2978393,
+          "latitude": 28.6326295,
+          "osm_node_id": 904042613
+        },
+        {
+          "longitude": 77.2987628,
+          "latitude": 28.628377,
+          "osm_node_id": 904029028
+        },
+        {
+          "longitude": 77.3059942,
+          "latitude": 28.6360955,
+          "osm_node_id": 7173961896
+        },
+        {
+          "longitude": 77.3112603,
+          "latitude": 28.6288735,
+          "osm_node_id": 9869570813
+        },
+        {
+          "longitude": 77.3066995,
+          "latitude": 28.6299854,
+          "osm_node_id": 9932271585
+        },
+        {
+          "longitude": 77.3021507,
+          "latitude": 28.629836,
+          "osm_node_id": 904029059
+        },
+        {
+          "longitude": 77.3017459,
+          "latitude": 28.6284748,
+          "osm_node_id": 904029012
+        },
+        {
+          "longitude": 77.3055114,
+          "latitude": 28.638642,
+          "osm_node_id": 903987652
+        },
+        {
+          "longitude": 77.2990438,
+          "latitude": 28.6257665,
+          "osm_node_id": 4211800718
+        },
+        {
+          "longitude": 77.3117606,
+          "latitude": 28.6335315,
+          "osm_node_id": 9861813356
+        },
+        {
+          "longitude": 77.3016979,
+          "latitude": 28.6380591,
+          "osm_node_id": 904024658
+        },
+        {
+          "longitude": 77.3053454,
+          "latitude": 28.6287099,
+          "osm_node_id": 14100413105
+        },
+        {
+          "longitude": 77.3107182,
+          "latitude": 28.6231457,
+          "osm_node_id": 905115819
+        },
+        {
+          "longitude": 77.299909,
+          "latitude": 28.6297807,
+          "osm_node_id": 4212228885
+        },
+        {
+          "longitude": 77.3041174,
+          "latitude": 28.6293864,
+          "osm_node_id": 904029060
+        },
+        {
+          "longitude": 77.3040102,
+          "latitude": 28.6377758,
+          "osm_node_id": 904024643
+        },
+        {
+          "longitude": 77.3062622,
+          "latitude": 28.6377531,
+          "osm_node_id": 903987699
+        },
+        {
+          "longitude": 77.2976485,
+          "latitude": 28.6279225,
+          "osm_node_id": 4211898252
+        },
+        {
+          "longitude": 77.3057976,
+          "latitude": 28.6304135,
+          "osm_node_id": 11950009520
+        },
+        {
+          "longitude": 77.2998315,
+          "latitude": 28.6335086,
+          "osm_node_id": 9186628708
+        },
+        {
+          "longitude": 77.3011842,
+          "latitude": 28.6281211,
+          "osm_node_id": 904024788
+        },
+        {
+          "longitude": 77.2991254,
+          "latitude": 28.6359108,
+          "osm_node_id": 9871826725
+        },
+        {
+          "longitude": 77.3006636,
+          "latitude": 28.6256375,
+          "osm_node_id": 4211927901
+        },
+        {
+          "longitude": 77.2989521,
+          "latitude": 28.6349456,
+          "osm_node_id": 9186628719
+        },
+        {
+          "longitude": 77.308987,
+          "latitude": 28.6287234,
+          "osm_node_id": 11959842025
+        },
+        {
+          "longitude": 77.3038324,
+          "latitude": 28.6319202,
+          "osm_node_id": 5595808096
+        },
+        {
+          "longitude": 77.3084538,
+          "latitude": 28.6256798,
+          "osm_node_id": 905115829
+        },
+        {
+          "longitude": 77.2978584,
+          "latitude": 28.6255688,
+          "osm_node_id": 13895879046
+        },
+        {
+          "longitude": 77.3079908,
+          "latitude": 28.6322425,
+          "osm_node_id": 9093848924
+        },
+        {
+          "longitude": 77.305537,
+          "latitude": 28.621576,
+          "osm_node_id": 9869923865
+        },
+        {
+          "longitude": 77.3088404,
+          "latitude": 28.6236919,
+          "osm_node_id": 906539263
+        },
+        {
+          "longitude": 77.3115457,
+          "latitude": 28.635086,
+          "osm_node_id": 903988267
+        },
+        {
+          "longitude": 77.3029665,
+          "latitude": 28.6284412,
+          "osm_node_id": 904029056
+        },
+        {
+          "longitude": 77.3030767,
+          "latitude": 28.6302643,
+          "osm_node_id": 904029011
+        },
+        {
+          "longitude": 77.3069389,
+          "latitude": 28.6341648,
+          "osm_node_id": 4212109498
+        },
+        {
+          "longitude": 77.3084396,
+          "latitude": 28.622454,
+          "osm_node_id": 4211927892
+        },
+        {
+          "longitude": 77.2997953,
+          "latitude": 28.6285449,
+          "osm_node_id": 11050273845
+        },
+        {
+          "longitude": 77.3059807,
+          "latitude": 28.6231243,
+          "osm_node_id": 906540360
+        },
+        {
+          "longitude": 77.2987809,
+          "latitude": 28.6303086,
+          "osm_node_id": 11193142329
+        },
+        {
+          "longitude": 77.3096366,
+          "latitude": 28.6230572,
+          "osm_node_id": 906539765
+        },
+        {
+          "longitude": 77.3069104,
+          "latitude": 28.6225027,
+          "osm_node_id": 11217135691
+        },
+        {
+          "longitude": 77.3018453,
+          "latitude": 28.6303586,
+          "osm_node_id": 9869662693
+        },
+        {
+          "longitude": 77.3065388,
+          "latitude": 28.6215293,
+          "osm_node_id": 9869914179
+        },
+        {
+          "longitude": 77.3012974,
+          "latitude": 28.6274907,
+          "osm_node_id": 9676122220
+        },
+        {
+          "longitude": 77.3030674,
+          "latitude": 28.6359029,
+          "osm_node_id": 9679544916
+        },
+        {
+          "longitude": 77.3047484,
+          "latitude": 28.6349573,
+          "osm_node_id": 11226379828
+        },
+        {
+          "longitude": 77.309993,
+          "latitude": 28.6329137,
+          "osm_node_id": 9093701779
+        },
+        {
+          "longitude": 77.3121536,
+          "latitude": 28.6258417,
+          "osm_node_id": 6872116134
+        },
+        {
+          "longitude": 77.2994879,
+          "latitude": 28.6265185,
+          "osm_node_id": 6636558481
+        },
+        {
+          "longitude": 77.2971453,
+          "latitude": 28.6267936,
+          "osm_node_id": 9883043738
+        },
+        {
+          "longitude": 77.3086308,
+          "latitude": 28.6299294,
+          "osm_node_id": 12100299542
+        },
+        {
+          "longitude": 77.3016045,
+          "latitude": 28.6239042,
+          "osm_node_id": 4212228834
+        },
+        {
+          "longitude": 77.3072608,
+          "latitude": 28.6358161,
+          "osm_node_id": 904024640
+        },
+        {
+          "longitude": 77.3017649,
+          "latitude": 28.6247725,
+          "osm_node_id": 6748445100
+        },
+        {
+          "longitude": 77.3000122,
+          "latitude": 28.6277124,
+          "osm_node_id": 9883043748
+        },
+        {
+          "longitude": 77.3038354,
+          "latitude": 28.6372307,
+          "osm_node_id": 904024497
+        },
+        {
+          "longitude": 77.2970732,
+          "latitude": 28.6296836,
+          "osm_node_id": 904029055
+        },
+        {
+          "longitude": 77.312059,
+          "latitude": 28.6251808,
+          "osm_node_id": 6872116122
+        },
+        {
+          "longitude": 77.3056451,
+          "latitude": 28.6275189,
+          "osm_node_id": 7171706071
+        },
+        {
+          "longitude": 77.3050249,
+          "latitude": 28.6368243,
+          "osm_node_id": 11563437727
+        },
+        {
+          "longitude": 77.3076092,
+          "latitude": 28.6221286,
+          "osm_node_id": 906539210
+        },
+        {
+          "longitude": 77.3030071,
+          "latitude": 28.6290225,
+          "osm_node_id": 904028988
+        },
+        {
+          "longitude": 77.2971761,
+          "latitude": 28.6335671,
+          "osm_node_id": 904042348
+        },
+        {
+          "longitude": 77.3091728,
+          "latitude": 28.6279595,
+          "osm_node_id": 5602878447
+        },
+        {
+          "longitude": 77.3056243,
+          "latitude": 28.6222297,
+          "osm_node_id": 906538862
+        },
+        {
+          "longitude": 77.2988158,
+          "latitude": 28.6236191,
+          "osm_node_id": 11050680268
+        },
+        {
+          "longitude": 77.3087696,
+          "latitude": 28.6249753,
+          "osm_node_id": 13161360117
+        },
+        {
+          "longitude": 77.29802,
+          "latitude": 28.6346706,
+          "osm_node_id": 904042340
+        },
+        {
+          "longitude": 77.3063669,
+          "latitude": 28.6220371,
+          "osm_node_id": 906540403
+        },
+        {
+          "longitude": 77.3055761,
+          "latitude": 28.6326367,
+          "osm_node_id": 13377987827
+        },
+        {
+          "longitude": 77.3036575,
+          "latitude": 28.6344414,
+          "osm_node_id": 5763898952
+        },
+        {
+          "longitude": 77.3097339,
+          "latitude": 28.6238368,
+          "osm_node_id": 7594051437
+        },
+        {
+          "longitude": 77.2981137,
+          "latitude": 28.6321747,
+          "osm_node_id": 904042344
+        },
+        {
+          "longitude": 77.3017783,
+          "latitude": 28.6272624,
+          "osm_node_id": 10053189715
+        },
+        {
+          "longitude": 77.3024249,
+          "latitude": 28.6292212,
+          "osm_node_id": 904029013
+        },
+        {
+          "longitude": 77.299362,
+          "latitude": 28.6274968,
+          "osm_node_id": 6642429897
+        },
+        {
+          "longitude": 77.3011726,
+          "latitude": 28.6341925,
+          "osm_node_id": 9186657419
+        },
+        {
+          "longitude": 77.3042633,
+          "latitude": 28.6283508,
+          "osm_node_id": 14038597390
+        },
+        {
+          "longitude": 77.2989514,
+          "latitude": 28.6262784,
+          "osm_node_id": 6636644085
+        },
+        {
+          "longitude": 77.309967,
+          "latitude": 28.6340811,
+          "osm_node_id": 903987181
+        },
+        {
+          "longitude": 77.2982121,
+          "latitude": 28.6271747,
+          "osm_node_id": 9883043744
+        },
+        {
+          "longitude": 77.3006763,
+          "latitude": 28.6242197,
+          "osm_node_id": 4211927897
+        },
+        {
+          "longitude": 77.2964215,
+          "latitude": 28.6326053,
+          "osm_node_id": 904042318
+        },
+        {
+          "longitude": 77.3115031,
+          "latitude": 28.6339718,
+          "osm_node_id": 1987490235
+        },
+        {
+          "longitude": 77.3125902,
+          "latitude": 28.6339496,
+          "osm_node_id": 903987253
+        },
+        {
+          "longitude": 77.3052454,
+          "latitude": 28.635063,
+          "osm_node_id": 904024744
+        },
+        {
+          "longitude": 77.3021891,
+          "latitude": 28.6281487,
+          "osm_node_id": 904029032
+        },
+        {
+          "longitude": 77.2978427,
+          "latitude": 28.6296916,
+          "osm_node_id": 9883043719
+        },
+        {
+          "longitude": 77.3001487,
+          "latitude": 28.625687,
+          "osm_node_id": 11330736444
+        },
+        {
+          "longitude": 77.3002211,
+          "latitude": 28.6240026,
+          "osm_node_id": 4211927898
+        },
+        {
+          "longitude": 77.2997602,
+          "latitude": 28.6243795,
+          "osm_node_id": 5768521194
+        },
+        {
+          "longitude": 77.311951,
+          "latitude": 28.6353802,
+          "osm_node_id": 903987224
+        },
+        {
+          "longitude": 77.3046764,
+          "latitude": 28.6224811,
+          "osm_node_id": 9869914186
+        },
+        {
+          "longitude": 77.2995072,
+          "latitude": 28.6306565,
+          "osm_node_id": 9870156043
+        },
+        {
+          "longitude": 77.2985022,
+          "latitude": 28.6351342,
+          "osm_node_id": 9871808108
+        },
+        {
+          "longitude": 77.2988411,
+          "latitude": 28.6295403,
+          "osm_node_id": 6754909087
+        },
+        {
+          "longitude": 77.3049712,
+          "latitude": 28.6339294,
+          "osm_node_id": 9093894586
+        },
+        {
+          "longitude": 77.309446,
+          "latitude": 28.6224906,
+          "osm_node_id": 4211927893
+        },
+        {
+          "longitude": 77.3025463,
+          "latitude": 28.6264942,
+          "osm_node_id": 4211927906
+        },
+        {
+          "longitude": 77.3028764,
+          "latitude": 28.6365209,
+          "osm_node_id": 904024578
+        },
+        {
+          "longitude": 77.3100379,
+          "latitude": 28.6284732,
+          "osm_node_id": 11959823439
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,207 @@
+[
+  {
+    "file": "East-20-10800.zip",
+    "sha256": "21ffefb045ccf61d2de13681874bcc680847a9a9b40d1aff82e7be1eb39ae1b5",
+    "bytes": 1306838
+  },
+  {
+    "file": "East-20-14400.zip",
+    "sha256": "aa59113e37a2c5f43d8b097292b767387cb1fdd14e710552350cb108be1bd36b",
+    "bytes": 1685760
+  },
+  {
+    "file": "East-20-7200.zip",
+    "sha256": "80e6102e59a6253a0ae4b0253978ac43b8e1f66c1a3ba1016e922da92c8bb1ef",
+    "bytes": 907933
+  },
+  {
+    "file": "East-40-10800.zip",
+    "sha256": "1d1480a37dbf393f7365d60aecb148772a87c601d6a0eabbc170bdb026cb79ef",
+    "bytes": 2984082
+  },
+  {
+    "file": "East-40-14400.zip",
+    "sha256": "e9c71646fbc759cfc93a722d20b79932a8e437db918605bd38003ace290e41a4",
+    "bytes": 3811772
+  },
+  {
+    "file": "East-40-7200.zip",
+    "sha256": "c0f9e71e05730355cc00c2ece780731f514cec7412644730164fcc3f2d987aa5",
+    "bytes": 2106104
+  },
+  {
+    "file": "East-60-10800.zip",
+    "sha256": "e59b4554755173de4f2306c2e0bb37eed5149dfd282e250ec1c89a3e128423de",
+    "bytes": 4465371
+  },
+  {
+    "file": "East-60-14400.zip",
+    "sha256": "dc652ed6055080d66c16fefaef5c3cfc002e3aee0a42afda1db64f88209b0c03",
+    "bytes": 5675368
+  },
+  {
+    "file": "East-60-7200.zip",
+    "sha256": "269f5aaf9f8b5e417d8e09e68988b312cd202530ad876c2159b18d0cb8c8e343",
+    "bytes": 3004433
+  },
+  {
+    "file": "lifecycle.zip",
+    "sha256": "73cb02bdd18d99f939ac924ab5bfdf6ad23360ea0a34d773510f60c660cb21c2",
+    "bytes": 71037
+  },
+  {
+    "file": "North-20-10800.zip",
+    "sha256": "f83098afc420edb7651d66a02f9537ab8197b6f4ab4b0fb42fafdc3394fab9f8",
+    "bytes": 1250721
+  },
+  {
+    "file": "North-20-14400.zip",
+    "sha256": "e6ab27657388227c40861e1aa07947dfb1aab7af64979f2c39edfa158b271c37",
+    "bytes": 1625413
+  },
+  {
+    "file": "North-20-7200.zip",
+    "sha256": "5726680f3fd43fbc7e52e473b154fba4c7ce60d6626a0ee487eafcf4ed330cfd",
+    "bytes": 896714
+  },
+  {
+    "file": "North-40-10800.zip",
+    "sha256": "2ee1362796f8a6bdbb5ca71dcf57c95418aaf6ee93590241e3a1d595f0d5c0a6",
+    "bytes": 2903870
+  },
+  {
+    "file": "North-40-14400.zip",
+    "sha256": "602575775c2ebd83a580bb009a9ff4aa86057fc4c14f91616478cd10ebb1a2d6",
+    "bytes": 3806691
+  },
+  {
+    "file": "North-40-7200.zip",
+    "sha256": "ddf0d72fd6c73e5fc2b4fc478999f0e585250712c7da8e4136c0afc457dc4dfe",
+    "bytes": 2101497
+  },
+  {
+    "file": "North-60-10800.zip",
+    "sha256": "6ac50c96fb1820a76e999f9a4497e9b9aceebbd5745f9fc29ae653f7886722fa",
+    "bytes": 4441096
+  },
+  {
+    "file": "North-60-14400.zip",
+    "sha256": "5bd1b7cc11f8f53e066f9f3e21e0c246b39e08ec37a7299ae101502d6ddea0b5",
+    "bytes": 5700972
+  },
+  {
+    "file": "North-60-7200.zip",
+    "sha256": "9af1404504878b533235e288d582ed4c8d78af96aba699080fe92702ab80f9f0",
+    "bytes": 2988002
+  },
+  {
+    "file": "overlap.zip",
+    "sha256": "9a9eaa984c9466d5263111e2a4696ecf5e80cc75c65690511f0b3a3944df568d",
+    "bytes": 19320
+  },
+  {
+    "file": "primary.zip",
+    "sha256": "61df311bc564ee3ca945b40560ae21f292d419c798d91128d1e062ee1281ff0d",
+    "bytes": 5304012
+  },
+  {
+    "file": "recovery.zip",
+    "sha256": "1aa0499af5ad45d58473a3692d4a71ccdd714b838d7d19b621558181f94bdfee",
+    "bytes": 14041
+  },
+  {
+    "file": "South-20-10800.zip",
+    "sha256": "bdf3e15062b1a918b478bd557764db85cd04cec521dbd6618ab06ee887c84190",
+    "bytes": 1315655
+  },
+  {
+    "file": "South-20-14400.zip",
+    "sha256": "b0ca58580bff55ad344b9d5e055f6dd3d34cc35649d8f7a80a65e9c83df6ce3f",
+    "bytes": 1689581
+  },
+  {
+    "file": "South-20-7200.zip",
+    "sha256": "cdefa87ea049b91aaad05427ed6c9d722ce435c4cfdaaca18ec76dde28daf33b",
+    "bytes": 941861
+  },
+  {
+    "file": "South-40-10800.zip",
+    "sha256": "4702102b1f6c7162d9c9d9a2e19e2acbb479ae55e7ecf30c581c3c8aa00ccc6b",
+    "bytes": 3022184
+  },
+  {
+    "file": "South-40-14400.zip",
+    "sha256": "ed7a6734e1083bd196cc4243ea1e6bf78397043857f0a1babb41d4c122c1de77",
+    "bytes": 4055799
+  },
+  {
+    "file": "South-40-7200.zip",
+    "sha256": "856f280ac7acfca29377115660c6e92b1406504a61cba62382c4adfb8180c804",
+    "bytes": 2095871
+  },
+  {
+    "file": "South-60-10800.zip",
+    "sha256": "69c6f239cbb0097c06aa041b6b2d06652552f70110567e4ba38da7e285974918",
+    "bytes": 4495895
+  },
+  {
+    "file": "South-60-14400.zip",
+    "sha256": "f392c7654a8fc1732e7a61e818eff67d0ef821f6ac0b59934a63030f93454dea",
+    "bytes": 5822804
+  },
+  {
+    "file": "South-60-7200.zip",
+    "sha256": "764bbb597da1330b9c9b26eb0884322e371baff405e092e202f2dc2aec08c492",
+    "bytes": 2916317
+  },
+  {
+    "file": "stateful.zip",
+    "sha256": "1246116f1ab86f155007799116d7eda2060afcab8d1b917c1da0ed990b2eb63a",
+    "bytes": 82266
+  },
+  {
+    "file": "West-20-10800.zip",
+    "sha256": "7696b3c68cff15ba68b6a13a5b84246205e83d01a8e57075ca4027928f1e71e5",
+    "bytes": 1364640
+  },
+  {
+    "file": "West-20-14400.zip",
+    "sha256": "b9981c04ef067cb6b2a3a1281696b3cd20bf42293600577bc22e8309a417b641",
+    "bytes": 1690596
+  },
+  {
+    "file": "West-20-7200.zip",
+    "sha256": "8c1fbdf1c24a6cb099e435865f2d9f589e7508144e6c5c594df21caa401e3522",
+    "bytes": 940835
+  },
+  {
+    "file": "West-40-10800.zip",
+    "sha256": "ad34c98d2cf60afbafc658a5b20ec9dcc03708a468ae37750082224e929fbce7",
+    "bytes": 3136532
+  },
+  {
+    "file": "West-40-14400.zip",
+    "sha256": "e60da14a5090404223cf04dedf4c7f56df137349e666b1d772fee15e986a5bfa",
+    "bytes": 3910950
+  },
+  {
+    "file": "West-40-7200.zip",
+    "sha256": "f538d10c7b7b9cccad0f36d6ff4e009872d1594dc7a221992970a3784b1d849c",
+    "bytes": 2105886
+  },
+  {
+    "file": "West-60-10800.zip",
+    "sha256": "dc431207018241637c1b5144ac5abd0b3799d70af9cd137f1f9a7c7cbb9fa96a",
+    "bytes": 4637233
+  },
+  {
+    "file": "West-60-14400.zip",
+    "sha256": "914b916004871239dea80fd587b8f1bc51a6441859b3336e20ff3f6b34169ecc",
+    "bytes": 5913955
+  },
+  {
+    "file": "West-60-7200.zip",
+    "sha256": "7ae5fe1da1cf64a251db8703e8b9e43d1bfbabbe58943b5766e41d7f20b8dc8c",
+    "bytes": 3041442
+  }
+]

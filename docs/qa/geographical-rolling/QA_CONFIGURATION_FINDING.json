@@ -1,0 +1,9 @@
+{
+  "base": "eefabf5c2174533653f71bdf7e961a039c46b261",
+  "source": "rolling.py:FleetPolicy.snapshot_configuration -> ShadowConfiguration",
+  "tested_envelope": 512,
+  "larger_envelope": 513,
+  "error_type": "ValidationError",
+  "error_message": "Value error, large discovery requires a regional owner",
+  "interpretation": "Regional context is supplied only after initial ShadowConfiguration construction in run_region; larger declared envelopes fail before that update."
+}
