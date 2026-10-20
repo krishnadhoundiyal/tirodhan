@@ -3,6 +3,7 @@
 Stdlib only. No routing solvers, network calls, or database needed. Reports are
 written beside (never in place of) QA_BOOKINGS/QA_PLAN_SNAPSHOTS/etc.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,7 +29,8 @@ def input_hashes(case_root: Path) -> dict[str, str]:
     names = [*REQUIRED, "QA_REGION_GEOGRAPHY.json"]
     return {
         n: hashlib.sha256((case_root / n).read_bytes()).hexdigest()
-        for n in names if (case_root / n).is_file()
+        for n in names
+        if (case_root / n).is_file()
     }
 
 
@@ -128,21 +130,32 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
         for e in events:
             snap = snap_by_label[e["label"]]
             met = met_by_label[e["label"]]
-            chosen = [b for b in bookings if b["region_id"] == region_id and int(b["cycle"]) <= int(e["cycle"])]
+            chosen = [
+                b
+                for b in bookings
+                if b["region_id"] == region_id and int(b["cycle"]) <= int(e["cycle"])
+            ]
             before = [b for b in chosen if int(b["cycle"]) < int(e["cycle"])]
             after = chosen
             if len(after) != int(e["total_bookings"]):
-                raise ValueError(f"{e['label']}: expected {e['total_bookings']} bookings, found {len(after)}")
+                raise ValueError(
+                    f"{e['label']}: expected {e['total_bookings']} bookings, found {len(after)}"
+                )
             after_ids = {b["booking_id"] for b in after}
             for phase in ("before", "after"):
                 for route in snap[phase]["routes"]:
                     for stop in route["stops"]:
                         if stop["booking_id"] not in booking_by_id:
-                            raise ValueError(f"{e['label']}: route stop has unknown booking {stop['booking_id']}")
+                            raise ValueError(
+                                f"{e['label']}: route stop has unknown booking {stop['booking_id']}"
+                            )
                         if phase == "after" and stop["booking_id"] not in after_ids:
                             raise ValueError(f"{e['label']}: route stop points to future booking")
             for b in chosen:
-                if not (-90 <= float(b["latitude"]) <= 90 and -180 <= float(b["longitude"]) <= 180):
+                if not (
+                    -90 <= float(b["latitude"]) <= 90
+                    and -180 <= float(b["longitude"]) <= 180
+                ):
                     raise ValueError(f"{e['label']}: invalid booking coordinate")
             if len(snap["after"]["assignments"]) != met["assigned"]:
                 raise ValueError(f"{e['label']}: assignment metrics mismatch")
@@ -151,20 +164,27 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
                 "region": e["region"],
                 "cycle": int(e["cycle"]),
                 "execution": {
-                    "label": e["label"], "invoked_at": e["invoked_at"],
-                    "elapsed_seconds": e["elapsed_seconds"], "status": e["status"],
-                    "horizon_seconds": e["horizon_seconds"], "fleet_size": e["fleet_size"],
+                    "label": e["label"],
+                    "invoked_at": e["invoked_at"],
+                    "elapsed_seconds": e["elapsed_seconds"],
+                    "status": e["status"],
+                    "horizon_seconds": e["horizon_seconds"],
+                    "fleet_size": e["fleet_size"],
                     "timings": (e.get("production_measurements") or {}).get("timings", {}),
                 },
                 "metrics": met,
                 "facility": facility,
                 "bookings": [
                     {
-                        "id": b["booking_id"], "ref": alias(e["region"], int(b["ordinal"])),
-                        "ordinal": int(b["ordinal"]), "cycle": int(b["cycle"]),
-                        "latitude": float(b["latitude"]), "longitude": float(b["longitude"]),
+                        "id": b["booking_id"],
+                        "ref": alias(e["region"], int(b["ordinal"])),
+                        "ordinal": int(b["ordinal"]),
+                        "cycle": int(b["cycle"]),
+                        "latitude": float(b["latitude"]),
+                        "longitude": float(b["longitude"]),
                         "osm_node_id": b.get("osm_node_id", ""),
-                        "slot_start": b["slot_start"], "slot_end": b["slot_end"],
+                        "slot_start": b["slot_start"],
+                        "slot_end": b["slot_end"],
                     }
                     for b in after
                 ],
@@ -181,8 +201,10 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
                                 "travel_seconds": r["travel_seconds"],
                                 "stops": [
                                     {
-                                        "kind": s["kind"], "booking_id": s["booking_id"],
-                                        "time": s["planned_start"], "end": s["planned_end"],
+                                        "kind": s["kind"],
+                                        "booking_id": s["booking_id"],
+                                        "time": s["planned_start"],
+                                        "end": s["planned_end"],
                                         "state": s["state"],
                                     }
                                     for s in r["stops"]
@@ -212,21 +234,34 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
             if target.exists():
                 raise FileExistsError(f"Report already exists; preserving prior output: {target}")
             rendered = page.replace(
-                "__QA_ROUTE_REPORT_DATA__", json.dumps(docs, ensure_ascii=True).replace("<", "\\u003c")
+                "__QA_ROUTE_REPORT_DATA__",
+                json.dumps(docs, ensure_ascii=True).replace("<", "\\u003c"),
             )
             target.parent.mkdir(parents=True, exist_ok=True)
             # Exclusive creation forbids accidental overwrites, including between processes.
             with target.open("x", encoding="utf-8") as f:
                 f.write(rendered)
-            out_index.append({"region": e["region"], "cycle": int(e["cycle"]), "report": rel,
-                              "bookings": len(after), "assigned": met["assigned"], "status": e["status"]})
+            out_index.append(
+                {
+                    "region": e["region"],
+                    "cycle": int(e["cycle"]),
+                    "report": rel,
+                    "bookings": len(after),
+                    "assigned": met["assigned"],
+                    "status": e["status"],
+                }
+            )
     return out_index
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--evidence-root", required=True, type=Path,
-                        help="One case directory or its parent run directory")
+    parser.add_argument(
+        "--evidence-root",
+        required=True,
+        type=Path,
+        help="One case directory or its parent run directory",
+    )
     args = parser.parse_args(argv)
     root = args.evidence_root.resolve()
     cases = evidence_cases(root)
@@ -240,12 +275,17 @@ def main(argv: list[str] | None = None) -> int:
             raise FileExistsError(f"Report index already exists: {listing}")
         links = "".join(
             f'<li><a href="{r["report"]}">{r["region"]} R{r["cycle"]}</a> — '
-            f'{r["assigned"]}/{r["bookings"]} assigned — {r["status"]}</li>' for r in idx
+            f'{r["assigned"]}/{r["bookings"]} assigned — {r["status"]}</li>'
+            for r in idx
         )
         with listing.open("x", encoding="utf-8") as out:
-            out.write('<!doctype html><meta charset="utf-8"><title>Tirodhan geographic route reports</title>'
-                      '<style>body{font:16px system-ui;margin:35px;line-height:1.8}a{color:#215a9e}</style>'
-                      f'<h1>{case.name} — geographic QA route reports</h1><ul>{links}</ul>')
+            out.write(
+                '<!doctype html><meta charset="utf-8">'
+                '<title>Tirodhan geographic route reports</title>'
+                '<style>body{font:16px system-ui;margin:35px;line-height:1.8}'
+                'a{color:#215a9e}</style>'
+                f'<h1>{case.name} — geographic QA route reports</h1><ul>{links}</ul>'
+            )
         print(f"Wrote {len(idx)} reports and index: {listing}")
     return 0
 
