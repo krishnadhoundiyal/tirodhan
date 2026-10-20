@@ -47,7 +47,7 @@ def geography(case_root: Path) -> list[dict[str, Any]]:
         content = legacy.read_text(encoding="utf-8")
         match = re.search(r"\bconst D\s*=\s*", content)
         if match:
-            data, _ = json.JSONDecoder().raw_decode(content[match.end():])
+            data, _ = json.JSONDecoder().raw_decode(content[match.end() :])
             return data.get("operating_regions", [])
     raise ValueError(
         f"{case_root}: missing QA_REGION_GEOGRAPHY.json, and no region geography "
@@ -125,7 +125,7 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
             for r in snap_by_label[e["label"]]["after"]["routes"]:
                 if r["rider_id"] not in rider_ids:
                     rider_ids.append(r["rider_id"])
-        rider_alias = {r: f"Rider {i+1:02d}" for i, r in enumerate(rider_ids)}
+        rider_alias = {r: f"Rider {i + 1:02d}" for i, r in enumerate(rider_ids)}
 
         for e in events:
             snap = snap_by_label[e["label"]]
@@ -152,10 +152,7 @@ def build_case(case_root: Path, output_root: Path) -> list[dict[str, Any]]:
                         if phase == "after" and stop["booking_id"] not in after_ids:
                             raise ValueError(f"{e['label']}: route stop points to future booking")
             for b in chosen:
-                if not (
-                    -90 <= float(b["latitude"]) <= 90
-                    and -180 <= float(b["longitude"]) <= 180
-                ):
+                if not (-90 <= float(b["latitude"]) <= 90 and -180 <= float(b["longitude"]) <= 180):
                     raise ValueError(f"{e['label']}: invalid booking coordinate")
             if len(snap["after"]["assignments"]) != met["assigned"]:
                 raise ValueError(f"{e['label']}: assignment metrics mismatch")
@@ -275,16 +272,16 @@ def main(argv: list[str] | None = None) -> int:
             raise FileExistsError(f"Report index already exists: {listing}")
         links = "".join(
             f'<li><a href="{r["report"]}">{r["region"]} R{r["cycle"]}</a> — '
-            f'{r["assigned"]}/{r["bookings"]} assigned — {r["status"]}</li>'
+            f"{r['assigned']}/{r['bookings']} assigned — {r['status']}</li>"
             for r in idx
         )
         with listing.open("x", encoding="utf-8") as out:
             out.write(
                 '<!doctype html><meta charset="utf-8">'
-                '<title>Tirodhan geographic route reports</title>'
-                '<style>body{font:16px system-ui;margin:35px;line-height:1.8}'
-                'a{color:#215a9e}</style>'
-                f'<h1>{case.name} — geographic QA route reports</h1><ul>{links}</ul>'
+                "<title>Tirodhan geographic route reports</title>"
+                "<style>body{font:16px system-ui;margin:35px;line-height:1.8}"
+                "a{color:#215a9e}</style>"
+                f"<h1>{case.name} — geographic QA route reports</h1><ul>{links}</ul>"
             )
         print(f"Wrote {len(idx)} reports and index: {listing}")
     return 0
