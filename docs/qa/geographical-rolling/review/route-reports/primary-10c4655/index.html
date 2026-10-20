@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tirodhan geographical QA — route reports</title>
+<style>
+body{font:15px/1.55 system-ui,Arial,sans-serif;color:#1c2a3a;background:#f7f9fc;margin:0;padding:35px}
+main{max-width:1040px;margin:auto;background:#fff;border-radius:16px;border:1px solid #e0e6f1;padding:30px}
+h1{margin:0 0 10px;font-size:28px}p{color:#5a6c83}table{border-collapse:collapse;width:100%;margin:22px 0}th,td{border-bottom:1px solid #e2e8f2;text-align:left;padding:17px}td a{font-size:20px;font-weight:700;color:#2259a2;text-decoration:none}td a:hover{text-decoration:underline}td small{display:block;color:#72839c}th{color:#344c69}
+.note{background:#fff8e7;border-left:4px solid #c49333;padding:10px 14px;margin:22px 0}
+</style><main><h1>Regional rolling QA — before/after rider routes</h1>
+<p>Primary scenario from commit <code>10c4655c8db0117ed9fe51c710d5b4c3f728ee0f</code>; 2026-10-20.
+Real road-network computations and recorded route publications with synthetic customer locations and receiving points.</p>
+<table><thead><tr><th>Region</th><th>Iteration R1</th><th>Iteration R2</th><th>Iteration R3</th><th>Iteration R4</th></tr></thead><tbody><tr><th>West</th><td><a href="West-R1.html">R1</a><small>6 assigned</small></td><td><a href="West-R2.html">R2</a><small>12 assigned</small></td><td><a href="West-R3.html">R3</a><small>15 assigned</small></td><td><a href="West-R4.html">R4</a><small>21 assigned</small></td></tr>
+<tr><th>North</th><td><a href="North-R1.html">R1</a><small>6 assigned</small></td><td><a href="North-R2.html">R2</a><small>12 assigned</small></td><td><a href="North-R3.html">R3</a><small>20 assigned</small></td><td><a href="North-R4.html">R4</a><small>28 assigned</small></td></tr>
+<tr><th>South</th><td><a href="South-R1.html">R1</a><small>6 assigned</small></td><td><a href="South-R2.html">R2</a><small>12 assigned</small></td><td><a href="South-R3.html">R3</a><small>15 assigned</small></td><td><a href="South-R4.html">R4</a><small>21 assigned</small></td></tr>
+<tr><th>East</th><td><a href="East-R1.html">R1</a><small>6 assigned</small></td><td><a href="East-R2.html">R2</a><small>12 assigned</small></td><td><a href="East-R3.html">R3</a><small>15 assigned</small></td><td><a href="East-R4.html">R4</a><small>21 assigned</small></td></tr></tbody></table>
+<div class="note"><b>Reading the maps:</b> route lines are stop-order connectors between actual OSM coordinates, not OSRM road polylines. A collected booking may retain its rider assignment without an active pickup stop; it is marked separately.</div>
+<p>Each report contains the full set of paid bookings for that region through the named iteration (including those unassigned), two independently selectable rider maps, stop sequences, execution measurements and provenance.</p></main></html>

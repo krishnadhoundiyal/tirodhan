@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tirodhan geographical QA — rider route comparison</title>
+<style>
+:root{--ink:#1c2a3a;--muted:#596c83;--line:#dfe6ef;--bg:#f6f8fc}
+*{box-sizing:border-box}body{font:14px/1.43 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink);margin:0}
+header{background:#fff;border-bottom:1px solid var(--line);padding:24px clamp(20px,4vw,60px)}h1{margin:0 0 6px;font-size:27px}header p{margin:0;color:var(--muted)}main{max-width:1510px;margin:auto;padding:24px 22px 58px}
+section{background:#fff;border:1px solid var(--line);border-radius:17px;margin-bottom:19px;padding:23px}h2{margin:0 0 8px;font-size:21px}.intro{color:var(--muted);margin:0 0 16px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:12px}.kpi{padding:17px;background:#f5f8fe;border:1px solid #e3e9f2;border-radius:12px}.kpi strong{font-size:27px;display:block;color:#213e6c}.kpi small{color:var(--muted)}
+.legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 14px}.rider-button{cursor:pointer;border:1px solid var(--line);border-radius:99px;background:#fff;padding:9px 11px;display:flex;align-items:center;gap:8px;color:#263951;font-size:13px;font-weight:650}.rider-button.active{background:#e9efff;border-color:#789adf}.legend-line{display:inline-block;width:23px;border-top:4px solid var(--rcolor)}.rider-button:not(.active):hover{background:#f2f5fa}
+.map-shell{width:100%;border:1px solid #dce4ef;border-radius:14px;overflow:hidden;background:#fff}svg.map{width:100%;display:block;height:auto;min-height:480px}.rider-route.faded{opacity:.08}.nonroute.faded{opacity:.15}.nonroute-label{pointer-events:none}.route-pin{cursor:default}
+.meta-row{margin:10px 0;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px}.note{border-left:4px solid #cfa348;background:#fffcf3;padding:10px 13px;color:#755c24;font-size:13px;margin:10px 0 12px}
+.route-card{display:grid;grid-template-columns:180px 1fr;gap:10px;border-top:1px solid var(--line);padding:16px 0;align-items:start}.route-meta strong{font-size:18px;color:#1e365a}.route-meta small{color:var(--muted);display:block;line-height:1.55;margin-top:5px}
+.stops{display:flex;align-items:center;flex-wrap:wrap;gap:7px}.stop{background:#eaf2ff;border:1px solid #c8d9f6;border-radius:11px;padding:9px 11px;min-width:87px;max-width:160px;color:#22538b}.stop.discharge{background:#ebf7f0;border-color:#c6e6d2;color:#1e7256}.stop.new{outline:2px solid #df8a28}.stop b{font-size:13px;display:block}.stop small{font-size:11px;display:block;opacity:.85;margin-top:3px}.arrow{color:#90a4bd;font-size:19px}
+.table-wrap{overflow-x:auto;border:1px solid #e0e7f0;border-radius:11px}table{width:100%;border-collapse:collapse;min-width:800px;font-size:12px}th,td{padding:9px 11px;border-bottom:1px solid #edf1f5;text-align:left}thead{background:#f6f9fc}th{position:sticky;top:0}tbody tr:hover{background:#f8fafc}.mono{font:12px ui-monospace,"Cascadia Code",Consolas,monospace}
+.subtle{color:var(--muted)}.chip{font-size:11px;display:inline-block;padding:3px 8px;background:#f0f4fa;border-radius:12px}.code-details{white-space:pre-wrap;word-break:break-all;font:11px ui-monospace,Consolas,monospace}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(120px,1fr))}.route-card{grid-template-columns:1fr}section{padding:16px}main{padding:16px 10px 30px}}
+</style>
+</head>
+<body>
+<header><h1 id="heading"></h1><p id="subtitle"></p></header>
+<main>
+<section><h2>1 · Planner result</h2><div id="summary" class="kpis"></div><p class="note">Pickup and discharge stops are from the committed QA route snapshots. Coloured connectors on maps show stop order between real OSM coordinates, <b>not OSRM road geometry</b>. Road distance and travel time use the planner's recorded road matrices. Receiving point is a declared synthetic QA facility.</p></section>
+<section><h2>2 · Planner object change</h2><div id="comparison" class="kpis"></div></section>
+<section><h2 id="stop-title">3 · Rider route stop sequence (after)</h2><p class="intro">P = pickup at the customer location, D = discharge at the shared facility. Orange outlines identify bookings first introduced this iteration.</p><div id="routes"></div></section>
+<section><h2>4 · Execution time</h2><p id="timing"></p><div id="timing-table" class="table-wrap"></div></section>
+<section id="geography-before"><h2 id="before-title">5A · Before — routes inherited from the previous iteration</h2><p id="before-intro" class="intro"></p><div id="before-legend" class="legend"></div><div class="map-shell"><svg id="before-booking-map" class="map" viewBox="0 0 1220 785" xmlns="http://www.w3.org/2000/svg" aria-label="Before planner rider routes"></svg></div><div id="before-summary" class="meta-row"></div></section>
+<section id="geography-after"><h2 id="after-title">5B · After — published rider routes and all bookings</h2><p id="after-intro" class="intro"></p><div id="after-legend" class="legend"></div><div class="map-shell"><svg id="after-booking-map" class="map" viewBox="0 0 1220 785" xmlns="http://www.w3.org/2000/svg" aria-label="After planner rider routes"></svg></div><div id="after-summary" class="meta-row"></div></section>
+<section><h2>6 · Complete booking identifier key</h2><p class="intro" id="key-intro"></p><div id="booking-table" class="table-wrap"></div></section>
+<section><h2>7 · Provenance</h2><p id="provenance" class="subtle"></p><details><summary>Input SHA-256 digests</summary><pre id="hashes" class="code-details"></pre></details></section>
+</main>
+<script>
+"use strict";
+const D=__QA_ROUTE_REPORT_DATA__;
+const COLORS=['#e07b22','#2f75bc','#178a70','#8357ad','#cc5262','#577297','#ad6619','#a34d79'];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const bookingsById=Object.fromEntries(D.bookings.map(b=>[b.id,b]));
+const riderNames=[...new Set([...D.phases.before.routes,...D.phases.after.routes].map(r=>r.rider))];
+const colByRider=Object.fromEntries(riderNames.map((x,i)=>[x,COLORS[i%COLORS.length]]));
+const local=s=>s?new Date(s.replace(' ','T')).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):'—';
+const hm=s=>s?new Date(s.replace(' ','T')).toLocaleTimeString('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
+const num=n=>Number(n).toLocaleString('en-IN');
+function km(m){return (Number(m||0)/1000).toFixed(2)+' km'}
+function card(n,t){return `<div class="kpi"><strong>${esc(n)}</strong><small>${esc(t)}</small></div>`}
+function table(headers,rows){return `<table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(c=>`<tr>${c.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
+const before=D.phases.before,after=D.phases.after;
+const dist=p=>p.routes.filter(r=>r.status!=='CLOSED').reduce((s,r)=>s+Number(r.distance_m||0),0);
+const assigned=p=>new Map((p.assignments||[]).map(a=>[a.booking_id,a.rider]));
+document.getElementById('heading').textContent=`${D.region} R${D.cycle} · Published rider routes and all booking locations`;
+document.getElementById('subtitle').textContent=`${local(D.execution.invoked_at)} · ${D.case} geographical QA · ${D.execution.status} · ${D.execution.horizon_seconds/3600}h routing horizon`;
+document.getElementById('summary').innerHTML=card(after.accepted,'Paid bookings')+card(after.assigned,'Bookings assigned')+card(after.routes.length+' / '+D.execution.fleet_size,'Riders used / fleet')+card(D.execution.elapsed_seconds.toFixed(2)+' s','Planner execution');
+document.getElementById('comparison').innerHTML=card(before.assigned+' → '+after.assigned,'Committed assignments')+card(before.routes.length+' → '+after.routes.length,'Published rider routes')+card(km(dist(before))+' → '+km(dist(after)),'Planned road distance')+card((D.metrics.unassigned_outside_horizon??'—'),'Outside recorded horizon');
+document.getElementById('stop-title').textContent=`3 · Rider route stop sequence (after R${D.cycle})`;
+function stopHtml(s){const b=bookingsById[s.booking_id];const newBooking=b&&b.cycle===D.cycle;const cl=s.kind==='DISCHARGE'?'discharge':'';return `<span class="stop ${cl} ${newBooking&&s.kind==='PICKUP'?'new':''}" title="${esc(s.booking_id)}"><b>${s.kind==='PICKUP'?'P':'D'} · ${esc(b?.ref||s.booking_id)}</b><small>${hm(s.time)}</small></span>`}
+document.getElementById('routes').innerHTML=after.routes.map(r=>`<div class="route-card"><div class="route-meta"><strong>${esc(r.rider)}</strong><small>Vehicle …${esc(r.vehicle_id.slice(-8))}<br>Route v${r.version} · ${km(r.distance_m)}<br>${r.stops.filter(x=>x.kind==='PICKUP').length} pickups</small></div><div class="stops">${r.stops.map((s,i)=>(i?'<span class="arrow">›</span>':'')+stopHtml(s)).join('')}</div></div>`).join('')||'<p>No routes were published in this cycle.</p>';
+const timing=D.execution.timings||{};
+document.getElementById('timing').textContent=`${D.execution.elapsed_seconds.toFixed(3)} seconds total wall-clock time; stage measurements below are instrumented spans, not necessarily additive.`;
+document.getElementById('timing-table').innerHTML=table(['Recorded stage','Elapsed (s)'],Object.entries(timing).map(([k,v])=>[esc(k.replaceAll('_',' ')),Number(v).toFixed(3)]));
+const finite=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon);
+const allpts=[...D.bookings,D.facility];const latmin=Math.min(...allpts.map(b=>b.latitude))-.006,latmax=Math.max(...allpts.map(b=>b.latitude))+.006,lonmin=Math.min(...allpts.map(b=>b.longitude))-.008,lonmax=Math.max(...allpts.map(b=>b.longitude))+.008;
+const fac=D.facility;const latFactor=Math.cos(((latmin+latmax)/2)*Math.PI/180),W=1220,H=785,left=72,right=112,top=45,bottom=55,w=W-left-right,h=H-top-bottom;
+const ex=(lonmax-lonmin)*latFactor,ey=latmax-latmin,sc=Math.min(w/ex,h/ey),xo=left+(w-ex*sc)/2,yo=top+(h-ey*sc)/2;
+const xy=p=>[xo+(p.longitude-lonmin)*latFactor*sc,yo+(latmax-p.latitude)*sc];
+function placeSVG(scope,phase){
+ const isBefore=scope==='before';const bookList=D.bookings.filter(b=>b.cycle<=(isBefore?D.cycle-1:D.cycle));const active=assigned(phase);
+ const listedIds=new Set(bookList.map(b=>b.id));const rows=phase.routes.filter(r=>r.status!=='CLOSED');const svg=document.getElementById(scope+'-booking-map');const colors=rows.map(r=>colByRider[r.rider]);
+ let text='<rect width="100%" height="100%" fill="#fff"/>';
+ for(let i=0;i<7;i++){const lon=lonmin+(lonmax-lonmin)*i/6,x=xy({longitude:lon,latitude:latmin})[0];text+=`<line x1="${x}" y1="55" x2="${x}" y2="730" stroke="#eaf0f7"/><text x="${x}" y="765" font-size="11" text-anchor="middle" fill="#8794a8">${lon.toFixed(3)}°E</text>`}
+ for(let i=0;i<6;i++){const lat=latmin+(latmax-latmin)*i/5,y=xy({longitude:lonmin,latitude:lat})[1];text+=`<line x1="70" y1="${y}" x2="1110" y2="${y}" stroke="#eaf0f7"/><text x="12" y="${y+4}" font-size="11" fill="#8794a8">${lat.toFixed(3)}°N</text>`}
+ text+='<g class="nonroute" id="unassigned-'+scope+'">';
+ for(const b of bookList.filter(b=>!active.has(b.id))){const [x,y]=xy(b);text+=`<g><circle cx="${x}" cy="${y}" r="4.6" fill="#d4deeb" stroke="#94a4b8"/><text class="nonroute-label" x="${x+7}" y="${y-7}" font-size="10" fill="#8492a7">${esc(b.ref)}</text><title>${esc(b.ref+' '+b.id+' '+b.slot_start)}</title></g>`}
+ text+='</g>';
+ rows.forEach(r=>{
+  const color=colByRider[r.rider];const stops=r.stops.filter(s=>['PENDING','STARTED'].includes(s.state));
+  const pts=stops.map(s=>s.kind==='DISCHARGE'?fac:bookingsById[s.booking_id]).filter(Boolean);
+  const locs=pts.map(p=>xy(p).map(n=>n.toFixed(2)).join(',')).join(' ');
+  text+=`<g class="rider-route" data-rider="${esc(r.rider)}"><polyline points="${locs}" fill="none" stroke="${color}" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>`;
+  let order=0;
+  for(const s of stops.filter(s=>s.kind==='PICKUP')){
+   const b=bookingsById[s.booking_id];if(!b||!listedIds.has(b.id))continue;
+   order++;const [x,y]=xy(b);const newly=b.cycle===D.cycle;
+   text+=`<g class="route-pin"><circle cx="${x}" cy="${y}" r="9" fill="#fff" stroke="${color}" stroke-width="3" ${newly?'stroke-dasharray="2,2"':''}/><circle cx="${x-13}" cy="${y-12}" r="10" fill="${color}"/><text x="${x-13}" y="${y-8}" font-size="10.5" text-anchor="middle" fill="#fff" font-weight="800">${order}</text><text x="${x+13}" y="${y-10}" font-size="12" fill="#21324b" font-weight="800">${esc(b.ref)}</text><text x="${x+13}" y="${y+4}" font-size="10" fill="#65788f">${esc(hm(s.time))}</text><title>${esc(r.rider+' · '+b.ref+' · '+b.id+' · '+hm(s.time))}</title></g>`;
+  }
+  text+='</g>';
+ });
+ // A collected booking remains owned but may no longer have an active PICKUP stop.
+ const activePickupIds=new Set(rows.flatMap(r=>r.stops.filter(s=>s.kind==='PICKUP'&&['PENDING','STARTED'].includes(s.state)).map(s=>s.booking_id)));
+ for(const a of (phase.assignments||[])){
+   if(activePickupIds.has(a.booking_id))continue;
+   const b=bookingsById[a.booking_id];if(!b||!listedIds.has(b.id))continue;
+   const [x,y]=xy(b),c=colByRider[a.rider]||'#65788f';
+   text+=`<g class="rider-route" data-rider="${esc(a.rider)}"><rect x="${x-6}" y="${y-6}" width="12" height="12" fill="#fff" stroke="${c}" stroke-width="2.4" transform="rotate(45 ${x} ${y})"/><text x="${x+12}" y="${y-5}" font-size="11" font-weight="800" fill="#21324b">${esc(b.ref)} · ${esc(a.status)}</text><title>${esc(a.rider+' · '+b.ref+' · '+a.status+' · '+b.id)}</title></g>`;
+ }
+ const [fx,fy]=xy(fac);text+=`<g><rect x="${fx-8}" y="${fy-8}" width="16" height="16" transform="rotate(45 ${fx} ${fy})" fill="#187f60" stroke="#fff" stroke-width="1.8"/><text x="${fx+15}" y="${fy-8}" font-size="12" font-weight="800" fill="#206a51">Discharge point</text><title>${esc(fac.label+' '+fac.latitude+','+fac.longitude)}</title></g>`;
+ svg.innerHTML=text;
+ document.getElementById(scope+'-title').textContent=`5${isBefore?'A':'B'} · ${isBefore?'Before':'After'} R${D.cycle} — ${rows.length} rider routes, ${phase.assigned} assigned bookings`;
+ document.getElementById(scope+'-intro').textContent=`${bookList.length} accepted bookings at this point; ${phase.assigned} are assigned (some may already be collected). Unassigned bookings appear as grey points. Routes are schematic stop-order connectors.`;
+ document.getElementById(scope+'-summary').textContent=`${phase.assigned} assigned • ${bookList.length-phase.assigned} unassigned • ${km(dist(phase))} total road travel distance from route models`;
+ const legend=document.getElementById(scope+'-legend');legend.innerHTML='<button class="rider-button active" type="button" data-rider="all">All riders</button>'+rows.map(r=>`<button class="rider-button" type="button" data-rider="${esc(r.rider)}"><span class="legend-line" style="--rcolor:${colByRider[r.rider]}"></span>${esc(r.rider)}</button>`).join('');
+ legend.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{const focus=btn.dataset.rider;legend.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===btn));svg.querySelectorAll('.rider-route').forEach(x=>x.classList.toggle('faded',focus!=='all'&&x.dataset.rider!==focus));svg.querySelector('.nonroute')?.classList.toggle('faded',focus!=='all')}));
+}
+placeSVG('before',before);placeSVG('after',after);
+const assignedById=assigned(after);
+document.getElementById('key-intro').textContent=`All ${D.bookings.length} paid bookings for ${D.region} through R${D.cycle}, including ${assignedById.size} assigned pickup locations and all unassigned locations. Booking identifiers are stable by region and seed ordinal within the run.`;
+const keyrows=[...D.bookings].sort((a,b)=>a.ordinal-b.ordinal).map(b=>[
+ `<b>${esc(b.ref)}</b>`, `<span class="mono">${esc(b.id)}</span>`, `R${b.cycle}`,
+ esc(local(b.slot_start)+' — '+hm(b.slot_end)),
+ `<span class="mono">${b.latitude.toFixed(7)}, ${b.longitude.toFixed(7)}</span>`,
+ assignedById.has(b.id)?esc(assignedById.get(b.id)):'<span class="subtle">Not assigned this iteration</span>'
+]);
+document.getElementById('booking-table').innerHTML=table(['Booking ref','Full booking UUID','Introduced','Pickup slot (IST)','Location (lat, lon)','Published owner'],keyrows);
+document.getElementById('provenance').textContent=`Renderer v${D.renderer_version}; recorded case ${D.case}; cycle ${D.execution.label}. Every coordinate is from QA_BOOKINGS.csv or recorded operating-region geography; no online map service required. Existing evidence is read-only.`;
+document.getElementById('hashes').textContent=JSON.stringify(D.source_hashes,null,2);
+</script>
+</body></html>

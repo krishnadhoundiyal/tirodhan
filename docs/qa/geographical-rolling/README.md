@@ -9,6 +9,7 @@ Polylines show stop order schematically; measured costs use actual directed OSRM
 
 - [Execution contract](QA_EXECUTION_CONTRACT.md): inspected production entry points and authority boundaries.
 - [Scenario matrix](QA_SCENARIO_MATRIX.md): declared synthetic geography, appointments, fleet and policy.
+- [Rider route comparisons](review/route-reports/primary-10c4655/index.html): all four regions and R1–R4, with before/after route maps, full booking keys and recorded timings.
 - [All scenario measurements](review/QA_ALL_SCENARIOS.json): 37 scenario summaries and actual call counts.
 - [Archive manifest](review/ARCHIVE_SHA256.json): SHA256 and byte length of every complete scenario ZIP.
 - `review/primary/`: immediately readable required outputs, derived diffs and publication audit.
