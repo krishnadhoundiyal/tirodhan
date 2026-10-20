@@ -102,9 +102,9 @@ def fixture(case: Path) -> None:
     for cycle in (1, 2):
         before = [route(["b1"], 1)] if cycle == 2 else []
         after = [route(["b1"], 1)] if cycle == 1 else [route(["b1", "b2"], 2)]
-        assignments_before = [
-            {"booking_id": "b1", "rider_id": "rider-1", "status": "PENDING"}
-        ] if cycle == 2 else []
+        assignments_before = (
+            [{"booking_id": "b1", "rider_id": "rider-1", "status": "PENDING"}] if cycle == 2 else []
+        )
         assignments_after = [
             {"booking_id": booking_id, "rider_id": "rider-1", "status": "PENDING"}
             for booking_id in (["b1"] if cycle == 1 else ["b1", "b2"])
@@ -132,13 +132,9 @@ def fixture(case: Path) -> None:
                 "production_measurements": {"timings": {"worker_seconds": 4.0}},
             }
         )
-        metrics.append(
-            {"label": label, "assigned": cycle, "unassigned_outside_horizon": 0}
-        )
+        metrics.append({"label": label, "assigned": cycle, "unassigned_outside_horizon": 0})
 
-    regions = [
-        {"region_id": "region-1", "origins": [{"latitude": 28.67, "longitude": 77.07}]}
-    ]
+    regions = [{"region_id": "region-1", "origins": [{"latitude": 28.67, "longitude": 77.07}]}]
     for name, value in [
         ("QA_PLAN_SNAPSHOTS.json", snapshots),
         ("QA_EXECUTIONS.json", executions),
