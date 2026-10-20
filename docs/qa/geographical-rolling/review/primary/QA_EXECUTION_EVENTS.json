@@ -1,0 +1,234 @@
+[
+  {
+    "region": "North",
+    "cycle": 1,
+    "command": {
+      "client_command_id": "01a15448-0bbb-7284-86e7-b9e1512cb7da",
+      "task_id": "01a15447-89af-7a1a-af1e-2b143c8757ff",
+      "revision_id": "01a15447-8997-70f8-90f7-39997109d26d",
+      "operation": "DEPART"
+    },
+    "result": "01a15447-89af-7a1a-af1e-2b143c8757ff",
+    "at": "2026-10-20T09:00:00+05:30",
+    "cargo_before": [
+      0,
+      0
+    ],
+    "cargo_after": [
+      0,
+      0
+    ],
+    "persisted_fact": {}
+  },
+  {
+    "region": "North",
+    "cycle": 2,
+    "command": {
+      "client_command_id": "01a1544a-4ed7-7ebd-9635-132339367129",
+      "task_id": "01a15447-89af-7a1a-af1e-2b143c8757ff",
+      "revision_id": "01a15447-8997-70f8-90f7-39997109d26d",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544a-4f22-729b-886d-9b6c67fbae25",
+    "at": "2026-10-20T04:03:00+00:00",
+    "cargo_before": [
+      0,
+      0
+    ],
+    "cargo_after": [
+      1250,
+      1250
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544a-4f22-729b-886d-9b6c67fbae25",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-e63f-726a-87ae-6773707241cb",
+      "task_id": "01a1544d-5d51-7967-ba5b-29b95851953e",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544d-e67b-7ae1-8d3c-3100f538e1ae",
+    "at": "2026-10-20T04:10:00+00:00",
+    "cargo_before": [
+      1250,
+      1250
+    ],
+    "cargo_after": [
+      2500,
+      2500
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544d-e67b-7ae1-8d3c-3100f538e1ae",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-e7bb-7ac6-be6e-8793cd9bf897",
+      "task_id": "01a15447-89c8-79b6-b9f5-ed60bb3e7bef",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544d-e7f5-79c9-8cee-95b6d3897bfb",
+    "at": "2026-10-20T04:13:52+00:00",
+    "cargo_before": [
+      2500,
+      2500
+    ],
+    "cargo_after": [
+      3750,
+      3750
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544d-e7f5-79c9-8cee-95b6d3897bfb",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-e871-7ad4-b01e-52c9da712712",
+      "task_id": "01a15447-89e1-7354-8beb-052553f17df8",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544d-e89b-7d96-8a83-06cbbc33715b",
+    "at": "2026-10-20T05:03:00+00:00",
+    "cargo_before": [
+      3750,
+      3750
+    ],
+    "cargo_after": [
+      5000,
+      5000
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544d-e89b-7d96-8a83-06cbbc33715b",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-e90c-772a-9fa1-4a4fe2454f05",
+      "task_id": "01a1544b-86a3-787d-94e9-a6bbddab07ac",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544d-e933-7221-8a6c-b6dd710ab038",
+    "at": "2026-10-20T05:33:00+00:00",
+    "cargo_before": [
+      5000,
+      5000
+    ],
+    "cargo_after": [
+      6250,
+      6250
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544d-e933-7221-8a6c-b6dd710ab038",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-e9ae-77aa-b922-f49a378a9eb5",
+      "task_id": "01a1544d-5d7a-72b7-adc4-1b9ed60ba699",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "PICKUP",
+      "outcome": "COLLECTED",
+      "failed_reason": null,
+      "client_capture_id": null,
+      "captured_at": null
+    },
+    "result": "01a1544d-e9e6-700e-b358-af7224773658",
+    "at": "2026-10-20T05:39:11+00:00",
+    "cargo_before": [
+      6250,
+      6250
+    ],
+    "cargo_after": [
+      7500,
+      7500
+    ],
+    "persisted_fact": {
+      "pickup_attempt_id": "01a1544d-e9e6-700e-b358-af7224773658",
+      "outcome": "COLLECTED",
+      "cargo_vehicle": "01a15446-1da7-76cf-b904-8ecf979de636",
+      "custodian": "01a15446-1a54-795d-9fee-9cacf21fa70a"
+    }
+  },
+  {
+    "region": "North",
+    "cycle": 4,
+    "command": {
+      "client_command_id": "01a1544d-ea72-7b7e-baef-a379673357ae",
+      "task_id": "01a15447-89eb-7ee4-a177-649b5c97808c",
+      "revision_id": "01a1544d-5d40-704d-b333-2897bd9b0117",
+      "operation": "DISCHARGE",
+      "scanned_pickup_id": "01a15447-89d1-7869-87b2-76e6f950a23e",
+      "scanned_receiving_identifier": "QA-01a15446-1a4a-75ce-9732-7af5c10f79ee",
+      "client_capture_id": "01a1544d-ea73-7f53-94a4-4e3ad9a93bc4",
+      "captured_at": "2026-10-20T05:44:13Z",
+      "longitude": 77.1977751,
+      "latitude": 28.7380917
+    },
+    "result": "01a1544d-eabc-74b2-826f-d32533e9ac7c",
+    "at": "2026-10-20T05:44:13+00:00",
+    "cargo_before": [
+      7500,
+      7500
+    ],
+    "cargo_after": [
+      6250,
+      6250
+    ],
+    "persisted_fact": {
+      "handover_id": "01a1544d-eabc-74b2-826f-d32533e9ac7c",
+      "status": "VALIDATED",
+      "evidence_capture_id": "01a1544d-eac7-7ffe-9e59-ca646adf4f6d"
+    }
+  }
+]

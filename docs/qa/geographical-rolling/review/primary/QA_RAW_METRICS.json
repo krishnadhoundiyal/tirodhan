@@ -1,0 +1,162 @@
+[
+  {
+    "label": "primary:West:R1",
+    "status": "ACTIVATED",
+    "assigned": 6,
+    "used_riders": 2,
+    "declared_fleet": 10,
+    "deferred": 14,
+    "distance_m": 19100,
+    "travel_seconds": 1833
+  },
+  {
+    "label": "primary:North:R1",
+    "status": "ACTIVATED",
+    "assigned": 6,
+    "used_riders": 2,
+    "declared_fleet": 15,
+    "deferred": 14,
+    "distance_m": 20905,
+    "travel_seconds": 2058
+  },
+  {
+    "label": "primary:South:R1",
+    "status": "ACTIVATED",
+    "assigned": 6,
+    "used_riders": 3,
+    "declared_fleet": 20,
+    "deferred": 14,
+    "distance_m": 46583,
+    "travel_seconds": 3765
+  },
+  {
+    "label": "primary:East:R1",
+    "status": "ACTIVATED",
+    "assigned": 6,
+    "used_riders": 2,
+    "declared_fleet": 25,
+    "deferred": 14,
+    "distance_m": 10528,
+    "travel_seconds": 1118
+  },
+  {
+    "label": "primary:West:R2",
+    "status": "ACTIVATED",
+    "assigned": 12,
+    "used_riders": 5,
+    "declared_fleet": 10,
+    "deferred": 28,
+    "distance_m": 44416,
+    "travel_seconds": 4384
+  },
+  {
+    "label": "primary:North:R2",
+    "status": "ACTIVATED",
+    "assigned": 12,
+    "used_riders": 4,
+    "declared_fleet": 15,
+    "deferred": 28,
+    "distance_m": 29859,
+    "travel_seconds": 3343
+  },
+  {
+    "label": "primary:South:R2",
+    "status": "ACTIVATED",
+    "assigned": 12,
+    "used_riders": 4,
+    "declared_fleet": 20,
+    "deferred": 28,
+    "distance_m": 78034,
+    "travel_seconds": 6501
+  },
+  {
+    "label": "primary:East:R2",
+    "status": "ACTIVATED",
+    "assigned": 12,
+    "used_riders": 3,
+    "declared_fleet": 25,
+    "deferred": 28,
+    "distance_m": 14406,
+    "travel_seconds": 1633
+  },
+  {
+    "label": "primary:West:R3",
+    "status": "ACTIVATED",
+    "assigned": 15,
+    "used_riders": 5,
+    "declared_fleet": 10,
+    "deferred": 45,
+    "distance_m": 47224,
+    "travel_seconds": 4735
+  },
+  {
+    "label": "primary:North:R3",
+    "status": "ACTIVATED",
+    "assigned": 20,
+    "used_riders": 5,
+    "declared_fleet": 15,
+    "deferred": 40,
+    "distance_m": 33332,
+    "travel_seconds": 3830
+  },
+  {
+    "label": "primary:South:R3",
+    "status": "ACTIVATED",
+    "assigned": 15,
+    "used_riders": 5,
+    "declared_fleet": 20,
+    "deferred": 45,
+    "distance_m": 91064,
+    "travel_seconds": 7977
+  },
+  {
+    "label": "primary:East:R3",
+    "status": "ACTIVATED",
+    "assigned": 15,
+    "used_riders": 3,
+    "declared_fleet": 25,
+    "deferred": 45,
+    "distance_m": 15303,
+    "travel_seconds": 1805
+  },
+  {
+    "label": "primary:West:R4",
+    "status": "ACTIVATED",
+    "assigned": 21,
+    "used_riders": 5,
+    "declared_fleet": 10,
+    "deferred": 59,
+    "distance_m": 61534,
+    "travel_seconds": 6188
+  },
+  {
+    "label": "primary:North:R4",
+    "status": "ACTIVATED",
+    "assigned": 28,
+    "used_riders": 5,
+    "declared_fleet": 15,
+    "deferred": 52,
+    "distance_m": 38586,
+    "travel_seconds": 4555
+  },
+  {
+    "label": "primary:South:R4",
+    "status": "ACTIVATED",
+    "assigned": 21,
+    "used_riders": 6,
+    "declared_fleet": 20,
+    "deferred": 59,
+    "distance_m": 113685,
+    "travel_seconds": 10160
+  },
+  {
+    "label": "primary:East:R4",
+    "status": "ACTIVATED",
+    "assigned": 21,
+    "used_riders": 5,
+    "declared_fleet": 25,
+    "deferred": 59,
+    "distance_m": 19980,
+    "travel_seconds": 2284
+  }
+]

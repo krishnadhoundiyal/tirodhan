@@ -1,0 +1,114 @@
+[
+  {
+    "label": "primary:West:R1",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 6
+  },
+  {
+    "label": "primary:North:R1",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 6
+  },
+  {
+    "label": "primary:South:R1",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 6
+  },
+  {
+    "label": "primary:East:R1",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 6
+  },
+  {
+    "label": "primary:West:R2",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 12
+  },
+  {
+    "label": "primary:North:R2",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 12
+  },
+  {
+    "label": "primary:South:R2",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 12
+  },
+  {
+    "label": "primary:East:R2",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 12
+  },
+  {
+    "label": "primary:West:R3",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 15
+  },
+  {
+    "label": "primary:North:R3",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 20
+  },
+  {
+    "label": "primary:South:R3",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 15
+  },
+  {
+    "label": "primary:East:R3",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 15
+  },
+  {
+    "label": "primary:West:R4",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 21
+  },
+  {
+    "label": "primary:North:R4",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 28
+  },
+  {
+    "label": "primary:South:R4",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 21
+  },
+  {
+    "label": "primary:East:R4",
+    "violation": null,
+    "committed_preserved": true,
+    "independent_proposal_validation": "all persisted current revisions",
+    "historical_commitments": 21
+  }
+]
