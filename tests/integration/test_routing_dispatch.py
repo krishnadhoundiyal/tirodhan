@@ -640,7 +640,7 @@ async def test_history_is_immutable_and_downgrade_refuses_loss(database_session_
         with pytest.raises(IntegrityError):
             await session.execute(text("UPDATE operating_shift SET resource_kind = 'FLEXIBLE'"))
         await session.rollback()
-    with pytest.raises(DBAPIError, match="0025 downgrade blocked"):
+    with pytest.raises(DBAPIError, match="0025 downgrade blocked|export adopted business"):
         await asyncio.to_thread(
             migrations.downgrade, Config("alembic.ini"), "0024_routing_operational_inputs"
         )
@@ -653,8 +653,10 @@ async def test_history_is_immutable_and_downgrade_refuses_loss(database_session_
 
 
 async def test_migration_v1_history_round_trip_and_no_new_drift(database_session_factory):
+    from legacy_financial_fixture import legacy_financial_fixture
+
     f = database_session_factory
-    fixture, vehicle, point, ids, config, _, command = await prepared(f)
+    await legacy_financial_fixture(f)
     await asyncio.to_thread(
         migrations.downgrade, Config("alembic.ini"), "0024_routing_operational_inputs"
     )

@@ -315,3 +315,7 @@ and at most one current membership per vehicle. Allocation confers no dispatch/c
 authority. At least one obligation origin is required; reservation and booking endpoints
 are actual optional FKs, not generic polymorphic references. See
 [migration detail](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager configuration and replacement additions
+
+`pickup_price` and each named editable master have their own concrete `*_revision` FK/history relation (including `fleet_control.scope`). `rider_replacement` links to its existing `fleet_exception` incident, latest `replacement_evaluation`, selected `replacement_candidate`, transfer intent and actual `route_activation`. Evaluation has many ranked immutable candidates; each candidate references an actual operating shift. Existing assignment, pickup and cargo-transfer relations retain historical authority. See [full relationship inventory](MANAGER_BUSINESS_CONFIGURATION.md).

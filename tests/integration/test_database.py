@@ -666,6 +666,8 @@ def test_phase_1i_downgrade_preserves_completed_assignment_history(
             await engine.dispose()
 
     command.upgrade(configuration, "head")
+    # Seed this historical lifecycle before adopting immutable manager revisions.
+    command.downgrade(configuration, "0032_projected_slot_allowances")
     completed_at = asyncio.run(seed_completed_assignment())
     command.downgrade(configuration, "0008_rider_dispatch_assignment")
     status, retained_completed_at, tables, constraint, offer_columns, offer_fks = asyncio.run(
@@ -782,6 +784,7 @@ def test_phase_1j_migration_preserves_reassignment_history_on_lossy_downgrade(
             await engine.dispose()
 
     command.upgrade(configuration, "head")
+    command.downgrade(configuration, "0032_projected_slot_allowances")
     predecessor_id, successor_id, pickup_id, superseded_at = asyncio.run(seed_reassignment())
     command.downgrade(configuration, "0009_pickup_execution_lifecycle")
     (

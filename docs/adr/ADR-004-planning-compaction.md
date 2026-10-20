@@ -204,3 +204,7 @@ openings, service duration and deadlines remain hard constraints. Commercial 128
 32-vehicle, 512-node and 8-profile ceilings are removed; byte/time/native limits remain explicit
 retryable execution budgets. Operational legacy guards and production activation remain unchanged.
 See [algorithms, proofs, tests and benchmarks](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Validated replacement options
+
+Replacement alternatives reuse the regional builder, both approved engines, independent validator and facility coordinator. All existing commitments remain hard constraints. Bounded UNKNOWN is not certified infeasibility. Published candidates are advisory; the normal regional cycle rebuilds current sources before authoritative activation. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).

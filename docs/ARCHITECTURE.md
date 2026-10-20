@@ -944,7 +944,7 @@ Do not silently decide:
 - clustering/compaction algorithm;
 - detailed routing algorithm;
 - item category taxonomy;
-- final pricing formula;
+- pricing extensions beyond the approved flat pickup fee;
 - exact values for planning lead time `N`, compaction attempt limit `P`, rider acceptance deadlines, and retention periods;
 - final CI/CD provider;
 - frontend/mobile technology;
@@ -1059,3 +1059,7 @@ The monolith adds finite admission/preflight, coalesced wakes, cancellation reco
 receipt, reattempt and evidenced custody workflows. Proposals establish neither assignment,
 custody nor finance. Production remains disabled. Full-city/private finite road hosting
 requires release review. See [increment 7](V2_ROUTING_INCREMENT_7.md).
+
+## Manager administration and replacement options
+
+See [implemented contracts](MANAGER_BUSINESS_CONFIGURATION.md). Database-backed flat pricing and 18 concrete entity revision relations extend the modular monolith. Transaction-local attribution and immutable fact metadata preserve manager history without EAV business authority. Both native engines use the existing regional builder/validator and facility coordinator for bounded options; selections use existing Payment-first activation/recovery. Physical transfers use actual cargo projections independently of global planner configuration. Collected-work readiness follows current custody, preserving historical pickup identity.

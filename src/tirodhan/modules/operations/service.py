@@ -228,6 +228,11 @@ async def reassign_outstanding_work(
         }
     )
     async with session_factory() as session, session.begin():
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(
+            session, manager_user_id, client_reassignment_id, "MANAGER_REASSIGNMENT"
+        )
         claim = await claim_idempotency_record(
             session,
             scope=REASSIGNMENT_IDEMPOTENCY_SCOPE,

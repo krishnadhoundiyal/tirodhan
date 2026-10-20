@@ -248,3 +248,7 @@ membership. Live transactional operational activation, rider acceptance where re
 protected work, custody and Payment-first arbitration remain the sole authority. The finite
 regional admission worker cannot dispatch. See
 [commercial implementation](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager-selected replacement implementation
+
+Managers may initiate an attributable whole-route incident and select a versioned, independently validated candidate. Selection authorizes existing recovery; it does not itself activate assignment or custody. APPROVED remains pending until ordinary authoritative activation. Collected households require individual evidenced transfer; sequential grouped transfers retain completed lots and original pickup attribution. Readiness uses current custody rather than historical assignment ownership for collected work. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).

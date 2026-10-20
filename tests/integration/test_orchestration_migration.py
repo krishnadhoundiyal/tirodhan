@@ -6,11 +6,11 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from legacy_financial_fixture import legacy_financial_fixture
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_operational_orchestration import admission, regional, reserve
 from test_payment_preparation import assert_readiness_schema
-from test_routing_dispatch import prepared
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -19,7 +19,7 @@ async def test_0027_preserves_populated_prior_financial_history_and_schema(
     database_session_factory,
 ):
     factory = database_session_factory
-    await prepared(factory)
+    await legacy_financial_fixture(factory)
     async with factory() as session:
         before = (
             await session.execute(
@@ -68,7 +68,9 @@ async def test_0027_preserves_populated_prior_financial_history_and_schema(
 async def test_0027_downgrade_refuses_to_destroy_regional_history(database_session_factory):
     factory = database_session_factory
     await regional(factory)
-    with pytest.raises(DBAPIError, match="preservation of operational history"):
+    with pytest.raises(
+        DBAPIError, match="preservation of operational history|export adopted business"
+    ):
         await asyncio.to_thread(command.downgrade, Config("alembic.ini"), "0026_continuous_fleet")
     async with factory() as session:
         assert (

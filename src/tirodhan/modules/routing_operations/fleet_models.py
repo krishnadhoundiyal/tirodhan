@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
 from tirodhan.db.values import new_uuid7
+from tirodhan.modules.business_admin.fact_metadata import BusinessFactMetadata
 
 
 class FleetControl(Base):
@@ -101,7 +102,7 @@ class FleetException(Base):
     )
 
 
-class FacilityRestriction(Base):
+class FacilityRestriction(BusinessFactMetadata, Base):
     __tablename__ = "routing_facility_restriction"
     restriction_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
     receiving_point_id: Mapped[UUID] = mapped_column(

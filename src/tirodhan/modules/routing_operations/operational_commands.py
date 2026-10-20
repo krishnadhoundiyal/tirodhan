@@ -51,8 +51,13 @@ from .regional_commands import TransferRegionalCapacity, transfer_capacity
 from .regional_projection import effective_shift_end
 from .replacement_commands import (
     DecideReplacement,
+    ManagerRequestReplacement,
+    PrepareReplacementTransfer,
     RecommendReplacement,
     RequestReplacement,
+    decide_replacement_group,
+    manager_replacement_request,
+    prepare_replacement_transfer,
     replacement_command,
 )
 from .rolling import FleetPolicy
@@ -209,12 +214,34 @@ OperationalCommand = Annotated[
     | ConfirmShift
     | TransferRegionalCapacity
     | RequestReplacement
+    | ManagerRequestReplacement
+    | PrepareReplacementTransfer
     | RecommendReplacement
     | DecideReplacement,
     # Rider confirmation is separate from receipt and flexible offer acceptance.
     Field(discriminator="operation"),
 ]
 OPERATIONAL_CODEC: TypeAdapter[OperationalCommand] = TypeAdapter(cast(Any, OperationalCommand))
+
+
+def operational_fingerprint(command: OperationalCommand) -> bytes:
+    # New optional presentation fields must not invalidate previously persisted
+    # command fingerprints. Explicit new selection authority remains fingerprinted.
+    exclude: set[str] = set()
+    if isinstance(command, RequestReplacement) and command.reason == "RIDER_REQUESTED":
+        exclude.add("reason")
+    if isinstance(command, DecideReplacement):
+        for field in (
+            "selected_candidate_id",
+            "expected_source_version",
+            "expected_region_version",
+            "expected_route_versions",
+        ):
+            if getattr(command, field) is None:
+                exclude.add(field)
+        if command.reason == "MANAGER_DECISION":
+            exclude.add("reason")
+    return hashlib.sha256(command.model_dump_json(exclude=exclude).encode()).digest()
 
 
 async def execute_operational(
@@ -255,6 +282,8 @@ async def _execute_operation_once(
             TransferRegionalCapacity,
             RecommendReplacement,
             DecideReplacement,
+            ManagerRequestReplacement,
+            PrepareReplacementTransfer,
             AuthorizeExtension,
             PrepareTransfer,
             CompleteTransfer,
@@ -273,11 +302,14 @@ async def _execute_operation_once(
         if isinstance(command, (TransferRegionalCapacity, DecideReplacement)):
             await session.connection(execution_options={"isolation_level": "SERIALIZABLE"})
         await require_live_role(session, actor_id, role)
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(session, actor_id, command.client_command_id, command.operation)
         claim = await claim_idempotency_record(
             session,
             scope=f"routing.operation:{actor_id}",
             idempotency_key=str(command.client_command_id),
-            request_fingerprint=hashlib.sha256(command.model_dump_json().encode()).digest(),
+            request_fingerprint=operational_fingerprint(command),
             expires_at=expires_at,
             now=now,
         )
@@ -301,7 +333,9 @@ async def _execute_operation_once(
             target_shift = getattr(command, "shift_id", None)
             target = await session.get(OperatingShift, target_shift) if target_shift else None
             replacement_region = getattr(command, "region_id", None)
-            if isinstance(command, (RecommendReplacement, DecideReplacement)):
+            if isinstance(
+                command, (RecommendReplacement, DecideReplacement, PrepareReplacementTransfer)
+            ):
                 from .capacity_models import RiderReplacement
 
                 replacement = await session.get(RiderReplacement, command.replacement_id)
@@ -411,8 +445,14 @@ async def _execute(
         )
         region.version += 1
         return region.region_id
-    if isinstance(command, (RequestReplacement, RecommendReplacement, DecideReplacement)):
+    if isinstance(command, DecideReplacement):
+        return await decide_replacement_group(session, actor, command, now, expires_at, clock)
+    if isinstance(command, PrepareReplacementTransfer):
+        return await prepare_replacement_transfer(session, actor, command, now, expires_at)
+    if isinstance(command, (RequestReplacement, RecommendReplacement)):
         return await replacement_command(session, actor, command, now, expires_at, clock)
+    if isinstance(command, ManagerRequestReplacement):
+        return await manager_replacement_request(session, actor, command, now)
     if isinstance(command, ConfirmShift):
         from .parallel_models import ShiftConfirmation
 
@@ -978,22 +1018,11 @@ async def _execute(
         }
         if donor not in captures or target.rider_id not in captures:
             raise RouteAuthorityError("BOTH_PHYSICAL_TRANSFER_RECEIPTS_REQUIRED")
-        from .fleet_models import FleetControl
-        from .rolling import FleetPolicy
+        # Physical custody is independent of regional/global planner configuration
+        # and its horizon. Reuse the same authoritative load projection as prepare.
+        from .physical import cargo_load
 
-        control = await session.get(FleetControl, "COMMITTED_FLEET")
-        if control is None:
-            raise OperationalInputError("FLEET_POLICY_REQUIRED")
-        # Use the same custody projection in this transaction, never a second transaction.
-        from .snapshot import _read_sources
-
-        policy = FleetPolicy.model_validate(control.configuration)
-        sources = await _read_sources(session, policy.snapshot_configuration(now))
-        manifests = [
-            r
-            for r in sources["requests"]
-            if r["pickup_status"] == "COLLECTED" and r["cargo_vehicle_id"] == target.vehicle_id
-        ]
+        current_mass, current_volume = await cargo_load(session, target.vehicle_id)
         manifest = await session.get(RoutingManifest, intent.request_id)
         assert manifest is not None
         from .physical import effective_manifest
@@ -1003,9 +1032,8 @@ async def _execute(
         assert manifest is not None and vehicle is not None
         if (
             vehicle.blocked_reason is not None
-            or sum(r["mass_g"] for r in manifests) + manifest.mass_g > vehicle.mass_capacity_g
-            or sum(r["volume_ml"] for r in manifests) + manifest.volume_ml
-            > vehicle.volume_capacity_ml
+            or current_mass + manifest.mass_g > vehicle.mass_capacity_g
+            or current_volume + manifest.volume_ml > vehicle.volume_capacity_ml
         ):
             raise RouteAuthorityError("TRANSFER_CAPACITY_UNAVAILABLE")
         from sqlalchemy import func
@@ -1056,7 +1084,7 @@ async def _execute(
                 RiderReplacement.status == "APPROVED",
             )
         ):
-            replacement.status = "COMPLETED"
+            replacement.failure_code = "AWAITING_ROUTE_ACTIVATION"
             replacement.version += 1
         availability = await session.get(RiderAvailability, target.rider_id)
         assert availability is not None

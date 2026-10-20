@@ -172,6 +172,9 @@ async def configure_region(
         raise OperationalInputError("REGIONAL_POLICY_REQUIRED")
     async with factory() as session, session.begin():
         await require_live_role(session, manager_id, "MANAGER")
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(session, manager_id, region_id, "REGIONAL_CONFIGURATION")
         if await session.get(OperatingRegion, region_id) is None:
             raise OperationalInputError("REGION_REQUIRED")
         from tirodhan.modules.receiving_points.models import ReceivingPoint

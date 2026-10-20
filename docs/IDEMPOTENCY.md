@@ -751,3 +751,7 @@ immutable. Provider/native work is read-only and outside database locks. Crash a
 replays the existing result; cache loss reconstructs from PostgreSQL. Existing checkout,
 Payment-first cancellation and authoritative dispatch idempotency remain unchanged. See
 [protocol and two-session tests](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager business changes and candidate selection
+
+Business commands use actor-scoped `business.config` idempotency with full typed fingerprints, source-row expected revisions and serializable transactions. Exact replay returns the same resource after live authorization; changed replay conflicts. Source and revision capture commit together. Product upload credentials have no business mutation authority; immutable asset finalization uses the command UUID and replay. Evaluation publication fences replacement/source versions after external compute; immutable evaluation/candidate IDs identify witnesses. Selection uses existing operational command claims, Payment-first/resource/source locks and expected request/source/region/route versions. Whole-incident decisions are atomic; physical transfers remain independently evidenced per lot. Activation completion and its outbox fact commit with existing route authority. Optional legacy replacement defaults preserve stored fingerprints. See [detailed contracts](MANAGER_BUSINESS_CONFIGURATION.md).

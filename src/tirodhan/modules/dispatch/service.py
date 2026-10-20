@@ -219,6 +219,9 @@ async def assign_group_manually(
     now: datetime | None = None,
 ) -> RiderAssignment:
     async with session_factory() as session, session.begin():
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(session, manager_user_id, collection_group_id, "MANUAL_ASSIGNMENT")
         return await _assign_group_to_rider(
             session,
             collection_group_id=collection_group_id,

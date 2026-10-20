@@ -210,6 +210,9 @@ async def _activate(
     clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     await require_live_role(session, actor, "MANAGER")
+    from tirodhan.modules.business_admin.history import attribute_change
+
+    await attribute_change(session, actor, command.client_command_id, "ROUTE_ACTIVATION")
     claim = await claim_idempotency_record(
         session,
         scope=f"routing.activate:{actor}",
@@ -722,14 +725,20 @@ async def _activate(
         select(RiderReplacement).where(
             in_ids(RiderReplacement.request_id, [s.lot_id for s in actual_problem.stops]),
             RiderReplacement.status == "APPROVED",
-            RiderReplacement.transfer_intent_id.is_(None),
         )
     ):
+        if replacement.transfer_intent_id:
+            from .orchestration_models import CargoTransferIntent
+
+            intent = await session.get(CargoTransferIntent, replacement.transfer_intent_id)
+            if intent is None or intent.resolution != "TRANSFERRED":
+                continue
         pickup_stop = next(
             (
                 s
                 for s in actual_problem.stops
-                if s.lot_id == replacement.request_id and s.kind.value == "PICKUP"
+                if s.lot_id == replacement.request_id
+                and s.kind.value == ("DISCHARGE" if replacement.transfer_intent_id else "PICKUP")
             ),
             None,
         )
@@ -747,6 +756,21 @@ async def _activate(
         ):
             replacement.status = "COMPLETED"
             replacement.version += 1
+            replacement.failure_code = None
+            replacement.activated_at = now
+            replacement.activation_id = activation.activation_id
+            await append_outbox_event(
+                session,
+                event_key=f"replacement.activated:{replacement.replacement_id}",
+                event_type="routing.replacement.activated",
+                aggregate_type="rider_replacement",
+                aggregate_id=replacement.replacement_id,
+                payload={
+                    "replacement_id": str(replacement.replacement_id),
+                    "activation_id": str(activation.activation_id),
+                },
+                available_at=now,
+            )
     await complete_idempotency_record(
         session,
         claim.record,

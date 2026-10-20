@@ -155,6 +155,35 @@ class AzureBlobMediaStorage:
         except AzureError as error:
             raise MediaStorageUnavailableError("product artwork is unavailable") from error
 
+    async def create_product_upload_authorization(
+        self,
+        *,
+        object_key: str,
+        expected_content_type: str,
+    ) -> UploadAuthorization:
+        if not object_key.startswith("product-art/") or ".." in object_key.split("/"):
+            raise MediaStorageUnavailableError("invalid product artwork key")
+        try:
+            key = await self._get_user_delegation_key()
+            expiry = datetime.now(timezone.utc) + timedelta(seconds=self._authorization_ttl_seconds)
+            account = self._client.account_name
+            if account is None:
+                raise MediaStorageUnavailableError("product storage unavailable")
+            # c alone permits a new blob; it cannot overwrite historical product bytes.
+            token = generate_blob_sas(
+                account_name=account,
+                container_name=self._container_name,
+                blob_name=object_key,
+                user_delegation_key=key,
+                permission=BlobSasPermissions(create=True),
+                expiry=expiry,
+                protocol="https",
+            )
+            blob = self._client.get_blob_client(container=self._container_name, blob=object_key)
+            return UploadAuthorization(opaque_value=f"{blob.url}?{token}", expires_at=expiry)
+        except AzureError:
+            raise MediaStorageUnavailableError("product storage unavailable") from None
+
     async def close(self) -> None:
         await self._client.close()
         await self._credential.close()

@@ -169,6 +169,9 @@ async def execute_resource_command(
     fingerprint = hashlib.sha256(COMMAND_CODEC.dump_json(command)).digest()
     async with factory() as session, session.begin():
         await require_live_role(session, manager_id, "MANAGER")
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(session, manager_id, command.client_command_id, command.operation)
         claim = await claim_idempotency_record(
             session,
             scope=f"routing.resources:{manager_id}",

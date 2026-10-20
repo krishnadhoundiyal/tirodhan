@@ -6,6 +6,7 @@ from datetime import timedelta
 import pytest
 from alembic import command as migrations
 from alembic.config import Config
+from legacy_financial_fixture import pre_administration_writer
 from sqlalchemy import func, select, text
 from test_operational_orchestration import admission, regional, reserve
 from test_payment_preparation import assert_readiness_schema
@@ -169,7 +170,8 @@ async def test_0029_roundtrip_preserves_intents_certificates_and_financial_histo
     monkeypatch,
 ):
     factory = database_session_factory
-    data = await regional(factory)
+    async with pre_administration_writer(factory):
+        data = await regional(factory)
     command = admission(data[9], data[6][0])
     await request_admission(
         factory,
@@ -196,7 +198,8 @@ async def test_0029_roundtrip_preserves_intents_certificates_and_financial_histo
 
     monkeypatch.setattr(admission_module, "certificate_document", legacy)
     monkeypatch.setattr(admission_module, "persist_certificate", legacy_persist)
-    await reserve(factory, data[8], command, data[6][0])
+    async with pre_administration_writer(factory):
+        await reserve(factory, data[8], command, data[6][0])
 
     async def facts():
         async with factory() as session:
@@ -499,7 +502,8 @@ async def test_migration_refuses_to_revoke_old_overlapping_owners(database_sessi
     from sqlalchemy.exc import DBAPIError
 
     factory = database_session_factory
-    data = await regional(factory, empty=True)
+    async with pre_administration_writer(factory):
+        data = await regional(factory, empty=True)
     now, customer, context = data[6][0], data[8], data[9]
     for _ in range(2):
         await request_admission(

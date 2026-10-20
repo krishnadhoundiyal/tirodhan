@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
+from tirodhan.modules.business_admin.fact_metadata import BusinessFactMetadata
 
 
 class RegionCapacityTransfer(Base):
@@ -58,6 +59,27 @@ class RiderReplacement(Base):
     failure_code: Mapped[str | None] = mapped_column(String(100))
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     attempt: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    requested_by: Mapped[UUID | None] = mapped_column(ForeignKey("app_user.user_id"))
+    reason: Mapped[str | None] = mapped_column(String(100))
+    incident_id: Mapped[UUID | None] = mapped_column(ForeignKey("fleet_exception.exception_id"))
+    evaluation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "replacement_evaluation.evaluation_id",
+            use_alter=True,
+            name="fk_replacement_evaluation",
+            deferrable=True,
+            initially="DEFERRED",
+        )
+    )
+    selected_candidate_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "replacement_candidate.candidate_id",
+            use_alter=True,
+            name="fk_replacement_selected_candidate",
+        )
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    activation_id: Mapped[UUID | None] = mapped_column(ForeignKey("route_activation.activation_id"))
     __table_args__ = (
         CheckConstraint(
             "status IN ('REQUESTED','RECOMMENDED','APPROVED','REJECTED','COMPLETED')",
@@ -81,6 +103,10 @@ class ReplacementDecision(Base):
     decision: Mapped[str] = mapped_column(String(16))
     version: Mapped[int] = mapped_column(BigInteger)
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    candidate_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("replacement_candidate.candidate_id")
+    )
+    reason: Mapped[str | None] = mapped_column(String(100))
 
 
 class RegionalSlotProjection(Base):
@@ -139,7 +165,7 @@ class RegionalCapacityBudget(Base):
     )
 
 
-class SlotAllowanceConfiguration(Base):
+class SlotAllowanceConfiguration(BusinessFactMetadata, Base):
     __tablename__ = "regional_slot_policy"
     region_id: Mapped[UUID] = mapped_column(
         ForeignKey("operating_region.region_id"), primary_key=True

@@ -124,7 +124,15 @@ def get_cell_id_deriver(request: Request) -> CellIdDeriver:
     return cast(CellIdDeriver, request.app.state.cell_id_deriver)
 
 
-def get_pricing_port(request: Request) -> PricingPort:
+def get_pricing_port(
+    request: Request,
+    factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> PricingPort:
+    from tirodhan.modules.business_admin.pricing import FlatPickupPricing
+    from tirodhan.modules.collection_requests.ports import UnconfiguredPricingPort
+
+    if isinstance(request.app.state.pricing_port, UnconfiguredPricingPort):
+        return FlatPickupPricing(factory)
     return cast(PricingPort, request.app.state.pricing_port)
 
 

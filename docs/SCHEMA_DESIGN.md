@@ -1287,3 +1287,7 @@ arrays. Upgrade requires draining RUNNING admission preparation. Legacy certific
 readable; downgrade preserves populated legacy data but refuses populated new proof history.
 No financial schema or initiation-term trigger changes. See
 [schema, recovery and validation](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager history migrations 0033–0034
+
+0033 adds `pickup_price`, 18 entity-specific revision tables with real source FKs, immutable capture triggers, stable catalogue/media identities and nullable recording metadata on seven existing immutable duty/facility facts. Region association snapshots are captured at transaction completion; fleet-control snapshots exclude lease churn. 0034 adds immutable `replacement_evaluation`/`replacement_candidate`, concrete incident/choice/activation FKs on RiderReplacement and decision provenance. Historical snapshots are audit facts, never generic mutable business storage. Baselines retain unknown historical actors. Adopted history blocks lossy downgrade. See [schema and API contracts](MANAGER_BUSINESS_CONFIGURATION.md).

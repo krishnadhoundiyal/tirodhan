@@ -117,7 +117,7 @@ The following are not yet fixed:
 - production compaction-distance and maximum group-request values;
 - final route optimization algorithm, if any;
 - detailed fleet rider-selection algorithm;
-- item category taxonomy and final pricing formula;
+- item category taxonomy and pricing extensions beyond the approved flat pickup fee;
 - detailed "material differs from booking" workflow;
 - final offline-evidence validation policy;
 - frontend/mobile technology;
@@ -156,3 +156,7 @@ Regional capacity, receipt/acceptance, reattempt consent, explicit custody recov
 shift authorization, destination fallback, ETA and finite preflight/reconciliation are behind
 disabled production flags. No new cloud resources or fixed recurring service are provisioned.
 See [implementation and release prerequisites](V2_ROUTING_INCREMENT_7.md).
+
+## Manager business configuration increment
+
+Manager-configured versioned flat INR pickup pricing replaces the unconfigured production pricing port. Entity-specific immutable histories and manager read/compare APIs cover editable masters; existing duty and operational facts remain authoritative. Replacement publishes bounded validated options, supports manager incidents and explicit candidate selection, and completes only after actual authoritative route activation. See [implementation and authority contracts](MANAGER_BUSINESS_CONFIGURATION.md). Production activation flags remain unchanged.

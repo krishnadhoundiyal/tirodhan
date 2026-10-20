@@ -136,3 +136,7 @@ Provider/source backoff and checkpoints survive worker restarts;
 process-local caches may be discarded. Read-only native/road work runs outside locks. No new
 broker, distributed-lock service, production schedule or infrastructure is introduced. See
 [recovery protocol and actual concurrency tests](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager change and replacement provenance
+
+Actor-scoped typed command claims, revision/source fences and transactional immutable history protect manager changes. Candidate compute stays outside locks; publication and selection fence current versions. Existing operational idempotency and physical transfer evidence remain authoritative; legacy optional defaults preserve prior fingerprints. See [contracts](../MANAGER_BUSINESS_CONFIGURATION.md).
