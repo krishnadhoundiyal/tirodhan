@@ -190,5 +190,36 @@ class RouteReportTests(unittest.TestCase):
             self.assertIn("expected 2 bookings", str(ctx.exception))
 
 
+    def test_generated_and_retained_reports_avoid_browser_top_collision(self) -> None:
+        # A top-level JavaScript `const top` collides with Chrome's window.top.
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory) / "primary"
+            fixture(case)
+            self.assertEqual(renderer.main(["--evidence-root", str(case)]), 0)
+            generated = sorted((case / "route-reports").glob("*-R*.html"))
+            self.assertEqual({p.name for p in generated}, {"West-R1.html", "West-R2.html"})
+
+            retained = (
+                Path(__file__).resolve().parents[3]
+                / "docs/qa/geographical-rolling/review/route-reports/primary-10c4655"
+            )
+            expected = {
+                f"{region}-R{cycle}.html"
+                for region in ("East", "North", "South", "West")
+                for cycle in range(1, 5)
+            }
+            retained_files = sorted(retained.glob("*-R*.html"))
+            self.assertEqual({p.name for p in retained_files}, expected)
+            for report in [*generated, *retained_files]:
+                with self.subTest(report=report.name):
+                    html = report.read_text(encoding="utf-8")
+                    self.assertIn("left=72,right=112,mapTop=45,bottom=55", html)
+                    self.assertIn("h=H-mapTop-bottom", html)
+                    self.assertIn("yo=mapTop+(h-ey*sc)/2", html)
+                    self.assertNotIn("left=72,right=112,top=45,bottom=55", html)
+                    self.assertNotIn("h=H-top-bottom", html)
+                    self.assertNotIn("yo=top+(h-ey*sc)/2", html)
+
+
 if __name__ == "__main__":
     unittest.main()
