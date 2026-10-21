@@ -44,6 +44,9 @@ async def recover_route(
     now = now or utc_now()
     async with factory() as session, session.begin():
         await require_live_role(session, manager_id, "MANAGER")
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(session, manager_id, command.client_command_id, command.reason_code)
         claim = await claim_idempotency_record(
             session,
             scope=f"routing.recover:{manager_id}",

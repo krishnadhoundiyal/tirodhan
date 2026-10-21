@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -42,6 +43,73 @@ Factory = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factor
 Customer = Annotated[AuthenticatedPrincipal, Depends(require_role("CUSTOMER"))]
 Rider = Annotated[AuthenticatedPrincipal, Depends(require_role("RIDER"))]
 Manager = Annotated[AuthenticatedPrincipal, Depends(require_role("MANAGER"))]
+
+
+class ReplacementSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_command_id: UUID
+    selected_candidate_id: UUID
+    expected_version: int = Field(strict=True, ge=1)
+    expected_source_version: int = Field(strict=True, ge=1)
+    expected_region_version: int = Field(strict=True, ge=1)
+    expected_route_versions: dict[UUID, int]
+    reason: str = Field(min_length=1, max_length=100, pattern=r"^[A-Z0-9_]+$")
+
+
+@router.post("/manager/replacements/{replacement_id}/select")
+async def select_replacement(
+    replacement_id: UUID,
+    body: ReplacementSelection,
+    request: Request,
+    actor: Manager,
+    factory: Factory,
+) -> dict[str, Any]:
+    from tirodhan.modules.routing_operations.replacement_commands import DecideReplacement
+    from tirodhan.modules.routing_operations.replacement_reads import read_replacement_options
+
+    await _command(
+        DecideReplacement(replacement_id=replacement_id, decision="APPROVE", **body.model_dump()),
+        request,
+        actor,
+        factory,
+    )
+    async with factory() as session:
+        return await read_replacement_options(session, replacement_id, utc_now())
+
+
+@router.get("/manager/replacements")
+async def replacements(
+    actor: Manager,
+    factory: Factory,
+    incident_id: UUID | None = None,
+    after_id: UUID | None = None,
+    limit: int = Query(50, ge=1, le=100),
+) -> Any:
+    from tirodhan.modules.routing_operations.capacity_models import RiderReplacement
+
+    async with factory() as session:
+        query = select(RiderReplacement).order_by(RiderReplacement.replacement_id).limit(limit + 1)
+        if incident_id:
+            query = query.where(RiderReplacement.incident_id == incident_id)
+        if after_id:
+            query = query.where(RiderReplacement.replacement_id > after_id)
+        rows = list(await session.scalars(query))
+        return {
+            "items": [
+                {
+                    "replacement_id": r.replacement_id,
+                    "request_id": r.request_id,
+                    "incident_id": r.incident_id,
+                    "status": r.status,
+                    "version": r.version,
+                    "requested_at": r.requested_at,
+                    "failure_code": r.failure_code,
+                    "activation_id": r.activation_id,
+                }
+                for r in rows[:limit]
+            ],
+            "next_cursor": rows[limit - 1].replacement_id if len(rows) > limit else None,
+        }
 
 
 @router.get("/customer/slot-availability")
@@ -86,25 +154,18 @@ async def read_replacement(
     replacement_id: UUID,
     actor: Manager,
     factory: Factory,
+    after_rank: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
 ) -> dict[str, Any]:
-    from tirodhan.modules.routing_operations.capacity_models import RiderReplacement
+    from tirodhan.modules.routing_operations.replacement_reads import read_replacement_options
 
     async with factory() as session:
-        row = await session.get(RiderReplacement, replacement_id)
-        if row is None:
-            raise HTTPException(404, "REPLACEMENT_UNAVAILABLE")
-        return {
-            "replacement_id": row.replacement_id,
-            "status": row.status,
-            "version": row.version,
-            "request_id": row.request_id,
-            "recommended_shift_id": row.recommended_shift_id,
-            "recommended_at": row.recommended_at,
-            "source_version": row.source_version,
-            "transfer_intent_id": row.transfer_intent_id,
-            "failure_code": row.failure_code,
-            "authoritative": False,
-        }
+        try:
+            return await read_replacement_options(
+                session, replacement_id, utc_now(), after_rank=after_rank, limit=limit
+            )
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
 
 
 @router.get("/manager/regions/{region_id}/capacity")
@@ -315,6 +376,47 @@ async def manager_operation(
     command: OperationalCommand, request: Request, actor: Manager, factory: Factory
 ) -> dict[str, UUID]:
     return await _command(command, request, actor, factory)
+
+
+@router.get("/manager/replacements/{replacement_id}/evaluations")
+async def replacement_evaluations(
+    replacement_id: UUID,
+    actor: Manager,
+    factory: Factory,
+    after_id: UUID | None = None,
+    limit: int = Query(50, ge=1, le=100),
+) -> Any:
+    from tirodhan.modules.routing_operations.replacement_reads import evaluation_history
+
+    async with factory() as session:
+        try:
+            return await evaluation_history(session, replacement_id, after_id=after_id, limit=limit)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+
+
+@router.get("/manager/replacements/{replacement_id}/evaluations/{evaluation_id}")
+async def replacement_evaluation(
+    replacement_id: UUID,
+    evaluation_id: UUID,
+    actor: Manager,
+    factory: Factory,
+    after_rank: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+) -> Any:
+    from tirodhan.modules.routing_operations.replacement_reads import evaluation_history
+
+    async with factory() as session:
+        try:
+            return await evaluation_history(
+                session,
+                replacement_id,
+                evaluation_id=evaluation_id,
+                after_rank=after_rank,
+                limit=limit,
+            )
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
 
 
 @router.post("/rider/operations")

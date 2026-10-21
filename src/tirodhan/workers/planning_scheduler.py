@@ -19,6 +19,18 @@ async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_file_path)
 
+    if settings.routing_orchestration_enabled:
+        recovery_engine = create_database_engine(settings, use_null_pool=True)
+        try:
+            from tirodhan.modules.routing_operations.failure_runtime import reconcile_recovery
+
+            await reconcile_recovery(
+                create_session_factory(recovery_engine), datetime.now(timezone.utc)
+            )
+        finally:
+            await recovery_engine.dispose()
+        if settings.planning_lead_time_minutes is None:
+            return
     if settings.planning_lead_time_minutes is None:
         raise ValueError("planning_lead_time_minutes must be configured")
     if settings.planning_max_attempts is None:

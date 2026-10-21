@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from tirodhan.core.config import Settings
 from tirodhan.db.base import Base
 from tirodhan.db.session import create_database_engine
+from tirodhan.modules.business_admin import models as business_models  # noqa: F401
 from tirodhan.modules.collection_requests import models as collection_request_models  # noqa: F401
 from tirodhan.modules.customer_reads import models as customer_read_models  # noqa: F401
 from tirodhan.modules.customers import models as customer_models  # noqa: F401
@@ -24,8 +25,10 @@ from tirodhan.modules.reliability import models as reliability_models  # noqa: F
 from tirodhan.modules.routing_operations import (
     admission_models,  # noqa: F401
     capacity_models,  # noqa: F401
+    failure_models,  # noqa: F401
     fleet_models,  # noqa: F401
     parallel_models,  # noqa: F401
+    replacement_models,  # noqa: F401
 )
 from tirodhan.modules.routing_operations import dispatch_models as route_models  # noqa: F401
 from tirodhan.modules.routing_operations import models as routing_operations_models  # noqa: F401

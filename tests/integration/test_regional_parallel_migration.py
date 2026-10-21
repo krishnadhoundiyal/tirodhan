@@ -5,10 +5,10 @@ import asyncio
 import pytest
 from alembic import command
 from alembic.config import Config
+from legacy_financial_fixture import legacy_financial_fixture as financial_fixture
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_payment_preparation import assert_readiness_schema
-from test_routing_dispatch import prepared as financial_fixture
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -61,7 +61,7 @@ async def test_0028_refuses_history_loss_and_sql_mutation(database_session_facto
     factory = database_session_factory
     values, _ = await prepared(factory)
     await run(factory, values)
-    with pytest.raises(DBAPIError, match="regional history"):
+    with pytest.raises(DBAPIError, match="regional history|export adopted business"):
         await asyncio.to_thread(
             command.downgrade, Config("alembic.ini"), "0027_operational_orchestration"
         )

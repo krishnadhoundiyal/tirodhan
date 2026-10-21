@@ -497,7 +497,7 @@ Do not silently decide:
 
 - detailed routing algorithm;
 - item category taxonomy;
-- final pricing formula;
+- pricing extensions beyond the approved flat pickup fee;
 - exact planning lead time, compaction-attempt limit, compaction distance, maximum group-request count, rider-offer deadline and retention periods;
 - final CI/CD provider;
 - frontend/mobile technology;
@@ -633,3 +633,20 @@ source notice/head records are preparation/recovery controls, not operational co
 Commercial proof composition assumes approved unlimited unloading throughput while retaining
 authorized facilities, openings, service times and deadlines. Legacy proof envelopes remain
 readable. See [model and correctness boundary](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Configured masters and replacement provenance
+
+`PickupPrice` supplies one flat INR booking fee, versioned into existing booking lines/Payment. Concrete immutable master revisions contain before/after states and manager/command/reason attribution. Existing duty/facility facts retain their own event semantics and gain nullable legacy-safe recording metadata. `ReplacementEvaluation` and `ReplacementCandidate` are immutable advisory witnesses; `RiderReplacement` retains incident, selected candidate and actual activation references. APPROVED does not mean assigned or transferred. Each collected household keeps its original pickup identity; actual custody follows validated CargoTransfer, and completion requires activation of its discharge route. See [contracts](MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure recovery
+
+A RiderFailureIncident covers every affected outstanding pickup and undischarged cargo lot.
+Its RiderReplacement obligations may be allocated across multiple receiving shifts through
+RecoveryAssignment membership. An allocation can be pending, running, awaiting physical
+transfer, activated, requiring attention or superseded independently of other legs. Missing
+allocations remain unresolved obligations. Manager selection, route authority, revision receipt,
+physical custody and final booking completion are separate facts. Before-pickup release commits
+with successor activation; started uncollected work requires explicit resolution. Collected lots
+move only through existing evidenced transfers. The approved rendezvous model is manager
+coordination. See [complete lifecycle](RIDER_FAILURE_RECOVERY.md).

@@ -181,14 +181,18 @@ async def execute_task(
             session, shift.shift_id, shift.ends_at
         ):
             raise RouteAuthorityError("ACTIVE_SHIFT_REQUIRED")
-        run_id = await session.scalar(
-            select(RouteActivation.run_id).where(
-                RouteActivation.activation_id == revision.activation_id
-            )
-        )
-        run = await session.get(RoutingShadowRun, run_id)
-        assert run is not None
-        config = ShadowConfiguration.model_validate(run.configuration)
+        activation = await session.get(RouteActivation, revision.activation_id)
+        assert activation is not None
+        if activation.recovery_witness_id is not None:
+            from .failure_models import RecoveryWitness
+
+            witness = await session.get(RecoveryWitness, activation.recovery_witness_id)
+            assert witness is not None
+            config = ShadowConfiguration.model_validate(witness.configuration)
+        else:
+            run = await session.get(RoutingShadowRun, activation.run_id)
+            assert run is not None
+            config = ShadowConfiguration.model_validate(run.configuration)
         position = await session.scalar(
             select(VehiclePosition)
             .where(VehiclePosition.vehicle_id == root.vehicle_id)

@@ -46,6 +46,14 @@ class PushNotification:
 
 
 @dataclass(frozen=True)
+class RouteRevisionNotification:
+    revision_id: UUID
+
+    def data(self) -> dict[str, str]:
+        return {"type": "ROUTE_REVISION", "revision_id": str(self.revision_id)}
+
+
+@dataclass(frozen=True)
 class PushDeliveryResult:
     delivery_id: UUID
     status: Literal["SENT", "PERMANENTLY_FAILED", "PENDING"]
@@ -54,7 +62,9 @@ class PushDeliveryResult:
 
 class PushNotificationPort(Protocol):
     async def send_batch(
-        self, recipients: Sequence[PushRecipient], notification: PushNotification
+        self,
+        recipients: Sequence[PushRecipient],
+        notification: PushNotification | RouteRevisionNotification,
     ) -> Sequence[PushDeliveryResult]: ...
 
 
@@ -75,14 +85,18 @@ class FcmPushNotificationPort:
             raise PushConfigurationError("invalid FCM runtime configuration") from None
 
     async def send_batch(
-        self, recipients: Sequence[PushRecipient], notification: PushNotification
+        self,
+        recipients: Sequence[PushRecipient],
+        notification: PushNotification | RouteRevisionNotification,
     ) -> Sequence[PushDeliveryResult]:
         chunks = [recipients[index : index + 500] for index in range(0, len(recipients), 500)]
         batches = await asyncio.gather(*(self._send_chunk(chunk, notification) for chunk in chunks))
         return tuple(result for batch in batches for result in batch)
 
     async def _send_chunk(
-        self, recipients: Sequence[PushRecipient], notification: PushNotification
+        self,
+        recipients: Sequence[PushRecipient],
+        notification: PushNotification | RouteRevisionNotification,
     ) -> tuple[PushDeliveryResult, ...]:
         try:
             response = await asyncio.to_thread(
@@ -90,7 +104,12 @@ class FcmPushNotificationPort:
                 messaging.MulticastMessage(
                     tokens=[recipient.registration_token for recipient in recipients],
                     notification=messaging.Notification(
-                        "New pickup opportunity", "Open Tirodhan to review and accept."
+                        "Route updated"
+                        if isinstance(notification, RouteRevisionNotification)
+                        else "New pickup opportunity",
+                        "Open Tirodhan to refresh your route."
+                        if isinstance(notification, RouteRevisionNotification)
+                        else "Open Tirodhan to review and accept.",
                     ),
                     data=notification.data(),
                 ),

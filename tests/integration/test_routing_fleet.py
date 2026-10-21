@@ -739,7 +739,7 @@ async def test_fleet_schema_roundtrip_and_history_guards(database_session_factor
         await connection.run_sync(assert_readiness_schema)
     _, _, _, _, _, _, clock = await fixture(database_session_factory)
     assert (await tick(database_session_factory, clock)).status == "ACTIVATED"
-    with pytest.raises(DBAPIError, match="0026 downgrade requires"):
+    with pytest.raises(DBAPIError, match="0026 downgrade requires|export adopted business"):
         await asyncio.to_thread(
             migrations.downgrade, Config("alembic.ini"), "0025_vehicle_route_authority"
         )

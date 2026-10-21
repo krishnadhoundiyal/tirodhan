@@ -43,7 +43,7 @@ async def fake_workers(tasks, count):
     return results
 
 
-async def prepared(factory, confirm=True, second=True, max_admitted=12):
+async def prepared(factory, confirm=True, second=True, max_admitted=12, configure=True):
     values = await regional(factory, second=second)
     f, vehicles, point, ids, config, resource, clock, region_id, *_ = values
     p = RegionalPolicy(
@@ -67,9 +67,10 @@ async def prepared(factory, confirm=True, second=True, max_admitted=12):
                 ConfirmShift(client_command_id=new_uuid7(), shift_id=shift.shift_id),
                 shift.starts_at - timedelta(seconds=1),
             )
-    await configure_region(
-        factory, region_id=region_id, manager_id=f.manager_id, policy=p, now=clock[0]
-    )
+    if configure:
+        await configure_region(
+            factory, region_id=region_id, manager_id=f.manager_id, policy=p, now=clock[0]
+        )
     return values, p
 
 
@@ -704,15 +705,10 @@ async def test_flexible_capacity_requires_offer_acceptance_then_can_activate(
 async def test_concurrent_configuration_is_one_exact_regional_initialization(
     database_session_factory,
 ):
-    from sqlalchemy import delete
-
     from tirodhan.modules.routing_operations.fleet_models import FleetControl
 
     factory = database_session_factory
-    values, p = await prepared(factory)
-    async with factory() as session, session.begin():
-        await session.execute(delete(FleetWakeup).where(FleetWakeup.scope == scope(values[7])))
-        await session.execute(delete(FleetControl).where(FleetControl.scope == scope(values[7])))
+    values, p = await prepared(factory, configure=False)
     await asyncio.gather(
         *(
             configure_region(

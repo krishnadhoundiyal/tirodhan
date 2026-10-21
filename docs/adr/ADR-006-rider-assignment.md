@@ -248,3 +248,22 @@ membership. Live transactional operational activation, rider acceptance where re
 protected work, custody and Payment-first arbitration remain the sole authority. The finite
 regional admission worker cannot dispatch. See
 [commercial implementation](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager-selected replacement implementation
+
+Managers may initiate an attributable whole-route incident and select a versioned, independently validated candidate. Selection authorizes existing recovery; it does not itself activate assignment or custody. APPROVED remains pending until ordinary authoritative activation. Collected households require individual evidenced transfer; sequential grouped transfers retain completed lots and original pickup attribution. Readiness uses current custody rather than historical assignment ownership for collected work. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure and replacement
+
+One rider-failure incident retains all affected obligations and may have multiple manager-approved receiving shifts. Approval is distinct from asynchronous activation and revision receipt. Both origins share the authoritative route writer. Before-pickup release occurs with successor activation; started work needs explicit resolution. Manager-coordinated rendezvous is approved initially; existing evidenced per-lot transfer remains the sole custody authority.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).
+
+Replacement recommendations retain committed-resource priority. Bounded evaluation orders
+candidates by broad time-window compatibility and geographic route-insertion detour rather
+than UUID. Validated options compare marginal generalized fleet impact against each surviving
+incumbent, rather than different riders' absolute route totals. Unavailable baselines are
+explicitly unpriced and follow priced options within their resource tier. These advisory
+rankings neither exclude unevaluated resources as infeasible nor grant assignment/custody
+authority; the existing independent gate and transactional activation remain mandatory.

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
 from tirodhan.db.values import new_uuid7, utc_now
+from tirodhan.modules.business_admin.fact_metadata import BusinessFactMetadata
 
 
 class OperatingRegion(Base):
@@ -244,7 +245,7 @@ class DischargeAuthorization(Base):
     authorized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class OperatingBreak(Base):
+class OperatingBreak(BusinessFactMetadata, Base):
     __tablename__ = "operating_break"
     break_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
     shift_id: Mapped[UUID] = mapped_column(ForeignKey("operating_shift.shift_id"), index=True)
@@ -254,7 +255,7 @@ class OperatingBreak(Base):
     __table_args__ = (CheckConstraint("ends_at > starts_at", name="ck_break_window"),)
 
 
-class ShiftExtension(Base):
+class ShiftExtension(BusinessFactMetadata, Base):
     __tablename__ = "operating_shift_extension"
     extension_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
     shift_id: Mapped[UUID] = mapped_column(ForeignKey("operating_shift.shift_id"), index=True)
@@ -343,7 +344,7 @@ class FlexibleCommitment(Base):
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class ShiftExtensionConsent(Base):
+class ShiftExtensionConsent(BusinessFactMetadata, Base):
     __tablename__ = "shift_extension_consent"
     consent_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
     shift_id: Mapped[UUID] = mapped_column(ForeignKey("operating_shift.shift_id"))

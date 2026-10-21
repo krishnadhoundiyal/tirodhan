@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
 from tirodhan.db.values import new_uuid7, utc_now
+from tirodhan.modules.business_admin.fact_metadata import BusinessFactMetadata
 
 
 class OperatingVehicle(Base):
@@ -133,7 +134,7 @@ class RoutingManifest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
-class ReceivingWindow(Base):
+class ReceivingWindow(BusinessFactMetadata, Base):
     __tablename__ = "routing_receiving_window"
     __table_args__ = (CheckConstraint("ends_at > starts_at", name="ck_routing_receiving_window"),)
     window_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)

@@ -136,3 +136,21 @@ Provider/source backoff and checkpoints survive worker restarts;
 process-local caches may be discarded. Read-only native/road work runs outside locks. No new
 broker, distributed-lock service, production schedule or infrastructure is introduced. See
 [recovery protocol and actual concurrency tests](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager change and replacement provenance
+
+Actor-scoped typed command claims, revision/source fences and transactional immutable history protect manager changes. Candidate compute stays outside locks; publication and selection fence current versions. Existing operational idempotency and physical transfer evidence remain authoritative; legacy optional defaults preserve prior fingerprints. See [contracts](../MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Recovery work and shared commit
+
+Concrete incident/assignment records, actor/client command claims, partial unique allocation guards, token/expiry compute claims and immutable recovery witnesses protect retryable recovery. Planning and recovery use one route persistence implementation. Inbox/outbox, bounded periodic reconciliation and per-device notification progress cover transport, external-send and crash-after-commit boundaries.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).
+
+Recovery notification publication uses immutable operation/generation identity, one open
+request, unique outbox identity and a bounded token/expiry publication claim (migration 0036).
+Publishing attempts and execution attempts have separate counters. Scheduler rediscovery
+cannot manufacture new generations; recorded operational retries and their next outbox
+commit together. Broker redelivery reuses its generation. Published consumer backlog does
+not expire into duplicate publication merely because no worker has started.

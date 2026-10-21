@@ -5,6 +5,7 @@ import math
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -40,6 +41,7 @@ from tirodhan.modules.reliability.primitives import (
     complete_idempotency_record,
 )
 
+from . import failure_models  # noqa: F401
 from .commands import OperationalInputError, require_live_role
 from .dispatch_models import (
     RouteActivation,
@@ -129,18 +131,22 @@ async def lock_resources(
     vehicle_ids: list[UUID],
     *,
     authorize: bool = True,
+    authorize_rider_ids: list[UUID] | None = None,
 ) -> None:
+    authorized = set(rider_ids if authorize_rider_ids is None else authorize_rider_ids)
+    if not authorized.issubset(set(rider_ids)):
+        raise RouteAuthorityError("RESOURCE_AUTHORIZATION_SCOPE")
     if authorize:
         profiles = list(
             await session.scalars(
                 select(RiderProfile)
-                .where(RiderProfile.rider_id.in_(rider_ids))
+                .where(RiderProfile.rider_id.in_(authorized))
                 .order_by(RiderProfile.rider_id)
                 .with_for_update(key_share=True)
                 .execution_options(populate_existing=True)
             )
         )
-        if len(profiles) != len(set(rider_ids)) or any(p.status != "ACTIVE" for p in profiles):
+        if len(profiles) != len(authorized) or any(p.status != "ACTIVE" for p in profiles):
             raise RouteAuthorityError("RESOURCE_AUTHORIZATION_STALE")
     availability = list(
         await session.scalars(
@@ -155,8 +161,12 @@ async def lock_resources(
         raise RouteAuthorityError("RIDER_AVAILABILITY_REQUIRED")
     # V1 profile -> availability -> authority order; FK-compatible locks avoid recorder cycles.
     for rider_id in sorted(set(rider_ids), key=str):
-        if authorize and not await lock_active_user_role(
-            session, user_id=rider_id, role_code="RIDER", no_key_update=True
+        if (
+            authorize
+            and rider_id in authorized
+            and not await lock_active_user_role(
+                session, user_id=rider_id, role_code="RIDER", no_key_update=True
+            )
         ):
             raise RouteAuthorityError("RESOURCE_AUTHORIZATION_STALE")
     vehicles = list(
@@ -210,6 +220,9 @@ async def _activate(
     clock: Callable[[], datetime] | None = None,
 ) -> UUID:
     await require_live_role(session, actor, "MANAGER")
+    from tirodhan.modules.business_admin.history import attribute_change
+
+    await attribute_change(session, actor, command.client_command_id, "ROUTE_ACTIVATION")
     claim = await claim_idempotency_record(
         session,
         scope=f"routing.activate:{actor}",
@@ -384,6 +397,7 @@ async def _activate(
         raise RouteAuthorityError("LEGACY_ASSIGNMENT_MUST_DRAIN")
     if any(r.status == "PRE_PLANNING" for r in requests.values()):
         raise RouteAuthorityError("LEGACY_BATCH_MUST_DRAIN")
+    cycle = None
     if command.fleet_cycle_id is not None:
         from .fleet_models import FleetControl, FleetCycle
 
@@ -456,14 +470,73 @@ async def _activate(
     activation = RouteActivation(
         run_id=run.run_id, engine=command.engine.value, activated_by=actor, created_at=now
     )
+    await commit_routes(
+        session,
+        actor=actor,
+        activation=activation,
+        config=config,
+        problem=live_problem,
+        proposal=proposal,
+        hold_ids=hold_ids,
+        requests=requests,
+        current=current,
+        now=now,
+        resume_recovery=command.resume_recovery,
+        delivery_policy=cycle.measurements["policy"].get("fleet", cycle.measurements["policy"])
+        if cycle is not None and cycle.measurements is not None
+        else None,
+    )
+    await complete_idempotency_record(
+        session,
+        claim.record,
+        result_resource_id=activation.activation_id,
+        result_status_code=200,
+        completed_at=now,
+    )
+    if command.fleet_cycle_id is not None:
+        assert cycle is not None
+        cycle.activation_id = activation.activation_id
+        cycle.selected_engine = command.engine.value
+        cycle.status, cycle.completed_at = "ACTIVATED", now
+        if command.engine == SelectionEngine.COMPOSITE:
+            from .regional_planner import complete_cycle
+
+            await complete_cycle(session, cycle, now)
+    return activation.activation_id
+
+
+async def commit_routes(
+    session: AsyncSession,
+    *,
+    actor: UUID,
+    activation: RouteActivation,
+    config: ShadowConfiguration,
+    problem: Any,
+    proposal: Any,
+    hold_ids: set[UUID],
+    requests: dict[UUID, CollectionRequest],
+    current: dict[str, Any],
+    now: datetime,
+    resume_recovery: bool = False,
+    delivery_policy: dict[str, Any] | None = None,
+) -> None:
+    """Shared persistence boundary. Callers verify origin and lock authoritative inputs.
+
+    No solver/provider I/O. Both origin adapters use the same assignment, revision,
+    task, delivery and replacement completion implementation in their transaction.
+    """
+    live_problem = problem
     session.add(activation)
     await session.flush([activation])
+    from tirodhan.modules.planning.routing.facilities import validate_sources
+
+    from .admission_queries import in_ids
     from .hold_projection import executable_projection
 
     actual_problem, proposal = executable_projection(live_problem, proposal, hold_ids)
     # Removing a passive visit changes road arcs. Check the route we actually authorize.
     assessment = validate_proposal(actual_problem, proposal)
-    if command.engine == SelectionEngine.COMPOSITE:
+    if config.regional:
         validate_sources(actual_problem, assessment, current)
     by_stop = {s.stop_id: s for s in actual_problem.stops}
     by_vehicle = {v.vehicle_id: v for v in actual_problem.vehicles}
@@ -542,7 +615,7 @@ async def _activate(
         if root is not None:
             if root.shift_id != v.operating_shift_id:
                 raise RouteAuthorityError("ROUTE_SHIFT_MISMATCH")
-            if root.status == "RECOVERY_REQUIRED" and not command.resume_recovery:
+            if root.status == "RECOVERY_REQUIRED" and not resume_recovery:
                 raise RouteAuthorityError("EXPLICIT_RECOVERY_RESUME_REQUIRED")
             assignment = await session.get(RiderAssignment, root.assignment_id)
             assert assignment is not None
@@ -685,11 +758,11 @@ async def _activate(
             # Receipt deadline derives from dispatch readiness and predicted first stop.
             acknowledgment = 60
             readiness = 0
-            if command.fleet_cycle_id:
-                assert cycle is not None and cycle.measurements is not None
-                configured = cycle.measurements["policy"]
-                acknowledgment = configured.get("delivery_ack_seconds", 60)
-                readiness = max(0, configured.get("dispatch_readiness_seconds", 0) - acknowledgment)
+            if delivery_policy:
+                acknowledgment = delivery_policy.get("delivery_ack_seconds", 60)
+                readiness = max(
+                    0, delivery_policy.get("dispatch_readiness_seconds", 0) - acknowledgment
+                )
             first = schedules[v.vehicle_id].stops[0].service_start_at
             due = min(
                 now + timedelta(seconds=acknowledgment),
@@ -722,14 +795,20 @@ async def _activate(
         select(RiderReplacement).where(
             in_ids(RiderReplacement.request_id, [s.lot_id for s in actual_problem.stops]),
             RiderReplacement.status == "APPROVED",
-            RiderReplacement.transfer_intent_id.is_(None),
         )
     ):
+        if replacement.transfer_intent_id:
+            from .orchestration_models import CargoTransferIntent
+
+            intent = await session.get(CargoTransferIntent, replacement.transfer_intent_id)
+            if intent is None or intent.resolution != "TRANSFERRED":
+                continue
         pickup_stop = next(
             (
                 s
                 for s in actual_problem.stops
-                if s.lot_id == replacement.request_id and s.kind.value == "PICKUP"
+                if s.lot_id == replacement.request_id
+                and s.kind.value == ("DISCHARGE" if replacement.transfer_intent_id else "PICKUP")
             ),
             None,
         )
@@ -747,20 +826,68 @@ async def _activate(
         ):
             replacement.status = "COMPLETED"
             replacement.version += 1
-    await complete_idempotency_record(
-        session,
-        claim.record,
-        result_resource_id=activation.activation_id,
-        result_status_code=200,
-        completed_at=now,
-    )
-    if command.fleet_cycle_id is not None:
-        assert cycle is not None
-        cycle.activation_id = activation.activation_id
-        cycle.selected_engine = command.engine.value
-        cycle.status, cycle.completed_at = "ACTIVATED", now
-        if command.engine == SelectionEngine.COMPOSITE:
-            from .regional_planner import complete_cycle
+            replacement.failure_code = None
+            replacement.activated_at = now
+            replacement.activation_id = activation.activation_id
+            await append_outbox_event(
+                session,
+                event_key=f"replacement.activated:{replacement.replacement_id}",
+                event_type="routing.replacement.activated",
+                aggregate_type="rider_replacement",
+                aggregate_id=replacement.replacement_id,
+                payload={
+                    "replacement_id": str(replacement.replacement_id),
+                    "activation_id": str(activation.activation_id),
+                },
+                available_at=now,
+            )
 
-            await complete_cycle(session, cycle, now)
-    return activation.activation_id
+    # Either origin can restore an approved allocation. Publish the same operational
+    # completion even if the normal regional cycle reaches actual transferred cargo first.
+    from .failure_models import RecoveryAssignment, RecoveryAssignmentItem
+
+    legs = list(
+        await session.scalars(
+            select(RecoveryAssignment)
+            .join(
+                RecoveryAssignmentItem,
+                RecoveryAssignmentItem.assignment_id == RecoveryAssignment.assignment_id,
+            )
+            .join(
+                RiderReplacement,
+                RiderReplacement.replacement_id == RecoveryAssignmentItem.replacement_id,
+            )
+            .where(
+                RiderReplacement.activation_id == activation.activation_id,
+                RecoveryAssignmentItem.released_at.is_(None),
+                RecoveryAssignment.status.in_(
+                    ("PENDING", "RUNNING", "AWAITING_TRANSFER", "ATTENTION")
+                ),
+            )
+            .order_by(RecoveryAssignment.assignment_id)
+            .with_for_update(of=RecoveryAssignment)
+        )
+    )
+    for leg in {item.assignment_id: item for item in legs}.values():
+        members = list(
+            await session.scalars(
+                select(RiderReplacement)
+                .join(
+                    RecoveryAssignmentItem,
+                    RecoveryAssignmentItem.replacement_id == RiderReplacement.replacement_id,
+                )
+                .where(
+                    RecoveryAssignmentItem.assignment_id == leg.assignment_id,
+                    RecoveryAssignmentItem.released_at.is_(None),
+                )
+            )
+        )
+        if members and all(r.status == "COMPLETED" for r in members):
+            leg.status = "ACTIVATED"
+            leg.activation_id = activation.activation_id
+            leg.lease_token = leg.lease_until = None
+            leg.failure_code = None
+            leg.version += 1
+            from .recovery_work import finish_work
+
+            await finish_work(session, leg, now)

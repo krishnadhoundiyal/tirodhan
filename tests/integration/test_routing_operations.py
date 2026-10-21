@@ -759,7 +759,9 @@ async def test_review_api_is_opt_in_and_requires_live_manager(
 async def test_migration_roundtrip_preserves_existing_history_and_no_new_drift(
     database_engine, database_session_factory
 ):
-    fixture, _, _, _, ids, config, _ = await setup(database_session_factory)
+    from legacy_financial_fixture import legacy_financial_fixture
+
+    await legacy_financial_fixture(database_session_factory)
     async with database_session_factory() as session:
         before = list(
             await session.scalars(

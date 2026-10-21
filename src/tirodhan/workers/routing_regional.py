@@ -9,7 +9,7 @@ import logging
 import socket
 import subprocess
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from tirodhan.core.config import Settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
+from tirodhan.db.values import utc_now
 from tirodhan.modules.planning.routing.contracts import RoadMatrix
 from tirodhan.modules.planning.routing.osrm import OSRMMatrixProvider, RoadNode
 from tirodhan.modules.routing_operations.commands import OperationalInputError
@@ -150,75 +151,80 @@ async def execute(
         if policy is not None:
             if manager_id is None:
                 raise OperationalInputError("MANAGER_CONFIGURATION_IDENTITY_REQUIRED")
-            from tirodhan.db.values import utc_now
 
             await configure_region(
                 factory, region_id=region_id, manager_id=manager_id, policy=policy, now=utc_now()
             )
-        if len({p.port for p in profiles}) != len(profiles) or len(
-            {p.profile_version for p in profiles}
-        ) != len(profiles):
-            raise OperationalInputError("DUPLICATE_ROAD_PROFILE_OR_PORT")
-        with contextlib.ExitStack() as stack:
-            started_profiles: set[str] = set()
+        async with road_sources(profiles) as providers:
+            from tirodhan.modules.planning.routing.adapters import (
+                ORToolsOptimizer,
+                VroomOptimizer,
+            )
+            from tirodhan.modules.planning.routing.contracts import OptimizerEngine
+            from tirodhan.modules.routing_operations.capacity_maintenance import (
+                maintain_capacity,
+            )
 
-            def start(p: LocalRoadProfile) -> None:
-                if p.profile_version not in started_profiles:
-                    stack.enter_context(road_processes([p]))
-                    started_profiles.add(p.profile_version)
-
-            def starter(profile: LocalRoadProfile) -> Callable[[], None]:
-                def begin() -> None:
-                    start(profile)
-
-                return begin
-
-            async with httpx.AsyncClient(trust_env=False) as client:
-                providers: dict[str, MatrixSource] = {
-                    p.profile_version: LazyMatrixSource(
-                        RegionalMatrixCache(
-                            OSRMMatrixProvider(
-                                client=client,
-                                endpoint=f"http://127.0.0.1:{p.port}",
-                                graph_version=p.graph_version,
-                                profile_version=p.profile_version,
-                                max_nodes=p.block_nodes,
-                                max_snap_distance_m=p.max_snap_distance_m,
-                                max_response_bytes=16_000_000,
-                            ),
-                            profile=p.profile_version,
-                            graph=p.graph_version,
-                            block_nodes=p.block_nodes,
-                            max_pairs=p.max_pairs,
-                            strategy=p.matrix_strategy,
-                        ),
-                        starter(p),
-                    )
-                    for p in profiles
-                }
-                from tirodhan.modules.planning.routing.adapters import (
-                    ORToolsOptimizer,
-                    VroomOptimizer,
-                )
-                from tirodhan.modules.planning.routing.contracts import OptimizerEngine
-                from tirodhan.modules.routing_operations.capacity_maintenance import (
-                    maintain_capacity,
-                )
-
-                cycle = await run_region(factory, region_id=region_id, providers=providers)
-                await maintain_capacity(
-                    factory,
-                    region_id,
-                    providers=providers,
-                    optimizers={
-                        OptimizerEngine.VROOM: VroomOptimizer(),
-                        OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
-                    },
-                    now=utc_now(),
-                )
-                return cycle.status if cycle else "NOT_DUE_OR_OWNED"
+            await maintain_capacity(
+                factory,
+                region_id,
+                providers=providers,
+                optimizers={
+                    OptimizerEngine.VROOM: VroomOptimizer(),
+                    OptimizerEngine.OR_TOOLS: ORToolsOptimizer(),
+                },
+                now=utc_now(),
+            )
+            cycle = await run_region(factory, region_id=region_id, providers=providers)
+            return cycle.status if cycle else "NOT_DUE_OR_OWNED"
     finally:
         await engine.dispose()
+
+
+@contextlib.asynccontextmanager
+async def road_sources(profiles: list[LocalRoadProfile]) -> AsyncIterator[dict[str, MatrixSource]]:
+    if len({p.port for p in profiles}) != len(profiles) or len(
+        {p.profile_version for p in profiles}
+    ) != len(profiles):
+        raise OperationalInputError("DUPLICATE_ROAD_PROFILE_OR_PORT")
+    with contextlib.ExitStack() as stack:
+        started_profiles: set[str] = set()
+
+        def start(p: LocalRoadProfile) -> None:
+            if p.profile_version not in started_profiles:
+                stack.enter_context(road_processes([p]))
+                started_profiles.add(p.profile_version)
+
+        def starter(profile: LocalRoadProfile) -> Callable[[], None]:
+            def begin() -> None:
+                start(profile)
+
+            return begin
+
+        async with httpx.AsyncClient(trust_env=False) as client:
+            providers: dict[str, MatrixSource] = {
+                p.profile_version: LazyMatrixSource(
+                    RegionalMatrixCache(
+                        OSRMMatrixProvider(
+                            client=client,
+                            endpoint=f"http://127.0.0.1:{p.port}",
+                            graph_version=p.graph_version,
+                            profile_version=p.profile_version,
+                            max_nodes=p.block_nodes,
+                            max_snap_distance_m=p.max_snap_distance_m,
+                            max_response_bytes=16_000_000,
+                        ),
+                        profile=p.profile_version,
+                        graph=p.graph_version,
+                        block_nodes=p.block_nodes,
+                        max_pairs=p.max_pairs,
+                        strategy=p.matrix_strategy,
+                    ),
+                    starter(p),
+                )
+                for p in profiles
+            }
+            yield providers
 
 
 def main() -> None:

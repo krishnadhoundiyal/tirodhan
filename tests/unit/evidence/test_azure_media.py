@@ -36,6 +36,37 @@ async def test_product_artwork_read_only_sas(mock_blob_service_client, mock_cred
             await storage.authorize_product_image(object_key=object_key)
 
 
+@pytest.mark.asyncio
+async def test_product_upload_is_create_only(mock_blob_service_client, mock_credential):
+    from urllib.parse import parse_qs, urlsplit
+
+    from azure.storage.blob import UserDelegationKey
+
+    storage = AzureBlobMediaStorage(
+        account_url="https://test.blob.core.windows.net",
+        container_name="test-container",
+        credential=mock_credential,
+        authorization_ttl_seconds=300,
+    )
+    key = UserDelegationKey()
+    key.value = "mock_key_value"
+    key.signed_expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    mock_blob_service_client.get_user_delegation_key = AsyncMock(return_value=key)
+    mock_blob_service_client.get_blob_client.return_value.url = (
+        "https://test.blob.core.windows.net/test-container/product-art/new-asset"
+    )
+    auth = await storage.create_product_upload_authorization(
+        object_key="product-art/new-asset", expected_content_type="image/jpeg"
+    )
+    query = parse_qs(urlsplit(auth.opaque_value).query)
+    assert query["sp"] == ["c"] and query["spr"] == ["https"]
+    for key in ("media/private", "product-art/../media/private"):
+        with pytest.raises(MediaStorageUnavailableError):
+            await storage.create_product_upload_authorization(
+                object_key=key, expected_content_type="image/jpeg"
+            )
+
+
 @pytest.fixture
 def mock_blob_service_client():
     with patch(

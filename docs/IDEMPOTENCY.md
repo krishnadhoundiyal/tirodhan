@@ -1,5 +1,24 @@
 # Idempotency
 
+## Recovery delivery generations (0036)
+
+- Business key: actual RecoveryAssignment/ACTIVATE or RiderReplacement/RECOMMEND plus a
+  monotonically allocated generation; one open request per operation, enforced in PostgreSQL.
+- Transaction: domain outcome, closing old request and next due outbox commit together.
+  Domain rows precede work rows and then outbox rows in lock order. Scheduler scans reuse
+  outstanding requests without incrementing versions or processing attempts.
+- Publication: a 60-second token/expiry lease gates a 30-second send. Failed/ambiguous send
+  backoff reuses the same message ID. Acknowledged publication never ages into a resend.
+- Processing: actual execution claim increments the processing counter. Infrastructure
+  failure abandons for broker redelivery; a recorded operational retry authorizes the next
+  generation. Inbox completion follows durable outcome/next-request persistence.
+- Replay: closed/stale generations perform no work; current busy claims abandon. Expired
+  execution claims can authorize one successor under the domain lock. Manager retries are
+  explicit new requests. No financial, assignment or custody effect is created by publication.
+- Recovery: outbox, publication lease, execution lease and inbox boundaries are independently
+  tested. Published/DLQ delivery requires normal broker operations, not periodic new messages.
+  See [cutover, migration and limits](RIDER_FAILURE_RECOVERY.md#recovery-notification-generations--21-october-2026).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route
@@ -751,3 +770,19 @@ immutable. Provider/native work is read-only and outside database locks. Crash a
 replays the existing result; cache loss reconstructs from PostgreSQL. Existing checkout,
 Payment-first cancellation and authoritative dispatch idempotency remain unchanged. See
 [protocol and two-session tests](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager business changes and candidate selection
+
+Business commands use actor-scoped `business.config` idempotency with full typed fingerprints, source-row expected revisions and serializable transactions. Exact replay returns the same resource after live authorization; changed replay conflicts. Source and revision capture commit together. Product upload credentials have no business mutation authority; immutable asset finalization uses the command UUID and replay. Evaluation publication fences replacement/source versions after external compute; immutable evaluation/candidate IDs identify witnesses. Selection uses existing operational command claims, Payment-first/resource/source locks and expected request/source/region/route versions. Whole-incident decisions are atomic; physical transfers remain independently evidenced per lot. Activation completion and its outbox fact commit with existing route authority. Optional legacy replacement defaults preserve stored fingerprints. See [detailed contracts](MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure recovery
+
+Manager failure/allocation/retry commands use actor-scoped client UUIDs, typed fingerprints,
+expected versions and SERIALIZABLE transactions. Token-fenced recommendation and activation
+claims bound concurrent execution; stale owners cannot publish or commit. Identifier-only outbox
+messages use the existing planning queue and durable inbox; periodic finite reconciliation
+recreates due execution debt. Both regional and recovery origins use the same Payment-first
+route writer. Physical transfers retain existing evidence/sequence idempotency. Per-device
+revision delivery resumes partial sends; ambiguous push delivery can repeat without repeating
+assignment or custody effects. See [business keys, boundaries and replay rules](RIDER_FAILURE_RECOVERY.md).

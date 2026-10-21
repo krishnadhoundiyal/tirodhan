@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
 from .dispatch_models import RouteActivation, RouteRevision, VehicleRoute
+from .failure_models import RecoveryWitness
 from .fleet_models import FleetCycle, FleetPositionAnchor
 from .models import RoutingShadowRun, VehiclePosition
 
@@ -35,7 +36,18 @@ async def retention_inventory(
             newer.vehicle_id == VehiclePosition.vehicle_id,
             newer.revision > VehiclePosition.revision,
         )
+        live_recovery = exists().where(
+            RouteActivation.recovery_witness_id == RecoveryWitness.witness_id,
+            RouteRevision.activation_id == RouteActivation.activation_id,
+            VehicleRoute.route_id == RouteRevision.route_id,
+            VehicleRoute.status != "CLOSED",
+        )
         counts = {
+            "inactive_recovery_diagnostics_older_than_30_days": await session.scalar(
+                select(func.count())
+                .select_from(RecoveryWitness)
+                .where(RecoveryWitness.created_at < now - timedelta(days=30), ~live_recovery)
+            ),
             "closed_routes_older_than_90_days": await session.scalar(
                 select(func.count())
                 .select_from(VehicleRoute)

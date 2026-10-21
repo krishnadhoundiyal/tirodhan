@@ -9,9 +9,10 @@ from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index,
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
+from tirodhan.modules.business_admin.fact_metadata import BusinessFactMetadata
 
 
-class ShiftConfirmation(Base):
+class ShiftConfirmation(BusinessFactMetadata, Base):
     __tablename__ = "routing_shift_confirmation"
     shift_id: Mapped[UUID] = mapped_column(ForeignKey("operating_shift.shift_id"), primary_key=True)
     rider_id: Mapped[UUID] = mapped_column(ForeignKey("rider_profile.rider_id"))

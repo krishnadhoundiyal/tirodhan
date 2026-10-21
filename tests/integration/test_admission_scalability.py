@@ -241,7 +241,7 @@ async def test_shared_history_is_immutable_and_readable_at_every_revision(databa
             with pytest.raises(DBAPIError, match="immutable|closed once"):
                 await session.execute(update(table).where(predicate).values(**values))
             await session.rollback()
-    with pytest.raises(DBAPIError, match="requires export/drain"):
+    with pytest.raises(DBAPIError, match="requires export/drain|export adopted business"):
         await asyncio.to_thread(
             migrations.downgrade, Config("alembic.ini"), "0029_admission_retry_schedule"
         )

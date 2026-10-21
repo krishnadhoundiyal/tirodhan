@@ -176,6 +176,9 @@ def create_app(
         from tirodhan.api.routes.routing_orchestration import router as orchestration_router
 
         application.include_router(orchestration_router)
+        from tirodhan.api.routes.routing_recovery import router as recovery_router
+
+        application.include_router(recovery_router)
         from tirodhan.api.routes.routing_recovery_media import router as recovery_media_router
 
         application.include_router(recovery_media_router)

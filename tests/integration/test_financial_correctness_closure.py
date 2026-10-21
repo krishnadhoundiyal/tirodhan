@@ -635,6 +635,7 @@ async def test_successful_attempt_owner_fk_and_no_financial_cascading_delete(har
         assert all(rule != "c" for _, rule in constraints)
 
 
+@pytest.mark.parametrize("harness", ["PRE_ADMINISTRATION"], indirect=True)
 async def test_new_migration_preserves_submitted_legacy_wire_identity_and_financial_history(
     harness,
 ):

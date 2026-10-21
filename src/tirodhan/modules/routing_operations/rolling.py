@@ -142,6 +142,11 @@ async def configure_fleet(
     now = now or utc_now()
     async with factory() as session, session.begin():
         await require_live_role(session, manager_id, "MANAGER")
+        from tirodhan.modules.business_admin.history import attribute_change
+
+        await attribute_change(
+            session, manager_id, command.client_command_id, "FLEET_CONFIGURATION"
+        )
         claim = await claim_idempotency_record(
             session,
             scope=f"routing.fleet.configure:{manager_id}",
@@ -336,7 +341,12 @@ def ready_snapshot(
     routes_by_vehicle = {r["vehicle_id"]: r for r in sources["routes"]}
     owned_by_rider: dict[UUID, list[dict[str, Any]]] = {}
     for request in sources["requests"]:
-        for rider in {request["owner_id"], request["collector_id"]} - {None}:
+        responsible = (
+            request["collector_id"]
+            if request["pickup_status"] == "COLLECTED"
+            else request["owner_id"]
+        )
+        for rider in {responsible} - {None}:
             owned_by_rider.setdefault(rider, []).append(request)
     for vehicle in sources["vehicles"]:
         route = routes_by_vehicle.get(vehicle["vehicle_id"])
@@ -413,7 +423,12 @@ def ready_snapshot(
     sources["released"] = [r for r in sources["released"] if r["vehicle_id"] not in excluded]
     requests = []
     for request in sources["requests"]:
-        if request["owner_id"] in excluded_riders or request["collector_id"] in excluded_riders:
+        responsible = (
+            request["collector_id"]
+            if request["pickup_status"] == "COLLECTED"
+            else request["owner_id"]
+        )
+        if responsible in excluded_riders:
             continue  # These obligations stay owned/custodied by the quarantined route.
         if request["owner_id"] is None and request["collector_id"] is None:
             reason = (

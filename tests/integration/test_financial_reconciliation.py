@@ -118,8 +118,13 @@ class Gateway(Orders):
 
 
 @pytest_asyncio.fixture
-async def harness(database_session_factory, database_engine):
+async def harness(database_session_factory, database_engine, request):
     factory = database_session_factory
+    legacy = getattr(request, "param", None) == "PRE_ADMINISTRATION"
+    if legacy:
+        await asyncio.to_thread(
+            migration_command.downgrade, Config("alembic.ini"), "0032_projected_slot_allowances"
+        )
     user, result = await booking(factory)
     async with factory() as session, session.begin():
         session.add(UserRole(user_id=user.user_id, role_code="MANAGER", granted_at=utc_now()))
@@ -130,7 +135,11 @@ async def harness(database_session_factory, database_engine):
         )
         attempt = await initiate(factory, user, result, provider)
         gateway.payments = [json.loads(payment_body(attempt))["payload"]["payment"]["entity"]]
-        yield factory, user, result, attempt, provider, gateway
+        try:
+            yield factory, user, result, attempt, provider, gateway
+        finally:
+            if legacy:
+                await asyncio.to_thread(migration_command.upgrade, Config("alembic.ini"), "head")
 
 
 async def counts(factory, model):
@@ -736,6 +745,7 @@ async def test_customer_events_contain_only_identifiers_and_committed_changes(ha
         }
 
 
+@pytest.mark.parametrize("harness", ["PRE_ADMINISTRATION"], indirect=True)
 async def test_reconciliation_migration_roundtrip_preserves_populated_original_history(harness):
     h = harness
     factory = h[0]

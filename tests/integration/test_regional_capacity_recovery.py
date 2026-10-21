@@ -379,6 +379,9 @@ async def test_rider_request_recommend_manager_approve_and_normal_route_activati
 async def test_collected_replacement_approval_keeps_custody_until_evidenced_transfer(
     database_session_factory,
 ):
+    pytest.importorskip(
+        "ortools", reason="regional replacement requires the optional routing extra"
+    )
     from test_orchestration_custody_races import loaded_route
 
     from tirodhan.modules.routing_operations.operational_commands import (
@@ -447,7 +450,9 @@ async def test_collected_replacement_approval_keeps_custody_until_evidenced_tran
             target.rider_id,
         )
         assert (await cargo_load(session, target.vehicle_id))[0] > 0
-        assert (await session.get(RiderReplacement, replacement)).status == "COMPLETED"
+        pending = await session.get(RiderReplacement, replacement)
+        assert pending.status == "APPROVED" and pending.activation_id is None
+        assert pending.failure_code == "AWAITING_ROUTE_ACTIVATION"
 
 
 async def test_recommendation_stale_on_source_change_and_manager_can_reject(
@@ -671,12 +676,19 @@ async def test_replacement_matrix_outage_retries_without_releasing_original_work
 async def test_migration_round_trip_preserves_financial_schema(database_session_factory):
     from alembic import command
     from alembic.config import Config
+    from test_collection_payment import create_context, create_request, create_user
     from test_payment_preparation import assert_readiness_schema
-    from test_routing_dispatch import prepared as financial_fixture
 
     factory = database_session_factory
-    await financial_fixture(factory)
+    # Exercise this migration's own populated legacy boundary. Later immutable
+    # administration history deliberately prevents lossy downgrade after adoption.
+    await asyncio.to_thread(
+        command.downgrade, Config("alembic.ini"), "0032_projected_slot_allowances"
+    )
     try:
+        user = await create_user(factory)
+        context = await create_context(factory, user.user_id)
+        await create_request(factory, user.user_id, context.serviceability_context_id)
         await asyncio.to_thread(
             command.downgrade, Config("alembic.ini"), "0030_admission_certificates"
         )

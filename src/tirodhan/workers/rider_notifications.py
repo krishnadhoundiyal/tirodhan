@@ -58,6 +58,26 @@ async def run() -> None:
                     max_lock_renewal_duration=settings.rider_notification_lock_renewal_seconds,
                 )
                 try:
+                    if message.subject == "VehicleRouteDeliveryRequested":
+                        from tirodhan.modules.routing_operations.route_notifications import (
+                            notify_revision,
+                        )
+
+                        try:
+                            await notify_revision(
+                                create_session_factory(engine),
+                                str(message.message_id),
+                                b"".join(message.body),
+                                push,
+                            )
+                        except ValueError:
+                            await receiver.dead_letter_message(message)
+                        except Exception:
+                            await receiver.abandon_message(message)
+                            raise
+                        else:
+                            await receiver.complete_message(message)
+                        continue
                     await handle_dispatch_delivery(
                         AzureDispatchDelivery(receiver, message),
                         create_session_factory(engine),

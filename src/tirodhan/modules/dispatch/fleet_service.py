@@ -58,6 +58,11 @@ async def execute_fleet_command(
         ).encode()
     ).digest()
     async with factory() as session, session.begin():
+        from tirodhan.modules.business_admin.history import attribute_change
+        from tirodhan.modules.routing_operations.commands import require_live_role
+
+        await require_live_role(session, manager_id, "MANAGER")
+        await attribute_change(session, manager_id, command.client_command_id, command.operation)
         claim = await claim_idempotency_record(
             session,
             scope=f"fleet.command:{manager_id}",

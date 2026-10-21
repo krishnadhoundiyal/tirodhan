@@ -25,11 +25,21 @@ from tirodhan.db.values import new_uuid7
 class RouteActivation(Base):
     __tablename__ = "route_activation"
     activation_id: Mapped[UUID] = mapped_column(primary_key=True, default=new_uuid7)
-    run_id: Mapped[UUID] = mapped_column(ForeignKey("routing_shadow_run.run_id"), unique=True)
-    engine: Mapped[str] = mapped_column(String(16))
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("routing_shadow_run.run_id"), unique=True
+    )
+    engine: Mapped[str | None] = mapped_column(String(16))
+    recovery_witness_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("recovery_witness.witness_id", use_alter=True), unique=True
+    )
     activated_by: Mapped[UUID] = mapped_column(ForeignKey("app_user.user_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
+        CheckConstraint(
+            "(run_id IS NOT NULL AND recovery_witness_id IS NULL AND engine IS NOT NULL) OR "
+            "(run_id IS NULL AND recovery_witness_id IS NOT NULL AND engine IS NULL)",
+            name="ck_route_activation_origin",
+        ),
         CheckConstraint(
             "engine IN ('VROOM', 'OR_TOOLS', 'COMPOSITE')", name="ck_route_activation_engine"
         ),

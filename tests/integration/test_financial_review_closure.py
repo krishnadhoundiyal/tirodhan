@@ -193,6 +193,7 @@ async def test_complete_exception_traversal_and_repeated_attention_are_bounded(h
     assert await escalate_unresolved_cases(factory, replace(POLICY, batch_size=1000)) == 0
 
 
+@pytest.mark.parametrize("harness", ["PRE_ADMINISTRATION"], indirect=True)
 async def test_new_recovery_audit_preserves_history_and_refuses_lossy_downgrade(harness):
     factory, user, _, attempt, provider, _ = harness
     refund = await extra_refund(harness)
@@ -441,6 +442,7 @@ async def test_preflight_timeout_retains_debt_and_does_not_post(harness, monkeyp
         ).amount_minor == 500
 
 
+@pytest.mark.parametrize("harness", ["PRE_ADMINISTRATION"], indirect=True)
 async def test_unmapped_settlement_has_audited_investigation_without_fictitious_payment(harness):
     factory, user, _, _, _, _ = harness
     original = movement("pay_unknown")
@@ -551,7 +553,7 @@ async def test_fresh_truth_can_release_a_refund_hold_with_immutable_audit(harnes
 
 @pytest.mark.parametrize("change", ["contradiction", "role_revoked", "other_hold"])
 async def test_hold_resolution_rechecks_changes_during_provider_get(harness, monkeypatch, change):
-    from sqlalchemy import delete
+    from sqlalchemy import update
 
     from tirodhan.modules.identity.models import UserRole
 
@@ -610,9 +612,9 @@ async def test_hold_resolution_rechecks_changes_during_provider_get(harness, mon
     elif change == "role_revoked":
         async with factory() as session, session.begin():
             await session.execute(
-                delete(UserRole).where(
-                    UserRole.user_id == user.user_id, UserRole.role_code == "MANAGER"
-                )
+                update(UserRole)
+                .where(UserRole.user_id == user.user_id, UserRole.role_code == "MANAGER")
+                .values(revoked_at=utc_now(), revoked_by_user_id=user.user_id)
             )
     else:
         async with factory() as session, session.begin():

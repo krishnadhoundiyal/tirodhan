@@ -51,3 +51,7 @@ notices and a separate transactional source-head fence. Bounded process-local ca
 disposable accelerators, not authoritative storage. No Redis/new database is introduced.
 Drain preparation before upgrade; populated new proof history blocks lossy downgrade. See
 [implementation and measured limits](../COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+## Manager configuration implementation clarification
+
+Entity-specific immutable revision relations and metadata on existing immutable duty facts implement durable manager change visibility. Audit JSONB snapshots do not replace relational core entities. Source update and attributable history are one PostgreSQL transaction. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).
