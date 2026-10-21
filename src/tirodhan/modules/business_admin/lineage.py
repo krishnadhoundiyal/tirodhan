@@ -204,6 +204,7 @@ async def route_history(
                 "actor_id": activation.activated_by,
                 "activation_id": activation.activation_id,
                 "run_id": activation.run_id,
+                "recovery_witness_id": activation.recovery_witness_id,
                 "stops": [
                     {
                         "task_id": t.task_id,

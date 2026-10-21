@@ -160,3 +160,13 @@ See [implementation and release prerequisites](V2_ROUTING_INCREMENT_7.md).
 ## Manager business configuration increment
 
 Manager-configured versioned flat INR pickup pricing replaces the unconfigured production pricing port. Entity-specific immutable histories and manager read/compare APIs cover editable masters; existing duty and operational facts remain authoritative. Replacement publishes bounded validated options, supports manager incidents and explicit candidate selection, and completes only after actual authoritative route activation. See [implementation and authority contracts](MANAGER_BUSINESS_CONFIGURATION.md). Production activation flags remain unchanged.
+
+
+## Consolidated rider failure recovery
+
+Whole-rider incidents, multi-rider manager-approved recovery allocations and a common regional/
+recovery route writer are implemented in migration 0035. Decisions trigger claimed asynchronous
+work through existing outbox/inbox workers; managers poll decision, activation, custody and receipt
+separately. Manager-coordinated rendezvous retains existing evidenced per-lot custody transfers.
+Production flags and infrastructure are unchanged. Native worker packaging/configuration remains
+a release prerequisite. See [implementation, validation and limitations](RIDER_FAILURE_RECOVERY.md).

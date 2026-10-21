@@ -3,14 +3,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.modules.planning.routing.contracts import OptimizerEngine, RouteOptimizer
 
-from .capacity_models import RegionalSlotRefresh, RiderReplacement
-from .replacements import recommend_replacement
+from .capacity_models import RegionalSlotRefresh
 from .slot_projection import refresh_slots
 from .snapshot import MatrixSource
 
@@ -24,26 +22,14 @@ async def maintain_capacity(
     now: datetime,
     recommend: bool = True,
 ) -> None:
+    from .failure_runtime import activate_due, recommend_due
+
+    await activate_due(factory, region_id, providers=providers, optimizers=optimizers, now=now)
+    # Bounded drain with atomic claims; unrelated incidents can progress concurrently.
+    if recommend:
+        await recommend_due(factory, region_id, providers=providers, optimizers=optimizers, now=now)
     async with factory() as session:
-        replacement = await session.scalar(
-            select(RiderReplacement.replacement_id)
-            .where(
-                RiderReplacement.region_id == region_id,
-                (RiderReplacement.status == "REQUESTED")
-                | (
-                    (RiderReplacement.status == "APPROVED")
-                    & (RiderReplacement.failure_code == "RECOMMENDATION_REQUESTED")
-                ),
-                RiderReplacement.next_attempt_at <= now,
-            )
-            .order_by(RiderReplacement.requested_at)
-            .limit(1)
-        )
         refresh = await session.get(RegionalSlotRefresh, region_id)
-    if replacement and recommend:
-        await recommend_replacement(
-            factory, replacement, providers=providers, optimizers=optimizers, now=now
-        )
     if refresh is None or refresh.due_at <= now:
         try:
             await refresh_slots(factory, region_id, now=now)

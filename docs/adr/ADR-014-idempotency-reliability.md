@@ -140,3 +140,10 @@ broker, distributed-lock service, production schedule or infrastructure is intro
 ## Manager change and replacement provenance
 
 Actor-scoped typed command claims, revision/source fences and transactional immutable history protect manager changes. Candidate compute stays outside locks; publication and selection fence current versions. Existing operational idempotency and physical transfer evidence remain authoritative; legacy optional defaults preserve prior fingerprints. See [contracts](../MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Recovery work and shared commit
+
+Concrete incident/assignment records, actor/client command claims, partial unique allocation guards, token/expiry compute claims and immutable recovery witnesses protect retryable recovery. Planning and recovery use one route persistence implementation. Inbox/outbox, bounded periodic reconciliation and per-device notification progress cover transport, external-send and crash-after-commit boundaries.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).

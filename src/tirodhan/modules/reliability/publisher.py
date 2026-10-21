@@ -80,10 +80,22 @@ async def publish_outbox_batch(
                     OutboxEvent.available_at <= utc_now(),
                     OutboxEvent.event_type.in_(
                         ["ServiceabilityRequested", "FinancialExceptionRaised"]
-                        + ([DISPATCH_REQUESTED] if rider_notification_entity else [])
+                        + (
+                            [
+                                DISPATCH_REQUESTED,
+                                "VehicleRouteRevised",
+                                "VehicleRouteDeliveryRequested",
+                            ]
+                            if rider_notification_entity
+                            else []
+                        )
                         + (["RefundRequested"] if refund_entity else [])
                         + (
-                            ["PlanningBatchReady", "PlanningAttemptRequested"]
+                            [
+                                "PlanningBatchReady",
+                                "PlanningAttemptRequested",
+                                "RecoveryWorkRequested",
+                            ]
                             if planning_entity
                             else []
                         )
@@ -117,6 +129,40 @@ async def publish_outbox_batch(
             elif event.event_type == "ServiceabilityRequested":
                 message = serviceability_message(event)
                 await publisher.send(serviceability_entity, message)
+            elif (
+                event.event_type in ("VehicleRouteRevised", "VehicleRouteDeliveryRequested")
+                and rider_notification_entity
+            ):
+                payload = {k: event.payload[k] for k in ("revision_id", "rider_id")}
+                if event.aggregate_type != "VehicleRoute":
+                    raise ValueError("INVALID_ROUTE_DELIVERY")
+                for value in payload.values():
+                    UUID(value)
+                await publisher.send(
+                    rider_notification_entity,
+                    RoutedMessage(
+                        str(event.outbox_event_id),
+                        "VehicleRouteDeliveryRequested",
+                        json.dumps(payload).encode(),
+                    ),
+                )
+            elif event.event_type == "RecoveryWorkRequested" and planning_entity:
+                if (
+                    event.aggregate_type != "routing_recovery"
+                    or set(event.payload) != {"work_id", "kind"}
+                    or UUID(event.payload["work_id"]) != event.aggregate_id
+                    or event.payload["kind"] not in ("RECOMMEND", "ACTIVATE")
+                ):
+                    raise ValueError("INVALID_RECOVERY_ENVELOPE")
+                await publisher.send(
+                    planning_entity,
+                    RoutedMessage(
+                        str(event.outbox_event_id),
+                        event.event_type,
+                        json.dumps(event.payload).encode(),
+                        session_id=f"recovery:{event.aggregate_id}",
+                    ),
+                )
             elif event.event_type == DISPATCH_REQUESTED and rider_notification_entity:
                 message = dispatch_message(event)
                 await publisher.send(rider_notification_entity, message)

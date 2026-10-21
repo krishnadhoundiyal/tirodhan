@@ -25,6 +25,7 @@ from tirodhan.modules.reliability import models as reliability_models  # noqa: F
 from tirodhan.modules.routing_operations import (
     admission_models,  # noqa: F401
     capacity_models,  # noqa: F401
+    failure_models,  # noqa: F401
     fleet_models,  # noqa: F401
     parallel_models,  # noqa: F401
     replacement_models,  # noqa: F401

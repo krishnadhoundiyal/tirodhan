@@ -459,6 +459,7 @@ async def manager_replacement_request(
             )
         )
         if command.include_route
+        or command.reason in ("RIDER_UNAVAILABLE", "VEHICLE_UNAVAILABLE", "EXECUTION_EXCEPTION")
         else [pickup]
     )
     bookings = await lock_booking_population(session, [p.request_id for p in pickups])
@@ -593,6 +594,8 @@ async def decide_replacement_group(
     from .replacement_models import ReplacementCandidate, ReplacementEvaluation
 
     parent = await session.get(RiderReplacement, command.replacement_id)
+    if parent is not None and parent.failure_incident_id is not None:
+        raise RouteAuthorityError("USE_INCIDENT_RECOVERY_ALLOCATION")
     if parent is None or command.decision != "APPROVE" or parent.incident_id is None:
         return await replacement_command(session, actor, command, now, expires_at, clock)
     option = (

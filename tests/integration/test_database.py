@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import UUID
 
 import pytest
@@ -17,8 +17,6 @@ from test_rider_dispatch import create_fixture
 from tirodhan.core.config import Settings
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.main import create_app
-from tirodhan.modules.dispatch.service import assign_group_manually
-from tirodhan.modules.operations.service import reassign_outstanding_work
 
 
 def get_test_database_url() -> str:
@@ -698,28 +696,61 @@ def test_phase_1j_migration_preserves_reassignment_history_on_lossy_downgrade(
         factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
             fixture = await create_fixture(factory, rider_count=2, pickups_per_group=2)
-            predecessor = await assign_group_manually(
-                factory,
-                collection_group_id=fixture.group_ids[0],
-                rider_id=fixture.rider_ids[0],
-                manager_user_id=fixture.manager_id,
-            )
+            # These are historical migration facts at 0032, not a current-code
+            # dispatch execution against an intentionally downgraded schema.
+            predecessor_id, successor_id = new_uuid7(), new_uuid7()
             superseded_at = utc_now().replace(microsecond=0)
-            successor = await reassign_outstanding_work(
-                factory,
-                predecessor_assignment_id=predecessor.assignment_id,
-                replacement_rider_id=fixture.rider_ids[1],
-                manager_user_id=fixture.manager_id,
-                client_reassignment_id=new_uuid7(),
-                idempotency_expires_at=superseded_at + timedelta(days=1),
-                now=superseded_at,
-            )
-            return (
-                predecessor.assignment_id,
-                successor.assignment_id,
-                fixture.pickup_ids[0][0],
-                superseded_at,
-            )
+            async with factory() as session, session.begin():
+                for identity, rider, status, predecessor in (
+                    (predecessor_id, fixture.rider_ids[0], "SUPERSEDED", None),
+                    (successor_id, fixture.rider_ids[1], "ACTIVE", predecessor_id),
+                ):
+                    await session.execute(
+                        text(
+                            "INSERT INTO rider_assignment "
+                            "(assignment_id,collection_group_id,rider_id,source,status,"
+                            "assigned_by_user_id,supersedes_assignment_id,created_at,assigned_at,"
+                            "superseded_at) VALUES (:id,:group,:rider,'MANAGER_ASSIGNED',:status,"
+                            ":manager,:predecessor,:at,:at,:superseded)"
+                        ),
+                        {
+                            "id": identity,
+                            "group": fixture.group_ids[0],
+                            "rider": rider,
+                            "status": status,
+                            "manager": fixture.manager_id,
+                            "predecessor": predecessor,
+                            "at": superseded_at,
+                            "superseded": superseded_at if status == "SUPERSEDED" else None,
+                        },
+                    )
+                    for pickup in fixture.pickup_ids[0]:
+                        await session.execute(
+                            text(
+                                "INSERT INTO rider_assignment_item "
+                                "(assignment_id,pickup_execution_id,assigned_at,released_at,"
+                                "release_reason_code) VALUES (:id,:pickup,:at,:released,:reason)"
+                            ),
+                            {
+                                "id": identity,
+                                "pickup": pickup,
+                                "at": superseded_at,
+                                "released": superseded_at if status == "SUPERSEDED" else None,
+                                "reason": "REASSIGNED" if status == "SUPERSEDED" else None,
+                            },
+                        )
+                await session.execute(
+                    text(
+                        "UPDATE pickup_execution SET status='ASSIGNED' "
+                        "WHERE collection_group_id=:group"
+                    ),
+                    {"group": fixture.group_ids[0]},
+                )
+                await session.execute(
+                    text("UPDATE rider_availability SET work_state='BUSY' WHERE rider_id=:rider"),
+                    {"rider": fixture.rider_ids[1]},
+                )
+            return predecessor_id, successor_id, fixture.pickup_ids[0][0], superseded_at
         finally:
             await engine.dispose()
 

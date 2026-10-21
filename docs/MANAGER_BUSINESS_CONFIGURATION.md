@@ -213,3 +213,14 @@ checkout, provider-event acceptance and replay. Nothing is certified by a mocked
 `feasible=True` flag.
 The collected-cart scenario continues through individual physical transfers,
 authoritative discharge-route activation and actual receiving-point handovers.
+
+
+## Consolidated rider failure recovery
+
+The rider-failure command API records complete incidents and explicit candidate/subset allocations
+with HTTP 202, without road/solver calls. Managers can inspect current rider routes/versions, page
+incident obligations and recovery assignments, retry the same selected resource or withdraw an
+unactivated allocation for new options. Started work needs an explicit no-collection resolution;
+physical transfer needs existing participant evidence. Polling distinguishes recorded approval,
+activation progress, actual transfer and rider receipt. One incident may use multiple receiving
+riders with partial activation. See [commands, concurrency and worker wiring](RIDER_FAILURE_RECOVERY.md).

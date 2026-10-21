@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.modules.planning.routing.contracts import (
@@ -31,6 +31,7 @@ async def recommend_replacement(
     optimizers: dict[OptimizerEngine, RouteOptimizer],
     now: datetime,
     max_wall_seconds: float = 30,
+    recommendation_token: UUID | None = None,
 ) -> bool:
     from .replacement_options import evaluate_options
 
@@ -41,6 +42,7 @@ async def recommend_replacement(
         optimizers=optimizers,
         now=now,
         max_wall_seconds=max_wall_seconds,
+        recommendation_token=recommendation_token,
     )
 
 
@@ -69,11 +71,22 @@ async def replacement_targets(
     requests: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Approved uncollected replacements constrain normal regional optimization/activation."""
+    from .failure_models import RecoveryAssignment, RecoveryAssignmentItem
+
+    protected = exists().where(
+        RecoveryAssignmentItem.replacement_id == RiderReplacement.replacement_id,
+        RecoveryAssignmentItem.released_at.is_(None),
+        RecoveryAssignment.assignment_id == RecoveryAssignmentItem.assignment_id,
+        RecoveryAssignment.status == "ACTIVATED",
+    )
     rows = list(
         await session.scalars(
             select(RiderReplacement).where(
                 in_ids(RiderReplacement.request_id, [r["request_id"] for r in requests]),
-                RiderReplacement.status == "APPROVED",
+                or_(
+                    RiderReplacement.status == "APPROVED",
+                    (RiderReplacement.status == "COMPLETED") & protected,
+                ),
             )
         )
     )

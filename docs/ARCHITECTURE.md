@@ -1063,3 +1063,15 @@ requires release review. See [increment 7](V2_ROUTING_INCREMENT_7.md).
 ## Manager administration and replacement options
 
 See [implemented contracts](MANAGER_BUSINESS_CONFIGURATION.md). Database-backed flat pricing and 18 concrete entity revision relations extend the modular monolith. Transaction-local attribution and immutable fact metadata preserve manager history without EAV business authority. Both native engines use the existing regional builder/validator and facility coordinator for bounded options; selections use existing Payment-first activation/recovery. Physical transfers use actual cargo projections independently of global planner configuration. Collected-work readiness follows current custody, preserving historical pickup identity.
+
+
+## Consolidated rider failure recovery
+
+Manager decisions enqueue identifier-only recovery commands through the existing transactional
+outbox and session-enabled planning worker. Claimed recommendation uses bounded local repair and
+native fallbacks; claimed activation rebuilds current selected-resource feasibility outside locks,
+then uses shared authority.commit_routes under existing Payment-first transactional authority.
+Immutable recovery provenance supplements regional run provenance. The regional planner consumes
+the resulting authoritative routes/custody and cannot silently undo approved protected work.
+Existing rider notification workers deliver revision hints; authenticated receipt remains authoritative.
+No infrastructure or production flags change. See [actual implementation and release gates](RIDER_FAILURE_RECOVERY.md).

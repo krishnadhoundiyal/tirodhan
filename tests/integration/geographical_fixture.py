@@ -71,6 +71,7 @@ async def setup_region(
     mass_capacity_g=100000,
     volume_capacity_ml=100000,
     facility_node=None,
+    shift_end_seconds=None,
 ):
     now = utc_now().replace(microsecond=0)
     local = now.astimezone(ZoneInfo("Asia/Kolkata"))
@@ -152,7 +153,9 @@ async def setup_region(
                 resource_kind="COMMITTED",
                 commitment_id=new_uuid7(),
                 starts_at=epoch - timedelta(minutes=5),
-                ends_at=epoch + timedelta(hours=8),
+                ends_at=epoch + timedelta(seconds=shift_end_seconds.get(i, 28800))
+                if shift_end_seconds
+                else epoch + timedelta(hours=8),
             ),
             now,
         )

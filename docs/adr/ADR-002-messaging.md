@@ -91,3 +91,10 @@ facts. Their new production notification delivery consumer is not yet connected.
 polling and proven committed-task compatibility permit execution under delayed delivery.
 No new broker or paid notification infrastructure is provisioned. See
 [Increment 5](../V2_ROUTING_INCREMENT_5.md) for the remaining release integration.
+
+
+## Recovery and revision-delivery integration
+
+RecoveryWorkRequested uses an explicit identifier-only envelope on the existing planning queue with per-work sessions. The existing planning worker records an inbox and executes separately claimed work. The finite scheduler recreates due debt. Revision notifications are explicitly routed to the existing rider queue/consumer and request current-route refresh. No region-wide broker authority, new queue or paid infrastructure is introduced.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).

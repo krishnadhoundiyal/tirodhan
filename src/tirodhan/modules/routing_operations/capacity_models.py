@@ -62,6 +62,11 @@ class RiderReplacement(Base):
     requested_by: Mapped[UUID | None] = mapped_column(ForeignKey("app_user.user_id"))
     reason: Mapped[str | None] = mapped_column(String(100))
     incident_id: Mapped[UUID | None] = mapped_column(ForeignKey("fleet_exception.exception_id"))
+    failure_incident_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("rider_failure_incident.incident_id")
+    )
+    recommendation_token: Mapped[UUID | None] = mapped_column()
+    recommendation_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     evaluation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey(
             "replacement_evaluation.evaluation_id",
@@ -91,6 +96,7 @@ class RiderReplacement(Base):
             unique=True,
             postgresql_where=text("status NOT IN ('REJECTED','COMPLETED')"),
         ),
+        Index("ix_replacement_failure_incident", "failure_incident_id", "replacement_id"),
         Index("ix_replacement_region_due", "region_id", "next_attempt_at", "requested_at"),
     )
 

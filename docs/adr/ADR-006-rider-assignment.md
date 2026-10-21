@@ -252,3 +252,10 @@ regional admission worker cannot dispatch. See
 ## Manager-selected replacement implementation
 
 Managers may initiate an attributable whole-route incident and select a versioned, independently validated candidate. Selection authorizes existing recovery; it does not itself activate assignment or custody. APPROVED remains pending until ordinary authoritative activation. Collected households require individual evidenced transfer; sequential grouped transfers retain completed lots and original pickup attribution. Readiness uses current custody rather than historical assignment ownership for collected work. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure and replacement
+
+One rider-failure incident retains all affected obligations and may have multiple manager-approved receiving shifts. Approval is distinct from asynchronous activation and revision receipt. Both origins share the authoritative route writer. Before-pickup release occurs with successor activation; started work needs explicit resolution. Manager-coordinated rendezvous is approved initially; existing evidenced per-lot transfer remains the sole custody authority.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).

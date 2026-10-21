@@ -45,7 +45,7 @@ async def test_worker_renews_every_message_before_delivery_and_keeps_context_ope
     monkeypatch, first_delivery_fails
 ):
     settings = runtime_settings(rider_notification_lock_renewal_seconds=180)
-    messages = [object(), object()]
+    messages = [SimpleNamespace(subject="RiderDispatchRequested") for _ in range(2)]
     registered = []
     handled = []
     lifecycle = []

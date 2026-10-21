@@ -18,6 +18,7 @@ class OptimizerEngine(str, Enum):
 
 
 class SelectionEngine(str, Enum):
+    LOCAL_REPAIR = "LOCAL_REPAIR"
     COMPOSITE = "COMPOSITE"
 
 

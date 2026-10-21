@@ -313,3 +313,14 @@ logged or exported as diagnostics. OSRM snapping attestations are opaque hashes.
 route proofs remain access-controlled operational evidence with existing retention obligations;
 this increment adds no destruction policy. Benchmark artifacts contain aggregate public-fixture
 synthetic measurements only. See [implementation](COMMERCIAL_ADMISSION_SCALABILITY.md).
+
+
+## Consolidated rider failure recovery
+
+Recovery witnesses contain the same private operational inputs as regional route proofs,
+including positions and booking identifiers. Restrict them through existing operational
+access and retention controls; never include their contents in logs or transport metadata.
+Recovery outbox messages contain only work ID and phase. Rider revision notifications contain
+only revision/rider identifiers and require authenticated sync for route details. Manager
+rendezvous coordination does not relax existing participant authorization, per-lot evidence
+or custody-history protections. See [implementation and boundaries](RIDER_FAILURE_RECOVERY.md).

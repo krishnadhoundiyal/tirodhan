@@ -208,3 +208,10 @@ See [algorithms, proofs, tests and benchmarks](../COMMERCIAL_ADMISSION_SCALABILI
 ## Validated replacement options
 
 Replacement alternatives reuse the regional builder, both approved engines, independent validator and facility coordinator. All existing commitments remain hard constraints. Bounded UNKNOWN is not certified infeasibility. Published candidates are advisory; the normal regional cycle rebuilds current sources before authoritative activation. See [implementation](../MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Localized operational recovery
+
+Manager-approved failure recovery uses bounded local paired insertion and both approved engines as repair fallback. It does not synchronously invoke regional planning. Scoped current-state feasibility and shared authoritative route commit replace the earlier requirement that every selected replacement await an ordinary regional cycle. Activated targets, protected work and actual custody become planner constraints.
+
+See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).

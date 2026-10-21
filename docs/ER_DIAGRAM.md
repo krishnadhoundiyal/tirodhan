@@ -319,3 +319,19 @@ are actual optional FKs, not generic polymorphic references. See
 ## Manager configuration and replacement additions
 
 `pickup_price` and each named editable master have their own concrete `*_revision` FK/history relation (including `fleet_control.scope`). `rider_replacement` links to its existing `fleet_exception` incident, latest `replacement_evaluation`, selected `replacement_candidate`, transfer intent and actual `route_activation`. Evaluation has many ranked immutable candidates; each candidate references an actual operating shift. Existing assignment, pickup and cargo-transfer relations retain historical authority. See [full relationship inventory](MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure recovery
+
+Migration 0035 adds the following concrete relationships:
+
+- RiderProfile -> RiderFailureIncident -> FailureRoute -> VehicleRoute / RouteRevision.
+- RiderFailureIncident -> RiderReplacement; RiderFailureIncident -> RecoveryAssignment.
+- RecoveryAssignment -> ReplacementCandidate / OperatingShift / approving AppUser.
+- RecoveryAssignment -> RecoveryAssignmentItem -> RiderReplacement.
+- RecoveryAssignment -> RecoveryWitness -> RouteActivation (recovery origin).
+- RouteRevision -> RoutePushDelivery -> PushRegistration.
+
+RouteActivation retains its existing run/engine origin for regional planning; a CHECK enforces
+exactly one origin. Allocation membership and immutable witnesses supplement the existing
+custody/assignment entities rather than replacing them. See [schema and lifecycle](RIDER_FAILURE_RECOVERY.md).

@@ -190,7 +190,9 @@ async def evaluate_options(
     optimizers: dict[OptimizerEngine, RouteOptimizer],
     now: datetime,
     max_wall_seconds: float = 30,
+    recommendation_token: UUID | None = None,
 ) -> bool:
+    started_at = time.monotonic()
     async with factory() as session:
         await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
         request = await session.get(RiderReplacement, replacement_id)
@@ -205,6 +207,17 @@ async def evaluate_options(
         config = policy.snapshot_configuration(now, region_id=region.region_id, admission_mode=True)
         config = config.model_copy(update={"confirmed_shifts": True})
         sources = await _read_sources(session, config)
+        if request.failure_incident_id:
+            from .recovery_planning import donor_positions
+
+            sources["recovery_donor_positions"] = await donor_positions(
+                session,
+                {
+                    r["cargo_vehicle_id"]
+                    for r in sources["requests"]
+                    if r["pickup_status"] == "COLLECTED" and r["cargo_vehicle_id"] is not None
+                },
+            )
         group = (
             list(
                 await session.scalars(
@@ -214,7 +227,7 @@ async def evaluate_options(
                     )
                 )
             )
-            if request.incident_id
+            if request.incident_id and not request.failure_incident_id
             else [request]
         )
         if request not in group:
@@ -235,8 +248,9 @@ async def evaluate_options(
     options: list[tuple[Any, dict[str, Any]]] = []
     roads = read_cache(factory).roads(providers)
     evaluated = 0
-    prerequisites = len(original) == len(identities) and not any(
-        rid not in identities for rid, _, _ in issues if rid is not None
+    prerequisites = len(original) == len(identities) and (
+        bool(request.failure_incident_id)
+        or not any(rid not in identities for rid, _, _ in issues if rid is not None)
     )
     if any(r.transfer_intent_id is not None for r in group):
         prerequisites = False
@@ -246,8 +260,12 @@ async def evaluate_options(
         for identity in identities
         for kind in ("pickup", "discharge")
     }
-    if any(t["state"] == "STARTED" and t["stop_id"] in rescued_stops for t in sources["tasks"]):
+    active_service = any(
+        t["state"] == "STARTED" and t["stop_id"] in rescued_stops for t in sources["tasks"]
+    )
+    if active_service:
         prerequisites = False
+        exclusions.append({"outcome": "ACTIVE_SERVICE_REQUIRES_RESOLUTION"})
     vehicles = sorted(ready.sources["vehicles"], key=lambda v: str(v["vehicle_id"]))
     for vehicle in vehicles if prerequisites else []:
         if time.monotonic() >= deadline or evaluated >= policy.max_vehicles:
@@ -262,7 +280,16 @@ async def evaluate_options(
             )
             continue
         evaluated += 1
-        projected = subset(ready, {r["request_id"] for r in ready.sources["requests"]})
+        if request.failure_incident_id:
+            from .recovery_planning import local_sources
+
+            async with factory() as local_session:
+                local = await local_sources(
+                    local_session, sources, vehicle["vehicle_id"], identities
+                )
+            projected = OperationalSnapshot(local, b"")
+        else:
+            projected = subset(ready, {r["request_id"] for r in ready.sources["requests"]})
         projected.sources["requests"] = [
             r for r in projected.sources["requests"] if r["request_id"] not in identities
         ]
@@ -275,6 +302,10 @@ async def evaluate_options(
                     (v for v in sources["vehicles"] if v["vehicle_id"] == row["cargo_vehicle_id"]),
                     None,
                 )
+                if request.failure_incident_id:
+                    donor = sources.get("recovery_donor_positions", {}).get(
+                        str(row["cargo_vehicle_id"])
+                    )
                 if (
                     donor is None
                     or donor["position_id"] is None
@@ -320,7 +351,27 @@ async def evaluate_options(
             baseline = incumbent_cost(problem, identities, orders, policy)
             successful = []
             attempts = []
-            for engine in OptimizerEngine:
+            if request.failure_incident_id:
+                from .recovery_planning import repair
+
+                try:
+                    local_proposal = repair(
+                        problem,
+                        projected.sources,
+                        identities,
+                        policy,
+                        min(5, max(0.001, deadline - time.monotonic())),
+                    )
+                    assessment = validate_proposal(problem, local_proposal)
+                    coordinate(problem, local_proposal, projected.sources, policy, orders)
+                    cost = measure(problem, local_proposal, policy.economics, orders)
+                    successful.append(
+                        (cost.rank, "LOCAL_PAIR_INSERTION_V1", local_proposal, assessment, cost)
+                    )
+                    attempts.append({"engine": "LOCAL_PAIR_INSERTION_V1", "outcome": "VALIDATED"})
+                except (RoutingValidationError, RoutingAdapterError):
+                    pass
+            for engine in () if successful else OptimizerEngine:
                 if time.monotonic() >= deadline:
                     attempts.append({"engine": engine.value, "outcome": "NOT_INVOKED_TIME_BUDGET"})
                     continue
@@ -375,6 +426,16 @@ async def evaluate_options(
                 "affected_bookings": sorted(map(str, identities)),
                 "physical_handoff_required": handoffs,
                 "handoff_basis": "ACTUAL_DONOR_POSITION_AND_EXISTING_HANDLING_TIME",
+                "donor_position_ids": {
+                    k: str(v["position_id"])
+                    for k, v in sources.get("recovery_donor_positions", {}).items()
+                    if k
+                    in {
+                        str(original[r]["cargo_vehicle_id"])
+                        for r in identities
+                        if original[r]["pickup_status"] == "COLLECTED"
+                    }
+                },
                 "current_cargo_lots": [
                     str(c.lot_id)
                     for v in problem.vehicles
@@ -451,6 +512,15 @@ async def evaluate_options(
         head = await session.get(AdmissionSourceHead, request.region_id, with_for_update=True)
         if (
             current_request is None
+            or (
+                recommendation_token is not None
+                and (
+                    current_request.recommendation_token != recommendation_token
+                    or current_request.recommendation_until is None
+                    or current_request.recommendation_until
+                    <= now + timedelta(seconds=time.monotonic() - started_at)
+                )
+            )
             or current_request.version != request_version
             or any(r.version != group_versions[r.replacement_id] for r in current_rows)
             or len(current_rows) != len(group_versions)
@@ -481,6 +551,9 @@ async def evaluate_options(
         )
         for current_request in current_rows:
             current_request.evaluation_id = evaluation_id
+            if recommendation_token is not None:
+                current_request.recommendation_token = None
+                current_request.recommendation_until = None
             if options:
                 if current_request.status != "APPROVED":
                     current_request.source_version = source_version
@@ -488,7 +561,11 @@ async def evaluate_options(
                     current_request.status = "RECOMMENDED"
                 current_request.recommended_at, current_request.failure_code = now, None
             else:
-                current_request.failure_code = "UNKNOWN_REPLACEMENT_SEARCH"
+                current_request.failure_code = (
+                    "ACTIVE_SERVICE_REQUIRES_RESOLUTION"
+                    if active_service
+                    else "UNKNOWN_REPLACEMENT_SEARCH"
+                )
                 current_request.attempt += 1
                 current_request.next_attempt_at = now + timedelta(
                     seconds=min(60, 5 * 2 ** min(current_request.attempt, 4))

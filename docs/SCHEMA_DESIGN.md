@@ -1291,3 +1291,15 @@ No financial schema or initiation-term trigger changes. See
 ## Manager history migrations 0033–0034
 
 0033 adds `pickup_price`, 18 entity-specific revision tables with real source FKs, immutable capture triggers, stable catalogue/media identities and nullable recording metadata on seven existing immutable duty/facility facts. Region association snapshots are captured at transaction completion; fleet-control snapshots exclude lease churn. 0034 adds immutable `replacement_evaluation`/`replacement_candidate`, concrete incident/choice/activation FKs on RiderReplacement and decision provenance. Historical snapshots are audit facts, never generic mutable business storage. Baselines retain unknown historical actors. Adopted history blocks lossy downgrade. See [schema and API contracts](MANAGER_BUSINESS_CONFIGURATION.md).
+
+
+## Consolidated rider failure recovery
+
+Migration 0035 adds concrete rider_failure_incident, rider_failure_route,
+recovery_assignment, recovery_assignment_item, recovery_witness and route_push_delivery tables.
+Foreign keys preserve existing replacement, shift, revision, identity and registration relations.
+Partial unique indexes permit one open incident per rider, one active allocation per obligation
+and one pending allocation per receiving shift. Immutable approved terms and witnesses retain
+audit evidence. RouteActivation has exactly one run/engine or recovery-witness origin. An
+adopted-history downgrade refuses before removing data. Financial schema is unchanged.
+See [implemented constraints and compatibility](RIDER_FAILURE_RECOVERY.md).

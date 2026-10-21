@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     routing_dispatch_enabled: bool = False
     routing_fleet_enabled: bool = False
     routing_orchestration_enabled: bool = False
+    routing_recovery_profiles_path: str | None = None
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file_path: Path | None = None
     database_url: SecretStr = SecretStr(

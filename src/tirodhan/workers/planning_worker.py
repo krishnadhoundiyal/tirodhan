@@ -29,6 +29,44 @@ async def handle_planning_delivery(
         if not isinstance(payload, dict):
             raise ValueError("Payload must be a JSON object")
 
+        if delivery.message_type == "RecoveryWorkRequested":
+            if set(payload) != {"work_id", "kind"} or payload["kind"] not in (
+                "ACTIVATE",
+                "RECOMMEND",
+            ):
+                raise ValueError("INVALID_RECOVERY_ENVELOPE")
+            from tirodhan.workers.routing_recovery import execute
+
+            identity = UUID(payload["work_id"])
+            from tirodhan.modules.reliability.models import InboxMessage
+            from tirodhan.modules.reliability.primitives import (
+                claim_inbox_message,
+                complete_inbox_message,
+            )
+
+            async with session_factory() as session, session.begin():
+                claim = await claim_inbox_message(
+                    session,
+                    consumer_name="routing-recovery",
+                    message_id=delivery.message_id,
+                    message_type=delivery.message_type,
+                    business_key=f"{payload['kind']}:{identity}",
+                )
+                if claim.message.status == "PROCESSED":
+                    await delivery.complete()
+                    return
+            try:
+                await execute(session_factory, identity, payload["kind"], get_settings())
+            except ValueError:
+                raise RuntimeError("RECOVERY_EXECUTION_RETRY") from None
+            async with session_factory() as session, session.begin():
+                inbox = await session.get(
+                    InboxMessage, ("routing-recovery", delivery.message_id), with_for_update=True
+                )
+                assert inbox
+                await complete_inbox_message(session, inbox)
+            await delivery.complete()
+            return
         if "planning_batch_id" not in payload:
             raise ValueError("Missing planning_batch_id")
 

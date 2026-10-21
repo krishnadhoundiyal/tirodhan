@@ -294,6 +294,7 @@ async def _assign_group_to_rider(
     assignment_time = now or utc_now()
     _require_rider_eligible(profile, availability)
     await _require_fresh_rider_authorization(session, rider_id)
+    await _require_no_operational_failure(session, rider_id)
     if offer is not None:
         if offer.status == OFFER_CLOSED_LOST:
             raise GroupAlreadyAssignedError("assignment offer lost to another assignment")
@@ -522,6 +523,7 @@ async def _lock_eligible_rider(
     profile, availability = await _lock_rider(session, rider_id)
     _require_rider_eligible(profile, availability)
     await _require_fresh_rider_authorization(session, rider_id)
+    await _require_no_operational_failure(session, rider_id)
     return profile, availability
 
 
@@ -537,3 +539,31 @@ def _require_rider_eligible(profile: RiderProfile, availability: RiderAvailabili
         or availability.work_state != WORK_IDLE
     ):
         raise RiderNotEligibleError("rider must be ACTIVE, AVAILABLE, and IDLE")
+
+
+async def _require_no_operational_failure(session: AsyncSession, rider_id: UUID) -> None:
+    """A recovered cart becoming IDLE does not clear an actual failure hold.
+
+    Caller holds profile/availability authority, shared with the failure command.
+    Device registration and custody/evidence reporting retain their normal authorization.
+    """
+    from tirodhan.modules.routing_operations.failure_models import RiderFailureIncident
+    from tirodhan.modules.routing_operations.models import OperatingShift, OperatingVehicle
+
+    incident = await session.scalar(
+        select(RiderFailureIncident.incident_id)
+        .where(RiderFailureIncident.rider_id == rider_id, RiderFailureIncident.status == "OPEN")
+        .limit(1)
+    )
+    blocked = await session.scalar(
+        select(OperatingVehicle.vehicle_id)
+        .join(OperatingShift)
+        .where(
+            OperatingShift.rider_id == rider_id,
+            OperatingShift.closed_at.is_(None),
+            OperatingVehicle.blocked_reason.is_not(None),
+        )
+        .limit(1)
+    )
+    if incident is not None or blocked is not None:
+        raise RiderNotEligibleError("rider has an unresolved operational failure")
