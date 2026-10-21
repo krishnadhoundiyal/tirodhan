@@ -189,7 +189,6 @@ class RouteReportTests(unittest.TestCase):
                 renderer.main(["--evidence-root", str(case)])
             self.assertIn("expected 2 bookings", str(ctx.exception))
 
-
     def test_generated_and_retained_reports_avoid_browser_top_collision(self) -> None:
         # A top-level JavaScript `const top` collides with Chrome's window.top.
         with tempfile.TemporaryDirectory() as directory:
