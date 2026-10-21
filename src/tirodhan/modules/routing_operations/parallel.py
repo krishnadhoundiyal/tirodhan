@@ -416,21 +416,21 @@ def consolidate(
         solver.parameters.random_seed = 1729
         status = solver.solve(model)
         statuses.append(solver.status_name(status))
-        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):  # type: ignore[comparison-overlap]
             break
         selected = tuple(c.candidate_id for i, c in enumerate(pool) if solver.value(x[i]))
         value = int(solver.value(expression))
         values.append(value)
         bounds.append(solver.best_objective_bound)
         # A timeout is not permission to sacrifice a higher-priority achieved objective.
-        if status != cp_model.OPTIMAL:
+        if status != cp_model.OPTIMAL:  # type: ignore[comparison-overlap]
             break
         model.add(expression == value)
         for i in range(len(pool)):
             model.add_hint(x[i], solver.value(x[i]))
         # Hints must be unique across sequential objective stages.
         if len(statuses) < len(terms):
-            model.clear_hints()
+            model.clear_hints()  # type: ignore[no-untyped-call]
     return Selection(
         policy_version=policy_version,
         candidates=pool,
