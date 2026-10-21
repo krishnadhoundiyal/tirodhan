@@ -1,8 +1,8 @@
 """Bounded replacement alternatives under the existing regional builder/engines/gate.
 
 Only immutable advisory witnesses are written. Neither these hypothetical problems nor
-their proposals can be submitted to activation; selection wakes the ordinary regional
-planner, which builds and validates actual current sources again.
+their proposals can be submitted to activation; selected recovery rebuilds and validates
+actual current sources through the regional or recovery authority.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from .parallel import FacilityLimit, consolidate, selected_routes
 from .parallel import candidate as route_candidate
 from .regional_planner import regional_ready, subset
 from .replacement_models import ReplacementCandidate, ReplacementEvaluation
+from .replacement_scoring import impact_rank, ordered_vehicles
 from .rolling import FleetPolicy, incumbent_orders
 from .service import PROBLEM_CODEC, PROPOSAL_CODEC
 from .snapshot import MatrixSource, OperationalSnapshot, _read_sources, build_problem, source_digest
@@ -266,7 +267,7 @@ async def evaluate_options(
     if active_service:
         prerequisites = False
         exclusions.append({"outcome": "ACTIVE_SERVICE_REQUIRES_RESOLUTION"})
-    vehicles = sorted(ready.sources["vehicles"], key=lambda v: str(v["vehicle_id"]))
+    vehicles = ordered_vehicles(ready.sources, original, now)
     for vehicle in vehicles if prerequisites else []:
         if time.monotonic() >= deadline or evaluated >= policy.max_vehicles:
             break
@@ -457,9 +458,13 @@ async def evaluate_options(
                     "travel_seconds": cost.travel_seconds - baseline.travel_seconds,
                     "distance_m": cost.distance_m - baseline.distance_m,
                     "generalized_seconds": cost.generalized_seconds - baseline.generalized_seconds,
+                    "disruptions": cost.disruptions - baseline.disruptions,
                 }
                 if baseline
                 else {"baseline": "UNAVAILABLE_OR_NOT_CURRENTLY_FEASIBLE"},
+                "ranking_basis": "INCREMENTAL_GENERALIZED_COST"
+                if baseline is not None
+                else "UNPRICED_BASELINE_UNAVAILABLE",
                 "existing_commitments_preserved": True,
                 "route_versions": [
                     {"route_id": str(r["route_id"]), "version": r["version"]}
@@ -469,7 +474,7 @@ async def evaluate_options(
             }
             rank = (
                 int(vehicle["resource_kind"] != "COMMITTED"),
-                cost.rank,
+                impact_rank(cost, baseline),
                 str(vehicle["shift_id"]),
             )
             options.append(
@@ -542,6 +547,8 @@ async def evaluate_options(
                 "evaluated_vehicles": evaluated,
                 "bounded": True,
                 "exhaustive": False,
+                "candidate_order": "TEMPORAL_ENVELOPE_AND_GEOGRAPHIC_INSERTION_V1",
+                "option_order": "COMMITTED_THEN_PRICED_INCREMENTAL_IMPACT_V1",
                 "incomplete": incomplete,
                 "max_wall_seconds": max_wall_seconds,
                 "exclusions": exclusions,

@@ -85,6 +85,29 @@ Each insertion is independently feasibility-gated; bounded exhaustion is UNKNOWN
 that no replacement exists. Native VROOM and OR-Tools remain bounded fallback alternatives.
 Local repair has the explicit `LOCAL_REPAIR` selection identity; native identities remain real.
 
+Replacement search orders committed resources first, then broad pickup-window compatibility
+and estimated great-circle insertion detour along the remaining route. A protected destination
+must precede a hypothetical insertion; collected work uses the donor rendezvous position.
+An idle vehicle has no pre-existing journey to subtract. These cheap estimates only order
+evaluation: they neither exclude riders nor substitute for directed road matrices or the
+independent validator. Identity breaks equal estimates deterministically. Budget exhaustion
+can still miss the best rider; no exhaustive-search or optimality claim is made.
+
+Across validated candidates, ranking retains committed-before-flexible priority and compares
+the additional generalized seconds, distance and disruptions relative to each candidate's
+feasible surviving incumbent. Existing waiting, window-risk, disruption and vehicle-activation
+penalties remain included; negative deltas are permitted. Within one candidate, the baseline
+is constant, so the existing engine comparison remains valid. Missing/infeasible baselines
+are labelled `UNPRICED_BASELINE_UNAVAILABLE`, follow priced options within their resource tier,
+and tie by shift identity; they never receive an invented zero or absolute-total cost score.
+They remain manager-selectable feasibility witnesses, without a minimum-impact claim.
+Historical evaluations retain their original order; new evaluations record versioned ordering
+identities and each candidate's ranking basis. No schema or authority changes are needed.
+
+For V vehicles, T remaining tasks, R requests, P facilities and B rescued pickups, shortlist
+preparation takes O(R + P + T + V log V + B(V + T)) time and O(R + P + T + V) memory.
+It performs no additional database query or road/solver call and creates no all-vehicle matrix.
+
 The regional source read is retained for authoritative operational projection. Local matrix and
 solver scope contain the receiving vehicle, its complete commitments and rescued work, relevant
 receiving points and windows. Other current discharge visits at those facilities, including
@@ -317,3 +340,42 @@ Local native acceptance does not validate deployed Azure Service Bus/FCM deliver
 graph storage/startup or sustained incident throughput. Production enablement remains subject
 to the packaging, operational acceptance and resource/cost review described above. This
 increment is intended for independent code review; it does not authorize production cutover.
+
+## Replacement ordering correction — 21 October 2026
+
+`replacement_scoring.py` and its evaluator integration correct UUID-first search and
+cross-candidate absolute-total ranking. No migration, dependency, production flag or
+assignment/custody/financial mutation changed. ADR-006 records the advisory comparison.
+
+Actual validation of this correction:
+
+- All unit tests: **556 passed, 4 warnings**, Python 3.12, 53.62 seconds.
+- Focused rider-failure, manager replacement safety/business and recovery-worker selection:
+  **36 passed**, disposable PostgreSQL/PostGIS, 130.09 seconds.
+- New persisted-score/unpriced-baseline regressions plus existing manager migration guards:
+  **4 passed**, disposable PostgreSQL/PostGIS, 36.16 seconds.
+- Native rider-failure acceptance: **2 passed, 2 warnings**, 37.66 seconds.
+- Native manager replacement acceptance: **2 passed, 2 warnings**, 74.03 seconds.
+  This also checks actual manager-visible marginal-cost ordering across multiple candidates.
+- Repository-wide Ruff and formatting passed; strict mypy passed for **249 source files**.
+
+The eight new pure regressions include independently validated 100+4 versus 20+17 minute
+routes, configured generalized penalties, unavailable baselines, rider 87 in a 100-rider/
+ten-evaluation shortlist, en-route versus nearest-start selection, protected pickup-window
+separation, donor rendezvous and committed/tie ordering. The shortlist remains heuristic.
+The database cases verify selectable feasible witnesses and retained original ownership
+with both available and deliberately unavailable baseline comparison.
+
+Reproduction uses `python -m pytest -q tests/unit`, the focused integration modules
+`test_rider_failure_recovery.py`, `test_manager_replacement_safety.py`,
+`test_manager_business.py`, `test_replacement_option_scoring.py`, `test_manager_migration.py`
+and `tests/unit/test_recovery_worker.py`, with `TIRODHAN_TEST_DATABASE_URL` pointing only
+to disposable PostgreSQL/PostGIS. Native tests use `tests/routing/run-geographical.ps1
+-SkipBuild -Selection <test-file>` once for each of `test_rider_failure_native.py` and
+`test_manager_replacement_native.py`, retaining pinned OSRM 6.0.0, VROOM 1.15.0 and
+OR-Tools 9.14.6206. No production service is involved.
+
+The warnings are the existing Firebase token deprecation (unit tests) and regional
+projection Cartesian-product warning (native tests). The complete repository suite was
+not rerun for this focused correction; the earlier full-suite result above belongs to
+the preceding recovery implementation.

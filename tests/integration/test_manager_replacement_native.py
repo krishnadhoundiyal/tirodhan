@@ -184,6 +184,24 @@ async def test_native_options_preserve_busy_candidate_work_and_activate(database
                 )
             )
         assert len(candidates) >= 2, view
+        assert view["evaluation"]["search"]["option_order"] == (
+            "COMMITTED_THEN_PRICED_INCREMENTAL_IMPACT_V1"
+        )
+        # Actual persisted, manager-visible ordering must use marginal fleet impact.
+        priced = [
+            c for c in view["candidates"] if c["ranking_basis"] == "INCREMENTAL_GENERALIZED_COST"
+        ]
+        assert len(priced) >= 2, view
+        impacts = [
+            (
+                c["incremental_impact"]["generalized_seconds"],
+                c["incremental_impact"]["distance_m"],
+                c["incremental_impact"]["disruptions"],
+                c["shift_id"],
+            )
+            for c in priced
+        ]
+        assert impacts == sorted(impacts)
         chosen = next(c for c in candidates if c.shift_id == region["shifts"][1])
         assert [c["rank"] for c in view["candidates"]] == list(range(1, len(candidates) + 1))
         async with factory() as session:

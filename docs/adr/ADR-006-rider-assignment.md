@@ -259,3 +259,11 @@ Managers may initiate an attributable whole-route incident and select a versione
 One rider-failure incident retains all affected obligations and may have multiple manager-approved receiving shifts. Approval is distinct from asynchronous activation and revision receipt. Both origins share the authoritative route writer. Before-pickup release occurs with successor activation; started work needs explicit resolution. Manager-coordinated rendezvous is approved initially; existing evidenced per-lot transfer remains the sole custody authority.
 
 See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).
+
+Replacement recommendations retain committed-resource priority. Bounded evaluation orders
+candidates by broad time-window compatibility and geographic route-insertion detour rather
+than UUID. Validated options compare marginal generalized fleet impact against each surviving
+incumbent, rather than different riders' absolute route totals. Unavailable baselines are
+explicitly unpriced and follow priced options within their resource tier. These advisory
+rankings neither exclude unevaluated resources as infeasible nor grant assignment/custody
+authority; the existing independent gate and transactional activation remain mandatory.
