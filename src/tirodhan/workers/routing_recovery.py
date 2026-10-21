@@ -33,7 +33,12 @@ async def record_blocked(
 
 
 async def execute(
-    factory: async_sessionmaker[AsyncSession], identity: UUID, kind: str, settings: Settings
+    factory: async_sessionmaker[AsyncSession],
+    identity: UUID,
+    kind: str,
+    settings: Settings,
+    *,
+    generation: int | None = None,
 ) -> None:
     if not (
         settings.routing_dispatch_enabled
@@ -74,11 +79,18 @@ async def execute(
                 )
 
             await recommend_one(
-                factory, identity, providers=providers, optimizers=optimizers, now=utc_now()
+                factory,
+                identity,
+                providers=providers,
+                optimizers=optimizers,
+                now=utc_now(),
+                generation=generation,
             )
         elif kind == "ACTIVATE":
             from tirodhan.modules.routing_operations.failure_execution import activate_recovery
 
-            await activate_recovery(factory, identity, providers=providers, optimizers=optimizers)
+            await activate_recovery(
+                factory, identity, providers=providers, optimizers=optimizers, generation=generation
+            )
         else:
             raise ValueError("INVALID_RECOVERY_KIND")

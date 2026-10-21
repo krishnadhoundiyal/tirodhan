@@ -1,5 +1,10 @@
 # Project Context
 
+Recovery notifications now have durable generations and separate publication claims.
+Scheduler scans reuse outstanding requests; operational retries atomically schedule the
+next generation, while broker redelivery keeps the same identity. Production remains
+disabled; existing infrastructure is unchanged. See [protocol and cutover](RIDER_FAILURE_RECOVERY.md).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

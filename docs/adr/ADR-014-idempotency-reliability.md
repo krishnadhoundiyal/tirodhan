@@ -147,3 +147,10 @@ Actor-scoped typed command claims, revision/source fences and transactional immu
 Concrete incident/assignment records, actor/client command claims, partial unique allocation guards, token/expiry compute claims and immutable recovery witnesses protect retryable recovery. Planning and recovery use one route persistence implementation. Inbox/outbox, bounded periodic reconciliation and per-device notification progress cover transport, external-send and crash-after-commit boundaries.
 
 See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).
+
+Recovery notification publication uses immutable operation/generation identity, one open
+request, unique outbox identity and a bounded token/expiry publication claim (migration 0036).
+Publishing attempts and execution attempts have separate counters. Scheduler rediscovery
+cannot manufacture new generations; recorded operational retries and their next outbox
+commit together. Broker redelivery reuses its generation. Published consumer backlog does
+not expire into duplicate publication merely because no worker has started.

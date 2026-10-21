@@ -203,6 +203,10 @@ async def replacement_command(
                 row.status, row.recommended_shift_id = "REQUESTED", None
                 row.failure_code = None
             row.next_attempt_at = now
+            from .recovery_work import enqueue_work
+
+            row.recommendation_token = row.recommendation_until = None
+            await enqueue_work(session, row.replacement_id, "RECOMMEND", now, replace=True)
             session.add(
                 ReplacementDecision(
                     decision_id=command.client_command_id,

@@ -288,7 +288,7 @@ async def test_cancelled_obligation_is_resolved_without_reacceptance(database_se
         ).failure_code == "BOOKING_CANCELLED"
 
 
-async def test_reconciliation_recreates_execution_without_advancing_due_past_message(
+async def test_reconciliation_reuses_pending_execution_without_advancing_due_past_message(
     database_session_factory,
 ):
     from tirodhan.modules.routing_operations.failure_runtime import reconcile_recovery
@@ -296,7 +296,7 @@ async def test_reconciliation_recreates_execution_without_advancing_due_past_mes
     factory = database_session_factory
     data, incident, _ = await failed(factory)
     _, leg = await choose(factory, data, incident)
-    assert await reconcile_recovery(factory, data[6][0]) >= 1
+    assert await reconcile_recovery(factory, data[6][0]) == 0
     assert await claim_activation(factory, leg.assignment_id, data[6][0])
 
 
@@ -431,10 +431,11 @@ async def test_http_decision_transport_and_revision_notification_routes(
     assert work.session_id.startswith("recovery:") and set(__import__("json").loads(work.body)) == {
         "work_id",
         "kind",
+        "generation",
     }
     calls = []
 
-    async def execute(actual_factory, identity, kind, settings):
+    async def execute(actual_factory, identity, kind, settings, *, generation=None):
         calls.append(identity)
         from tirodhan.db.values import utc_now
 
@@ -444,6 +445,7 @@ async def test_http_decision_transport_and_revision_notification_routes(
             providers={"test-car": LineMatrix()},
             optimizers=engines(),
             now=utc_now(),
+            generation=generation,
         )
 
     monkeypatch.setattr(routing_recovery, "execute", execute)
@@ -581,10 +583,18 @@ async def test_new_failure_hold_on_selected_resource_cannot_be_resumed_by_recove
 async def test_new_incident_history_refuses_lossy_downgrade(database_session_factory):
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import text
     from sqlalchemy.exc import DBAPIError
 
     factory = database_session_factory
     _, incident, _ = await failed(factory)
+    with pytest.raises(DBAPIError, match="export adopted recovery work requests"):
+        await asyncio.to_thread(
+            command.downgrade, Config("alembic.ini"), "0035_rider_failure_recovery"
+        )
+    # Simulate export of notification history, then independently verify 0035's guard.
+    async with factory() as session, session.begin():
+        await session.execute(text("DELETE FROM recovery_work_request"))
     with pytest.raises(DBAPIError, match="export adopted rider failure recovery"):
         await asyncio.to_thread(
             command.downgrade, Config("alembic.ini"), "0034_replacement_options"

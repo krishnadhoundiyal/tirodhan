@@ -95,6 +95,12 @@ No new broker or paid notification infrastructure is provisioned. See
 
 ## Recovery and revision-delivery integration
 
-RecoveryWorkRequested uses an explicit identifier-only envelope on the existing planning queue with per-work sessions. The existing planning worker records an inbox and executes separately claimed work. The finite scheduler recreates due debt. Revision notifications are explicitly routed to the existing rider queue/consumer and request current-route refresh. No region-wide broker authority, new queue or paid infrastructure is introduced.
+RecoveryWorkRequested uses an explicit identifier/kind/generation envelope on the existing
+planning queue with per-work sessions. The planning worker records an inbox and executes
+separately claimed work. Migration 0036 coalesces outstanding requests and leases recovery
+publication; a consumer that has not started does not cause additional messages. Broker
+redelivery retains its message identity. Durable operational retries atomically authorize
+the next generation at its due time. Revision notifications use the existing rider queue/
+consumer and request current-route refresh. No new queue or paid infrastructure is introduced.
 
 See [implemented contracts and release gates](../RIDER_FAILURE_RECOVERY.md).

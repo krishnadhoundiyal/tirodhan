@@ -50,7 +50,10 @@ async def assignment_rows(session: AsyncSession, identity: UUID) -> list[RiderRe
 
 
 async def claim_activation(
-    factory: async_sessionmaker[AsyncSession], identity: UUID, now: datetime
+    factory: async_sessionmaker[AsyncSession],
+    identity: UUID,
+    now: datetime,
+    generation: int | None = None,
 ) -> UUID | None:
     async with factory() as session, session.begin():
         row = await session.scalar(
@@ -66,6 +69,16 @@ async def claim_activation(
             .with_for_update(skip_locked=True)
         )
         if row is None:
+            if generation is not None:
+                from .recovery_work import current_work
+
+                pending = await current_work(session, identity, "ACTIVATE")
+                if pending and pending.generation == generation:
+                    raise RuntimeError("RECOVERY_WORK_NOT_CLAIMABLE")
+            return None
+        from .recovery_work import begin_work
+
+        if not await begin_work(session, identity, "ACTIVATE", now, generation):
             return None
         token = new_uuid7()
         row.lease_token, row.lease_until = token, now + timedelta(seconds=120)
@@ -98,6 +111,9 @@ async def finish_attempt(
             row.lease_token = row.lease_until = None
             row.due_at = now + timedelta(seconds=min(300, 5 * 2 ** min(row.attempt, 6)))
             row.version += 1
+            from .recovery_work import finish_work
+
+            await finish_work(session, row, now)
 
 
 async def resolve_terminal_obligations(
@@ -138,6 +154,9 @@ async def resolve_terminal_obligations(
             assignment.failure_code = "TERMINAL_BOOKING_OUTCOME"
             assignment.lease_token = assignment.lease_until = None
             assignment.version += 1
+            from .recovery_work import finish_work
+
+            await finish_work(session, assignment, now)
             return True
         return False
 
@@ -149,10 +168,11 @@ async def activate_recovery(
     providers: dict[str, MatrixSource],
     optimizers: dict[OptimizerEngine, RouteOptimizer],
     now: datetime | None = None,
+    generation: int | None = None,
 ) -> UUID | None:
     now = now or utc_now()
     started = time.monotonic()
-    token = await claim_activation(factory, identity, now)
+    token = await claim_activation(factory, identity, now, generation)
     if token is None:
         async with factory() as session:
             existing = await session.get(RecoveryAssignment, identity)

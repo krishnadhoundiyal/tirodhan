@@ -1,5 +1,11 @@
 # Architecture
 
+Recovery work notification generations (0036) now coalesce outstanding requests, lease
+publication and distinguish same-message broker redelivery from explicitly scheduled
+operational retries. No-start consumer backlog does not manufacture more messages. Domain
+outcome and next due generation commit together; existing assignment/custody authority and
+infrastructure remain unchanged. See [protocol and cutover](RIDER_FAILURE_RECOVERY.md).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

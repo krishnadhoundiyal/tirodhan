@@ -12,12 +12,72 @@ from sqlalchemy import (
     Index,
     LargeBinary,
     String,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tirodhan.db.base import Base
+
+
+class RecoveryWorkRequest(Base):
+    """One durable notification generation, separate from operational attempt state."""
+
+    __tablename__ = "recovery_work_request"
+    outbox_event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("outbox_event.outbox_event_id"), primary_key=True
+    )
+    assignment_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("recovery_assignment.assignment_id")
+    )
+    replacement_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("rider_replacement.replacement_id")
+    )
+    generation: Mapped[int] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(24))
+    publication_token: Mapped[UUID | None] = mapped_column()
+    publication_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    close_reason: Mapped[str | None] = mapped_column(String(80))
+    __table_args__ = (
+        CheckConstraint(
+            "(assignment_id IS NOT NULL) <> (replacement_id IS NOT NULL)",
+            name="ck_recovery_work_owner",
+        ),
+        CheckConstraint("generation > 0", name="ck_recovery_work_generation"),
+        CheckConstraint(
+            "state IN ('READY','PUBLISHING','PUBLISHED','RETRY_DUE','CLOSED')",
+            name="ck_recovery_work_state",
+        ),
+        CheckConstraint(
+            "(state = 'PUBLISHING') = (publication_token IS NOT NULL) AND "
+            "(publication_token IS NULL) = (publication_until IS NULL)",
+            name="ck_recovery_work_lease",
+        ),
+        CheckConstraint(
+            "(state = 'CLOSED') = (closed_at IS NOT NULL)", name="ck_recovery_work_closed"
+        ),
+        UniqueConstraint(
+            "assignment_id", "generation", name="uq_recovery_work_assignment_generation"
+        ),
+        UniqueConstraint(
+            "replacement_id", "generation", name="uq_recovery_work_replacement_generation"
+        ),
+        Index(
+            "uq_recovery_work_assignment_open",
+            "assignment_id",
+            unique=True,
+            postgresql_where=text("state <> 'CLOSED'"),
+        ),
+        Index(
+            "uq_recovery_work_replacement_open",
+            "replacement_id",
+            unique=True,
+            postgresql_where=text("state <> 'CLOSED'"),
+        ),
+    )
 
 
 class RiderFailureIncident(Base):

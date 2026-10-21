@@ -888,3 +888,6 @@ async def commit_routes(
             leg.lease_token = leg.lease_until = None
             leg.failure_code = None
             leg.version += 1
+            from .recovery_work import finish_work
+
+            await finish_work(session, leg, now)

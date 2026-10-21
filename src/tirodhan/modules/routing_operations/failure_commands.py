@@ -18,7 +18,6 @@ from tirodhan.modules.dispatch.models import RiderAssignment, RiderAssignmentIte
 from tirodhan.modules.handovers.models import HandoverEventItem
 from tirodhan.modules.planning.models import PickupExecution
 from tirodhan.modules.reliability.primitives import (
-    append_outbox_event,
     claim_idempotency_record,
     complete_idempotency_record,
 )
@@ -82,17 +81,11 @@ class ResolveFailedPickup(BaseModel):
 
 
 async def enqueue(
-    session: AsyncSession, identity: UUID, kind: str, now: datetime, generation: int = 1
+    session: AsyncSession, identity: UUID, kind: str, now: datetime, *, replace: bool = False
 ) -> None:
-    await append_outbox_event(
-        session,
-        event_key=f"recovery:{kind}:{identity}:{generation}",
-        event_type="RecoveryWorkRequested",
-        aggregate_type="routing_recovery",
-        aggregate_id=identity,
-        payload={"work_id": str(identity), "kind": kind},
-        available_at=now,
-    )
+    from .recovery_work import enqueue_work
+
+    await enqueue_work(session, identity, kind, now, replace=replace)
 
 
 async def rider_routes(session: AsyncSession, rider: UUID) -> list[VehicleRoute]:
@@ -496,9 +489,7 @@ async def execute_failure(
             replacement.version += 1
             replacement.failure_code = None
             replacement.next_attempt_at = now
-            await enqueue(
-                session, replacement.replacement_id, "RECOMMEND", now, replacement.version
-            )
+            await enqueue(session, replacement.replacement_id, "RECOMMEND", now, replace=True)
             result = replacement.replacement_id
         else:
             initial = await session.get(RecoveryAssignment, command.assignment_id)
@@ -561,15 +552,18 @@ async def execute_failure(
                     obligation.version += 1
                     obligation.next_attempt_at = now
                     await enqueue(
-                        session, obligation.replacement_id, "RECOMMEND", now, obligation.version
+                        session, obligation.replacement_id, "RECOMMEND", now, replace=True
                     )
                 row.status = "SUPERSEDED"
+                from .recovery_work import close_work
+
+                await close_work(session, row.assignment_id, "ACTIVATE", now, "MANAGER_SUPERSEDED")
             else:
                 row.status = "PENDING"
             row.due_at, row.failure_code = now, None
             row.version += 1
             if not command.request_new_options:
-                await enqueue(session, row.assignment_id, "ACTIVATE", now, row.version)
+                await enqueue(session, row.assignment_id, "ACTIVATE", now, replace=True)
             parent = await session.get(RiderFailureIncident, row.incident_id, with_for_update=True)
             assert parent
             parent.version += 1

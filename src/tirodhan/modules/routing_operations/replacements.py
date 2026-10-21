@@ -33,6 +33,17 @@ async def recommend_replacement(
     max_wall_seconds: float = 30,
     recommendation_token: UUID | None = None,
 ) -> bool:
+    if recommendation_token is None:
+        from .failure_runtime import recommend_one
+
+        return await recommend_one(
+            factory,
+            replacement_id,
+            providers=providers,
+            optimizers=optimizers,
+            now=now,
+            max_wall_seconds=max_wall_seconds,
+        )
     from .replacement_options import evaluate_options
 
     return await evaluate_options(
@@ -61,7 +72,6 @@ async def record_failure(
         )
         if row is not None and row.version == version and row.status in ("REQUESTED", "APPROVED"):
             row.failure_code = code if row.status == "REQUESTED" else "RECOMMENDATION_REQUESTED"
-            row.attempt += 1
             row.next_attempt_at = now + timedelta(seconds=min(60, 5 * 2 ** min(row.attempt, 4)))
             row.version += 1
 

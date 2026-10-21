@@ -1,5 +1,16 @@
 # Schema Design
 
+## Migration 0036 — recovery work notification generations
+
+`recovery_work_request` references its actual OutboxEvent and exactly one RecoveryAssignment
+or RiderReplacement, with unique per-owner generations and one open request per owner.
+Publication state, complete token/expiry pairs, execution-start and closure facts have SQL
+checks; a trigger prevents changing request identity/generation. Operational rows retain
+their existing status, execution claims and processing counts. No generic entity/type/value
+relation or financial/custody schema changes are introduced. Upgrade adopts valid legacy
+delivery identities after draining execution; populated downgrade requires reviewed export.
+See [protocol and cutover](RIDER_FAILURE_RECOVERY.md#recovery-notification-generations--21-october-2026).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

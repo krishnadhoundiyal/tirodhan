@@ -335,3 +335,8 @@ Migration 0035 adds the following concrete relationships:
 RouteActivation retains its existing run/engine origin for regional planning; a CHECK enforces
 exactly one origin. Allocation membership and immutable witnesses supplement the existing
 custody/assignment entities rather than replacing them. See [schema and lifecycle](RIDER_FAILURE_RECOVERY.md).
+
+Migration 0036 links each RecoveryWorkRequest to its actual OutboxEvent (also its PK),
+and exactly one concrete RecoveryAssignment or RiderReplacement FK. Each operation has
+many historical notification generations and at most one open request. Publication leases
+belong to that request; execution leases remain on the operational entity.

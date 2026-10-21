@@ -1,5 +1,24 @@
 # Idempotency
 
+## Recovery delivery generations (0036)
+
+- Business key: actual RecoveryAssignment/ACTIVATE or RiderReplacement/RECOMMEND plus a
+  monotonically allocated generation; one open request per operation, enforced in PostgreSQL.
+- Transaction: domain outcome, closing old request and next due outbox commit together.
+  Domain rows precede work rows and then outbox rows in lock order. Scheduler scans reuse
+  outstanding requests without incrementing versions or processing attempts.
+- Publication: a 60-second token/expiry lease gates a 30-second send. Failed/ambiguous send
+  backoff reuses the same message ID. Acknowledged publication never ages into a resend.
+- Processing: actual execution claim increments the processing counter. Infrastructure
+  failure abandons for broker redelivery; a recorded operational retry authorizes the next
+  generation. Inbox completion follows durable outcome/next-request persistence.
+- Replay: closed/stale generations perform no work; current busy claims abandon. Expired
+  execution claims can authorize one successor under the domain lock. Manager retries are
+  explicit new requests. No financial, assignment or custody effect is created by publication.
+- Recovery: outbox, publication lease, execution lease and inbox boundaries are independently
+  tested. Published/DLQ delivery requires normal broker operations, not periodic new messages.
+  See [cutover, migration and limits](RIDER_FAILURE_RECOVERY.md#recovery-notification-generations--21-october-2026).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

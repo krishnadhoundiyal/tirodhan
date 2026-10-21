@@ -24,6 +24,8 @@ async def recommend_one(
     providers: dict[str, MatrixSource],
     optimizers: dict[OptimizerEngine, RouteOptimizer],
     now: datetime,
+    generation: int | None = None,
+    max_wall_seconds: float = 30,
 ) -> bool:
     async with factory() as session, session.begin():
         row = await session.scalar(
@@ -44,9 +46,20 @@ async def recommend_one(
             .with_for_update(skip_locked=True)
         )
         if row is None:
+            if generation is not None:
+                from .recovery_work import current_work
+
+                pending = await current_work(session, identity, "RECOMMEND")
+                if pending and pending.generation == generation:
+                    raise RuntimeError("RECOVERY_WORK_NOT_CLAIMABLE")
+            return False
+        from .recovery_work import begin_work
+
+        if not await begin_work(session, identity, "RECOMMEND", now, generation):
             return False
         token = new_uuid7()
         row.recommendation_token, row.recommendation_until = token, now + timedelta(seconds=60)
+        row.attempt += 1
     from .replacements import recommend_replacement
 
     try:
@@ -57,12 +70,17 @@ async def recommend_one(
             optimizers=optimizers,
             now=now,
             recommendation_token=token,
+            max_wall_seconds=max_wall_seconds,
         )
     except Exception:
         async with factory() as session, session.begin():
             current = await session.get(RiderReplacement, identity, with_for_update=True)
             if current and current.recommendation_token == token:
-                current.failure_code = "RECOMMENDATION_EXECUTION_FAILED"
+                current.failure_code = (
+                    "RECOMMENDATION_REQUESTED"
+                    if current.status == "APPROVED"
+                    else "RECOMMENDATION_EXECUTION_FAILED"
+                )
         return False
     finally:
         async with factory() as session, session.begin():
@@ -70,6 +88,9 @@ async def recommend_one(
             if row and row.recommendation_token == token:
                 row.recommendation_token = row.recommendation_until = None
                 row.next_attempt_at = max(row.next_attempt_at, now + timedelta(seconds=5))
+                from .recovery_work import finish_work
+
+                await finish_work(session, row, now)
 
 
 async def recommend_due(
@@ -185,6 +206,12 @@ async def reconcile_terminal_obligations(
                     leg.failure_code = "TERMINAL_BOOKING_OUTCOME"
                     leg.lease_token = leg.lease_until = None
                     leg.version += 1
+                    from .recovery_work import finish_work
+
+                    await finish_work(session, leg, now)
+            from .recovery_work import finish_work
+
+            await finish_work(session, row, now)
 
 
 async def reconcile_recovery(
@@ -224,7 +251,7 @@ async def reconcile_recovery(
     from sqlalchemy import exists, func
 
     from .dispatch_models import RouteRevision, VehicleRoute
-    from .failure_models import RiderFailureIncident
+    from .failure_models import RecoveryWorkRequest, RiderFailureIncident
     from .fleet_models import FleetControl
     from .orchestration import prepare_due
     from .orchestration_models import RegionVehicle, RouteAcknowledgment, RouteDelivery
@@ -261,6 +288,13 @@ async def reconcile_recovery(
                         RecoveryAssignment.lease_until.is_(None),
                         RecoveryAssignment.lease_until <= now,
                     ),
+                    or_(
+                        ~exists().where(
+                            RecoveryWorkRequest.assignment_id == RecoveryAssignment.assignment_id,
+                            RecoveryWorkRequest.state != "CLOSED",
+                        ),
+                        RecoveryAssignment.lease_until <= now,
+                    ),
                 )
                 .order_by(RecoveryAssignment.due_at)
                 .limit(limit)
@@ -268,17 +302,36 @@ async def reconcile_recovery(
             )
         )
         for row in jobs:
-            row.version += 1
-            await enqueue(session, row.assignment_id, "ACTIVATE", now, row.version)
+            if row.lease_until is not None:
+                from .recovery_work import close_work
+
+                await close_work(
+                    session, row.assignment_id, "ACTIVATE", now, "EXECUTION_LEASE_EXPIRED"
+                )
+                row.lease_token = row.lease_until = None
+                row.status, row.failure_code = "PENDING", "EXECUTION_LEASE_EXPIRED"
+                row.version += 1
+            await enqueue(session, row.assignment_id, "ACTIVATE", now)
         requests = list(
             await session.scalars(
                 select(RiderReplacement)
                 .where(
-                    RiderReplacement.status == "REQUESTED",
+                    or_(
+                        RiderReplacement.status == "REQUESTED",
+                        (RiderReplacement.status == "APPROVED")
+                        & (RiderReplacement.failure_code == "RECOMMENDATION_REQUESTED"),
+                    ),
                     RiderReplacement.failure_incident_id.is_not(None),
                     RiderReplacement.next_attempt_at <= now,
                     or_(
                         RiderReplacement.recommendation_until.is_(None),
+                        RiderReplacement.recommendation_until <= now,
+                    ),
+                    or_(
+                        ~exists().where(
+                            RecoveryWorkRequest.replacement_id == RiderReplacement.replacement_id,
+                            RecoveryWorkRequest.state != "CLOSED",
+                        ),
                         RiderReplacement.recommendation_until <= now,
                     ),
                 )
@@ -288,8 +341,14 @@ async def reconcile_recovery(
             )
         )
         for request in requests:
-            request.attempt += 1
-            await enqueue(session, request.replacement_id, "RECOMMEND", now, request.attempt + 1)
+            if request.recommendation_until is not None:
+                from .recovery_work import close_work
+
+                await close_work(
+                    session, request.replacement_id, "RECOMMEND", now, "EXECUTION_LEASE_EXPIRED"
+                )
+                request.recommendation_token = request.recommendation_until = None
+            await enqueue(session, request.replacement_id, "RECOMMEND", now)
         # An incident's resolution is independent of facility completion. Require
         # every recovery leg and the actual revision receipt, plus no unresolved work.
         incidents = list(

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import utc_now
 from tirodhan.modules.dispatch.events import DISPATCH_REQUESTED, parse_dispatch_message
 from tirodhan.modules.reliability.models import OutboxEvent
+
+RECOVERY_SEND_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -70,7 +73,25 @@ async def publish_outbox_batch(
     """Finite explicit route. Duplicate sends across Jobs are intentionally tolerated."""
     if batch_size <= 0:
         raise ValueError("outbox batch size must be positive")
-    # No persistent claim/lease is invented: a crash leaves PENDING recoverable.
+    # Recovery notifications additionally retain a publication lease outside this
+    # selection transaction. Existing event types retain their established behavior.
+    recovery_filter = []
+    if planning_entity:
+        from tirodhan.modules.routing_operations.failure_models import RecoveryWorkRequest
+
+        recovery_filter.append(
+            or_(
+                OutboxEvent.event_type != "RecoveryWorkRequested",
+                exists().where(
+                    RecoveryWorkRequest.outbox_event_id == OutboxEvent.outbox_event_id,
+                    RecoveryWorkRequest.state.in_(("READY", "RETRY_DUE", "PUBLISHING")),
+                    or_(
+                        RecoveryWorkRequest.publication_until.is_(None),
+                        RecoveryWorkRequest.publication_until <= utc_now(),
+                    ),
+                ),
+            )
+        )
     async with session_factory() as session, session.begin():
         events = list(
             await session.scalars(
@@ -78,6 +99,7 @@ async def publish_outbox_batch(
                 .where(
                     OutboxEvent.status == "PENDING",
                     OutboxEvent.available_at <= utc_now(),
+                    *recovery_filter,
                     OutboxEvent.event_type.in_(
                         ["ServiceabilityRequested", "FinancialExceptionRaised"]
                         + (
@@ -107,11 +129,24 @@ async def publish_outbox_batch(
             )
         )
         for event in events:
-            event.publish_attempt_count += 1
+            if event.event_type != "RecoveryWorkRequested":
+                event.publish_attempt_count += 1
         await session.flush()
 
     published = 0
     for event in events:
+        recovery_token = None
+        if event.event_type == "RecoveryWorkRequested":
+            from tirodhan.modules.routing_operations.recovery_work import (
+                publication_claim,
+                publication_finished,
+            )
+
+            recovery_token = await publication_claim(
+                session_factory, event.outbox_event_id, utc_now()
+            )
+            if recovery_token is None:
+                continue
         try:
             if event.event_type == "FinancialExceptionRaised":
                 if (
@@ -149,19 +184,23 @@ async def publish_outbox_batch(
             elif event.event_type == "RecoveryWorkRequested" and planning_entity:
                 if (
                     event.aggregate_type != "routing_recovery"
-                    or set(event.payload) != {"work_id", "kind"}
+                    or set(event.payload)
+                    not in ({"work_id", "kind"}, {"work_id", "kind", "generation"})
                     or UUID(event.payload["work_id"]) != event.aggregate_id
                     or event.payload["kind"] not in ("RECOMMEND", "ACTIVATE")
                 ):
                     raise ValueError("INVALID_RECOVERY_ENVELOPE")
-                await publisher.send(
-                    planning_entity,
-                    RoutedMessage(
-                        str(event.outbox_event_id),
-                        event.event_type,
-                        json.dumps(event.payload).encode(),
-                        session_id=f"recovery:{event.aggregate_id}",
+                await asyncio.wait_for(
+                    publisher.send(
+                        planning_entity,
+                        RoutedMessage(
+                            str(event.outbox_event_id),
+                            event.event_type,
+                            json.dumps(event.payload).encode(),
+                            session_id=f"recovery:{event.aggregate_id}",
+                        ),
                     ),
+                    timeout=RECOVERY_SEND_TIMEOUT_SECONDS,
                 )
             elif event.event_type == DISPATCH_REQUESTED and rider_notification_entity:
                 message = dispatch_message(event)
@@ -179,6 +218,16 @@ async def publish_outbox_batch(
                 continue
         except Exception:
             # Never log SDK exception text/envelope. Leave the event recoverably pending.
+            if recovery_token is not None:
+                await publication_finished(
+                    session_factory, event.outbox_event_id, recovery_token, success=False
+                )
+            continue
+        if recovery_token is not None:
+            await publication_finished(
+                session_factory, event.outbox_event_id, recovery_token, success=True
+            )
+            published += 1
             continue
         async with session_factory() as session, session.begin():
             await session.execute(

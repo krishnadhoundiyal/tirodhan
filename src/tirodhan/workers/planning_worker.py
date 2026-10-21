@@ -30,11 +30,17 @@ async def handle_planning_delivery(
             raise ValueError("Payload must be a JSON object")
 
         if delivery.message_type == "RecoveryWorkRequested":
-            if set(payload) != {"work_id", "kind"} or payload["kind"] not in (
+            if set(payload) not in (
+                {"work_id", "kind"},
+                {"work_id", "kind", "generation"},
+            ) or payload["kind"] not in (
                 "ACTIVATE",
                 "RECOMMEND",
             ):
                 raise ValueError("INVALID_RECOVERY_ENVELOPE")
+            generation = payload.get("generation")
+            if generation is not None and (type(generation) is not int or generation < 1):
+                raise ValueError("INVALID_RECOVERY_GENERATION")
             from tirodhan.workers.routing_recovery import execute
 
             identity = UUID(payload["work_id"])
@@ -43,6 +49,7 @@ async def handle_planning_delivery(
                 claim_inbox_message,
                 complete_inbox_message,
             )
+            from tirodhan.modules.routing_operations.recovery_work import delivery_current
 
             async with session_factory() as session, session.begin():
                 claim = await claim_inbox_message(
@@ -56,7 +63,21 @@ async def handle_planning_delivery(
                     await delivery.complete()
                     return
             try:
-                await execute(session_factory, identity, payload["kind"], get_settings())
+                current_generation = await delivery_current(
+                    session_factory,
+                    UUID(delivery.message_id),
+                    identity,
+                    payload["kind"],
+                    generation,
+                )
+                if current_generation is not None:
+                    await execute(
+                        session_factory,
+                        identity,
+                        payload["kind"],
+                        get_settings(),
+                        generation=current_generation,
+                    )
             except ValueError:
                 raise RuntimeError("RECOVERY_EXECUTION_RETRY") from None
             async with session_factory() as session, session.begin():

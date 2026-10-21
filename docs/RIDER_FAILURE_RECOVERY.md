@@ -379,3 +379,113 @@ The warnings are the existing Firebase token deprecation (unit tests) and region
 projection Cartesian-product warning (native tests). The complete repository suite was
 not rerun for this focused correction; the earlier full-suite result above belongs to
 the preceding recovery implementation.
+
+## Recovery notification generations — 21 October 2026
+
+Migration 0036 adds `recovery_work_request`, linked by real FKs to exactly one existing
+RecoveryAssignment or RiderReplacement and its actual outbox record. Its immutable identity
+is operation/kind/generation. Unique generation constraints and partial unique indexes permit
+one open notification per operation. Operational status, publication state and processing
+attempt count are separate. No infrastructure, queue, dependency declaration, assignment,
+custody, economic policy or production flag changes are introduced.
+
+Notification publication states are:
+
+| State | Meaning and permitted action |
+|---|---|
+| READY | A newly authorized generation may publish at its outbox available_at |
+| PUBLISHING | One token/expiry-fenced publisher owns the send |
+| PUBLISHED | Broker accepted the message; scheduler/publisher must not republish it |
+| RETRY_DUE | An uncertain/failed send may retry the same outbox ID after backoff |
+| CLOSED | Outcome recorded or generation superseded; no further sends are authorized |
+
+Recovery sends have a 30-second deadline inside a 60-second publication lease. A failed or
+uncertain send retains the same outbox/message ID and generation. Publication attempt count
+increments only on a successful publication claim. Expired publication claims may resume
+that identity; old publisher results cannot overwrite a successor claim. Broker duplicate
+detection remains supplementary: a process crash after send but before recording its ACK
+can still produce duplicate transport delivery. Other outbox routes retain their established
+publication behavior.
+
+Repeated reconciliation scans do not change domain versions, processing attempts or message
+generations just because an assignment remains due. A PUBLISHED request with no started
+consumer remains outstanding indefinitely; delayed consumers are not treated as failed
+executions. Queue age/DLQ and worker configuration require operational monitoring. Broker
+redelivery/redrive of the same valid message requires no new outbox record. This increment
+does not introduce an automatic DLQ inspector or an age-based republishing timer.
+
+An operational failure that returns normally closes its generation and appends the next
+one with `available_at = due_at` in the SAME database transaction as the durable retry
+outcome. This applies to activation, physical-transfer waiting and recommendation outcomes.
+The next generation is READY because its initial publication is explicitly authorized;
+this differs from RETRY_DUE, which retries a send of an existing generation. The consumer
+completes the old message only after the outcome and next outbox are durable. A crash before
+commit leaves the original generation recoverable; a crash after commit/before settlement
+replays the old inbox result without creating another generation.
+
+Unhandled worker/infrastructure exceptions abandon the existing broker message. A currently
+busy execution claim also abandons rather than marking its generation processed. Processing
+attempt counts increment only when an actual activation/recommendation claim succeeds;
+failed publication, scheduler scans, duplicate delivery and failed claims do not increment
+them. Historical counters cannot be retrospectively separated and are retained as-is.
+
+Actual expired execution leases authorize one replacement generation under the locked
+domain row, revoke the old claim and fence stale delivery/results. Explicit manager retries
+or refreshed recommendations also authorize a replacement generation. Source-version and
+existing Payment-first activation safeguards remain unchanged. The common route writer
+closes activation notifications when either regional or recovery authority completes them.
+Cancellation reconciliation closes terminal work without assigning or discarding cargo.
+
+Messages add a positive integer `generation` to the existing identifier/kind envelope.
+The worker resolves that exact outbox identity and generation before starting road services;
+the execution claim checks it again under the domain lock. Stale generations are no-ops.
+Legacy two-field messages are accepted ONLY when migration adopted their actual outbox ID.
+Unknown/older duplicate legacy identities cannot execute current work.
+
+Cutover requires stopping/draining old recovery producers, publishers and consumers before
+upgrading the schema and all corresponding binaries together. Migration refuses live execution
+leases, preferentially adopts one existing published/unprocessed legacy identity per operation,
+and cancels redundant unsent outbox copies. It never fabricates a broker ACK. Already processed
+or terminal work is adopted closed; due retries can then be reconciled. Committed legacy retries
+are also recognized when inbox completion was lost: activation has an actual attempt with a
+cleared lease, while recommendation uses its recorded next-attempt time after notification
+creation (its historically inflated counter is not used as proof). Financial/custody facts
+and accepted work are unchanged. Downgrade is supported while the new relation is empty;
+adopted notification history requires reviewed export/drain before downgrade. The immutable
+generation history and referenced outbox records must be retained together.
+
+The changes use `recovery_work.py`, the existing recovery commands/runtime/authority,
+recommendation outcome transaction, outbox publisher and planning consumer. Regression modules
+`test_recovery_work_requests.py` and `test_recovery_work_migration.py` exercise actual PostgreSQL
+transactions with controlled broker send/delivery boundaries. Native acceptance continues
+through the existing OSRM/VROOM/OR-Tools harness. Deployed Azure delivery/scaling remains an
+operational acceptance requirement; the local tests do not claim a live Azure scaling test.
+
+Validation for notification generations used Python 3.12 with disposable PostgreSQL 17.5 /
+PostGIS 3.5.2. The complete frozen-runtime suite passed **1,557 tests**, with **65 opt-in
+skips** and **10 existing warnings**, in **1,422.49 seconds (23m42s)**. All **556 unit tests**
+also passed separately. Native rider-failure acceptance passed **2 tests / 2 existing
+warnings in 39.68 seconds**; native manager replacement passed **2 tests / 2 existing
+warnings in 83.25 seconds**, using OSRM 6.0.0, VROOM 1.15.0 and OR-Tools 9.14.6206.
+Ruff and formatting passed for **533 files**; strict mypy passed for **250 source files**.
+The final focused PostgreSQL run passed **39 tests in 208.47 seconds**, including both
+inbox/settlement crash boundaries and committed legacy retry adoption for activation and
+recommendation, alongside the existing recovery/manager safety checks.
+
+All 250 runtime Python files match the complete-suite snapshot byte-for-byte. After snapshot
+capture, final review added the committed-legacy-retry migration backfill and an additional
+crash-boundary test variant; those changes were validated by the final focused run rather
+than a second complete-suite run. Strict Alembic comparison filters extension-owned objects
+using PostgreSQL catalog metadata and retains only the two explicitly checked historical
+application index differences; no new application drift was introduced. Existing warnings concern the
+regional projection Cartesian-product query and Firebase token deprecation, both unchanged.
+
+Reproduce with `python -m pytest -q -p no:cacheprovider --tb=short` using an isolated database
+and the routing extra; focused modules are `test_recovery_work_migration.py`,
+`test_recovery_work_requests.py`, `test_rider_failure_recovery.py` and
+`test_manager_replacement_safety.py` under `tests/integration`. Run the two native modules
+through `tests/routing/run-geographical.ps1 -SkipBuild -Selection <test-file>` separately.
+The full-suite log and source comparison are retained locally under
+`.tools/manager-business/generation-suite-20261021/`; native evidence is under the two
+`.tools/manager-business/generation-native-*-20261021/` directories. These are ignored
+validation artifacts, not production resources.

@@ -569,11 +569,14 @@ async def evaluate_options(
                 current_request.recommended_at, current_request.failure_code = now, None
             else:
                 current_request.failure_code = (
-                    "ACTIVE_SERVICE_REQUIRES_RESOLUTION"
-                    if active_service
-                    else "UNKNOWN_REPLACEMENT_SEARCH"
+                    "RECOMMENDATION_REQUESTED"
+                    if current_request.status == "APPROVED"
+                    else (
+                        "ACTIVE_SERVICE_REQUIRES_RESOLUTION"
+                        if active_service
+                        else "UNKNOWN_REPLACEMENT_SEARCH"
+                    )
                 )
-                current_request.attempt += 1
                 current_request.next_attempt_at = now + timedelta(
                     seconds=min(60, 5 * 2 ** min(current_request.attempt, 4))
                 )
@@ -594,4 +597,8 @@ async def evaluate_options(
                 )
             )
         await session.flush()
+        from .recovery_work import finish_work
+
+        for current_request in current_rows:
+            await finish_work(session, current_request, now)
     return bool(options)
