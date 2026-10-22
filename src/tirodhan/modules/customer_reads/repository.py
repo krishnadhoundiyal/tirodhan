@@ -192,6 +192,7 @@ async def projections(
                         declared_weight_grams=i.declared_weight_grams,
                         weight_band=i.weight_band,
                         weight_kg=i.weight_kg,
+                        declared_volume_ml=i.declared_volume_ml,
                         pricing_rule_version=i.pricing_rule_version,
                         quoted_line_amount_minor=i.quoted_line_amount_minor,
                         image=None,

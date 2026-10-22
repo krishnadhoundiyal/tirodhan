@@ -1,4 +1,4 @@
-"""Real policy/booking transactions, synthetic operational loads, no approved customer volume."""
+"""Real policy/booking transactions and independently declared physical loads."""
 
 import asyncio
 from dataclasses import replace
@@ -517,7 +517,7 @@ async def test_operational_hold_mass_once_and_changed_declarations_rejected(
         fresh_body = c.model_copy(update={"client_command_id": new_uuid7()}).model_dump(mode="json")
         blocked = await api.post("/v2/customer/slot-holds", json=fresh_body)
         assert blocked.status_code == 409
-        assert blocked.json()["detail"] == "PHYSICAL_VOLUME_POLICY_REQUIRED"
+        assert blocked.json()["detail"] == "ITEM_VOLUME_DECLARATIONS_REQUIRED"
     async with factory() as session:
         manifest = await session.get(RoutingManifest, identity)
         assert (manifest.mass_g, manifest.volume_ml) == (mass, volume)
@@ -532,7 +532,7 @@ async def test_operational_hold_mass_once_and_changed_declarations_rejected(
         == held
     )
     fresh = c.model_copy(update={"client_command_id": new_uuid7()})
-    with pytest.raises(OperationalInputError, match="PHYSICAL_VOLUME_POLICY_REQUIRED"):
+    with pytest.raises(OperationalInputError, match="ITEM_VOLUME_DECLARATIONS_REQUIRED"):
         await hold_slot(
             factory,
             customer_id=customer,

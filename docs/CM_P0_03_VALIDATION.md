@@ -1,5 +1,8 @@
 # CM-P0-03 validation and delivery record
 
+This records the original increment before the volume follow-up. Its historical volume
+block is superseded by [the item-volume implementation and validation](CM_P0_03_VOLUME_VALIDATION.md).
+
 22 October 2026. Working directory verified as `C:\Users\91956\Tirodhan\tirodhan`.
 Initial branch `codex/cm-p0-02-booking-recovery`, HEAD
 `bdf13021c8c1c19819a507926b25e7661e8b81e2`, clean working tree.

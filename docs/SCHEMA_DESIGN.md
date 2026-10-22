@@ -1,5 +1,14 @@
 # Schema Design
 
+## Migration 0038 — declared item volume
+
+One nullable `collection_request_item.declared_volume_ml` bigint records occupied transport
+volume for the whole selected line. Positive/range SQL constraints and deferred complete/bounded
+aggregation protect new volume-bearing weight bookings. Existing booking-item immutability
+also freezes this field. No volume is backfilled; populated volume history blocks downgrade.
+No new policy, table, service or pricing parameter is introduced. Reservation/manifest retain
+their existing volume columns and once-applied safety margin.
+
 ## Migration 0037 — declared weight pricing
 
 `weight_pricing_policy` stores typed bands, labels/unit, integer price/weight parameters,
@@ -354,6 +363,7 @@ request_id                 uuid FK -> collection_request
 item_category_code         varchar(...) NOT NULL
 declared_quantity          integer NULL
 declared_weight_grams      bigint NULL
+declared_volume_ml         bigint NULL -- occupied transport volume for the whole line
 quoted_line_amount_minor   bigint NOT NULL
 currency                   char(3) NOT NULL
 pricing_rule_version       varchar(...) NULL

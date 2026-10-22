@@ -4,8 +4,9 @@ CM-P0-03 supersedes flat pricing for new work after explicit weight-policy activ
 The existing PricingPort and typed manager administration own configurable weight bands
 and exact bounded pricing. A stateless version/declaration-bound customer quote creates no
 booking or money; PostgreSQL configuration fencing establishes confirmation at booking.
-Historical quotes/payment/refunds remain immutable. Volume has no approved source, so new
-weight-priced customer holds remain blocked. See [contract](CM_P0_03_WEIGHT_PRICING.md).
+Historical quotes/payment/refunds remain immutable. Occupied volume is explicitly declared
+per selected line and summed by the server, with the same facts bound through hold and
+booking into the existing routing manifest. See [contract](CM_P0_03_WEIGHT_PRICING.md).
 
 Recovery work notification generations (0036) now coalesce outstanding requests, lease
 publication and distinguish same-message broker redelivery from explicitly scheduled

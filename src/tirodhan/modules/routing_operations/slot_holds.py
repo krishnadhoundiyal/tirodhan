@@ -67,13 +67,17 @@ async def _hold(
     customer_checkout: bool,
 ) -> UUID:
     # Preserve the exact legacy wire fingerprint when new optional fields are absent.
-    fingerprint = hashlib.sha256(
-        command.model_dump_json(
-            exclude={
-                name for name in ("items", "confirmed_quote") if getattr(command, name) is None
-            }
-        ).encode()
-    ).digest()
+    exclude: dict[str, bool | dict[int, set[str]]] = {
+        name: True for name in ("items", "confirmed_quote") if getattr(command, name) is None
+    }
+    # Omitted volume must not alter pre-volume hold fingerprints, including nested items.
+    if command.items is not None:
+        exclude["items"] = {
+            index: {"declared_volume_ml"}
+            for index, item in enumerate(command.items)
+            if item.declared_volume_ml is None
+        }
+    fingerprint = hashlib.sha256(command.model_dump_json(exclude=exclude).encode()).digest()
     async with factory() as session, session.begin():
         await require_live_role(session, customer_id, "CUSTOMER")
         claim = await claim_idempotency_record(
@@ -92,6 +96,7 @@ async def _hold(
         from tirodhan.modules.business_admin.weight_pricing import (
             confirm_quote,
             declaration_fingerprint,
+            declared_volume,
             lock_pricing,
             quote_in_session,
             weight_pricing_selected,
@@ -102,10 +107,6 @@ async def _hold(
         declared_fingerprint = None
         weight_quote_fingerprint = None
         if await weight_pricing_selected(session):
-            if customer_checkout:
-                # No product-approved source for physical volume exists. A caller-supplied
-                # positive number is not approval; historical replay above remains recoverable.
-                raise OperationalInputError("PHYSICAL_VOLUME_POLICY_REQUIRED")
             if not command.items:
                 raise OperationalInputError("HOLD_WEIGHT_DECLARATIONS_REQUIRED")
             quote = await quote_in_session(
@@ -115,6 +116,11 @@ async def _hold(
             assert quote.weight_facts is not None and quote.declared_items is not None
             if command.mass_g != quote.weight_facts.total_weight_grams:
                 raise OperationalInputError("HOLD_DECLARED_MASS_MISMATCH")
+            volume = declared_volume(quote.declared_items)
+            if volume is None and customer_checkout:
+                raise OperationalInputError("ITEM_VOLUME_DECLARATIONS_REQUIRED")
+            if volume is not None and command.volume_ml != volume:
+                raise OperationalInputError("HOLD_DECLARED_VOLUME_MISMATCH")
             declared_fingerprint = declaration_fingerprint(quote.declared_items)
             weight_quote_fingerprint = quote.weight_facts.quote_fingerprint
         elif command.items is not None or command.confirmed_quote is not None:

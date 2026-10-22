@@ -282,6 +282,11 @@ async def create_collection_request(
             "slot_end": command.slot_end,
             "items": command.items,
             **(
+                {"volume_selections": [i.declared_volume_ml for i in command.items]}
+                if any(i.declared_volume_ml is not None for i in command.items)
+                else {}
+            ),
+            **(
                 {"weight_selections": [(i.weight_band, i.weight_kg) for i in command.items]}
                 if any(i.weight_band is not None or i.weight_kg is not None for i in command.items)
                 else {}
@@ -483,6 +488,7 @@ async def create_collection_request(
                 declared_weight_grams=declared.declared_weight_grams,
                 weight_band=declared.weight_band,
                 weight_kg=declared.weight_kg,
+                declared_volume_ml=declared.declared_volume_ml,
                 quoted_line_amount_minor=quoted.quoted_line_amount_minor,
                 currency=quote.currency.upper(),
                 pricing_rule_version=quoted.pricing_rule_version,

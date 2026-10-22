@@ -214,6 +214,7 @@ class CollectionItemDto(BaseModel):
     image: MediaDto | None
     weight_band: str | None = None
     weight_kg: str | None = None
+    declared_volume_ml: int | None = None
     pricing_rule_version: str | None = None
 
 

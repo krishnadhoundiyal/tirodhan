@@ -1,5 +1,9 @@
 # ER Diagram
 
+Migration 0038 adds only nullable declared occupied volume to CollectionRequestItem;
+no relationship or entity is added. The existing declaration fingerprint binds it to the
+reservation and the manifest retains the reservation's once-padded aggregate volume.
+
 CM-P0-03 adds WeightPricingPolicy -> WeightPricingPolicyRevision -> BookingWeightQuote,
 with a composite policy ID/revision FK and a one-to-one CollectionRequest provenance FK.
 Existing item/request, reservation/binding, manifest, Payment and Refund relationships

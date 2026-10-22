@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_GRAMS = 2**31 - 1  # Existing routing input representation, not a collection entitlement.
+MAX_VOLUME_ML = 2**31 - 1  # Same existing routing input representation.
 MAX_MONEY = 9007199254740991  # Existing customer money DTO's exact integer range.
 WeightBand = Literal["BELOW_B", "B_TO_T", "ABOVE_T"]
 
@@ -77,6 +78,8 @@ class WeightItemInput(BaseModel):
     declared_weight_grams: int | None = Field(default=None, strict=True, ge=1, le=MAX_GRAMS)
     weight_band: WeightBand | None = None
     weight_kg: str | None = Field(default=None, max_length=20)
+    # Occupied transport volume of the WHOLE line, including its selected quantity.
+    declared_volume_ml: int | None = Field(default=None, strict=True, gt=0, le=MAX_VOLUME_ML)
 
     @field_validator("weight_kg")
     @classmethod
@@ -100,8 +103,8 @@ class WeightPolicyResponse(WeightPolicyFields):
     policy_id: UUID
     policy_revision: int
     confirmation_freshness: Literal["CURRENT_POLICY_REVISION"] = "CURRENT_POLICY_REVISION"
-    live_customer_holds_available: Literal[False] = False
-    hold_blocker: Literal["PHYSICAL_VOLUME_POLICY_REQUIRED"] = "PHYSICAL_VOLUME_POLICY_REQUIRED"
+    live_customer_holds_available: Literal[True] = True
+    hold_blocker: None = None
 
 
 class ValidatedWeightItem(WeightItemInput):
@@ -112,6 +115,7 @@ class ValidatedWeightItem(WeightItemInput):
 class WeightQuoteResponse(BaseModel):
     items: list[ValidatedWeightItem]
     total_weight_grams: int
+    total_volume_ml: int | None = None
     minimum_amount_minor: int
     maximum_amount_minor: int
     total_amount_minor: int
@@ -119,5 +123,5 @@ class WeightQuoteResponse(BaseModel):
     confirmation: WeightQuoteConfirmation
     confirmation_freshness: Literal["CURRENT_POLICY_REVISION"] = "CURRENT_POLICY_REVISION"
     rounding: Literal["HALF_UP_MINOR_UNIT"] = "HALF_UP_MINOR_UNIT"
-    live_customer_holds_available: Literal[False] = False
-    hold_blocker: Literal["PHYSICAL_VOLUME_POLICY_REQUIRED"] = "PHYSICAL_VOLUME_POLICY_REQUIRED"
+    live_customer_holds_available: bool
+    hold_blocker: Literal["ITEM_VOLUME_DECLARATIONS_REQUIRED"] | None

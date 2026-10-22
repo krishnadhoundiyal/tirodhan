@@ -21,6 +21,7 @@ from .history import current_version
 from .models import WeightPricingPolicy
 from .weight_contracts import (
     MAX_GRAMS,
+    MAX_VOLUME_ML,
     WeightPolicyFields,
     WeightQuoteConfirmation,
     WeightQuoteFacts,
@@ -150,6 +151,11 @@ def declaration_fingerprint(items: Sequence[DeclaredRequestItem]) -> str:
                     declared_weight_grams=i.declared_weight_grams,
                     weight_band=i.weight_band,
                     weight_kg=i.weight_kg,
+                    **(
+                        {"declared_volume_ml": i.declared_volume_ml}
+                        if i.declared_volume_ml is not None
+                        else {}
+                    ),
                 )
                 for i in items
             ]
@@ -157,11 +163,29 @@ def declaration_fingerprint(items: Sequence[DeclaredRequestItem]) -> str:
     ).hex()
 
 
+def declared_volume(items: Sequence[DeclaredRequestItem]) -> int | None:
+    """Sum explicit whole-line occupied volumes. Missing declarations never become zero."""
+    total = 0
+    complete = bool(items)
+    for item in items:
+        volume = item.declared_volume_ml
+        if volume is None:
+            complete = False
+            continue
+        if type(volume) is not int or not 0 < volume <= MAX_VOLUME_ML:
+            raise WeightPricingConflict("ITEM_VOLUME_OUT_OF_RANGE")
+        total += volume
+        if total > MAX_VOLUME_ML:
+            raise WeightPricingConflict("AGGREGATE_VOLUME_OUT_OF_RANGE")
+    return total if complete else None
+
+
 async def quote_in_session(
     session: AsyncSession, items: Sequence[DeclaredRequestItem]
 ) -> PricingQuote:
     row, revision = await active_policy(session)
     normalized, total = normalize_items(items, policy_fields(row))
+    declared_volume(normalized)
     offered = {
         c.category_code: c
         for c in await session.scalars(
@@ -233,6 +257,12 @@ async def fence_booking_quote(
             raise WeightPricingConflict("WEIGHT_QUOTE_CONFIRMATION_REQUIRED")
         return
     confirm_quote(quote, confirmation)
+    assert quote.declared_items is not None
+    if (
+        any(i.declared_volume_ml is not None for i in quote.declared_items)
+        and declared_volume(quote.declared_items) is None
+    ):
+        raise WeightPricingConflict("ITEM_VOLUME_DECLARATIONS_REQUIRED")
     row, revision = await active_policy(session)
     if (row.policy_id, revision) != (
         quote.weight_facts.policy_id,
@@ -252,7 +282,10 @@ class ConfiguredPickupPricing:
             await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             if await weight_pricing_selected(session):
                 return await quote_in_session(session, items)
-        if any(i.weight_band is not None or i.weight_kg is not None for i in items):
+        if any(
+            i.weight_band is not None or i.weight_kg is not None or i.declared_volume_ml is not None
+            for i in items
+        ):
             raise PricingNotConfiguredError("ACTIVE_WEIGHT_PRICING_POLICY_REQUIRED")
         from .pricing import FlatPickupPricing
 

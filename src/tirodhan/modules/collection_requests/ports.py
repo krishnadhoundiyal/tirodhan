@@ -15,6 +15,7 @@ class DeclaredRequestItem:
     # Existing booking fingerprints use the legacy dataclass repr. Preserve it.
     weight_band: WeightBand | None = field(default=None, repr=False)
     weight_kg: str | None = field(default=None, repr=False)
+    declared_volume_ml: int | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,8 +16,11 @@
   fingerprints remain byte-compatible. SQL freezes confirmed weight facts and financial terms.
 - Holds retain actor/client replay and existing inventory transaction. Weighted provenance
   pins raw mass, declarations and price confirmation; binding rejects changed facts without
-  consuming another request. Public fresh weight-priced holds are blocked by absent volume
-  policy; a completed hold replay remains readable and creates no new permission.
+  consuming another request. Per-line occupied volume participates in both declaration and
+  command fingerprints; the server sum must match the raw hold volume. Missing/partial volume
+  fails closed for fresh customer holds. Completed replay precedes current validation and
+  cannot extend expiry, add debits or create another manifest. Omitted additive volume retains
+  pre-volume fingerprint bytes. No external effect is added.
 - No extra payment/provider, broker or external side effect; later physical observations
   retain existing idempotency/evidence and cannot reprice. See
   [full contract and validation](CM_P0_03_WEIGHT_PRICING.md).

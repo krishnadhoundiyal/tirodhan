@@ -8,8 +8,10 @@ This supersedes flat pricing for newly quoted work after explicit weight-policy 
 Historical quotes, Payment/Attempt/Refund and collection commitments retain their authority.
 The earlier CM-P0-02 standard mass-envelope recommendation remains an unimplemented proposal;
 the approved mass source is now the customer's configured per-line weight declaration.
-**There is still no approved source for physical volume. New weight-priced customer holds
-are explicitly blocked until that separate policy and its provenance are implemented.**
+The volume follow-up uses an explicit whole-line occupied-volume declaration alongside
+weight in existing item selection. The server sums it, binds the line facts through hold
+and booking, and retains the existing manifest and physical capacity checks. No extra
+policy, configuration table or service is needed.
 
 ## Manager configuration
 
@@ -65,6 +67,7 @@ declared_quantity: positive integer | null = null
 weight_band: "BELOW_B" | "B_TO_T" | "ABOVE_T" | null = null
 weight_kg: decimal string | null = null
 declared_weight_grams: positive integer | null = null
+declared_volume_ml: positive integer | null = null  # whole-line occupied transport volume
 ```
 
 Legacy null selection fields preserve old command bodies. Under an adopted weight policy,
@@ -143,8 +146,8 @@ Both endpoints require an authenticated current CUSTOMER. Responses are private/
 policy_id: UUID
 policy_revision: positive integer
 confirmation_freshness: "CURRENT_POLICY_REVISION"
-live_customer_holds_available: false
-hold_blocker: "PHYSICAL_VOLUME_POLICY_REQUIRED"
+live_customer_holds_available: true
+hold_blocker: null
 ```
 
 `POST /v1/customer/collection-quotes` accepts only
@@ -157,6 +160,7 @@ and returns:
 ```text
 items: ValidatedItem[]                 # band required; declared_weight_grams resolved
 total_weight_grams: integer
+total_volume_ml: integer | null        # null if any selected line lacks a declaration
 minimum_amount_minor: integer          # X
 maximum_amount_minor: integer          # Y
 total_amount_minor: integer            # computed, rounded server total
@@ -168,8 +172,8 @@ confirmation: {
 }
 confirmation_freshness: "CURRENT_POLICY_REVISION"
 rounding: "HALF_UP_MINOR_UNIT"
-live_customer_holds_available: false
-hold_blocker: "PHYSICAL_VOLUME_POLICY_REQUIRED"
+live_customer_holds_available: boolean # true when all line volumes are valid/present
+hold_blocker: "ITEM_VOLUME_DECLARATIONS_REQUIRED" | null
 ```
 
 This POST is a pure query: no CollectionRequest, Payment, hold, route task, outbox or
@@ -183,9 +187,10 @@ string detail, including `WEIGHT_BAND_REQUIRED`, `NUMERICAL_WEIGHT_MUST_EXCEED_T
 `DECLARED_WEIGHT_MISMATCH` and `AGGREGATE_WEIGHT_OUT_OF_RANGE`. Neither endpoint accepts
 a caller-supplied total or price override.
 
-Customer Mobile sequence: load the catalogue and current policy; collect one band per line
-and a kg string only for ABOVE_T; submit policy identity/revision plus the declarations to
-the quote endpoint; display the returned normalized weights, aggregate and total before
+Customer Mobile sequence: load the catalogue and current policy; collect one band and the
+whole-line occupied volume per line, with a kg string only for ABOVE_T; submit policy
+identity/revision plus the declarations to the quote endpoint; display the returned normalized
+weights, volume aggregates and price before
 confirmation. Preserve the exact validated declaration strings and confirmation. Any policy
 or declaration conflict requires refreshing/reviewing the quote. While
 `live_customer_holds_available=false`, show the explicit availability blocker and do not
@@ -242,19 +247,39 @@ changes with unchanged aggregate grams. The once-reserved mass/volume copy to Ro
 The regional safety percentage is applied exactly once to each independent raw physical input
 using integer round-up; pricing always uses the unpadded customer-declared weight.
 
-The existing independent positive volume input is retained by that operational primitive;
-it is never inferred from mass or item names. Tests exercise it only with explicitly synthetic
-operational volume. **New HTTP customer holds under adopted weight pricing return
-409 PHYSICAL_VOLUME_POLICY_REQUIRED, even if a caller supplies positive volume.** This gate
-runs after completed hold replay, preserving durable recovery. No production bypass flag is added.
+The catalogue and previous selections have no physical dimensions or volume. Category,
+quantity and weight cannot uniquely determine occupied transport volume. The minimal input
+is therefore `declared_volume_ml` on each existing selected line, alongside the weight band
+or numerical weight. It describes **the occupied space for that line's entire quantity,
+including packaging**, not material displacement. Mobile may display litres (1 L = 1000 ml)
+and must send exact positive integer millilitres; it must not infer density or use a default.
+This adds one declaration field, without dimension/shape assumptions or new master data.
+
+The server sums all line volumes, without multiplying quantity. Each value and aggregate
+must be <= 2,147,483,647 (the existing routing input representation). Unknown lines never
+count as zero. Price-only previews may omit volume and return a null total and the explicit
+`ITEM_VOLUME_DECLARATIONS_REQUIRED` readiness blocker. Fresh HTTP customer holds require
+complete volume declarations and reject missing/partial volume with that 409 code.
+`PHYSICAL_VOLUME_POLICY_REQUIRED` is removed: valid declarations supply the missing input.
+
+Send the quote's `total_volume_ml` as the hold's existing `volume_ml`, and its normalized
+`total_weight_grams` as `mass_g`. The server independently checks both. Mismatched volume
+returns `409 HOLD_DECLARED_VOLUME_MISMATCH`; changed item volumes invalidate confirmation,
+even if the total volume and weight-based price stay the same. The declaration fingerprint
+also binds each volume at booking. Each booked item stores its immutable raw volume;
+customer booking and detail responses expose it. The manifest copies the hold's once-padded
+volume unchanged. Weight remains the only price input.
+
+Completed hold/booking replay still precedes current configuration, freshness and declaration
+validation. Omitted additive volume preserves historical fingerprints and null snapshots;
+no old volume is invented. Existing trusted operational holds retain their independent
+explicit-volume interface; the HTTP customer path always requires line declarations.
 Confirmed weight-priced HTTP booking also always requires a matching reservation, including
 when orchestration registration is disabled, so the legacy booking route cannot bypass this gate.
 
-The outstanding product/Operations decision is the independent source of occupied transport
-volume: customer size declaration, calibrated collection/category envelope, or measured operational
-assessment; its numeric values, eligibility, versioning/provenance and mismatch handling must be
-approved and implemented before removing the gate. A density conversion or placeholder is not
-authorized. Vehicle mass/volume limits and independent operational route validation are unchanged.
+Vehicle mass/volume limits and independent operational route validation are unchanged.
+Customer declarations are planning inputs; later observed physical loads use the existing
+observation, safety-hold and Operations recovery workflow. No automatic surcharge is added.
 
 Later ObservePhysicalLoad appends evidence for effective operational mass/volume. It cannot
 rewrite original band/declared grams, quote, Payment or refund, and never authorizes an extra
@@ -269,5 +294,11 @@ New code requires migration to head first. Empty-feature downgrade preserves his
 any retained policy (including drafts) or weight provenance refuses lossy downgrade.
 Disablement does not erase debt or custody.
 
-Source and tests are listed in [CM_P0_03_VALIDATION.md](CM_P0_03_VALIDATION.md). No Azure
+Follow-up migration `0038_item_volume` adds only nullable `declared_volume_ml` on existing
+booking items, positive/range checks and deferred complete/bounded aggregation validation.
+Existing item immutability covers volume. Populated volume refuses lossy downgrade; historical
+nulls are retained. Upgrade to head before deploying this writer.
+
+Original increment evidence is in [CM_P0_03_VALIDATION.md](CM_P0_03_VALIDATION.md);
+volume follow-up evidence is in [CM_P0_03_VOLUME_VALIDATION.md](CM_P0_03_VOLUME_VALIDATION.md). No Azure
 resources, queues, cache, services, runtime AI, frontend changes or production flag activation.

@@ -116,4 +116,9 @@ async def legacy_financial_fixture(factory):
 def pre_weight_item_snapshot(row):
     """Old financial round trips omit only explicitly unknown additive provenance."""
     assert row.get("weight_band") is None and row.get("weight_kg") is None
-    return {key: value for key, value in row.items() if key not in {"weight_band", "weight_kg"}}
+    assert row.get("declared_volume_ml") is None
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"weight_band", "weight_kg", "declared_volume_ml"}
+    }

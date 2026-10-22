@@ -18,6 +18,7 @@ from tirodhan.modules.business_admin.weight_contracts import (
 from tirodhan.modules.business_admin.weight_pricing import (
     WeightPricingConflict,
     active_policy,
+    declared_volume,
     policy_fields,
 )
 from tirodhan.modules.collection_requests.ports import (
@@ -71,6 +72,7 @@ async def post_quote(
             raise PricingNotConfiguredError("ACTIVE_WEIGHT_PRICING_POLICY_REQUIRED")
         if (body.policy_id, body.policy_revision) != (facts.policy_id, facts.policy_revision):
             raise WeightPricingConflict("WEIGHT_POLICY_CHANGED_REVIEW_DECLARATIONS")
+        volume = declared_volume(quote.declared_items)
         return WeightQuoteResponse(
             items=[
                 ValidatedWeightItem.model_validate(
@@ -80,11 +82,15 @@ async def post_quote(
                         declared_weight_grams=i.declared_weight_grams,
                         weight_band=i.weight_band,
                         weight_kg=i.weight_kg,
+                        declared_volume_ml=i.declared_volume_ml,
                     )
                 )
                 for i in quote.declared_items
             ],
             total_weight_grams=facts.total_weight_grams,
+            total_volume_ml=volume,
+            live_customer_holds_available=volume is not None,
+            hold_blocker=None if volume is not None else "ITEM_VOLUME_DECLARATIONS_REQUIRED",
             minimum_amount_minor=facts.minimum_amount_minor,
             maximum_amount_minor=facts.maximum_amount_minor,
             total_amount_minor=quote.total_amount_minor,

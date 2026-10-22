@@ -83,6 +83,7 @@ class CollectionRequestItemResponse(BaseModel):
     pricing_rule_version: str | None
     weight_band: str | None = None
     weight_kg: str | None = None
+    declared_volume_ml: int | None = None
 
 
 class CollectionRequestResponse(BaseModel):
@@ -116,6 +117,7 @@ def collection_request_response(result: CollectionRequestResult) -> CollectionRe
                 pricing_rule_version=item.pricing_rule_version,
                 weight_band=item.weight_band,
                 weight_kg=item.weight_kg,
+                declared_volume_ml=item.declared_volume_ml,
             )
             for item in result.items
         ],
@@ -168,6 +170,7 @@ async def post_collection_request(
                         declared_weight_grams=item.declared_weight_grams,
                         weight_band=item.weight_band,
                         weight_kg=item.weight_kg,
+                        declared_volume_ml=item.declared_volume_ml,
                     )
                     for item in body.items
                 ),

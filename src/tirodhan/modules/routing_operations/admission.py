@@ -712,6 +712,7 @@ async def bind_reservation(
                     i.declared_weight_grams,
                     type_cast(WeightBand, i.weight_band),
                     i.weight_kg,
+                    i.declared_volume_ml,
                 )
                 for i in items
             )
