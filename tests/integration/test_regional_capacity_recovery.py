@@ -680,15 +680,17 @@ async def test_migration_round_trip_preserves_financial_schema(database_session_
     from test_payment_preparation import assert_readiness_schema
 
     factory = database_session_factory
-    # Exercise this migration's own populated legacy boundary. Later immutable
-    # administration history deliberately prevents lossy downgrade after adoption.
+    # Populate legacy-shaped financial facts before downgrading. Current booking
+    # code requires post-0037 pricing schema even when it quotes a legacy flat fee.
+    # The resulting facts have no adopted weight policy or volume declarations and
+    # still traverse the populated 0032 -> 0030 -> head migration round trip.
+    user = await create_user(factory)
+    context = await create_context(factory, user.user_id)
+    await create_request(factory, user.user_id, context.serviceability_context_id)
     await asyncio.to_thread(
         command.downgrade, Config("alembic.ini"), "0032_projected_slot_allowances"
     )
     try:
-        user = await create_user(factory)
-        context = await create_context(factory, user.user_id)
-        await create_request(factory, user.user_id, context.serviceability_context_id)
         await asyncio.to_thread(
             command.downgrade, Config("alembic.ini"), "0030_admission_certificates"
         )
