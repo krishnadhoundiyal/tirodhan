@@ -1,5 +1,27 @@
 # Idempotency
 
+## CM-P0-03 weight pricing
+
+- Manager policy commands reuse `business.config:<actor>` + client UUID/fingerprint, live
+  role checks, expected immutable revision and SERIALIZABLE transaction. Policy, revision,
+  adoption, outbox and result commit together. A DB exclusive advisory lock fences policy
+  writes against shared booking/hold confirmation, including first activation. Unique active
+  configuration and retained history arbitrate competing identities/versions.
+- Customer price POST is a pure authenticated query: no mutation/provider call or command
+  record. Same declarations and current revision return the same exact arithmetic result.
+  Stateless confirmation binds policy/revision, normalized ordered declarations and amount.
+- Booking retains customer/client identity and atomic request/items/Payment/bind/result.
+  Confirmation under the shared DB configuration lock rejects stale/mismatched prices. Exact
+  committed replay precedes recalculation and survives policy retirement/expiry; legacy
+  fingerprints remain byte-compatible. SQL freezes confirmed weight facts and financial terms.
+- Holds retain actor/client replay and existing inventory transaction. Weighted provenance
+  pins raw mass, declarations and price confirmation; binding rejects changed facts without
+  consuming another request. Public fresh weight-priced holds are blocked by absent volume
+  policy; a completed hold replay remains readable and creates no new permission.
+- No extra payment/provider, broker or external side effect; later physical observations
+  retain existing idempotency/evidence and cannot reprice. See
+  [full contract and validation](CM_P0_03_WEIGHT_PRICING.md).
+
 ## Recovery delivery generations (0036)
 
 - Business key: actual RecoveryAssignment/ACTIVATE or RiderReplacement/RECOMMEND plus a

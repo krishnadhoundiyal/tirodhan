@@ -1,5 +1,12 @@
 # Domain Model
 
+CM-P0-03: WeightPricingPolicy is a typed manager master with concrete immutable revisions.
+Customer bands resolve conservative per-line total-quantity grams; BookingWeightQuote links
+immutable normalized booking items and original price to that policy revision. A stateless
+display quote has no financial/capacity lifecycle. PhysicalLoadObservation remains separate
+evidence and cannot reprice a booking. Volume remains a separately required, unapproved input
+for new customer holds. See [semantics](CM_P0_03_WEIGHT_PRICING.md).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

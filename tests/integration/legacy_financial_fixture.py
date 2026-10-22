@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from test_rider_dispatch import create_fixture
 
 from tirodhan.db.values import new_uuid7, utc_now
-from tirodhan.modules.collection_requests.models import CollectionRequest, CollectionRequestItem
+from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.payments.models import Payment, PaymentAttempt
 
 
@@ -74,16 +74,22 @@ async def legacy_financial_fixture(factory):
     await create_fixture(factory, group_count=2, pickups_per_group=1)
     async with factory() as session, session.begin():
         for request in await session.scalars(select(CollectionRequest)):
-            session.add(
-                CollectionRequestItem(
-                    request_id=request.request_id,
-                    item_category_code="TEST_LEGACY",
-                    declared_quantity=1,
-                    quoted_line_amount_minor=request.quoted_amount_minor,
-                    currency=request.currency,
-                    pricing_rule_version="legacy-fixture-1",
-                    created_at=utc_now(),
-                )
+            # Write only columns that existed at this migration boundary. Current ORM
+            # item metadata includes nullable post-0037 declaration provenance.
+            await session.execute(
+                text(
+                    "INSERT INTO collection_request_item(request_item_id,request_id,"
+                    "item_category_code,declared_quantity,quoted_line_amount_minor,currency,"
+                    "pricing_rule_version,created_at) VALUES(:item,:request,'TEST_LEGACY',1,"
+                    ":amount,:currency,'legacy-fixture-1',:now)"
+                ),
+                {
+                    "item": new_uuid7(),
+                    "request": request.request_id,
+                    "amount": request.quoted_amount_minor,
+                    "currency": request.currency,
+                    "now": utc_now(),
+                },
             )
             payment = Payment(
                 request_id=request.request_id,
@@ -105,3 +111,9 @@ async def legacy_financial_fixture(factory):
             session.add(attempt)
             await session.flush()
             payment.successful_attempt_id = attempt.payment_attempt_id
+
+
+def pre_weight_item_snapshot(row):
+    """Old financial round trips omit only explicitly unknown additive provenance."""
+    assert row.get("weight_band") is None and row.get("weight_kg") is None
+    return {key: value for key, value in row.items() if key not in {"weight_band", "weight_kg"}}

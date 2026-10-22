@@ -1,5 +1,11 @@
 # Project Context
 
+CM-P0-03 approves configurable per-line weight bands and exact bounded nonlinear pricing.
+Version-bound customer quotation and immutable booking declarations use existing manager,
+booking and financial authority. No rates/thresholds are seeded. Physical volume remains
+unapproved; new weight-priced customer holds explicitly fail closed. See
+[contract and remaining gate](CM_P0_03_WEIGHT_PRICING.md).
+
 Recovery notifications now have durable generations and separate publication claims.
 Scheduler scans reuse outstanding requests; operational retries atomically schedule the
 next generation, while broker redelivery keeps the same identity. Production remains

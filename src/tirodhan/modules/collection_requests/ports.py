@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
+
+from tirodhan.modules.business_admin.weight_contracts import WeightBand, WeightQuoteFacts
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,6 +12,9 @@ class DeclaredRequestItem:
     item_category_code: str
     declared_quantity: int | None = None
     declared_weight_grams: int | None = None
+    # Existing booking fingerprints use the legacy dataclass repr. Preserve it.
+    weight_band: WeightBand | None = field(default=None, repr=False)
+    weight_kg: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +28,8 @@ class PricingQuote:
     total_amount_minor: int
     currency: str
     items: tuple[QuotedRequestItem, ...]
+    declared_items: tuple[DeclaredRequestItem, ...] | None = None
+    weight_facts: WeightQuoteFacts | None = None
 
 
 class PricingPort(Protocol):

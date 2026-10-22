@@ -96,6 +96,8 @@ class CollectionRequestItem(Base):
     display_name_snapshot: Mapped[str | None] = mapped_column(String(200), nullable=True)
     declared_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     declared_weight_grams: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    weight_band: Mapped[str | None] = mapped_column(String(16))
+    weight_kg: Mapped[str | None] = mapped_column(String(20))
     quoted_line_amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
     pricing_rule_version: Mapped[str | None] = mapped_column(String(100), nullable=True)

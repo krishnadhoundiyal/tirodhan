@@ -498,6 +498,8 @@ async def test_migration_roundtrip_preserves_financial_history_and_schema(databa
         await cancel(factory, result.request)
 
     async def history():
+        from legacy_financial_fixture import pre_weight_item_snapshot
+
         async with factory() as session:
             snapshots = {}
             for table in (
@@ -513,6 +515,8 @@ async def test_migration_roundtrip_preserves_financial_history_and_schema(databa
             ):
                 rows = list(await session.scalars(text(f"SELECT to_jsonb(t) FROM {table} t")))
                 assert rows, table
+                if table == "collection_request_item":
+                    rows = [pre_weight_item_snapshot(row) for row in rows]
                 snapshots[table] = sorted(json.dumps(row, sort_keys=True) for row in rows)
             return snapshots
 

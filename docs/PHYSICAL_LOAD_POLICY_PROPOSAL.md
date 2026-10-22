@@ -1,5 +1,11 @@
 # Physical load for Customer Mobile: proposed V1 policy
 
+CM-P0-03 now approves configured customer item-weight bands as the mass source and
+implements version-bound nonlinear pricing. The standard mass-envelope recommendation
+below is historical and remains unimplemented. Independent physical volume is still an
+open decision and blocks new weight-priced customer holds; no density or volume default
+has been approved. See [the current contract](CM_P0_03_WEIGHT_PRICING.md).
+
 Assessment: 22 October 2026, CM-P0-02. **Recommendation for product-owner approval;
 not an approved business policy or implemented load-class feature.** No mass/volume
 values, densities, customer size questions or extra charges are introduced here.

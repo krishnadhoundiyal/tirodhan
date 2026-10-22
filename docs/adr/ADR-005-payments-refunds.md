@@ -1,5 +1,16 @@
 # ADR-005: Payments and Refunds
 
+## Approved CM-P0-03 pricing — 22 October 2026
+
+The implementation request approves customer-selected, manager-configured item weight bands
+and normalized bounded nonlinear pricing through existing PricingPort/manager conventions.
+Integer declared grams and exact rational calculation produce server-owned INR minor units.
+Version/declaration-bound price confirmation precedes atomic booking; historical amounts and
+payment/refund/provider authority remain unchanged. Wmax saturates price, not physical eligibility.
+No numerical rates/bands are seeded; independent physical volume remains an explicit customer
+hold blocker. This supersedes the earlier flat-fee-only restriction for newly quoted work after
+activation. See [precise policy and transition](../CM_P0_03_WEIGHT_PRICING.md).
+
 **Status:** Accepted; production provider Razorpay (Phase 1V)
 
 ## Decision

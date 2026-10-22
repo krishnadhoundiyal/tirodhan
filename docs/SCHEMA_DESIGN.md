@@ -1,5 +1,18 @@
 # Schema Design
 
+## Migration 0037 — declared weight pricing
+
+`weight_pricing_policy` stores typed bands, labels/unit, integer price/weight parameters,
+numeric(18,6) positive curvature and activation. A partial unique index selects at most one
+active policy; database-maintained adoption prevents accidental return to flat charging.
+`weight_pricing_policy_revision` reuses concrete FK/audit capture. `booking_weight_quote`
+has a real request FK and composite policy-revision FK, integer aggregate/X/Y and fingerprint.
+Nullable item band/numerical fields and reservation raw-mass/declaration/quote fingerprints
+preserve unknown historical values. SQL protects weight booking terms before initiation and
+checks item totals/Payment at commit. Existing financial/custody constraints are unchanged.
+Empty-feature rollback is supported; populated adoption refuses lossy downgrade. No seeded
+production values. See [contract and rollout](CM_P0_03_WEIGHT_PRICING.md).
+
 ## Migration 0036 — recovery work notification generations
 
 `recovery_work_request` references its actual OutboxEvent and exactly one RecoveryAssignment

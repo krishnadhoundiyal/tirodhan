@@ -1,5 +1,12 @@
 # ER Diagram
 
+CM-P0-03 adds WeightPricingPolicy -> WeightPricingPolicyRevision -> BookingWeightQuote,
+with a composite policy ID/revision FK and a one-to-one CollectionRequest provenance FK.
+Existing item/request, reservation/binding, manifest, Payment and Refund relationships
+remain. Item band/numerical facts and reservation fingerprints add provenance; no generic
+polymorphic table or independent quote service is introduced. See
+[schema and semantics](CM_P0_03_WEIGHT_PRICING.md).
+
 Current commercial policy (19 October 2026): projection-backed slot allowances and atomic holds
 replace the customer per-booking routing feasibility prerequisite. The old customer preparation
 API/worker are retired. No trained model or new infrastructure is introduced; operational route

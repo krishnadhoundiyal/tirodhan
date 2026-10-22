@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .weight_contracts import WeightPolicyFields
+
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 Code = Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_\-]+$")]
 
@@ -62,6 +64,10 @@ class PriceEdit(Edit):
     active: bool
 
 
+class WeightPriceEdit(Edit, WeightPolicyFields):
+    operation: Literal["WEIGHT_PRICING_POLICY"] = "WEIGHT_PRICING_POLICY"
+
+
 class RiderEdit(Edit):
     operation: Literal["RIDER_PROFILE"] = "RIDER_PROFILE"
     status: Literal["ACTIVE", "SUSPENDED"]
@@ -114,6 +120,7 @@ BusinessCommand = Annotated[
     | ArtworkEdit
     | MediaRegister
     | PriceEdit
+    | WeightPriceEdit
     | RiderEdit
     | RiderRoleEdit
     | ReceivingEdit
