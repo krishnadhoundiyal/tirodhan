@@ -60,8 +60,8 @@ document.getElementById('timing').textContent=`${D.execution.elapsed_seconds.toF
 document.getElementById('timing-table').innerHTML=table(['Recorded stage','Elapsed (s)'],Object.entries(timing).map(([k,v])=>[esc(k.replaceAll('_',' ')),Number(v).toFixed(3)]));
 const finite=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon);
 const allpts=[...D.bookings,D.facility];const latmin=Math.min(...allpts.map(b=>b.latitude))-.006,latmax=Math.max(...allpts.map(b=>b.latitude))+.006,lonmin=Math.min(...allpts.map(b=>b.longitude))-.008,lonmax=Math.max(...allpts.map(b=>b.longitude))+.008;
-const fac=D.facility;const latFactor=Math.cos(((latmin+latmax)/2)*Math.PI/180),W=1220,H=785,left=72,right=112,top=45,bottom=55,w=W-left-right,h=H-top-bottom;
-const ex=(lonmax-lonmin)*latFactor,ey=latmax-latmin,sc=Math.min(w/ex,h/ey),xo=left+(w-ex*sc)/2,yo=top+(h-ey*sc)/2;
+const fac=D.facility;const latFactor=Math.cos(((latmin+latmax)/2)*Math.PI/180),W=1220,H=785,left=72,right=112,mapTop=45,bottom=55,w=W-left-right,h=H-mapTop-bottom;
+const ex=(lonmax-lonmin)*latFactor,ey=latmax-latmin,sc=Math.min(w/ex,h/ey),xo=left+(w-ex*sc)/2,yo=mapTop+(h-ey*sc)/2;
 const xy=p=>[xo+(p.longitude-lonmin)*latFactor*sc,yo+(latmax-p.latitude)*sc];
 function placeSVG(scope,phase){
  const isBefore=scope==='before';const bookList=D.bookings.filter(b=>b.cycle<=(isBefore?D.cycle-1:D.cycle));const active=assigned(phase);
