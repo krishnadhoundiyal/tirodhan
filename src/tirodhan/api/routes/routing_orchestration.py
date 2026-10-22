@@ -269,6 +269,7 @@ async def slot_hold_status(
         return dict(
             reservation_id=row.reservation_id,
             admission_basis=row.admission_basis,
+            bound_request_id=row.request_id,
             bookable=row.request_id is None and utc_now() <= book_by,
             expires_at=row.expires_at,
             book_by=book_by,
