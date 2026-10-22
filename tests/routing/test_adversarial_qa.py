@@ -1,27 +1,23 @@
-import pytest
-from hypothesis import given, settings, strategies as st
 from uuid import UUID
-from dataclasses import replace
+
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from tirodhan.modules.planning.routing.contracts import (
-    RoutingProblem,
-    RoutingStop,
-    StopKind,
-    TimeWindow,
-    CargoLot,
-    RouteProposal,
+    OptimizerEngine,
     ProposedRoute,
-    OptimizerEngine
+    RouteProposal,
 )
-from tirodhan.modules.planning.routing.validation import validate_proposal, RoutingValidationError
+from tirodhan.modules.planning.routing.validation import RoutingValidationError, validate_proposal
+
 
 def uid(i: int) -> UUID:
     return UUID(int=i)
 
+
 @settings(max_examples=20)
-@given(
-    invalid_sequence=st.booleans()
-)
+@given(invalid_sequence=st.booleans())
 def test_adversarial_route_validation_with_fixture(routing_problem, invalid_sequence):
     problem = routing_problem
     v = problem.vehicles[0]
@@ -39,10 +35,7 @@ def test_adversarial_route_validation_with_fixture(routing_problem, invalid_sequ
     else:
         stop_seq = tuple(eligible_stops)
 
-    leg1 = ProposedRoute(
-        vehicle_id=v.vehicle_id,
-        stop_ids=stop_seq
-    )
+    leg1 = ProposedRoute(vehicle_id=v.vehicle_id, stop_ids=stop_seq)
 
     proposal = RouteProposal(
         problem_id=problem.problem_id,
@@ -52,7 +45,7 @@ def test_adversarial_route_validation_with_fixture(routing_problem, invalid_sequ
         engine=OptimizerEngine.VROOM,
         engine_version="1.15.0",
         routes=(leg1,),
-        unserved_stop_ids=()
+        unserved_stop_ids=(),
     )
 
     try:
@@ -64,9 +57,7 @@ def test_adversarial_route_validation_with_fixture(routing_problem, invalid_sequ
 
 
 @settings(max_examples=20)
-@given(
-    time_shift=st.integers(min_value=-1000, max_value=1000)
-)
+@given(time_shift=st.integers(min_value=-1000, max_value=1000))
 def test_adversarial_route_time_windows(routing_problem, time_shift):
     problem = routing_problem
     v = problem.vehicles[0]
@@ -87,10 +78,7 @@ def test_adversarial_route_time_windows(routing_problem, time_shift):
     # Drop one stop (e.g. drop a discharge stop while keeping the pickup)
     stop_seq = tuple(eligible_stops[:-1])
 
-    leg1 = ProposedRoute(
-        vehicle_id=v.vehicle_id,
-        stop_ids=stop_seq
-    )
+    leg1 = ProposedRoute(vehicle_id=v.vehicle_id, stop_ids=stop_seq)
 
     proposal = RouteProposal(
         problem_id=problem.problem_id,
@@ -100,7 +88,7 @@ def test_adversarial_route_time_windows(routing_problem, time_shift):
         engine=OptimizerEngine.VROOM,
         engine_version="1.15.0",
         routes=(leg1,),
-        unserved_stop_ids=()
+        unserved_stop_ids=(),
     )
 
     try:
