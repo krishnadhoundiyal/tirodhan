@@ -1,38 +1,40 @@
-import pytest
-from hypothesis import given, strategies as st, settings, HealthCheck
-from uuid import UUID
 from datetime import datetime, timezone
-import math
+from uuid import UUID
+
+import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from tirodhan.modules.planning.routing.contracts import (
-    RoutingProblem,
-    VehicleSnapshot,
-    RoutingStop,
-    TimeWindow,
-    StopKind,
     CargoLot,
-    RouteProposal,
-    ProposedRoute,
+    ReceivingPointSnapshot,
     ResourceKind,
+    RouteProposal,
     RoutingLimits,
-    ReceivingPointSnapshot
+    RoutingProblem,
+    RoutingStop,
+    StopKind,
+    TimeWindow,
+    VehicleSnapshot,
 )
-from tirodhan.modules.planning.routing.validation import validate_proposal, RoutingValidationError
+from tirodhan.modules.planning.routing.validation import RoutingValidationError, validate_proposal
+
 
 def uid(i: int) -> UUID:
     return UUID(int=i)
+
 
 # Strategies for property-based adversarial testing
 time_windows = st.builds(
     TimeWindow,
     start=st.integers(min_value=0, max_value=86400),
-    end=st.integers(min_value=0, max_value=86400)
+    end=st.integers(min_value=0, max_value=86400),
 ).filter(lambda tw: tw.start <= tw.end)
 
 capacities = st.tuples(
-    st.integers(min_value=0, max_value=1000),
-    st.integers(min_value=0, max_value=1000)
+    st.integers(min_value=0, max_value=1000), st.integers(min_value=0, max_value=1000)
 )
+
 
 @st.composite
 def adversarial_routing_problem(draw):
@@ -40,19 +42,19 @@ def adversarial_routing_problem(draw):
     vehicles = tuple(
         VehicleSnapshot(
             vehicle_id=uid(i),
-            rider_id=uid(100+i),
+            rider_id=uid(100 + i),
             state_version=1,
             resource_kind=ResourceKind.COMMITTED,
             operating_shift_id=None,
             matrix_id=uid(100),
-            start_node_id=uid(200+i),
-            end_node_id=uid(200+i),
+            start_node_id=uid(200 + i),
+            end_node_id=uid(200 + i),
             available_at=draw(st.integers(min_value=0, max_value=1000)),
             shift=draw(time_windows),
             capacity=draw(capacities),
             initial_cargo=(),
             protected_prefix=(),
-            breaks=()
+            breaks=(),
         )
         for i in range(1, num_vehicles + 1)
     )
@@ -61,13 +63,13 @@ def adversarial_routing_problem(draw):
     lots = tuple(
         CargoLot(
             lot_id=uid(1000 + i),
-            collection_request_id=uid(2000+i),
+            collection_request_id=uid(2000 + i),
             quantity=draw(st.integers(min_value=1, max_value=50)),
             quantity_unit="kg",
             unit_load=draw(capacities),
             authorized_receiving_point_ids=(uid(5000),),
             discharge_deadline=draw(st.integers(min_value=0, max_value=100000)),
-            pickup_stop_id=uid(3000 + i)
+            pickup_stop_id=uid(3000 + i),
         )
         for i in range(1, num_lots + 1)
     )
@@ -78,7 +80,7 @@ def adversarial_routing_problem(draw):
             node_id=uid(6000),
             state_version=1,
             available=True,
-            opening_windows=(TimeWindow(0, 100000),)
+            opening_windows=(TimeWindow(0, 100000),),
         ),
     )
 
@@ -96,7 +98,7 @@ def adversarial_routing_problem(draw):
                 required=draw(st.booleans()),
                 eligible_vehicle_ids=tuple(v.vehicle_id for v in vehicles),
                 bound_vehicle_id=None,
-                receiving_point_id=None
+                receiving_point_id=None,
             )
         )
 
@@ -113,7 +115,7 @@ def adversarial_routing_problem(draw):
                 required=True,
                 eligible_vehicle_ids=tuple(v.vehicle_id for v in vehicles),
                 bound_vehicle_id=None,
-                receiving_point_id=uid(5000)
+                receiving_point_id=uid(5000),
             )
         )
 
@@ -125,11 +127,11 @@ def adversarial_routing_problem(draw):
         epoch=datetime.now(timezone.utc),
         load_dimensions=("kg", "L"),
         limits=RoutingLimits(100, 100, 10, 1),
-        matrices=(), # We won't test solving here, only validation logic resilience
+        matrices=(),  # We won't test solving here, only validation logic resilience
         vehicles=vehicles,
         lots=lots,
         stops=tuple(stops),
-        receiving_points=receiving_points
+        receiving_points=receiving_points,
     )
 
 
@@ -145,11 +147,12 @@ def test_validation_resilience_to_adversarial_inputs(problem):
         engine="VROOM",
         engine_version="1.0",
         routes=(),
-        unserved_stop_ids=tuple(s.stop_id for s in problem.stops)
+        unserved_stop_ids=tuple(s.stop_id for s in problem.stops),
     )
 
-    # The validation function should either pass (if proposal somehow valid, though unlikely as empty)
-    # or raise RoutingValidationError, but NEVER crash with other exceptions like KeyError, ValueError, etc.
+    # The validation function should either pass (if proposal somehow valid)
+    # or raise RoutingValidationError, but NEVER crash with other exceptions.
+
     try:
         validate_proposal(problem, proposal)
     except RoutingValidationError:
