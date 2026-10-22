@@ -121,11 +121,15 @@ class Gateway(Orders):
 async def harness(database_session_factory, database_engine, request):
     factory = database_session_factory
     legacy = getattr(request, "param", None) == "PRE_ADMINISTRATION"
+    # Create the legacy-shaped booking while the current application schema exists.
+    # The booking contains no weight policy or volume declarations, so it can then
+    # be migrated across the pre-administration boundary without invoking today's
+    # pricing code against a database predating migration 0037.
+    user, result = await booking(factory)
     if legacy:
         await asyncio.to_thread(
             migration_command.downgrade, Config("alembic.ini"), "0032_projected_slot_allowances"
         )
-    user, result = await booking(factory)
     async with factory() as session, session.begin():
         session.add(UserRole(user_id=user.user_id, role_code="MANAGER", granted_at=utc_now()))
     gateway = Gateway(database_engine)

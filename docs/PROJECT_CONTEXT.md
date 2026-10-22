@@ -1,5 +1,12 @@
 # Project Context
 
+CM-P0-03 approves configurable per-line weight bands and exact bounded nonlinear pricing.
+Version-bound customer quotation and immutable booking declarations use existing manager,
+booking and financial authority. No rates/thresholds are seeded. Customers declare occupied
+volume per selected line alongside weight; the server sums it and binds the declarations to
+hold, booking and manifest. Missing volume fails closed. See
+[contract](CM_P0_03_WEIGHT_PRICING.md#holdmanifest-consistency-and-the-volume-block).
+
 Recovery notifications now have durable generations and separate publication claims.
 Scheduler scans reuse outstanding requests; operational retries atomically schedule the
 next generation, while broker redelivery keeps the same identity. Production remains

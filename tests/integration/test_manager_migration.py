@@ -5,9 +5,9 @@ import asyncio
 import pytest
 from alembic import command
 from alembic.config import Config
+from legacy_financial_fixture import legacy_financial_fixture
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from test_collection_payment import create_context, create_request, create_user
 from test_manager_business import change, group, manager
 from test_payment_preparation import assert_readiness_schema
 
@@ -19,11 +19,8 @@ async def test_manager_upgrade_preserves_populated_financial_facts_and_schema(
 ):
     factory = database_session_factory
     config = Config("alembic.ini")
-    await asyncio.to_thread(command.downgrade, config, "0032_projected_slot_allowances")
     try:
-        user = await create_user(factory)
-        context = await create_context(factory, user.user_id)
-        await create_request(factory, user.user_id, context.serviceability_context_id)
+        await legacy_financial_fixture(factory)
         async with factory() as session:
             before = await session.scalar(
                 text("SELECT jsonb_agg(to_jsonb(p) ORDER BY payment_id) FROM payment p")

@@ -9,6 +9,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import new_uuid7, utc_now
+from tirodhan.modules.business_admin.weight_contracts import WeightQuoteConfirmation
 from tirodhan.modules.collection_requests.models import (
     CollectionRequest,
     CollectionRequestItem,
@@ -122,6 +123,7 @@ class CreateCollectionRequestCommand:
     items: tuple[DeclaredRequestItem, ...]
     payment_expires_at: datetime
     capacity_reservation_id: UUID | None = None
+    confirmed_quote: WeightQuoteConfirmation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +281,21 @@ async def create_collection_request(
             "slot_start": command.slot_start,
             "slot_end": command.slot_end,
             "items": command.items,
+            **(
+                {"volume_selections": [i.declared_volume_ml for i in command.items]}
+                if any(i.declared_volume_ml is not None for i in command.items)
+                else {}
+            ),
+            **(
+                {"weight_selections": [(i.weight_band, i.weight_kg) for i in command.items]}
+                if any(i.weight_band is not None or i.weight_kg is not None for i in command.items)
+                else {}
+            ),
+            **(
+                {"confirmed_quote": command.confirmed_quote.model_dump(mode="json")}
+                if command.confirmed_quote is not None
+                else {}
+            ),
         }
     )
     scope = f"collection-request.create:{command.customer_id}"
@@ -354,6 +371,7 @@ async def create_collection_request(
     # Pricing may eventually be external. It deliberately runs without a DB session.
     quote = await pricing.quote(command.items)
     _validate_quote(quote, len(command.items))
+    declared_items = quote.declared_items or command.items
 
     async with session_factory() as session, session.begin():
         claim = await claim_idempotency_record(
@@ -372,6 +390,10 @@ async def create_collection_request(
             return await _load_request_result(
                 session, request_id=replay.resource_id, customer_id=command.customer_id
             )
+
+        from tirodhan.modules.business_admin.weight_pricing import fence_booking_quote
+
+        await fence_booking_quote(session, quote, command.confirmed_quote)
 
         context = await session.scalar(
             select(ServiceabilityContext).where(
@@ -464,12 +486,15 @@ async def create_collection_request(
                 display_name_snapshot=display_names.get(declared.item_category_code),
                 declared_quantity=declared.declared_quantity,
                 declared_weight_grams=declared.declared_weight_grams,
+                weight_band=declared.weight_band,
+                weight_kg=declared.weight_kg,
+                declared_volume_ml=declared.declared_volume_ml,
                 quoted_line_amount_minor=quoted.quoted_line_amount_minor,
                 currency=quote.currency.upper(),
                 pricing_rule_version=quoted.pricing_rule_version,
                 created_at=now,
             )
-            for declared, quoted in zip(command.items, quote.items, strict=True)
+            for declared, quoted in zip(declared_items, quote.items, strict=True)
         )
         payment = Payment(
             payment_id=new_uuid7(),
@@ -481,6 +506,14 @@ async def create_collection_request(
         )
         session.add_all([*request_items, payment])
         await session.flush()
+        if quote.weight_facts is not None:
+            from dataclasses import asdict
+
+            from tirodhan.modules.business_admin.models import BookingWeightQuote
+
+            session.add(
+                BookingWeightQuote(request_id=request.request_id, **asdict(quote.weight_facts))
+            )
         if require_capacity_reservation:
             from tirodhan.modules.routing_operations.admission import bind_reservation
 

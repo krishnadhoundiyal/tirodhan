@@ -51,9 +51,10 @@ from .commands import (
     RiderEdit,
     RiderRoleEdit,
     VehicleEdit,
+    WeightPriceEdit,
 )
 from .history import attribute_change, current_version
-from .models import PickupPrice
+from .models import PickupPrice, WeightPricingPolicy
 
 MODELS: dict[type[Edit], tuple[Any, str]] = {
     GroupEdit: (CatalogueGroup, "group_id"),
@@ -61,6 +62,7 @@ MODELS: dict[type[Edit], tuple[Any, str]] = {
     ArtworkEdit: (CatalogueArtwork, "artwork_id"),
     MediaRegister: (CatalogueMedia, "media_id"),
     PriceEdit: (PickupPrice, "price_id"),
+    WeightPriceEdit: (WeightPricingPolicy, "policy_id"),
     RiderEdit: (RiderProfile, "rider_id"),
     RiderRoleEdit: (UserRole, "user_role_id"),
     ReceivingEdit: (ReceivingPoint, "receiving_point_id"),
@@ -131,6 +133,10 @@ async def execute_business_command(
         if not claim.created:
             raise OperationalInputError("COMMAND_IN_PROGRESS")
         await attribute_change(session, actor_id, command.client_command_id, command.reason)
+        if isinstance(command, (PriceEdit, WeightPriceEdit)):
+            from .weight_pricing import lock_pricing
+
+            await lock_pricing(session, exclusive=True)
         model, key = MODELS[type(command)]
         row = await session.scalar(
             select(model).where(getattr(model, key) == command.resource_id).with_for_update()

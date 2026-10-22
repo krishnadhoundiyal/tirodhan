@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import get_session_factory, require_role
 from tirodhan.db.values import utc_now
+from tirodhan.modules.business_admin.weight_pricing import WeightPricingConflict
 from tirodhan.modules.identity.service import AuthenticatedPrincipal
 from tirodhan.modules.reliability.primitives import IdempotencyKeyConflictError
 from tirodhan.modules.routing_operations.admission import ReserveCapacity
@@ -246,10 +247,19 @@ async def reserve_slot(
             customer_id=actor.user_id,
             command=command,
             expires_at=utc_now() + timedelta(seconds=lifetime * 2),
+            customer_checkout=True,
         )
-    except (OperationalInputError, IdempotencyKeyConflictError, IntegrityError) as error:
+    except (
+        OperationalInputError,
+        WeightPricingConflict,
+        IdempotencyKeyConflictError,
+        IntegrityError,
+    ) as error:
         raise HTTPException(
-            409, str(error) if isinstance(error, OperationalInputError) else "SLOT_HOLD_CONFLICT"
+            409,
+            str(error)
+            if isinstance(error, (OperationalInputError, WeightPricingConflict))
+            else "SLOT_HOLD_CONFLICT",
         ) from None
     return await slot_hold_status(identity, request, actor, factory)
 
@@ -269,6 +279,7 @@ async def slot_hold_status(
         return dict(
             reservation_id=row.reservation_id,
             admission_basis=row.admission_basis,
+            bound_request_id=row.request_id,
             bookable=row.request_id is None and utc_now() <= book_by,
             expires_at=row.expires_at,
             book_by=book_by,

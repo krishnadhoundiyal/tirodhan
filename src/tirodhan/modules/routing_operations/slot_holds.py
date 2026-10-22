@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -13,6 +12,10 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.db.values import utc_now
+from tirodhan.modules.business_admin.weight_contracts import (
+    WeightItemInput,
+    WeightQuoteConfirmation,
+)
 from tirodhan.modules.collection_requests.scheduling import validate_slot
 from tirodhan.modules.reliability.primitives import (
     append_outbox_event,
@@ -32,6 +35,8 @@ from .orchestration_models import CapacityReservation, OperatingRegion, RegionCe
 
 class HoldSlot(ReserveCapacity):
     expected_generation: int = Field(strict=True, ge=1)
+    items: tuple[WeightItemInput, ...] | None = None
+    confirmed_quote: WeightQuoteConfirmation | None = None
 
 
 async def hold_slot(
@@ -41,9 +46,12 @@ async def hold_slot(
     command: HoldSlot,
     expires_at: datetime,
     now: datetime | None = None,
+    customer_checkout: bool = False,
 ) -> UUID:
     try:
-        return await _hold(factory, customer_id, command, expires_at, now or utc_now())
+        return await _hold(
+            factory, customer_id, command, expires_at, now or utc_now(), customer_checkout
+        )
     except DBAPIError as error:
         if getattr(error.orig, "sqlstate", None) in {"40001", "40P01", "23514"}:
             raise OperationalInputError("SLOT_ALLOWANCE_CHANGED_RETRY") from None
@@ -56,8 +64,20 @@ async def _hold(
     command: HoldSlot,
     expires_at: datetime,
     now: datetime,
+    customer_checkout: bool,
 ) -> UUID:
-    fingerprint = hashlib.sha256(command.model_dump_json().encode()).digest()
+    # Preserve the exact legacy wire fingerprint when new optional fields are absent.
+    exclude: dict[str, bool | dict[int, set[str]]] = {
+        name: True for name in ("items", "confirmed_quote") if getattr(command, name) is None
+    }
+    # Omitted volume must not alter pre-volume hold fingerprints, including nested items.
+    if command.items is not None:
+        exclude["items"] = {
+            index: {"declared_volume_ml"}
+            for index, item in enumerate(command.items)
+            if item.declared_volume_ml is None
+        }
+    fingerprint = hashlib.sha256(command.model_dump_json(exclude=exclude).encode()).digest()
     async with factory() as session, session.begin():
         await require_live_role(session, customer_id, "CUSTOMER")
         claim = await claim_idempotency_record(
@@ -73,6 +93,38 @@ async def _hold(
             return claim.record.result_resource_id
         if not claim.created:
             raise OperationalInputError("SLOT_HOLD_IN_PROGRESS")
+        from tirodhan.modules.business_admin.weight_pricing import (
+            confirm_quote,
+            declaration_fingerprint,
+            declared_volume,
+            lock_pricing,
+            quote_in_session,
+            weight_pricing_selected,
+        )
+        from tirodhan.modules.collection_requests.ports import DeclaredRequestItem
+
+        await lock_pricing(session)
+        declared_fingerprint = None
+        weight_quote_fingerprint = None
+        if await weight_pricing_selected(session):
+            if not command.items:
+                raise OperationalInputError("HOLD_WEIGHT_DECLARATIONS_REQUIRED")
+            quote = await quote_in_session(
+                session, tuple(DeclaredRequestItem(**i.model_dump()) for i in command.items)
+            )
+            confirm_quote(quote, command.confirmed_quote)
+            assert quote.weight_facts is not None and quote.declared_items is not None
+            if command.mass_g != quote.weight_facts.total_weight_grams:
+                raise OperationalInputError("HOLD_DECLARED_MASS_MISMATCH")
+            volume = declared_volume(quote.declared_items)
+            if volume is None and customer_checkout:
+                raise OperationalInputError("ITEM_VOLUME_DECLARATIONS_REQUIRED")
+            if volume is not None and command.volume_ml != volume:
+                raise OperationalInputError("HOLD_DECLARED_VOLUME_MISMATCH")
+            declared_fingerprint = declaration_fingerprint(quote.declared_items)
+            weight_quote_fingerprint = quote.weight_facts.quote_fingerprint
+        elif command.items is not None or command.confirmed_quote is not None:
+            raise OperationalInputError("WEIGHT_PRICING_POLICY_REQUIRED")
         # Reattempts keep the same Payment-first authority used by customer consent.
         original = None
         if command.reattempt_request_id:
@@ -181,8 +233,11 @@ async def _hold(
             pickup_location=context.location,
             slot_start=command.slot_start,
             slot_end=command.slot_end,
-            mass_g=math.ceil(command.mass_g * region.policy["safety_percent"] / 100),
-            volume_ml=math.ceil(command.volume_ml * region.policy["safety_percent"] / 100),
+            mass_g=(command.mass_g * int(region.policy["safety_percent"]) + 99) // 100,
+            volume_ml=(command.volume_ml * int(region.policy["safety_percent"]) + 99) // 100,
+            declared_mass_g=command.mass_g if declared_fingerprint else None,
+            declaration_fingerprint=declared_fingerprint,
+            weight_quote_fingerprint=weight_quote_fingerprint,
             pickup_seconds=pickup,
             discharge_seconds=discharge,
             receiving_point_id=region.default_warehouse_id,

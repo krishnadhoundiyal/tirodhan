@@ -686,6 +686,43 @@ async def bind_reservation(
     )
     if known_weight is not None and known_weight > row.mass_g:
         raise OperationalInputError("CAPACITY_BELOW_DECLARED_WEIGHT")
+    from tirodhan.modules.business_admin.models import BookingWeightQuote
+    from tirodhan.modules.business_admin.weight_pricing import declaration_fingerprint
+    from tirodhan.modules.collection_requests.ports import DeclaredRequestItem
+
+    weight_quote = await session.get(BookingWeightQuote, request.request_id)
+    if weight_quote is not None:
+        items = list(
+            await session.scalars(
+                select(CollectionRequestItem)
+                .where(CollectionRequestItem.request_id == request.request_id)
+                .order_by(CollectionRequestItem.created_at, CollectionRequestItem.request_item_id)
+            )
+        )
+        # Item order in the request is preserved by UUIDv7 allocation, as in customer reads.
+        from typing import cast as type_cast
+
+        from tirodhan.modules.business_admin.weight_contracts import WeightBand
+
+        fingerprint = declaration_fingerprint(
+            tuple(
+                DeclaredRequestItem(
+                    i.item_category_code,
+                    i.declared_quantity,
+                    i.declared_weight_grams,
+                    type_cast(WeightBand, i.weight_band),
+                    i.weight_kg,
+                    i.declared_volume_ml,
+                )
+                for i in items
+            )
+        )
+        if (
+            row.declared_mass_g != weight_quote.total_weight_grams
+            or row.declaration_fingerprint != fingerprint
+            or row.weight_quote_fingerprint != weight_quote.quote_fingerprint
+        ):
+            raise OperationalInputError("HOLD_DECLARATION_OR_QUOTE_MISMATCH")
     row.request_id = request.request_id
     session.add(
         RoutingManifest(

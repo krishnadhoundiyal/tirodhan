@@ -19,6 +19,11 @@ from tirodhan.api.dependencies import (
 )
 from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
+from tirodhan.modules.business_admin.weight_contracts import (
+    WeightItemInput,
+    WeightQuoteConfirmation,
+)
+from tirodhan.modules.business_admin.weight_pricing import WeightPricingConflict
 from tirodhan.modules.collection_requests.cancellation import (
     CancellationConflictError,
     CancellationNotAuthorizedError,
@@ -53,19 +58,19 @@ from tirodhan.modules.serviceability.ports import (
 router = APIRouter(prefix="/v1/collection-requests", tags=["collection requests"])
 
 
-class CollectionRequestItemInput(BaseModel):
-    item_category_code: str = Field(min_length=1, max_length=100)
-    declared_quantity: int | None = Field(default=None, ge=1)
-    declared_weight_grams: int | None = Field(default=None, ge=1)
+class CollectionRequestItemInput(WeightItemInput):
+    pass
 
 
 class CollectionRequestCreate(BaseModel):
+    model_config = {"extra": "forbid"}
     client_request_id: UUID
     serviceability_context_id: UUID
     capacity_reservation_id: UUID | None = None
     slot_start: datetime
     slot_end: datetime
     items: list[CollectionRequestItemInput] = Field(min_length=1)
+    confirmed_quote: WeightQuoteConfirmation | None = None
 
 
 class CollectionRequestItemResponse(BaseModel):
@@ -76,6 +81,9 @@ class CollectionRequestItemResponse(BaseModel):
     quoted_line_amount_minor: int
     currency: str
     pricing_rule_version: str | None
+    weight_band: str | None = None
+    weight_kg: str | None = None
+    declared_volume_ml: int | None = None
 
 
 class CollectionRequestResponse(BaseModel):
@@ -107,6 +115,9 @@ def collection_request_response(result: CollectionRequestResult) -> CollectionRe
                 quoted_line_amount_minor=item.quoted_line_amount_minor,
                 currency=item.currency,
                 pricing_rule_version=item.pricing_rule_version,
+                weight_band=item.weight_band,
+                weight_kg=item.weight_kg,
+                declared_volume_ml=item.declared_volume_ml,
             )
             for item in result.items
         ],
@@ -148,6 +159,7 @@ async def post_collection_request(
                 capacity_reservation_id=body.capacity_reservation_id,
                 customer_id=customer_id,
                 client_request_id=body.client_request_id,
+                confirmed_quote=body.confirmed_quote,
                 serviceability_context_id=body.serviceability_context_id,
                 slot_start=body.slot_start,
                 slot_end=body.slot_end,
@@ -156,6 +168,9 @@ async def post_collection_request(
                         item_category_code=item.item_category_code,
                         declared_quantity=item.declared_quantity,
                         declared_weight_grams=item.declared_weight_grams,
+                        weight_band=item.weight_band,
+                        weight_kg=item.weight_kg,
+                        declared_volume_ml=item.declared_volume_ml,
                     )
                     for item in body.items
                 ),
@@ -167,7 +182,10 @@ async def post_collection_request(
             location_resolver=location_resolver,
             cell_id_deriver=cells,
             slot_availability=cast(SlotAvailabilityPort, request.app.state.slot_availability),
-            require_capacity_reservation=request.app.state.settings.routing_orchestration_enabled,
+            require_capacity_reservation=(
+                request.app.state.settings.routing_orchestration_enabled
+                or body.confirmed_quote is not None
+            ),
             planning_lead_time_minutes=cast(
                 Settings, request.app.state.settings
             ).planning_lead_time_minutes,
@@ -179,7 +197,7 @@ async def post_collection_request(
         ServiceabilityResolverNotConfiguredError,
     ) as error:
         raise HTTPException(status_code=503, detail="Required runtime is not configured") from error
-    except OperationalInputError as error:
+    except (OperationalInputError, WeightPricingConflict) as error:
         raise HTTPException(status_code=409, detail={"code": str(error)}) from None
     except ServiceabilityContextIneligibleError as error:
         raise CustomerReadError(error.status, error.code) from error

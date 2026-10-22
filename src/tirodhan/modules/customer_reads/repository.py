@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tirodhan.modules.business_admin.models import BookingWeightQuote
 from tirodhan.modules.collection_requests.models import CollectionRequest, CollectionRequestItem
 from tirodhan.modules.collection_requests.scheduling import SlotWindow
 from tirodhan.modules.customer_reads.cursor import Cursor, CursorCodec
@@ -28,6 +29,7 @@ from tirodhan.modules.customer_reads.schemas import (
     RecommendationItemDto,
     RecommendationsDto,
     SlotDto,
+    WeightQuoteProvenanceDto,
 )
 from tirodhan.modules.customers.ports import AddressProtector
 from tirodhan.modules.handovers.models import HandoverEvent, HandoverEventItem
@@ -51,6 +53,12 @@ async def projections(
     if not requests:
         return []
     ids = [r.request_id for r in requests]
+    weight_quotes = {
+        q.request_id: q
+        for q in await session.scalars(
+            select(BookingWeightQuote).where(BookingWeightQuote.request_id.in_(ids))
+        )
+    }
     items_by_request: dict[UUID, list[CollectionRequestItem]] = defaultdict(list)
     for item in await session.scalars(
         select(CollectionRequestItem)
@@ -182,12 +190,21 @@ async def projections(
                         display_name=i.display_name_snapshot or i.item_category_code,
                         declared_quantity=i.declared_quantity,
                         declared_weight_grams=i.declared_weight_grams,
+                        weight_band=i.weight_band,
+                        weight_kg=i.weight_kg,
+                        declared_volume_ml=i.declared_volume_ml,
+                        pricing_rule_version=i.pricing_rule_version,
                         quoted_line_amount_minor=i.quoted_line_amount_minor,
                         image=None,
                     )
                     for i in request_items
                 ],
                 quote=MoneyDto(amount_minor=request.quoted_amount_minor, currency=request.currency),
+                weight_quote=WeightQuoteProvenanceDto.model_validate(
+                    weight_quotes[request.request_id], from_attributes=True
+                )
+                if request.request_id in weight_quotes
+                else None,
                 payment=payment_projection(
                     request,
                     payment,

@@ -1,5 +1,27 @@
 # Schema Design
 
+## Migration 0038 — declared item volume
+
+One nullable `collection_request_item.declared_volume_ml` bigint records occupied transport
+volume for the whole selected line. Positive/range SQL constraints and deferred complete/bounded
+aggregation protect new volume-bearing weight bookings. Existing booking-item immutability
+also freezes this field. No volume is backfilled; populated volume history blocks downgrade.
+No new policy, table, service or pricing parameter is introduced. Reservation/manifest retain
+their existing volume columns and once-applied safety margin.
+
+## Migration 0037 — declared weight pricing
+
+`weight_pricing_policy` stores typed bands, labels/unit, integer price/weight parameters,
+numeric(18,6) positive curvature and activation. A partial unique index selects at most one
+active policy; database-maintained adoption prevents accidental return to flat charging.
+`weight_pricing_policy_revision` reuses concrete FK/audit capture. `booking_weight_quote`
+has a real request FK and composite policy-revision FK, integer aggregate/X/Y and fingerprint.
+Nullable item band/numerical fields and reservation raw-mass/declaration/quote fingerprints
+preserve unknown historical values. SQL protects weight booking terms before initiation and
+checks item totals/Payment at commit. Existing financial/custody constraints are unchanged.
+Empty-feature rollback is supported; populated adoption refuses lossy downgrade. No seeded
+production values. See [contract and rollout](CM_P0_03_WEIGHT_PRICING.md).
+
 ## Migration 0036 — recovery work notification generations
 
 `recovery_work_request` references its actual OutboxEvent and exactly one RecoveryAssignment
@@ -341,6 +363,7 @@ request_id                 uuid FK -> collection_request
 item_category_code         varchar(...) NOT NULL
 declared_quantity          integer NULL
 declared_weight_grams      bigint NULL
+declared_volume_ml         bigint NULL -- occupied transport volume for the whole line
 quoted_line_amount_minor   bigint NOT NULL
 currency                   char(3) NOT NULL
 pricing_rule_version       varchar(...) NULL

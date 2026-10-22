@@ -936,6 +936,8 @@ async def test_readiness_migration_preserves_populated_financial_history_and_sch
     )
 
     async def history():
+        from legacy_financial_fixture import pre_weight_item_snapshot
+
         async with factory() as session:
             snapshots = {}
             for table in tables:
@@ -948,6 +950,8 @@ async def test_readiness_migration_preserves_populated_financial_history_and_sch
                     await session.scalars(text(f"SELECT to_jsonb(t){exclude} FROM {table} t"))
                 )
                 assert rows, table
+                if table == "collection_request_item":
+                    rows = [pre_weight_item_snapshot(row) for row in rows]
                 snapshots[table] = sorted(json.dumps(row, sort_keys=True) for row in rows)
             return snapshots
 

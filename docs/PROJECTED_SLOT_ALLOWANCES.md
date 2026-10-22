@@ -24,6 +24,11 @@ The existing booking API binds `capacity_reservation_id`. Neither hold acquisiti
 payment preparation nor authenticated capture invokes road acquisition or route feasibility.
 Normal authorization, serviceability, booking cutoff, payment expiry and financial checks remain.
 
+Hold status includes owner-only `bound_request_id` (UUID or null) from persisted binding,
+including after hold expiry and later booking state changes. Binding is not payment or
+acceptance. See [CM-P0-02 restart recovery](CM_P0_02_BOOKING_RECOVERY.md) and the
+[unapproved physical-load policy proposal](PHYSICAL_LOAD_POLICY_PROPOSAL.md).
+
 AVAILABLE and LIMITED permit holds; FULL has no remaining modelled allowance; UNKNOWN cannot
 create new permission. A hold acquired earlier remains bindable when a projection becomes stale.
 The API never calls a projection refresh synchronously as a hidden checkout fallback.

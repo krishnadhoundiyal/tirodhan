@@ -212,12 +212,26 @@ class CollectionItemDto(BaseModel):
     declared_weight_grams: int | None
     quoted_line_amount_minor: int
     image: MediaDto | None
+    weight_band: str | None = None
+    weight_kg: str | None = None
+    declared_volume_ml: int | None = None
+    pricing_rule_version: str | None = None
+
+
+class WeightQuoteProvenanceDto(BaseModel):
+    policy_id: UUID
+    policy_revision: int
+    total_weight_grams: int
+    minimum_amount_minor: int
+    maximum_amount_minor: int
+    quote_fingerprint: str
 
 
 class CollectionDetailDto(CollectionSummaryDto):
     address: AddressDto
     items: list[CollectionItemDto]
     quote: MoneyDto
+    weight_quote: WeightQuoteProvenanceDto | None = None
     payment: PaymentDto
     cancellation: CancellationDto
     journey: JourneyDto
