@@ -38,13 +38,20 @@ def test_opt_in_jobs_default_absent_and_stay_stage_four() -> None:
         and "scheduled" in item["azurerm_container_app_job"]
     )
     assert scheduled["for_each"] == "${var.deployment_stage >= 4 ? local.jobs : {}}"
-    assert scheduled["schedule_trigger_config"][0]["cron_expression"] == "${local.job_cron[each.key]}"
+    assert (
+        scheduled["schedule_trigger_config"][0]["cron_expression"]
+        == "${local.job_cron[each.key]}"
+    )
     assert len(scheduled["template"][0]["container"]) == 2
 
 
 def test_keyvault_refs_and_feature_settings_are_allowlisted() -> None:
     variables = load("variables.tf")["variable"]
-    names = next(item["runtime_secret_names"]["default"] for item in variables if "runtime_secret_names" in item)
+    names = next(
+        item["runtime_secret_names"]["default"]
+        for item in variables
+        if "runtime_secret_names" in item
+    )
     refs = {
         "TIRODHAN_CUSTOMER_CURSOR_SIGNING_KEY": "customer-cursor-signing-key",
         "TIRODHAN_CUSTOMER_DATA_ENCRYPTION_KEYS": "customer-data-encryption-keys",
@@ -65,7 +72,13 @@ def test_approved_credential_batches_are_complete() -> None:
     customer = seed_secrets.CUSTOMER_SECRET_NAMES
     assert legacy.isdisjoint(customer)
     assert seed_secrets.SECRET_NAMES == legacy | customer
-    for batch in (legacy, seed_secrets.CUSTOMER_DATA_SECRET_NAMES, seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES, customer, legacy | customer):
+    for batch in (
+        legacy,
+        seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
+        seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
+        customer,
+        legacy | customer,
+    ):
         assert seed_secrets.approved_secret_batch(set(batch))
     assert not seed_secrets.approved_secret_batch({"customer-data-hmac-key"})
     assert not seed_secrets.approved_secret_batch({"arbitrary-secret"})
@@ -73,7 +86,10 @@ def test_approved_credential_batches_are_complete() -> None:
 
 @pytest.mark.parametrize("kind", ["legacy", "customer", "vapid"])
 def test_secret_seeding_does_not_echo_values(
-    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     groups = {
         "legacy": seed_secrets.LEGACY_SECRET_NAMES,

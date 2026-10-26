@@ -48,7 +48,9 @@ def approved_secret_batch(names: set[str]) -> bool:
 def main() -> None:
     values = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     if not isinstance(values, dict) or not approved_secret_batch(set(values)):
-        raise SystemExit("Supply a complete approved legacy, customer-data, VAPID or combined secret batch")
+        raise SystemExit(
+            "Supply a complete approved legacy, customer-data, VAPID or combined secret batch"
+        )
     if any(not isinstance(value, str) or not value.strip() for value in values.values()):
         raise SystemExit("Every secret must be a nonempty string")
     for name, value in values.items():
