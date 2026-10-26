@@ -1,10 +1,10 @@
-"""Fail-stop ownership for the finite POSIX notification worker and its children."""
+"""Fail-stop ownership for the finite Linux notification worker and its children."""
 
 import os
 import sys
 from typing import NoReturn, Protocol
 
-if sys.platform != "win32":
+if sys.platform == "linux":
     from os import getpgrp, killpg, setpgid
     from signal import SIGKILL
 
@@ -14,11 +14,13 @@ class LaunchOwner(Protocol):
 
 
 class ProcessGroupOwner:
+    group_id: int
+
     def __init__(self) -> None:
         # Establish this boundary in the dedicated worker, never the transactional API.
         # Children inherit membership at creation, before asyncio can return a PID/handle.
-        if sys.platform == "win32":
-            raise RuntimeError("WEB_PUSH_REQUIRES_POSIX_WORKER_OWNERSHIP")
+        if sys.platform != "linux":
+            raise RuntimeError("WEB_PUSH_REQUIRES_LINUX_WORKER_OWNERSHIP")
         else:
             # The production Dockerfile already uses CPython 3.12. Its Linux vfork
             # path releases the GIL while exec may stall (CPython GH-104372); older
@@ -35,7 +37,7 @@ class ProcessGroupOwner:
         # Never detach/cancel unknown launch ownership and continue processing. Kernel
         # group membership covers even children whose asyncio handoff never completes.
         try:
-            if sys.platform != "win32":
+            if sys.platform == "linux":
                 killpg(self.group_id, SIGKILL)
         finally:
             # Also exits a namespace's PID 1, which may treat group signals specially;
