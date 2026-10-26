@@ -1,5 +1,31 @@
 # ER Diagram
 
+## Migration 0039 customer relationships
+
+```mermaid
+erDiagram
+    APP_USER ||--o| CUSTOMER_PROFILE : extends
+    APP_USER ||--o| CUSTOMER_PREFERENCES : chooses
+    APP_USER ||--o| CUSTOMER_FAVOURITE_SET : saves
+    CUSTOMER_FAVOURITE_SET ||--o{ CUSTOMER_FAVOURITE_CATEGORY : contains
+    CATALOGUE_CATEGORY ||--o{ CUSTOMER_FAVOURITE_CATEGORY : references
+    APP_USER ||--o{ CUSTOMER_FEEDBACK : submits
+    IDEMPOTENCY_RECORD ||--o| CUSTOMER_COMMAND_RECEIPT : replays
+    APP_USER ||--o{ CUSTOMER_COMMAND_RECEIPT : owns
+    APP_USER ||--o{ CONTENT_REVISION : authors_approves
+    CONTENT_REVISION ||--|{ CONTENT_PARAGRAPH : orders
+    REFRESH_SESSION ||--o{ CUSTOMER_PUSH_BINDING : owns
+    APP_USER ||--o{ CUSTOMER_PUSH_BINDING : owns
+    OUTBOX_EVENT ||--o| CUSTOMER_NOTIFICATION : projects
+    COLLECTION_REQUEST ||--o{ CUSTOMER_NOTIFICATION : concerns
+    CUSTOMER_NOTIFICATION ||--o{ CUSTOMER_PUSH_DELIVERY : signals
+    CUSTOMER_PUSH_BINDING ||--o{ CUSTOMER_PUSH_DELIVERY : targets
+```
+
+Composite owner FKs additionally fence request/customer, session/customer and both delivery
+parents. There is no polymorphic business reference or second customer identity. See
+[implemented contracts](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 Migration 0038 adds only nullable declared occupied volume to CollectionRequestItem;
 no relationship or entity is added. The existing declaration fingerprint binds it to the
 reservation and the manifest retains the reservation's once-padded aggregate volume.

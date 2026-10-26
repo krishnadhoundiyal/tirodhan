@@ -1,5 +1,14 @@
 # Architecture
 
+The customer account module extends existing AppUser identity with relational versioned profile,
+preferences and catalogue-linked favourites; private fields and exact command replay are encrypted.
+Public informational content uses immutable manager-authored revisions and explicit publication
+attestation. A finite customer worker independently consumes existing accepted/financial outbox
+facts with its own inbox, owned history and leased device delivery. It does not change shared
+outbox publication state or financial/routing producers. FCM reuses the existing adapter; Web Push
+is an explicitly gated platform adapter. No new service, queue, resource or production activation.
+See [contracts, boundaries and release gates](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 CM-P0-03 supersedes flat pricing for new work after explicit weight-policy activation.
 The existing PricingPort and typed manager administration own configurable weight bands
 and exact bounded pricing. A stateless version/declaration-bound customer quote creates no

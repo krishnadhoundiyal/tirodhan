@@ -1,5 +1,14 @@
 # Domain Model
 
+Customer capabilities (0039) extend `app_user` through CustomerProfile, CustomerPreferences,
+CustomerFavouriteSet/Category and CustomerFeedback. Favourites reference existing catalogue
+identities. CustomerCommandReceipt is encrypted protocol replay data, never account authority.
+ContentRevision/Paragraph distinguish draft, published and retired authored text with actual manager
+attestation. CustomerPushBinding belongs to an AppUser and that user's RefreshSession, independently
+of Rider ownership. CustomerNotification belongs to a real owned CollectionRequest and source
+OutboxEvent; CustomerPushDelivery records transport progress, never read acknowledgement or
+fulfilment. See [semantics and constraints](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 CM-P0-03: WeightPricingPolicy is a typed manager master with concrete immutable revisions.
 Customer bands resolve conservative per-line total-quantity grams; BookingWeightQuote links
 immutable normalized booking items and original price to that policy revision. A stateless

@@ -28,6 +28,7 @@ from tirodhan.db.values import new_uuid7, utc_now
 class CollectionRequest(Base):
     __tablename__ = "collection_request"
     __table_args__ = (
+        UniqueConstraint("request_id", "customer_id", name="uq_collection_request_owner"),
         Index(
             "ix_customer_collection_page",
             "customer_id",

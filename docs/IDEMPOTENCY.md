@@ -1,5 +1,27 @@
 # Idempotency
 
+## Customer capabilities (0039)
+
+Versioned profile/preferences/favourite commands and feedback use existing actor/operation/client
+claims with keyed fingerprints. User row locks arbitrate absent/current heads; state, encrypted
+exact response receipt and command completion commit together. Replay precedes current version
+or catalogue checks; changed bodies conflict. Feedback additionally has customer/client uniqueness.
+Content commands add a per-slug publication lock, expected revision and unique published-slug index.
+
+Customer device registration uses natural installation/provider token identity, immutable
+credential generations, sorted advisory locks, session/role locks and partial active uniqueness.
+Same active registration replays its timestamp; retired same-session credentials cannot reactivate.
+Newer login sessions fence older account callbacks; owner/session-scoped DELETE is a repeatable
+no-op for missing/foreign bindings. Logout revocation is atomic through a session SQL trigger.
+
+Existing accepted/financial outbox facts fan out through an independent durable inbox, unique
+source notification and notification/binding delivery key. History, delivery work and inbox
+completion commit together without changing shared source publication status. Send claims use
+SKIP LOCKED and token/expiry leases; external FCM/Web Push runs outside DB transactions. Expired
+claims resume the same notification identity. Permanent invalidity revokes only the exact binding;
+retry/disabled debt persists. Signals are best-effort at-least-once, never business acknowledgement.
+See the [full operation matrix, limitations and test evidence](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 ## CM-P0-03 weight pricing
 
 - Manager policy commands reuse `business.config:<actor>` + client UUID/fingerprint, live

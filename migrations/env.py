@@ -11,6 +11,7 @@ from tirodhan.db.base import Base
 from tirodhan.db.session import create_database_engine
 from tirodhan.modules.business_admin import models as business_models  # noqa: F401
 from tirodhan.modules.collection_requests import models as collection_request_models  # noqa: F401
+from tirodhan.modules.customer_account import models as customer_account_models  # noqa: F401
 from tirodhan.modules.customer_reads import models as customer_read_models  # noqa: F401
 from tirodhan.modules.customers import models as customer_models  # noqa: F401
 from tirodhan.modules.dispatch import models as dispatch_models  # noqa: F401

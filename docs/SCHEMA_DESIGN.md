@@ -1,5 +1,16 @@
 # Schema Design
 
+## Migration 0039 — customer capabilities
+
+Adds concrete customer profile/preferences/favourites, encrypted feedback/replay receipts, content
+revisions/paragraphs, CUSTOMER device bindings, notification history and leased delivery tables.
+Composite parent unique constraints support real session/owner, request/owner and delivery/owner
+FKs. Partial unique active installation/token and published-slug indexes fence races. SQL guards
+preserve immutable private history, binding tombstones and content provenance; revoking a refresh
+session atomically revokes its bindings. Additive defaults project existing users without backfill.
+Populated new tables refuse lossy downgrade. See
+[complete contracts, privacy and migration evidence](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 ## Migration 0038 — declared item volume
 
 One nullable `collection_request_item.declared_volume_ml` bigint records occupied transport

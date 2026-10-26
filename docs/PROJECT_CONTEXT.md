@@ -1,5 +1,12 @@
 # Project Context
 
+Customer account/profile/preferences/favourites, encrypted feedback, public controlled content,
+owned notification history and finite outbox/push delivery are implemented in migration 0039.
+Existing identity and financial/routing authority remain unchanged. Provider delivery defaults
+disabled; iOS APNs, Mobile FCM schema normalization, browser adapter wiring, approved content,
+configuration and real deployment/device acceptance remain gates. See
+[implementation and verification](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 CM-P0-03 approves configurable per-line weight bands and exact bounded nonlinear pricing.
 Version-bound customer quotation and immutable booking declarations use existing manager,
 booking and financial authority. No rates/thresholds are seeded. Customers declare occupied

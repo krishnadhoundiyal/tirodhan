@@ -151,6 +151,7 @@ class UserRole(Base):
 class RefreshSession(Base):
     __tablename__ = "refresh_session"
     __table_args__ = (
+        UniqueConstraint("refresh_session_id", "user_id", name="uq_refresh_session_owner"),
         CheckConstraint("expires_at > created_at", name="ck_refresh_session_expiry"),
         UniqueConstraint("credential_hash", name="uq_refresh_session_credential_hash"),
     )

@@ -71,6 +71,14 @@ class InboxMessage(Base):
 class OutboxEvent(Base):
     __tablename__ = "outbox_event"
     __table_args__ = (
+        Index(
+            "ix_customer_event_fanout",
+            "created_at",
+            "outbox_event_id",
+            postgresql_where=text(
+                "event_type IN ('CollectionRequestAccepted','CustomerFinancialStatusChanged')"
+            ),
+        ),
         UniqueConstraint("event_key", name="uq_outbox_event_event_key"),
         Index(
             "ix_outbox_routing_wakeup",
