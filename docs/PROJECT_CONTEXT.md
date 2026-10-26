@@ -1,5 +1,7 @@
 # Project Context
 
+Customer review closure (0040) bounds Web Push DNS with supervised children, enforces the approved 5 native / 10 browser and 30-change rolling-day policy, and replaces history rescans with transactional pending membership. Provider activation remains disabled. See [review closure and measured evidence](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 Customer account/profile/preferences/favourites, encrypted feedback, public controlled content,
 owned notification history and finite outbox/push delivery are implemented in migration 0039.
 Existing identity and financial/routing authority remain unchanged. Provider delivery defaults

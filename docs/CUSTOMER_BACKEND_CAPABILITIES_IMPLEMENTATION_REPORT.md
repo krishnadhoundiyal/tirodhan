@@ -1,5 +1,7 @@
 # Customer backend capabilities implementation
 
+Follow-up CB-01/02/03 fixes, approved device limits, migration 0040 and PostgreSQL query measurements are documented in [the review closure](CUSTOMER_BACKEND_REVIEW_CLOSURE.md). The original verification below describes the initial 0039 increment.
+
 26 October 2026. Backend implementation and local verification only. No frontend file,
 cloud resource, deployed configuration or production flag is changed. No PR, merge or deployment.
 
@@ -168,7 +170,8 @@ operation cannot be recalled on logout/preference change; subsequent claims rech
 No schedule, queue or cloud worker is provisioned by this change.
 
 1. Select a bounded due batch of existing `CollectionRequestAccepted` and
-   `CustomerFinancialStatusChanged` outbox facts using SKIP LOCKED and indexed inbox exclusion.
+   `CustomerFinancialStatusChanged` outbox facts through transactional pending membership
+   (migration 0040), using SKIP LOCKED without rescanning completed history.
 2. Validate the identifier-only envelope and resolve the real request/owner from PostgreSQL.
 3. Under ordered customer page locks, persist safe generic history and per-device delivery work,
    then complete the consumer's inbox in the same transaction. Device iteration is streamed.
@@ -214,8 +217,10 @@ the approved ingress must preserve and enforce browser Origin.
 
 HTTPS sending resolves once, rejects any private/mixed DNS answer, pins the chosen global IP,
 and uses the original hostname for TLS certificate validation/SNI/Host. It ignores proxy environment,
-does not follow redirects, read provider response bodies, or log subscription URLs. DNS delay is
-checked against a send deadline before socket creation. Status 404/410 revokes; 400/413 is permanent;
+does not follow redirects, read provider response bodies, or log subscription URLs. DNS/HTTPS runs
+in a supervised one-at-a-time child with a 20-second parent deadline and child watchdog; timeout,
+cancellation and shutdown kill/reap it without using the default executor. Status 404/410 revokes;
+400/413 is permanent;
 auth/rate-limit/server/network/redirect failures remain retryable. Payload is only numeric schema
 version, notification event UUID, COLLECTION target and owned request UUID. No status, amount,
 provider details, URL, household data, secrets or coordinates are sent.

@@ -1,5 +1,7 @@
 # Data Protection
 
+Web Push child IPC (0040) carries encrypted bodies and private credentials only through bounded stdin; no secret command arguments, stderr or provider body logging. Pending notification work stores only source UUID/availability. Device limits preserve encrypted history and expose sanitized quota codes only. See [review closure](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 ## Customer account, content and notification capabilities (0039)
 
 Optional display name/email, feedback, native tokens, browser subscription endpoints/keys and

@@ -21,6 +21,7 @@ from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
 from tirodhan.modules.customer_account.protection import canonical
 from tirodhan.modules.customer_account.schemas import BrowserSubscription
+from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
 from tirodhan.modules.customer_reads.errors import CustomerReadError
 
 
@@ -188,6 +189,7 @@ async def send_web_push(
     subscription: BrowserSubscription,
     signal: dict[str, object],
     settings: Settings,
+    transport: WebPushTransport,
 ) -> str:
     key = check_configuration(settings)
     endpoint = validate_subscription(subscription, settings)
@@ -210,10 +212,10 @@ async def send_web_push(
         "TTL": "300",
     }
     try:
-        status = await asyncio.to_thread(
-            post_public, endpoint, encrypt_payload(subscription, canonical(signal)), headers
+        status = await transport.post(
+            endpoint, encrypt_payload(subscription, canonical(signal)), headers
         )
-    except (OSError, http.client.HTTPException):
+    except (OSError, http.client.HTTPException, asyncio.TimeoutError):
         return "RETRY"
     if status in (201, 202):
         return "SENT"

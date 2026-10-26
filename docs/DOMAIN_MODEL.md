@@ -1,5 +1,7 @@
 # Domain Model
 
+CustomerNotificationPending (0040) is derived source-event work membership, not notification history or fulfilment authority. Approved active allowances are 5 native and 10 browser registrations per customer, with 30 committed changes in a rolling 24 hours. See [lifecycle and concurrency](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 Customer capabilities (0039) extend `app_user` through CustomerProfile, CustomerPreferences,
 CustomerFavouriteSet/Category and CustomerFeedback. Favourites reference existing catalogue
 identities. CustomerCommandReceipt is encrypted protocol replay data, never account authority.

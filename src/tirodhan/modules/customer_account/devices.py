@@ -1,8 +1,10 @@
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import exists, func, or_, select, text
+from sqlalchemy import exists, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tirodhan.core.config import Settings
 from tirodhan.db.values import utc_now
 from tirodhan.modules.customer_account.models import CustomerPushBinding
 from tirodhan.modules.customer_account.protection import CustomerDataProtection
@@ -22,6 +24,7 @@ async def register(
     provider: str,
     secret: str,
     protection: CustomerDataProtection,
+    settings: Settings,
     browser_origin: str | None = None,
     token_identity: str | None = None,
 ) -> RegistrationDto:
@@ -37,7 +40,10 @@ async def register(
         )
         .with_for_update()
     )
-    now = utc_now()
+    # Database time after the customer lock: app clocks and concurrent sessions cannot
+    # move the rolling window or admit changes against an earlier quota snapshot.
+    now = await session.scalar(select(func.clock_timestamp()))
+    assert now is not None
     if login is None or login.revoked_at is not None or login.expires_at <= now:
         raise CustomerReadError(401, "NOT_ELIGIBLE")
     token_hmac = protection.fingerprint(f"push:{provider}", token_identity or secret)
@@ -103,6 +109,57 @@ async def register(
     ):
         # Tombstones stop a lost old registration response from resurrecting a retired token.
         raise CustomerReadError(409, "STALE_REGISTRATION")
+    limits = (
+        settings.customer_native_registration_limit,
+        settings.customer_browser_registration_limit,
+        settings.customer_registration_change_limit,
+        settings.customer_registration_window_seconds,
+    )
+    if any(value < 1 for value in limits):
+        raise CustomerReadError(503, "DEVICE_POLICY_UNAVAILABLE")
+    changes = await session.scalar(
+        select(func.count())
+        .select_from(CustomerPushBinding)
+        .where(
+            CustomerPushBinding.user_id == principal.user_id,
+            CustomerPushBinding.created_at > now - timedelta(seconds=limits[3]),
+        )
+    )
+    if changes is not None and changes >= limits[2]:
+        raise CustomerReadError(429, "DEVICE_CHANGE_LIMIT")
+    # Only live sessions hold capacity. Expired bindings are revoked after all admission
+    # checks pass; rejected registrations have no effects even if the caller catches errors.
+    live_session = exists().where(
+        RefreshSession.refresh_session_id == CustomerPushBinding.session_id,
+        RefreshSession.expires_at > now,
+        RefreshSession.revoked_at.is_(None),
+    )
+    replacing = {row.binding_id for row in history}
+    active_count = await session.scalar(
+        select(func.count())
+        .select_from(CustomerPushBinding)
+        .where(
+            CustomerPushBinding.user_id == principal.user_id,
+            CustomerPushBinding.revoked_at.is_(None),
+            live_session,
+            CustomerPushBinding.platform.in_(("ANDROID", "IOS"))
+            if platform != "WEB"
+            else CustomerPushBinding.platform == "WEB",
+            CustomerPushBinding.binding_id.not_in(replacing),
+        )
+    )
+    allowance = limits[1] if platform == "WEB" else limits[0]
+    if active_count is not None and active_count >= allowance:
+        raise CustomerReadError(429, "DEVICE_ACTIVE_LIMIT")
+    await session.execute(
+        update(CustomerPushBinding)
+        .where(
+            CustomerPushBinding.user_id == principal.user_id,
+            CustomerPushBinding.revoked_at.is_(None),
+            ~live_session,
+        )
+        .values(revoked_at=now)
+    )
     for prior in history:
         if prior.revoked_at is None:
             prior.revoked_at = now

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import signal
 
 from tirodhan.core.config import get_settings
 from tirodhan.core.logging import configure_logging
@@ -42,5 +43,25 @@ async def run() -> None:
         await engine.dispose()
 
 
+async def supervised_run() -> None:
+    task = asyncio.current_task()
+    assert task is not None
+    loop = asyncio.get_running_loop()
+    installed = False
+    try:
+        try:
+            loop.add_signal_handler(signal.SIGTERM, task.cancel)
+            installed = True
+        except NotImplementedError:
+            # Windows asyncio.run still cancels pending sends on ordinary loop shutdown.
+            pass
+        await run()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        if installed:
+            loop.remove_signal_handler(signal.SIGTERM)
+
+
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(supervised_run())

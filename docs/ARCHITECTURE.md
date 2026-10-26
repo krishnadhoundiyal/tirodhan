@@ -1,5 +1,7 @@
 # Architecture
 
+Customer notification work (0040) uses a concrete source-FK pending set maintained in the outbox transaction; inbox/business replay remain independent. Web Push executes in one supervised, deadline-bound child per finite port, without a default-executor resolver. Approved customer-level device admission bounds fan-out without silent eviction. See [review closure](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 The customer account module extends existing AppUser identity with relational versioned profile,
 preferences and catalogue-linked favourites; private fields and exact command replay are encrypted.
 Public informational content uses immutable manager-authored revisions and explicit publication

@@ -176,7 +176,7 @@ async def test_web_adapter_vapid_payload_and_classification(
         "request_id": str(new_uuid7()),
     }
 
-    def post(endpoint: str, body: bytes, headers: dict[str, str]) -> int:
+    async def post(endpoint: str, body: bytes, headers: dict[str, str]) -> int:
         assert endpoint == subscription().endpoint.get_secret_value()
         assert b"request_id" not in body
         assert headers["Content-Encoding"] == "aes128gcm"
@@ -192,8 +192,9 @@ async def test_web_adapter_vapid_payload_and_classification(
         assert set(claims) == {"aud", "exp", "sub"}
         return status
 
-    monkeypatch.setattr(web_push, "post_public", post)
-    assert await web_push.send_web_push(subscription(), signal, settings) == outcome
+    transport = web_push.WebPushTransport()
+    monkeypatch.setattr(transport, "post", post)
+    assert await web_push.send_web_push(subscription(), signal, settings, transport) == outcome
 
 
 def test_provider_configuration_is_explicit_and_fails_closed() -> None:

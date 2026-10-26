@@ -160,6 +160,13 @@ class CustomerPushBinding(Base):
             postgresql_where=text("revoked_at IS NULL"),
         ),
         Index("ix_customer_binding_user", "user_id", "session_id"),
+        Index("ix_customer_binding_changes", "user_id", "created_at"),
+        Index(
+            "ix_customer_binding_active",
+            "user_id",
+            "platform",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
         Index("ix_customer_binding_session", "session_id"),
         Index("ix_customer_binding_installation_history", "client_device_id", "session_id"),
         Index("ix_customer_binding_token_history", "provider", "token_hmac", "session_id"),
@@ -181,6 +188,18 @@ class CustomerPushBinding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CustomerNotificationPending(Base):
+    """Disposable work membership, atomically maintained with source availability."""
+
+    __tablename__ = "customer_notification_pending"
+    __table_args__ = (Index("ix_customer_notification_due", "available_at", "source_event_id"),)
+
+    source_event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("outbox_event.outbox_event_id"), primary_key=True
+    )
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class CustomerNotification(Base):

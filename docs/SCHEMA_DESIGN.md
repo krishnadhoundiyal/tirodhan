@@ -1,5 +1,7 @@
 # Schema Design
 
+Migration 0040 adds source-FK customer_notification_pending with a due index and transactional outbox insert/availability trigger, plus indexed device admission history/live bindings. One-time adoption preserves deferred events and excludes established history. No watermark or recurring historical scan. See [migration cutover, plans and constraints](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 ## Migration 0039 — customer capabilities
 
 Adds concrete customer profile/preferences/favourites, encrypted feedback/replay receipts, content

@@ -1,5 +1,7 @@
 # ER Diagram
 
+Migration 0040 adds `OutboxEvent 1 -- 0..1 CustomerNotificationPending` through a real UUID FK. Work membership is deleted with atomic history/inbox completion; source/history remain durable. See [incremental consumption](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 ## Migration 0039 customer relationships
 
 ```mermaid
@@ -17,6 +19,7 @@ erDiagram
     REFRESH_SESSION ||--o{ CUSTOMER_PUSH_BINDING : owns
     APP_USER ||--o{ CUSTOMER_PUSH_BINDING : owns
     OUTBOX_EVENT ||--o| CUSTOMER_NOTIFICATION : projects
+    OUTBOX_EVENT ||--o| CUSTOMER_NOTIFICATION_PENDING : schedules
     COLLECTION_REQUEST ||--o{ CUSTOMER_NOTIFICATION : concerns
     CUSTOMER_NOTIFICATION ||--o{ CUSTOMER_PUSH_DELIVERY : signals
     CUSTOMER_PUSH_BINDING ||--o{ CUSTOMER_PUSH_DELIVERY : targets

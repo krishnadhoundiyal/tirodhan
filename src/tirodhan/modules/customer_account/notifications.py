@@ -1,11 +1,13 @@
 """Independent outbox fan-out with inbox, owned history and leased device delivery."""
 
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
-from sqlalchemy import String, exists, or_, select, text, tuple_
+from sqlalchemy import delete, exists, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.core.config import Settings
@@ -13,6 +15,7 @@ from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.collection_requests.models import CollectionRequest
 from tirodhan.modules.customer_account.models import (
     CustomerNotification,
+    CustomerNotificationPending,
     CustomerPreferences,
     CustomerPushBinding,
     CustomerPushDelivery,
@@ -27,10 +30,11 @@ from tirodhan.modules.customer_account.schemas import (
 from tirodhan.modules.customer_reads.cursor import Cursor, CursorCodec
 from tirodhan.modules.customer_reads.errors import CustomerReadError
 from tirodhan.modules.identity.models import AppUser, RefreshSession, UserRole
-from tirodhan.modules.reliability.models import InboxMessage, OutboxEvent
+from tirodhan.modules.reliability.models import OutboxEvent
 from tirodhan.modules.reliability.primitives import claim_inbox_message, complete_inbox_message
 
 if TYPE_CHECKING:
+    from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
     from tirodhan.modules.dispatch.push import FcmPushNotificationPort
 
 EVENT_TYPES = ("CollectionRequestAccepted", "CustomerFinancialStatusChanged")
@@ -44,17 +48,19 @@ async def materialize(factory: async_sessionmaker[AsyncSession], limit: int = 10
         events = list(
             await session.scalars(
                 select(OutboxEvent)
-                .where(
-                    OutboxEvent.event_type.in_(EVENT_TYPES),
-                    OutboxEvent.available_at <= utc_now(),
-                    ~exists().where(
-                        InboxMessage.consumer_name == CONSUMER,
-                        InboxMessage.message_id == OutboxEvent.outbox_event_id.cast(String),
-                    ),
+                .join(
+                    CustomerNotificationPending,
+                    CustomerNotificationPending.source_event_id == OutboxEvent.outbox_event_id,
                 )
-                .order_by(OutboxEvent.created_at, OutboxEvent.outbox_event_id)
+                .where(
+                    CustomerNotificationPending.available_at <= utc_now(),
+                )
+                .order_by(
+                    CustomerNotificationPending.available_at,
+                    CustomerNotificationPending.source_event_id,
+                )
                 .limit(limit)
-                .with_for_update(skip_locked=True)
+                .with_for_update(of=CustomerNotificationPending, skip_locked=True)
             )
         )
         requests = {
@@ -67,7 +73,8 @@ async def materialize(factory: async_sessionmaker[AsyncSession], limit: int = 10
             )
         for event in events:
             if (
-                event.aggregate_type != "collection_request"
+                event.event_type not in EVENT_TYPES
+                or event.aggregate_type != "collection_request"
                 or set(event.payload)
                 != (
                     {"request_id"}
@@ -125,6 +132,11 @@ async def materialize(factory: async_sessionmaker[AsyncSession], limit: int = 10
                         CustomerPushBinding.user_id == request.customer_id,
                         CustomerPushBinding.revoked_at.is_(None),
                         CustomerPushBinding.created_at <= event.created_at,
+                        exists().where(
+                            RefreshSession.refresh_session_id == CustomerPushBinding.session_id,
+                            RefreshSession.revoked_at.is_(None),
+                            RefreshSession.expires_at > utc_now(),
+                        ),
                     )
                     .execution_options(yield_per=100)
                 )
@@ -142,6 +154,14 @@ async def materialize(factory: async_sessionmaker[AsyncSession], limit: int = 10
                     )
                     await session.flush()
             await complete_inbox_message(session, claim.message)
+        if events:
+            await session.execute(
+                delete(CustomerNotificationPending).where(
+                    CustomerNotificationPending.source_event_id.in_(
+                        [event.outbox_event_id for event in events]
+                    )
+                )
+            )
         return len(events)
 
 
@@ -231,6 +251,11 @@ class CustomerDeliveryPort(Protocol):
 class ConfiguredDelivery:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.web: WebPushTransport | None = None
+        if settings.customer_web_push_enabled:
+            from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
+
+            self.web = WebPushTransport()
         self.fcm: FcmPushNotificationPort | None = None
         if settings.customer_fcm_enabled:
             from tirodhan.modules.customer_account.native_push import require_fcm
@@ -266,6 +291,7 @@ class ConfiguredDelivery:
             from tirodhan.modules.customer_account.web_push import send_web_push
 
             try:
+                assert self.web is not None
                 return await send_web_push(
                     BrowserSubscription.model_validate_json(secret),
                     {
@@ -275,12 +301,15 @@ class ConfiguredDelivery:
                         "request_id": str(signal.request_id),
                     },
                     self.settings,
+                    self.web,
                 )
             except CustomerReadError as error:
                 return "INVALID_TOKEN" if error.status == 422 else "DISABLED"
         return "DISABLED"
 
     async def close(self) -> None:
+        if self.web:
+            await self.web.close()
         if self.fcm:
             await self.fcm.close()
 

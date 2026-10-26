@@ -31,6 +31,7 @@ from tirodhan.modules.customer_account.models import (
     CustomerCommandReceipt,
     CustomerFeedback,
     CustomerNotification,
+    CustomerNotificationPending,
     CustomerPreferences,
     CustomerProfile,
     CustomerPushBinding,
@@ -381,6 +382,7 @@ async def register_device(
             provider="FCM",
             secret=token,
             protection=CustomerDataProtection(config()),
+            settings=config(),
         )
 
 
@@ -735,7 +737,7 @@ async def test_database_owner_constraints_and_immutable_history(
                 )
                 await session.flush()
         version = await session.scalar(text("SELECT version_num FROM alembic_version"))
-        assert version == "0039_customer_capabilities"
+        assert version == "0040_customer_notification_work"
 
 
 async def test_disabled_adapter_retains_retry_debt_without_provider_invocation(
@@ -904,7 +906,7 @@ async def test_lossy_downgrade_refuses_customer_history(database_session_factory
     async with database_session_factory() as session:
         assert (
             await session.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0039_customer_capabilities"
+            == "0040_customer_notification_work"
         )
         assert await session.scalar(select(func.count()).select_from(CustomerFeedback)) == 1
 
@@ -948,13 +950,19 @@ async def test_domain_event_replay_survives_missing_inbox_without_expanding_devi
     factory = database_session_factory
     _, _, owner = await setup(factory)
     await register_device(factory, owner, new_uuid7())
-    await event_for(factory, owner.user_id, "independent-business-replay")
+    source = await event_for(factory, owner.user_id, "independent-business-replay")
     assert await materialize(factory) == 1
     await register_device(factory, owner, new_uuid7(), "another-device-token")
     async with factory() as session, session.begin():
         await session.execute(
             delete(InboxMessage).where(
                 InboxMessage.consumer_name == "customer-notification-history"
+            )
+        )
+        # Explicit source replay; normal scans no longer re-examine completed history.
+        session.add(
+            CustomerNotificationPending(
+                source_event_id=source.outbox_event_id, available_at=utc_now()
             )
         )
     assert await materialize(factory) == 1

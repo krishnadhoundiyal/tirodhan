@@ -1,5 +1,7 @@
 # Idempotency
 
+Customer closure (0040): source insert/availability and pending membership commit together; materialization atomically commits notification/deliveries/inbox and removes membership. Independent source uniqueness still protects explicit replay after inbox loss. Customer row locks serialize approved live-device and rolling committed-change admission; exact replay/revocation are exempt, rejected commands mutate nothing. Web Push child termination retains at-least-once delivery debt. See [keys, transaction boundaries and tests](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
 ## Customer capabilities (0039)
 
 Versioned profile/preferences/favourite commands and feedback use existing actor/operation/client

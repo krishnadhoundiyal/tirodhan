@@ -306,6 +306,7 @@ async def put_native_push(
         provider=body.token_provider,
         secret=body.token.get_secret_value(),
         protection=protection(request),
+        settings=config,
     )
 
 
@@ -350,6 +351,7 @@ async def put_web_push(
         secret=json.dumps(data, sort_keys=True),
         token_identity=body.endpoint.get_secret_value(),
         protection=protection(request),
+        settings=settings(request),
     )
 
 
