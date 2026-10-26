@@ -242,3 +242,30 @@ Reference details: [Fluent Bit Azure Blob](https://docs.fluentbit.io/manual/4.0/
 [pinned plugin final flush](https://github.com/fluent/fluent-bit/blob/v4.0.11/plugins/out_azure_blob/azure_blob.c),
 [ACA Key Vault secret refresh](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets),
 [PostgreSQL Entra principal functions](https://learn.microsoft.com/en-us/azure/postgresql/security/security-manage-entra-users).
+
+
+## BDEP-01 optional finite-work integration (not activated)
+
+The stage-4 workload map supports opt-in `customer_notifications` and
+`routing_availability` ACA Jobs. The schedules default to null, so neither
+Job is created during stage 4 without separately approved cron values.
+Use `customer_notifications_schedule` and `routing_availability_schedule`
+only after documenting expected cadence, cost and operational acceptance.
+The former reads durable PostgreSQL pending membership; do not invent a
+Service Bus queue. The latter requires an explicit enabled
+`TIRODHAN_ROUTING_ORCHESTRATION_ENABLED` setting.
+
+New Key Vault names are `customer-cursor-signing-key`,
+`customer-data-encryption-keys`, `customer-data-hmac-key` and
+`customer-vapid-private-key-pem`. The existing seeder accepts complete
+legacy/customer-data/VAPID batches and approved combinations, never partial
+customer-data batches. These names are optional references via the existing
+versionless Key Vault scheme. Protected customer data requires matching
+`TIRODHAN_CUSTOMER_DATA_ACTIVE_KEY_ID` and explicitly supplied keys.
+Enabled secrets are not permission to activate push providers: FCM/Web Push
+remain off until platform acceptance and required retention policies are approved.
+
+The 300-second scheduled-Job timeout must be reconciled with enabled Web Push
+attempts (up to 22 seconds each) before adopting a schedule/batch size.
+The current native routing workers requiring OSRM and solver artifact packaging
+must not be auto-scheduled. Consult `docs/NONPROD_RUNTIME_INTEGRATION.md`.

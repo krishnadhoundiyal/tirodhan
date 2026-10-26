@@ -22,18 +22,32 @@ locals {
     planning          = "planning"
     financial_webhook = "financial-webhook"
   }
-  jobs = merge({
-    outbox                 = "outbox_publisher"
-    planning_scheduler     = "planning_scheduler"
-    fleet_timeout          = "fleet_timeout"
-    pending_payment_expiry = "pending_payment_expiry"
-  }, var.financial_inventory_schedule == null ? {} : { financial_inventory = "financial_inventory" })
+  jobs = merge(
+    {
+      outbox                 = "outbox_publisher"
+      planning_scheduler     = "planning_scheduler"
+      fleet_timeout          = "fleet_timeout"
+      pending_payment_expiry = "pending_payment_expiry"
+    },
+    var.financial_inventory_schedule == null ? {} : { financial_inventory = "financial_inventory" },
+    var.customer_notifications_schedule == null ? {} : { customer_notifications = "customer_notifications" },
+    var.routing_availability_schedule == null ? {} : { routing_availability = "routing_availability" },
+  )
+  # Extra finite work is opt-in; null schedule produces no job and no new cost.
+  job_cron = merge(
+    var.job_schedules,
+    var.financial_inventory_schedule == null ? {} : { financial_inventory = var.financial_inventory_schedule },
+    var.customer_notifications_schedule == null ? {} : { customer_notifications = var.customer_notifications_schedule },
+    var.routing_availability_schedule == null ? {} : { routing_availability = var.routing_availability_schedule },
+  )
   scheduled_job_resource_names = {
     outbox                 = "outbox"
     planning_scheduler     = "plansched"
     fleet_timeout          = "fleet-tmo"
     pending_payment_expiry = "pay-exp"
     financial_inventory    = "fin-inv"
+    customer_notifications = "cust-notify"
+    routing_availability   = "slot-refresh"
   }
   # Paths are deployment choices, not domain configuration.
   shared_dir = "/var/log/tirodhan"

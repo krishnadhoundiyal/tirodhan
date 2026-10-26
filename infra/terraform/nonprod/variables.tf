@@ -91,6 +91,10 @@ variable "runtime_secret_names" {
     TIRODHAN_PHONE_ENCRYPTION_KEYS            = "phone-encryption-keys"
     TIRODHAN_PHONE_LOOKUP_HMAC_KEY            = "phone-lookup-hmac-key"
     TIRODHAN_ADDRESS_ENCRYPTION_KEYS          = "address-encryption-keys"
+    TIRODHAN_CUSTOMER_CURSOR_SIGNING_KEY      = "customer-cursor-signing-key"
+    TIRODHAN_CUSTOMER_DATA_ENCRYPTION_KEYS    = "customer-data-encryption-keys"
+    TIRODHAN_CUSTOMER_DATA_HMAC_KEY           = "customer-data-hmac-key"
+    TIRODHAN_CUSTOMER_VAPID_PRIVATE_KEY_PEM   = "customer-vapid-private-key-pem"
   }
 }
 variable "enabled_runtime_secret_names" {
@@ -152,5 +156,25 @@ variable "financial_inventory_schedule" {
   validation {
     condition     = var.financial_inventory_schedule == null ? true : length(split(" ", var.financial_inventory_schedule)) == 5
     error_message = "Provide an explicitly reviewed five-field UTC cron or null."
+  }
+}
+
+# Feature jobs are deliberately absent until an explicitly approved UTC cron is supplied.
+variable "customer_notifications_schedule" {
+  description = "Optional UTC cron for finite customer history and push delivery. Null deploys no job."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.customer_notifications_schedule == null ? true : length(split(" ", var.customer_notifications_schedule)) == 5
+    error_message = "Supply an approved five-field UTC cron or null."
+  }
+}
+variable "routing_availability_schedule" {
+  description = "Optional UTC cron for projected-slot refresh. Requires active regional orchestration. Null deploys no job."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.routing_availability_schedule == null ? true : length(split(" ", var.routing_availability_schedule)) == 5
+    error_message = "Supply an approved five-field UTC cron or null."
   }
 }
