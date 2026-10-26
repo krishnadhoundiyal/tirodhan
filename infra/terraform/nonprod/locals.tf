@@ -46,8 +46,8 @@ locals {
     fleet_timeout          = "fleet-tmo"
     pending_payment_expiry = "pay-exp"
     financial_inventory    = "fin-inv"
-    customer_notifications = "cust-notify"
-    routing_availability   = "slot-refresh"
+    customer_notifications = "cust-ntf"
+    routing_availability   = "slot-rfr"
   }
   # Paths are deployment choices, not domain configuration.
   shared_dir = "/var/log/tirodhan"
