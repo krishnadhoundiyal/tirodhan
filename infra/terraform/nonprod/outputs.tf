@@ -13,3 +13,5 @@ output "storage_account_name" { value = azurerm_storage_account.application.name
 output "storage_account_id" { value = azurerm_storage_account.application.id }
 output "api_url" { value = var.deployment_stage >= 2 ? "https://${azurerm_container_app.api[0].ingress[0].fqdn}" : null }
 output "migration_job_name" { value = var.deployment_stage >= 1 ? azurerm_container_app_job.migration[0].name : null }
+output "postgres_bootstrap_job_name" { value = var.deployment_stage >= 1 ? azurerm_container_app_job.postgres_bootstrap[0].name : null }
+output "postgres_bootstrap_client_id" { value = azurerm_user_assigned_identity.postgres_bootstrap.client_id }

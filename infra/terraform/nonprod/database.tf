@@ -37,6 +37,18 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "ad
   principal_name      = var.postgres_admin_name
   principal_type      = var.postgres_admin_type
 }
+# Separate Entra administrator for idempotent, automated SQL setup. The human
+# recovery administrator above remains unchanged and the runtime MI is nonadmin.
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "bootstrap" {
+  server_name         = azurerm_postgresql_flexible_server.database.name
+  resource_group_name = data.azurerm_resource_group.nonprod.name
+  tenant_id           = var.tenant_id
+  object_id           = azurerm_user_assigned_identity.postgres_bootstrap.principal_id
+  principal_name      = azurerm_user_assigned_identity.postgres_bootstrap.name
+  principal_type      = "ServicePrincipal"
+
+  depends_on = [azurerm_postgresql_flexible_server_active_directory_administrator.administrator]
+}
 resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
   name      = "azure.extensions"
   server_id = azurerm_postgresql_flexible_server.database.id

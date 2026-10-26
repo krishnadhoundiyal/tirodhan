@@ -144,6 +144,8 @@ jobs:
         run: |
           terraform apply -input=false migration.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
+          # Runs the dedicated-MI PostgreSQL bootstrap ACA Job and waits for
+          # success BEFORE starting Alembic. Failure blocks runtime rollout.
           python -m tirodhan.deployment.release migrate
   runtime-plan:
     needs: migration-apply

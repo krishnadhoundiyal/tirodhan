@@ -92,11 +92,9 @@ def plan(mode: str, path: str) -> None:
         raise RuntimeError("Deployment plan contains populated storage credential attributes")
 
 
-def run_migration() -> None:
-    state = output_values()
-    group, job = state["resource_group_name"], state["migration_job_name"]
+def run_finite_job(group: str, job: str, purpose: str) -> None:
     if not job:
-        raise RuntimeError("Migration job must be applied first")
+        raise RuntimeError(f"{purpose} job must be applied first")
     execution = cli_json(["az", "containerapp", "job", "start", "-g", group, "-n", job])
     name = execution["name"]
     deadline = time.monotonic() + 1200
@@ -108,12 +106,21 @@ def run_migration() -> None:
             (item["properties"]["status"] for item in executions if item["name"] == name), None
         )
         if status == "Succeeded":
-            print("Migration and bounded log-sidecar execution succeeded")
+            print(f"{purpose} and bounded log-sidecar execution succeeded")
             return
         if status in {"Failed", "Stopped"}:
-            raise RuntimeError("Migration job did not succeed; runtime rollout is blocked")
+            raise RuntimeError(f"{purpose} job failed; runtime rollout is blocked")
         time.sleep(10)
-    raise RuntimeError("Migration completion timed out; runtime rollout is blocked")
+    raise RuntimeError(f"{purpose} completion timed out; runtime rollout is blocked")
+
+
+def run_migration() -> None:
+    state = output_values()
+    group = state["resource_group_name"]
+    # Every migration run rechecks the database principal and PostGIS grants.
+    # Failure prevents Alembic and any downstream application release.
+    run_finite_job(group, state["postgres_bootstrap_job_name"], "PostgreSQL bootstrap")
+    run_finite_job(group, state["migration_job_name"], "Migration")
 
 
 def main() -> None:

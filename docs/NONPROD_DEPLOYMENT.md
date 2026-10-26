@@ -82,16 +82,23 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
 1. Apply a reviewed foundation plan at `deployment_stage=0`. This creates the
    database, extension allowlist, firewall, queues, storage, vault, UAMI, RBAC and
    Consumption-only ACA environment, **no live workloads**.
-2. As the configured Entra PostgreSQL administrator, bootstrap PostGIS and the
-   UAMI-backed SQL principal. Set `POSTGRES_HOST`, `POSTGRES_ADMIN_NAME`,
-   `RUNTIME_DATABASE_ROLE`, `RUNTIME_PRINCIPAL_ID` from Terraform outputs, then
-   run `python -m tirodhan.deployment.bootstrap_database` from the repository root.
-   If connecting outside Azure, provide `postgres_bootstrap_ipv4` temporarily;
-   remove it through Terraform afterward. Re-running checks the principal's OID.
-   Grants are database CONNECT, public schema USAGE/CREATE and spatial-reference
-   SELECT; the UAMI owns its migration-created tables. Admin pre-creates PostGIS.
-   TLS certificates are verified, Entra tokens are obtained per connection, and
-   Alembic retains its existing NullPool behavior. Password auth is disabled.
+2. Terraform creates a dedicated PostgreSQL bootstrap managed identity and
+   registers it as a second PostgreSQL Entra administrator; the existing human
+   Entra administrator remains available for recovery. The normal runtime UAMI
+   receives no PostgreSQL admin privileges. Do not manually execute SQL setup
+   during ordinary deployment. After stage-0 foundation, seed the two required
+   secrets via their existing protected GitHub Actions (GHCR pull PAT and logging
+   SAS). The migration-stage Terraform plan provisions a finite `pgboot` ACA
+   Job. The migration-apply workflow automatically runs that Job with its
+   dedicated identity before Alembic; it fails closed on missing/failed bootstrap.
+   The idempotent script creates the runtime Entra SQL principal by object ID,
+   creates PostGIS and grants CONNECT, public USAGE/CREATE and
+   spatial-reference SELECT, without giving runtime administrative access.
+   Only the `ghcr-pull-pat` and `fluent-bit-sas` secret objects are accessible
+   to the elevated bootstrap identity through dedicated Terraform RBAC.
+   No operator IP firewall rule or Azure CLI administrator session is needed
+   in the ordinary ACA-hosted path. The previous operator-run CLI procedure is
+   retained solely for explicitly authorized recovery.
 3. Authenticate **as the restricted deployment identity** before initial
    application secret seeding and initial Fluent Bit user-delegation SAS creation,
    not as the one-time bootstrap operator or the PostgreSQL administrator from
@@ -109,8 +116,9 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
 4. Configure GitHub variables and protected environments below. Publish private
    GHCR images from reviewed main. Set/verify both packages' **private** visibility
    and repository package-access permission; GitHub defaults are not the authority.
-5. The workflow plans/applies migration stage 1 and starts the manual Alembic Job.
-   Its successful execution (including sidecar termination) gates runtime planning.
+5. The workflow plans/applies migration stage 1, starts the PostgreSQL bootstrap
+   Job and waits for success, then starts the existing manual Alembic Job.
+   Both must succeed, including bounded sidecar termination, before runtime planning.
    Existing stages/images are preserved during migrations on subsequent releases.
 6. Approve the runtime plan. Terraform dependencies deploy API (stage 2), workers
    (stage 3), then scheduled Jobs (stage 4). Verify acceptance below.

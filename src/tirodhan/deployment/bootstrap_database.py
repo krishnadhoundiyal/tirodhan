@@ -7,13 +7,21 @@ import os
 import ssl
 
 import asyncpg
-from azure.identity import AzureCliCredential
+from azure.identity import AzureCliCredential, ManagedIdentityCredential
 
 
 async def bootstrap() -> None:
     role = os.environ["RUNTIME_DATABASE_ROLE"]
     oid = os.environ["RUNTIME_PRINCIPAL_ID"]
-    with AzureCliCredential() as credential:
+    # Hosted ACA bootstraps strictly with its dedicated PostgreSQL admin MI.
+    # Preserve the explicitly authenticated Azure CLI path for recovery operations.
+    client_id = os.environ.get("POSTGRES_BOOTSTRAP_CLIENT_ID")
+    credential = (
+        ManagedIdentityCredential(client_id=client_id)
+        if client_id
+        else AzureCliCredential()
+    )
+    with credential:
         token = credential.get_token("https://ossrdbms-aad.database.windows.net/.default").token
     connection = await asyncpg.connect(
         host=os.environ["POSTGRES_HOST"],
