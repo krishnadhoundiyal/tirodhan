@@ -219,7 +219,9 @@ HTTPS sending resolves once, rejects any private/mixed DNS answer, pins the chos
 and uses the original hostname for TLS certificate validation/SNI/Host. It ignores proxy environment,
 does not follow redirects, read provider response bodies, or log subscription URLs. DNS/HTTPS runs
 in a supervised one-at-a-time child with a 20-second parent deadline and child watchdog; timeout,
-cancellation and shutdown kill/reap it without using the default executor. Status 404/410 revokes;
+cancellation and shutdown normally kill/reap it without using the default executor. If launch
+ownership never resolves, the CB-04 POSIX worker group watchdog terminates all owned processes
+after a further two-second cleanup allowance (22 seconds total). Status 404/410 revokes;
 400/413 is permanent;
 auth/rate-limit/server/network/redirect failures remain retryable. Payload is only numeric schema
 version, notification event UUID, COLLECTION target and owned request UUID. No status, amount,

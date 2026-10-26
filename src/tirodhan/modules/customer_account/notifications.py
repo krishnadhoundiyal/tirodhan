@@ -34,6 +34,7 @@ from tirodhan.modules.reliability.models import OutboxEvent
 from tirodhan.modules.reliability.primitives import claim_inbox_message, complete_inbox_message
 
 if TYPE_CHECKING:
+    from tirodhan.modules.customer_account.web_push_ownership import LaunchOwner
     from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
     from tirodhan.modules.dispatch.push import FcmPushNotificationPort
 
@@ -249,13 +250,15 @@ class CustomerDeliveryPort(Protocol):
 
 
 class ConfiguredDelivery:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, web_push_owner: LaunchOwner | None = None) -> None:
         self.settings = settings
         self.web: WebPushTransport | None = None
         if settings.customer_web_push_enabled:
             from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
 
-            self.web = WebPushTransport()
+            if web_push_owner is None:
+                raise ValueError("WEB_PUSH_PROCESS_OWNERSHIP_REQUIRED")
+            self.web = WebPushTransport(owner=web_push_owner)
         self.fcm: FcmPushNotificationPort | None = None
         if settings.customer_fcm_enabled:
             from tirodhan.modules.customer_account.native_push import require_fcm

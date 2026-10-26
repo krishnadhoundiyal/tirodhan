@@ -1,5 +1,10 @@
 # Project Context
 
+CB-04 closes stalled Web Push creation through private POSIX worker process-group ownership
+and a watchdog that terminates the group if cleanup exceeds two seconds (22 seconds total
+attempt budget). Enabled Web Push requires that worker boundary; production flags remain false.
+See [closure and fault tests](CUSTOMER_BACKEND_REVIEW_CLOSURE.md#cb-04-permanently-unresolved-subprocess-launch).
+
 Customer review closure (0040) bounds Web Push DNS with supervised children, enforces the approved 5 native / 10 browser and 30-change rolling-day policy, and replaces history rescans with transactional pending membership. Provider activation remains disabled. See [review closure and measured evidence](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
 
 Customer account/profile/preferences/favourites, encrypted feedback, public controlled content,

@@ -13,9 +13,10 @@ from tirodhan.modules.customer_account.notifications import (
     materialize,
 )
 from tirodhan.modules.customer_account.protection import CustomerDataProtection
+from tirodhan.modules.customer_account.web_push_ownership import ProcessGroupOwner
 
 
-async def run() -> None:
+async def run(web_push_owner: ProcessGroupOwner | None = None) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_file_path)
     batch = settings.outbox_publish_batch_size
@@ -29,7 +30,7 @@ async def run() -> None:
         if not settings.customer_fcm_enabled and not settings.customer_web_push_enabled:
             return
         protection = CustomerDataProtection(settings)
-        port = ConfiguredDelivery(settings)
+        port = ConfiguredDelivery(settings, web_push_owner=web_push_owner)
         for _ in range(batch):
             if not await deliver_one(factory, protection, port):
                 break
@@ -55,7 +56,8 @@ async def supervised_run() -> None:
         except NotImplementedError:
             # Windows asyncio.run still cancels pending sends on ordinary loop shutdown.
             pass
-        await run()
+        owner = ProcessGroupOwner() if get_settings().customer_web_push_enabled else None
+        await run(owner)
     except asyncio.CancelledError:
         pass
     finally:

@@ -1,4 +1,4 @@
-# Customer backend review closure — CB-01, CB-02, CB-03
+# Customer backend review closure — CB-01 through CB-04
 
 This follow-up extends `daa33acc0bf8d5792d3bec2465d693cea4c26499` on
 `codex/customer-backend-capabilities`. It changes backend code only. Provider activation,
@@ -14,10 +14,14 @@ without a shell; endpoint, encrypted body and VAPID headers travel only through 
 stdin pipe, never command arguments or logs. Child stderr is discarded; stdout contains only
 a three-digit HTTP status. The bounded request envelope is at most 16 KiB.
 
-The parent applies a 20-second budget across launch and exchange, then kills and reaps the
-child and drains its pipes. Cancellation during launch is shielded until the child handle is
-acquired, so it can also be reaped. Closing the port cancels an active send and waits for
-cleanup. POSIX SIGTERM cancels the finite worker through its existing `finally` cleanup.
+The parent applies a 20-second budget across launch and exchange, then normally kills/reaps
+the child and drains its pipes. Cancellation during launch retains the ownership obligation;
+it cannot detach an unknown launch. CB-04 below adds an independent process-group watchdog:
+two seconds are allowed for cleanup, after which the whole isolated worker group is terminated.
+The hard bound is therefore **22 seconds**, subject to a functioning OS, rather than a promise
+that every caller returns a timeout exception at exactly 20 seconds. Closing the port cancels
+an active send and initiates the same bounded cleanup. POSIX SIGTERM cancels the finite worker
+through its existing `finally` cleanup.
 Ordinary `asyncio.run` shutdown also cancels/reaps pending sends. A daemon watchdog inside
 the child calls `os._exit(1)` after 20 seconds, including while libc `getaddrinfo` is blocked
 and has released the GIL. Thus a killed parent cannot leave stalled DNS children indefinitely.
@@ -124,6 +128,60 @@ There is no recurring historical anti-join. The one-time adoption scan and trigg
 per-source history lookup are intentional. Pending membership is derived, so downgrade to 0039
 can drop/reconstruct it without losing business facts; older code resumes its original scan.
 
+## CB-04: permanently unresolved subprocess launch
+
+The earlier cleanup awaited the shielded launch indefinitely if
+`asyncio.create_subprocess_exec()` never settled. A coroutine timeout alone could not resolve
+whether a child existed, and abandoning that task could abandon its child. This correction
+chooses explicit finite-worker termination when normal ownership handoff/cleanup cannot finish.
+
+Before enabling Web Push in the finite CLI, `ProcessGroupOwner` establishes a private POSIX
+process group whose leader is the worker itself. Children inherit that group at creation;
+they do not start new sessions or change process groups. This kernel ownership exists before
+asyncio exposes a child handle. `ConfiguredDelivery` rejects enabled Web Push without this
+owner; the lower transport also refuses to spawn without an owner. Isolation is established
+only in the dedicated worker, never the transactional API. Native FCM-only and history-only
+workers keep their previous behavior. Web Push delivery requires a POSIX/Linux CPython 3.12+
+worker, consistent with the existing production Dockerfile. CPython 3.12's Linux vfork path
+releases the GIL while the child's exec may stall; launch explicitly keeps `close_fds=True`
+and `cwd="."` so it uses the fork/exec path rather than a GIL-held `posix_spawn` call (3.13's
+CLOSEFROM fast path can otherwise apply even with closed descriptors). The real pipe-success
+test forbids that fast path. See the
+[CPython implementation](https://github.com/python/cpython/blob/v3.12.0/Modules/_posixsubprocess.c#L751-L774).
+Older/other Python runtimes fail closed for enabled delivery. Likewise,
+Windows fails closed for enabled delivery rather than claiming equivalent containment.
+
+For each attempt, a non-daemon watchdog thread is armed before launch, independently of event-loop
+progress, for the 20-second budget plus two-second cleanup allowance. Entering cleanup also
+starts a two-second watchdog, so early cancellation does not wait for the original attempt
+budget to expire. The timers are disarmed only after obtaining the handle, killing if necessary,
+reaping and draining pipes. Repeated task cancellation cannot cancel that ownership task or
+disarm a live watchdog. If normal cleanup fails or launch remains unknown, the watchdog sends
+SIGKILL to the entire private group and exits the worker. There is no subsequent batch item or
+optimistic successful close after discarding ownership. Normal POSIX init/container-runtime
+orphan reaping applies after the group is killed; if the worker is namespace PID 1, its exit
+also causes namespace teardown. No new service, paid resource or deployment setting is added.
+External hard termination must target the job/container or this private process group, rather
+than only the worker PID on an unmanaged host. A dead parent cannot execute its watchdog,
+and the child's own watchdog starts only after exec; single-PID hard killing during pre-exec
+is not a supported cleanup protocol. The existing container runtime supplies the outer lifetime
+boundary; no claim is made about surviving kernel failure or unbounded OS scheduling suspension.
+
+This fail-stop path cannot flush logs, return an ordinary timeout result or finalize a delivery
+lease. The existing committed SENDING claim remains recoverable after its 60-second lease;
+its notification/event identity does not change. A provider may already have received the
+signal, so retry remains at-least-once. History, financial truth and fulfilment never roll back.
+An external runner observes worker failure and must schedule the existing finite retry; this
+change neither creates a scheduler nor enables delivery.
+
+Eight Linux regression cases leave launch permanently unresolved, with no release path: before
+creating a child and after actually starting an hour-long child while hiding its handle. Each
+case exercises timeout, explicit close, repeated caller cancellation or `asyncio.run` shutdown.
+The disposable worker is killed within the test bound, never returns after discarding ownership,
+and any created child is verified killed by SIGKILL and reaped by a temporary test subreaper.
+The root test runner's group is never targeted. Existing eventual-handoff cancellation, DNS,
+executor saturation, pipe, child watchdog and graceful SIGTERM checks remain in place.
+
 ## Migration and operational gates
 
 Drain old customer materializers and registration writers for the 0039-to-0040 cutover, apply
@@ -140,6 +198,24 @@ approved legal/support content, retention/access decisions and real payment-meth
 remain the previously reported release gates. No capability is activated by these fixes.
 
 ## Verification
+
+CB-04 verification on the follow-up to `6afb294`:
+
+- Final unprivileged Linux provider/Web Push checks: **48 passed in 18.76 seconds** (32 provider
+  tests and 16 lifecycle tests). This includes all eight unresolved launch cases, rejection of
+  missing ownership, real group termination/orphan reaping, and forbidding the GIL-held spawn
+  fast path. One existing Firebase deprecation warning remains.
+- Targeted real-PostgreSQL worker/configuration/lease recovery checks: **4 passed in 20.49 seconds**.
+  They verify disabled provider/crypto behavior, disabled delivery debt, the standalone history-only
+  worker and crash-after-provider-send lease recovery.
+- Ruff lint/format checks pass for **573 Python files**; full Windows strict mypy passes for
+  **268 source modules**. Linux strict checking of the two ownership/transport modules also passes
+  with imports skipped. A broad Linux mypy attempt is blocked by the existing image's NumPy stubs
+  using Python 3.12 type syntax while the repository targets 3.10; no dependency/type target was
+  changed to hide that limitation. `git diff --check` passes.
+- The earlier broader suite results below remain evidence for the preceding increment; the full
+  unrelated suite was not rerun for CB-04. No provider was enabled, frontend edited or deployment
+  performed. The integration PR is for review only; production gates remain in force.
 
 - Final Linux customer suite: **90 passed in 118.03 seconds** (39 unit and 51 real-PostgreSQL
   integration cases). Includes actual POSIX SIGTERM, stalled resolver/executor/shutdown cases,

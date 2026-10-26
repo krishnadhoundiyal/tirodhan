@@ -1,5 +1,11 @@
 # Idempotency
 
+CB-04 unknown-launch cleanup terminates the isolated notification worker group rather than
+discarding a potentially live child. The committed SENDING lease remains pending recovery
+after expiry; retries retain the notification identity and may duplicate a provider-accepted
+signal. No history, financial or fulfilment transition is undone. See
+[bounded ownership](CUSTOMER_BACKEND_REVIEW_CLOSURE.md#cb-04-permanently-unresolved-subprocess-launch).
+
 Customer closure (0040): source insert/availability and pending membership commit together; materialization atomically commits notification/deliveries/inbox and removes membership. Independent source uniqueness still protects explicit replay after inbox loss. Customer row locks serialize approved live-device and rolling committed-change admission; exact replay/revocation are exempt, rejected commands mutate nothing. Web Push child termination retains at-least-once delivery debt. See [keys, transaction boundaries and tests](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
 
 ## Customer capabilities (0039)

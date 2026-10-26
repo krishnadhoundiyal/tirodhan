@@ -2,6 +2,10 @@
 
 import asyncio
 import concurrent.futures
+import ctypes
+import json
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -12,6 +16,11 @@ from typing import Any
 import pytest
 
 from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
+
+
+class UnexpectedAbort:
+    def abort(self) -> None:
+        raise AssertionError("normal lifecycle must finish before the fail-stop watchdog")
 
 
 def stall_command(marker: Path) -> tuple[str, ...]:
@@ -52,7 +61,7 @@ async def test_stalled_dns_is_killed_and_reaped_without_executor_leak(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
     children = track_children(monkeypatch)
-    transport = WebPushTransport(timeout_seconds=3)
+    transport = WebPushTransport(timeout_seconds=3, owner=UnexpectedAbort())
     marker = tmp_path / "dns"
     monkeypatch.setattr(transport, "command", lambda: stall_command(marker))
     started = time.monotonic()
@@ -76,7 +85,7 @@ async def test_exhausted_executor_does_not_block_send_and_excess_calls_do_not_sp
     old_executor = loop._default_executor  # type: ignore[attr-defined]
     loop.set_default_executor(executor)
     children = track_children(monkeypatch)
-    transport = WebPushTransport(timeout_seconds=15)
+    transport = WebPushTransport(timeout_seconds=15, owner=UnexpectedAbort())
     marker = tmp_path / "dns"
     monkeypatch.setattr(transport, "command", lambda: stall_command(marker))
     task = asyncio.create_task(transport.post("https://push.example.test/p", b"body", {}))
@@ -116,7 +125,7 @@ async def test_cancellation_during_spawn_still_reaps_child(monkeypatch: Any) -> 
         return child
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", delayed)
-    transport = WebPushTransport()
+    transport = WebPushTransport(owner=UnexpectedAbort())
     task = asyncio.create_task(transport.post("https://push.example.test/p", b"body", {}))
     await asyncio.wait_for(spawned.wait(), 10)
     task.cancel()
@@ -133,8 +142,10 @@ def test_asyncio_run_shutdown_reaps_stalled_dns_child(tmp_path: Path) -> None:
 import asyncio
 from pathlib import Path
 from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
+from types import SimpleNamespace
+import os
 async def run():
-    transport=WebPushTransport()
+    transport=WebPushTransport(owner=SimpleNamespace(abort=lambda: os._exit(91)))
     transport.command=lambda: {stall_command(marker)!r}
     task=asyncio.create_task(transport.post('https://push.example.test/p',b'body',{{}}))
     while not Path({str(marker)!r}).exists():
@@ -170,7 +181,13 @@ def test_child_watchdog_exits_even_without_a_supervising_parent(tmp_path: Path) 
 
 @pytest.mark.asyncio
 async def test_child_pipe_success_uses_no_shell_or_secret_arguments(monkeypatch: Any) -> None:
-    transport = WebPushTransport()
+    if sys.platform == "linux":
+
+        def forbidden(*args: Any, **kwargs: Any) -> None:
+            pytest.fail("the worker watchdog must not depend on GIL-held posix_spawn")
+
+        monkeypatch.setattr(subprocess.Popen, "_posix_spawn", forbidden)
+    transport = WebPushTransport(owner=UnexpectedAbort())
     command = (
         sys.executable,
         "-c",
@@ -193,21 +210,28 @@ async def test_child_pipe_success_uses_no_shell_or_secret_arguments(monkeypatch:
     await transport.close()
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Windows terminate is not POSIX SIGTERM")
+@pytest.mark.skipif(
+    sys.platform != "linux" or sys.version_info < (3, 12),
+    reason="production ownership requires CPython 3.12+ on Linux",
+)
 def test_finite_worker_sigterm_cancels_and_reaps_stalled_dns(tmp_path: Path) -> None:
     marker = tmp_path / "dns"
     code = f"""
 import asyncio
 from tirodhan.workers import customer_notifications as worker
 from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
-async def run():
-    transport=WebPushTransport()
+from tirodhan.modules.customer_account.web_push_ownership import ProcessGroupOwner
+from types import SimpleNamespace
+async def run(owner=None):
+    assert isinstance(owner, ProcessGroupOwner)
+    transport=WebPushTransport(owner=owner)
     transport.command=lambda: {stall_command(marker)!r}
     try:
         await transport.post('https://push.example.test/p',b'body',{{}})
     finally:
         await transport.close()
 worker.run=run
+worker.get_settings=lambda: SimpleNamespace(customer_web_push_enabled=True)
 asyncio.run(worker.supervised_run())
 print('SIGTERM_COMPLETE')
 """
@@ -227,3 +251,116 @@ print('SIGTERM_COMPLETE')
             if driver.poll() is None:
                 driver.kill()
                 driver.wait(timeout=3)
+
+
+@pytest.mark.asyncio
+async def test_missing_worker_ownership_rejects_before_launch(monkeypatch: Any) -> None:
+    async def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("uncontained Web Push must not create a subprocess")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", forbidden)
+    with pytest.raises(OSError, match="ownership unavailable"):
+        await WebPushTransport().post("https://push.example.test/p", b"body", {})
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux" or sys.version_info < (3, 12),
+    reason="real group kill and Linux orphan adoption on the supported worker runtime",
+)
+@pytest.mark.parametrize("with_child", [False, True])
+@pytest.mark.parametrize("shutdown", ["timeout", "close", "cancel", "event_loop"])
+def test_permanently_unresolved_spawn_has_bounded_owned_shutdown(
+    tmp_path: Path, with_child: bool, shutdown: str
+) -> None:
+    marker = tmp_path / "ownership.json"
+    # Adopt/reap the disposable worker's child after group termination, just as the
+    # container runtime/init must do. Never signal the pytest runner's process group.
+    libc = ctypes.CDLL(None, use_errno=True)
+    old_subreaper = ctypes.c_int()
+    assert libc.prctl(37, ctypes.byref(old_subreaper), 0, 0, 0) == 0  # GET_CHILD_SUBREAPER
+    assert libc.prctl(36, 1, 0, 0, 0) == 0  # SET_CHILD_SUBREAPER
+    code = f"""
+import asyncio,json,os,sys
+from pathlib import Path
+from tirodhan.modules.customer_account.web_push_transport import WebPushTransport
+from tirodhan.modules.customer_account.web_push_ownership import ProcessGroupOwner
+async def run():
+    owner=ProcessGroupOwner()
+    port=WebPushTransport(timeout_seconds=.5,cleanup_seconds=.3,owner=owner)
+    original=asyncio.create_subprocess_exec
+    entered=asyncio.Event()
+    async def never_resolves(*args,**kwargs):
+        child=None
+        if {with_child!r}:
+            child=await original(sys.executable,'-c','import time;time.sleep(3600)',**kwargs)
+            assert os.getpgid(child.pid)==os.getpgrp()
+        Path({str(marker)!r}).write_text(json.dumps({{
+            'child':child.pid if child else None,'group':os.getpgrp()
+        }}))
+        entered.set()
+        # Never release launch, including during asyncio.run's final cancellation sweep.
+        while True:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                pass
+    asyncio.create_subprocess_exec=never_resolves
+    task=asyncio.create_task(port.post('https://push.example.test/p',b'body',{{}}))
+    await entered.wait()
+    if {shutdown!r}=='close':
+        await port.close()
+    elif {shutdown!r}=='cancel':
+        task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        await task
+    elif {shutdown!r}=='event_loop':
+        return
+    else:
+        await task
+asyncio.run(run())
+print('UNSAFE_RETURN')
+"""
+    child_pid = None
+    reaped = False
+    try:
+        with subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        ) as driver:
+            started = time.monotonic()
+            try:
+                stdout, stderr = driver.communicate(timeout=5)
+                assert driver.returncode == -signal.SIGKILL
+                assert time.monotonic() - started < 3
+                assert stdout == stderr == b""
+                ownership = json.loads(marker.read_text())
+                assert ownership["group"] == driver.pid
+                child_pid = ownership["child"]
+                assert (child_pid is not None) == with_child
+            finally:
+                if driver.poll() is None:
+                    os.killpg(driver.pid, signal.SIGKILL)
+                    driver.wait(timeout=3)
+                if marker.exists():
+                    child_pid = json.loads(marker.read_text())["child"]
+        if child_pid is not None:
+            until = time.monotonic() + 2
+            while time.monotonic() < until:
+                pid, status = os.waitpid(child_pid, os.WNOHANG)
+                if pid:
+                    reaped = True
+                    assert os.WIFSIGNALED(status) and os.WTERMSIG(status) == signal.SIGKILL
+                    break
+                time.sleep(0.01)
+            assert reaped, "the potentially created child must be killed and reaped"
+    finally:
+        if child_pid is not None and not reaped:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+                os.waitpid(child_pid, 0)
+            except ProcessLookupError:
+                pass
+        assert libc.prctl(36, old_subreaper.value, 0, 0, 0) == 0
