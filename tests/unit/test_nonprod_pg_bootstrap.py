@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import inspect
-import os
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import hcl2
 import pytest
@@ -41,15 +40,20 @@ def test_pg_bootstrap_identity_is_separate_and_administrator_is_terraform_owned(
     assert admin["object_id"] == "${azurerm_user_assigned_identity.postgres_bootstrap.principal_id}"
     assert admin["principal_type"] == "ServicePrincipal"
     assert admin["principal_name"] == "${azurerm_user_assigned_identity.postgres_bootstrap.name}"
-    assert any(
-        "administrator" in entry["azurerm_postgresql_flexible_server_active_directory_administrator"]
+    admin_resources = [
+        entry["azurerm_postgresql_flexible_server_active_directory_administrator"]
         for entry in admins
         if "azurerm_postgresql_flexible_server_active_directory_administrator" in entry
-    )
+    ]
+    assert any("administrator" in entry for entry in admin_resources)
 
 
 def test_pg_bootstrap_job_is_finite_and_cannot_be_scheduled() -> None:
-    job = named(tf("postgres_bootstrap_job.tf")["resource"], "azurerm_container_app_job", "postgres_bootstrap")
+    job = named(
+        tf("postgres_bootstrap_job.tf")["resource"],
+        "azurerm_container_app_job",
+        "postgres_bootstrap",
+    )
     assert job["count"] == "${var.deployment_stage >= 1 ? 1 : 0}"
     assert job["name"] == "${local.prefix}-pgboot"
     assert "manual_trigger_config" in job and "schedule_trigger_config" not in job
@@ -57,7 +61,10 @@ def test_pg_bootstrap_job_is_finite_and_cannot_be_scheduled() -> None:
         "${azurerm_user_assigned_identity.postgres_bootstrap.id}"
     ]
     assert job["workload_profile_name"] == "Consumption"
-    assert job["template"][0]["container"][0]["args"][-1] == "tirodhan.deployment.bootstrap_database"
+    assert (
+        job["template"][0]["container"][0]["args"][-1]
+        == "tirodhan.deployment.bootstrap_database"
+    )
     assert len(job["template"][0]["container"]) == 2
     env = {e["name"]: e["value"] for e in job["template"][0]["container"][0]["env"]}
     assert env["POSTGRES_BOOTSTRAP_CLIENT_ID"] == (
@@ -106,20 +113,55 @@ def test_pg_bootstrap_is_prior_to_alembic_and_automatic_in_trusted_workflow(
     assert "postgres_bootstrap_job_name" in (INFRA / "outputs.tf").read_text()
 
 
-def test_bootstrap_requires_dedicated_managed_identity_in_hosted_mode(
+@pytest.mark.asyncio
+async def test_hosted_bootstrap_uses_only_dedicated_mi_and_grants_nonadmin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = inspect.getsource(bootstrap_database.bootstrap)
-    assert "ManagedIdentityCredential(client_id=client_id)" in source
     assert "pgaadauth_create_principal_with_oid" in source
     assert "CREATE EXTENSION IF NOT EXISTS postgis" in source
     assert "GRANT USAGE, CREATE ON SCHEMA public" in source
     assert "GRANT SELECT ON public.spatial_ref_sys" in source
-    monkeypatch.setenv("POSTGRES_BOOTSTRAP_CLIENT_ID", "test-bootstrap-client")
-    fake = MagicMock()
-    fake.__enter__.return_value = fake
-    monkeypatch.setattr(bootstrap_database, "ManagedIdentityCredential", fake)
-    assert os.environ["POSTGRES_BOOTSTRAP_CLIENT_ID"] == "test-bootstrap-client"
+    for name, value in {
+        "POSTGRES_BOOTSTRAP_CLIENT_ID": "test-bootstrap-client",
+        "POSTGRES_HOST": "synthetic-pg.example",
+        "POSTGRES_ADMIN_NAME": "synthetic-pgboot",
+        "RUNTIME_DATABASE_ROLE": "synthetic-runtime",
+        "RUNTIME_PRINCIPAL_ID": "00000000-0000-0000-0000-000000000010",
+    }.items():
+        monkeypatch.setenv(name, value)
+    credential = MagicMock()
+    credential.__enter__.return_value = credential
+    credential.get_token.return_value.token = "test-token"
+    mi_factory = MagicMock(return_value=credential)
+    cli_factory = MagicMock()
+    monkeypatch.setattr(bootstrap_database, "ManagedIdentityCredential", mi_factory)
+    monkeypatch.setattr(bootstrap_database, "AzureCliCredential", cli_factory)
+
+    admin_connection = MagicMock(
+        fetchval=AsyncMock(return_value=None),
+        execute=AsyncMock(),
+        close=AsyncMock(),
+    )
+    application_connection = MagicMock(execute=AsyncMock(), close=AsyncMock())
+    connections = iter([admin_connection, application_connection])
+    connect = AsyncMock(side_effect=lambda **kwargs: next(connections))
+    monkeypatch.setattr(bootstrap_database.asyncpg, "connect", connect)
+    await bootstrap_database.bootstrap()
+    mi_factory.assert_called_once_with(client_id="test-bootstrap-client")
+    cli_factory.assert_not_called()
+    assert connect.await_count == 2
+    assert all(
+        item.kwargs["user"] == "synthetic-pgboot"
+        for item in connect.await_args_list
+    )
+    created = admin_connection.execute.await_args_list[0].args
+    assert created[0].startswith("SELECT pgaadauth_create_principal_with_oid")
+    assert created[3] == "service"
+    assert created[4:] == (False, False)
+    assert application_connection.execute.await_args_list[0].args == (
+        "CREATE EXTENSION IF NOT EXISTS postgis",
+    )
 
 
 def test_all_production_workloads_exclude_pg_bootstrap_identity() -> None:
