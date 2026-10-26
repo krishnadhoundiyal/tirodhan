@@ -29,18 +29,16 @@ def test_opt_in_jobs_default_absent_and_stay_stage_four() -> None:
     for name in ("customer_notifications", "routing_availability"):
         assert f"var.{name}_schedule == null ? {{}}" in locals_text
         assert f'{name} = "{name}"' in locals_text
-        assert f'{name} = var.{name}_schedule' in locals_text
+        assert f"{name} = var.{name}_schedule" in locals_text
     jobs = load("jobs.tf")["resource"]
     scheduled = next(
         item["azurerm_container_app_job"]["scheduled"]
         for item in jobs
-        if "azurerm_container_app_job" in item
-        and "scheduled" in item["azurerm_container_app_job"]
+        if "azurerm_container_app_job" in item and "scheduled" in item["azurerm_container_app_job"]
     )
     assert scheduled["for_each"] == "${var.deployment_stage >= 4 ? local.jobs : {}}"
     assert (
-        scheduled["schedule_trigger_config"][0]["cron_expression"]
-        == "${local.job_cron[each.key]}"
+        scheduled["schedule_trigger_config"][0]["cron_expression"] == "${local.job_cron[each.key]}"
     )
     assert len(scheduled["template"][0]["container"]) == 2
 
