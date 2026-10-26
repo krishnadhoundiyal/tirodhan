@@ -131,5 +131,5 @@ resource "azurerm_container_app_job" "postgres_bootstrap" {
     azurerm_postgresql_flexible_server_configuration.extensions,
     azurerm_role_assignment.postgres_bootstrap_secrets,
   ]
-  tags = local.tags
+  tags       = local.tags
 }

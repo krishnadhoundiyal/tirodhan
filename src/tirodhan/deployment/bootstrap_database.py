@@ -17,9 +17,7 @@ async def bootstrap() -> None:
     # Preserve the explicitly authenticated Azure CLI path for recovery operations.
     client_id = os.environ.get("POSTGRES_BOOTSTRAP_CLIENT_ID")
     credential = (
-        ManagedIdentityCredential(client_id=client_id)
-        if client_id
-        else AzureCliCredential()
+        ManagedIdentityCredential(client_id=client_id) if client_id else AzureCliCredential()
     )
     with credential:
         token = credential.get_token("https://ossrdbms-aad.database.windows.net/.default").token

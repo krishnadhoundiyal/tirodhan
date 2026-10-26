@@ -23,9 +23,7 @@ def tf(filename: str) -> dict:
 
 def named(blocks: list[dict], resource: str, name: str) -> dict:
     return next(
-        item[resource][name]
-        for item in blocks
-        if resource in item and name in item[resource]
+        item[resource][name] for item in blocks if resource in item and name in item[resource]
     )
 
 
@@ -62,17 +60,14 @@ def test_pg_bootstrap_job_is_finite_and_cannot_be_scheduled() -> None:
     ]
     assert job["workload_profile_name"] == "Consumption"
     assert (
-        job["template"][0]["container"][0]["args"][-1]
-        == "tirodhan.deployment.bootstrap_database"
+        job["template"][0]["container"][0]["args"][-1] == "tirodhan.deployment.bootstrap_database"
     )
     assert len(job["template"][0]["container"]) == 2
     env = {e["name"]: e["value"] for e in job["template"][0]["container"][0]["env"]}
     assert env["POSTGRES_BOOTSTRAP_CLIENT_ID"] == (
         "${azurerm_user_assigned_identity.postgres_bootstrap.client_id}"
     )
-    assert env["RUNTIME_PRINCIPAL_ID"] == (
-        "${azurerm_user_assigned_identity.runtime.principal_id}"
-    )
+    assert env["RUNTIME_PRINCIPAL_ID"] == ("${azurerm_user_assigned_identity.runtime.principal_id}")
     assert "TIRODHAN_DATABASE_URL" not in env
 
 
@@ -151,10 +146,7 @@ async def test_hosted_bootstrap_uses_only_dedicated_mi_and_grants_nonadmin(
     mi_factory.assert_called_once_with(client_id="test-bootstrap-client")
     cli_factory.assert_not_called()
     assert connect.await_count == 2
-    assert all(
-        item.kwargs["user"] == "synthetic-pgboot"
-        for item in connect.await_args_list
-    )
+    assert all(item.kwargs["user"] == "synthetic-pgboot" for item in connect.await_args_list)
     created = admin_connection.execute.await_args_list[0].args
     assert created[0].startswith("SELECT pgaadauth_create_principal_with_oid")
     assert created[3] == "service"
