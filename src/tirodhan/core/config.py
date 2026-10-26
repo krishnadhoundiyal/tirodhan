@@ -113,6 +113,19 @@ class Settings(BaseSettings):
     planning_max_group_requests: int | None = None
     customer_cursor_signing_key: SecretStr | None = None
     customer_cursor_ttl_seconds: int | None = None
+    customer_data_active_key_id: str | None = None
+    customer_data_encryption_keys: SecretStr | None = None
+    customer_data_hmac_key: SecretStr | None = None
+    customer_fcm_enabled: bool = False
+    customer_web_push_enabled: bool = False
+    customer_native_registration_limit: int = 5
+    customer_browser_registration_limit: int = 10
+    customer_registration_change_limit: int = 30
+    customer_registration_window_seconds: int = 86400
+    customer_web_push_origins: list[str] = []
+    customer_web_push_endpoint_origins: list[str] = []
+    customer_vapid_private_key_pem: SecretStr | None = None
+    customer_vapid_subject: str | None = None
 
     media_blob_account_url: str | None = None
     media_blob_container_name: str | None = None
@@ -264,6 +277,18 @@ class Settings(BaseSettings):
     def aliases_must_be_nonempty(cls, value: list[str]) -> list[str]:
         if not value or any(not alias.strip() for alias in value):
             raise ValueError("Delhi administrative aliases must not be empty")
+        return value
+
+    @field_validator(
+        "customer_native_registration_limit",
+        "customer_browser_registration_limit",
+        "customer_registration_change_limit",
+        "customer_registration_window_seconds",
+    )
+    @classmethod
+    def customer_device_policy_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Customer device policy values must be positive")
         return value
 
 

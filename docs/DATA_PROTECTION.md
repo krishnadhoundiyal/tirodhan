@@ -1,5 +1,29 @@
 # Data Protection
 
+Web Push child IPC (0040) carries encrypted bodies and private credentials only through bounded stdin; no secret command arguments, stderr or provider body logging. Pending notification work stores only source UUID/availability. Device limits preserve encrypted history and expose sanitized quota codes only. See [review closure](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
+## Customer account, content and notification capabilities (0039)
+
+Optional display name/email, feedback, native tokens, browser subscription endpoints/keys and
+exact replay responses are AES-GCM encrypted using independent versioned customer-private keys
+and purpose/owner binding. Keyed HMAC protects request fingerprints and provider-token/endpoint
+equality. Phone display uses existing protected identity data; no second plaintext phone store.
+Validation errors omit private input. Reliability records contain IDs/fingerprints only; the
+separate encrypted response receipt is protocol replay data, not current account authority.
+
+Push contains only a schema marker, event/request IDs and generic collection copy; it establishes
+neither read acknowledgement nor business state. Live session/role/customer ownership and opt-out
+are rechecked for delivery. Session revocation atomically revokes customer device bindings.
+Immutable tombstones fence delayed old-session/token replay. Web endpoints require exact approved
+HTTPS origins, public-only DNS pinned to TLS hostname, validated keys and no redirects/proxies.
+Provider delivery remains explicitly disabled by default. No legal/support content is seeded;
+public reads expose only manager-published plain text with recorded provenance.
+
+No retention duration/destructive purge is invented. Approve private customer/service data,
+device tombstone, notification, publication and replay retention before release. Keep historical
+AES key IDs available and use explicit HMAC migration. See
+[contracts, limitations and verification](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 ## Increment 8 regional runtime
 
 Local OSRM children remain private to the finite job and suppress access/error payload output.

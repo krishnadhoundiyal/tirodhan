@@ -1,5 +1,19 @@
 # Project Context
 
+CB-04 closes stalled Web Push creation through private POSIX worker process-group ownership
+and a watchdog that terminates the group if cleanup exceeds two seconds (22 seconds total
+attempt budget). Enabled Web Push requires that worker boundary; production flags remain false.
+See [closure and fault tests](CUSTOMER_BACKEND_REVIEW_CLOSURE.md#cb-04-permanently-unresolved-subprocess-launch).
+
+Customer review closure (0040) bounds Web Push DNS with supervised children, enforces the approved 5 native / 10 browser and 30-change rolling-day policy, and replaces history rescans with transactional pending membership. Provider activation remains disabled. See [review closure and measured evidence](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
+Customer account/profile/preferences/favourites, encrypted feedback, public controlled content,
+owned notification history and finite outbox/push delivery are implemented in migration 0039.
+Existing identity and financial/routing authority remain unchanged. Provider delivery defaults
+disabled; iOS APNs, Mobile FCM schema normalization, browser adapter wiring, approved content,
+configuration and real deployment/device acceptance remain gates. See
+[implementation and verification](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 CM-P0-03 approves configurable per-line weight bands and exact bounded nonlinear pricing.
 Version-bound customer quotation and immutable booking declarations use existing manager,
 booking and financial authority. No rates/thresholds are seeded. Customers declare occupied

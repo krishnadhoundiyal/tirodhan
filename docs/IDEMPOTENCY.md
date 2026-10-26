@@ -1,5 +1,35 @@
 # Idempotency
 
+CB-04 unknown-launch cleanup terminates the isolated notification worker group rather than
+discarding a potentially live child. The committed SENDING lease remains pending recovery
+after expiry; retries retain the notification identity and may duplicate a provider-accepted
+signal. No history, financial or fulfilment transition is undone. See
+[bounded ownership](CUSTOMER_BACKEND_REVIEW_CLOSURE.md#cb-04-permanently-unresolved-subprocess-launch).
+
+Customer closure (0040): source insert/availability and pending membership commit together; materialization atomically commits notification/deliveries/inbox and removes membership. Independent source uniqueness still protects explicit replay after inbox loss. Customer row locks serialize approved live-device and rolling committed-change admission; exact replay/revocation are exempt, rejected commands mutate nothing. Web Push child termination retains at-least-once delivery debt. See [keys, transaction boundaries and tests](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
+## Customer capabilities (0039)
+
+Versioned profile/preferences/favourite commands and feedback use existing actor/operation/client
+claims with keyed fingerprints. User row locks arbitrate absent/current heads; state, encrypted
+exact response receipt and command completion commit together. Replay precedes current version
+or catalogue checks; changed bodies conflict. Feedback additionally has customer/client uniqueness.
+Content commands add a per-slug publication lock, expected revision and unique published-slug index.
+
+Customer device registration uses natural installation/provider token identity, immutable
+credential generations, sorted advisory locks, session/role locks and partial active uniqueness.
+Same active registration replays its timestamp; retired same-session credentials cannot reactivate.
+Newer login sessions fence older account callbacks; owner/session-scoped DELETE is a repeatable
+no-op for missing/foreign bindings. Logout revocation is atomic through a session SQL trigger.
+
+Existing accepted/financial outbox facts fan out through an independent durable inbox, unique
+source notification and notification/binding delivery key. History, delivery work and inbox
+completion commit together without changing shared source publication status. Send claims use
+SKIP LOCKED and token/expiry leases; external FCM/Web Push runs outside DB transactions. Expired
+claims resume the same notification identity. Permanent invalidity revokes only the exact binding;
+retry/disabled debt persists. Signals are best-effort at-least-once, never business acknowledgement.
+See the [full operation matrix, limitations and test evidence](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 ## CM-P0-03 weight pricing
 
 - Manager policy commands reuse `business.config:<actor>` + client UUID/fingerprint, live

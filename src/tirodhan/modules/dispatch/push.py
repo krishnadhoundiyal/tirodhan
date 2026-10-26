@@ -16,6 +16,7 @@ from firebase_admin import (  # type: ignore[import-untyped]
 )
 
 from tirodhan.core.config import Settings
+from tirodhan.modules.customer_account.schemas import CustomerCollectionNotification
 
 
 class PushConfigurationError(RuntimeError):
@@ -64,21 +65,24 @@ class PushNotificationPort(Protocol):
     async def send_batch(
         self,
         recipients: Sequence[PushRecipient],
-        notification: PushNotification | RouteRevisionNotification,
+        notification: PushNotification | RouteRevisionNotification | CustomerCollectionNotification,
     ) -> Sequence[PushDeliveryResult]: ...
 
 
 class FcmPushNotificationPort:
     """Real Firebase Admin multicast off the event loop; chunks start together."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, http_timeout_seconds: int | None = None) -> None:
         if not settings.fcm_project_id or settings.fcm_credentials_json is None:
             raise PushConfigurationError("FCM runtime is not configured")
         try:
             material = json.loads(settings.fcm_credentials_json.get_secret_value())
+            options: dict[str, str | int] = {"projectId": settings.fcm_project_id}
+            if http_timeout_seconds is not None:
+                options["httpTimeout"] = http_timeout_seconds
             self._app = initialize_app(
                 credentials.Certificate(material),
-                options={"projectId": settings.fcm_project_id},
+                options=options,
                 name=f"tirodhan-push-{uuid4()}",
             )
         except Exception:
@@ -87,7 +91,7 @@ class FcmPushNotificationPort:
     async def send_batch(
         self,
         recipients: Sequence[PushRecipient],
-        notification: PushNotification | RouteRevisionNotification,
+        notification: PushNotification | RouteRevisionNotification | CustomerCollectionNotification,
     ) -> Sequence[PushDeliveryResult]:
         chunks = [recipients[index : index + 500] for index in range(0, len(recipients), 500)]
         batches = await asyncio.gather(*(self._send_chunk(chunk, notification) for chunk in chunks))
@@ -96,7 +100,7 @@ class FcmPushNotificationPort:
     async def _send_chunk(
         self,
         recipients: Sequence[PushRecipient],
-        notification: PushNotification | RouteRevisionNotification,
+        notification: PushNotification | RouteRevisionNotification | CustomerCollectionNotification,
     ) -> tuple[PushDeliveryResult, ...]:
         try:
             response = await asyncio.to_thread(
@@ -104,10 +108,14 @@ class FcmPushNotificationPort:
                 messaging.MulticastMessage(
                     tokens=[recipient.registration_token for recipient in recipients],
                     notification=messaging.Notification(
-                        "Route updated"
+                        notification.title
+                        if isinstance(notification, CustomerCollectionNotification)
+                        else "Route updated"
                         if isinstance(notification, RouteRevisionNotification)
                         else "New pickup opportunity",
-                        "Open Tirodhan to refresh your route."
+                        notification.body
+                        if isinstance(notification, CustomerCollectionNotification)
+                        else "Open Tirodhan to refresh your route."
                         if isinstance(notification, RouteRevisionNotification)
                         else "Open Tirodhan to review and accept.",
                     ),

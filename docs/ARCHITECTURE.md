@@ -1,5 +1,22 @@
 # Architecture
 
+CB-04 makes unknown Web Push launch ownership fail-stop: the finite POSIX worker creates a
+private process group before spawning, and independent watchdogs terminate that group if
+launch/cleanup cannot settle within the 20-second attempt plus two-second cleanup budget.
+Normal cleanup still reaps known children; API processes never establish this ownership.
+See [resource ownership and retry semantics](CUSTOMER_BACKEND_REVIEW_CLOSURE.md#cb-04-permanently-unresolved-subprocess-launch).
+
+Customer notification work (0040) uses a concrete source-FK pending set maintained in the outbox transaction; inbox/business replay remain independent. Web Push executes in one supervised, deadline-bound child per finite port, without a default-executor resolver. Approved customer-level device admission bounds fan-out without silent eviction. See [review closure](CUSTOMER_BACKEND_REVIEW_CLOSURE.md).
+
+The customer account module extends existing AppUser identity with relational versioned profile,
+preferences and catalogue-linked favourites; private fields and exact command replay are encrypted.
+Public informational content uses immutable manager-authored revisions and explicit publication
+attestation. A finite customer worker independently consumes existing accepted/financial outbox
+facts with its own inbox, owned history and leased device delivery. It does not change shared
+outbox publication state or financial/routing producers. FCM reuses the existing adapter; Web Push
+is an explicitly gated platform adapter. No new service, queue, resource or production activation.
+See [contracts, boundaries and release gates](CUSTOMER_BACKEND_CAPABILITIES_IMPLEMENTATION_REPORT.md).
+
 CM-P0-03 supersedes flat pricing for new work after explicit weight-policy activation.
 The existing PricingPort and typed manager administration own configurable weight bands
 and exact bounded pricing. A stateless version/declaration-bound customer quote creates no

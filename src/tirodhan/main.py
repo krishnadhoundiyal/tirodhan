@@ -5,7 +5,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from tirodhan.api.router import api_router
@@ -163,6 +165,23 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = application_settings
+
+    @application.exception_handler(RequestValidationError)
+    async def private_validation_error(request: Request, error: RequestValidationError) -> Response:
+        if request.url.path.startswith(
+            (
+                "/v1/customer/me/",
+                "/v1/customer/feedback",
+                "/v1/manager/content/",
+            )
+        ):
+            return JSONResponse(
+                status_code=422,
+                content={"error": {"code": "INVALID_INPUT"}},
+                headers={"Cache-Control": "private, no-store"},
+            )
+        return await request_validation_exception_handler(request, error)
+
     if application_settings.routing_dispatch_enabled:
         from tirodhan.api.routes.routing_dispatch import router as routing_dispatch_router
 
