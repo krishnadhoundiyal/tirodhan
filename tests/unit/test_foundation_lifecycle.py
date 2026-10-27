@@ -295,3 +295,16 @@ def test_clean_first_apply_rollback_removes_only_owned_resources(
 
 def test_approved_postgres_sku_is_loaded_from_committed_terraform() -> None:
     assert lifecycle.approved_postgres_sku() == "B_Standard_B1ms"
+
+
+def test_read_only_bootstrap_data_source_does_not_count_as_managed_vault(
+    monkeypatch: pytest.MonkeyPatch,
+    config: dict[str, str],
+) -> None:
+    monkeypatch.setattr(
+        lifecycle,
+        "state_addresses",
+        lambda: ["data.azurerm_key_vault.runtime", "data.azurerm_resource_group.nonprod"],
+    )
+    monkeypatch.setattr(lifecycle, "disposable_ids", lambda *_: set())
+    assert lifecycle.preflight() == "CLEAN"
