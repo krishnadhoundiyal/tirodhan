@@ -64,3 +64,21 @@ def test_persistent_key_vault_and_preflight_rollback_wiring() -> None:
     stack = Path("infra/terraform/nonprod/key_vault.tf").read_text()
     assert 'data "azurerm_key_vault" "runtime"' in stack
     assert 'resource "azurerm_key_vault"' not in stack
+
+
+def test_reconciliation_precedes_any_foundation_or_destroy_plan() -> None:
+    foundation = yaml.safe_load(Path(".github/workflows/nonprod-foundation.yml").read_text())
+    destroy = yaml.safe_load(WORKFLOW.read_text())
+    assert foundation["jobs"]["foundation-plan"]["needs"] == "state-reconcile"
+    assert foundation["jobs"]["state-reconcile"]["needs"] == "recovery"
+    assert foundation["jobs"]["recovery"]["environment"] == "nonprod-recovery"
+    assert destroy["jobs"]["destroy-plan"]["needs"] == "destroy-state-reconcile"
+    assert destroy["jobs"]["destroy-state-reconcile"]["needs"] == "destroy-recovery"
+    assert destroy["jobs"]["destroy-recovery"]["environment"] == "nonprod-recovery"
+
+    for workflow in (foundation, destroy):
+        text = str(workflow)
+        assert "foundation_reconcile recover-vault" in text
+        assert "foundation_reconcile release-legacy-state" in text
+        assert "nonprod-recovery requires protected branches and human reviewers" in text
+        assert "az keyvault purge" not in text
