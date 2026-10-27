@@ -65,7 +65,7 @@ for attempt in {1..12}; do
 done
 [[ "$created" == true ]] || { echo "State data-plane RBAC not ready"; exit 1; }
 temp_dir="$(mktemp -d)"
-trap 'rm -f "$temp_dir/role.json" "$temp_dir/federation.json"; rmdir "$temp_dir"' EXIT
+trap 'rm -f "$temp_dir/role.json" "$temp_dir/recovery-role.json" "$temp_dir/federation.json"; rmdir "$temp_dir"' EXIT
 jq --arg scope "$rg_scope" --arg name "Tirodhan NONPROD Deployment $NONPROD_SUFFIX" \
   '.AssignableScopes=[$scope] | .Name=$name' deploy/bootstrap/deployment-role.json > "$temp_dir/role.json"
 if az role definition list --name "Tirodhan NONPROD Deployment $NONPROD_SUFFIX" --query '[0].id' -o tsv | grep -q .; then
@@ -128,5 +128,54 @@ for environment in nonprod-plan nonprod; do
     az ad app federated-credential create --id "$FEDERATED_APP_OBJECT_ID" --parameters "$temp_dir/federation.json" --output none
   fi
 done
+# Optional one-time enrollment for automated exact-name Key Vault recovery.
+# Both IDs must be provided together. Do not reuse the normal deployment identity.
+if [[ -n "${RECOVERY_OBJECT_ID:-}" || -n "${RECOVERY_FEDERATED_APP_OBJECT_ID:-}" ]]; then
+  : "${RECOVERY_OBJECT_ID:?}" "${RECOVERY_FEDERATED_APP_OBJECT_ID:?}"
+  [[ "$RECOVERY_OBJECT_ID" != "$DEPLOYMENT_OBJECT_ID" ]] || {
+    echo "Recovery and deployment service principals must differ" >&2; exit 1
+  }
+  recovery_role="Tirodhan NONPROD Vault Recovery $NONPROD_SUFFIX"
+  # Deleted vaults are subscription-level Azure resources, not application-RG
+  # children. Only exact-name recovery is permitted by workflow validation.
+  jq -n --arg scope "$scope" --arg name "$recovery_role" '{
+    Name: $name,
+    IsCustom: true,
+    Description: "Read vaults and recover soft-deleted vaults; no create, purge or delete",
+    Actions: [
+      "Microsoft.KeyVault/vaults/read",
+      "Microsoft.KeyVault/locations/deletedVaults/read",
+      "Microsoft.KeyVault/locations/deletedVaults/recover/action"
+    ],
+    NotActions: [],
+    DataActions: [],
+    NotDataActions: [],
+    AssignableScopes: [$scope]
+  }' > "$temp_dir/recovery-role.json"
+  if az role definition list --name "$recovery_role" --query '[0].id' -o tsv | grep -q .; then
+    az role definition update --role-definition "$temp_dir/recovery-role.json" --output none
+  else
+    az role definition create --role-definition "$temp_dir/recovery-role.json" --output none
+  fi
+  grant_role "$recovery_role" "$scope" "$RECOVERY_OBJECT_ID" ServicePrincipal
+  recovery_cred="tirodhan-nonprod-recovery"
+  recovery_sub="repo:$github_subject_repo:environment:nonprod-recovery"
+  jq -n --arg name "$recovery_cred" --arg subject "$recovery_sub" '{
+    name: $name, issuer: "https://token.actions.githubusercontent.com",
+    subject: $subject, audiences: ["api://AzureADTokenExchange"]
+  }' > "$temp_dir/federation.json"
+  old_recovery_sub="$(az ad app federated-credential show \
+    --id "$RECOVERY_FEDERATED_APP_OBJECT_ID" \
+    --federated-credential-id "$recovery_cred" --query subject -o tsv 2>/dev/null || true)"
+  if [[ -n "$old_recovery_sub" && "$old_recovery_sub" != "$recovery_sub" ]]; then
+    echo "Existing recovery OIDC subject differs; refusing automatic rebind" >&2
+    exit 1
+  fi
+  if [[ -z "$old_recovery_sub" ]]; then
+    az ad app federated-credential create --id "$RECOVERY_FEDERATED_APP_OBJECT_ID" \
+      --parameters "$temp_dir/federation.json" --output none
+  fi
+  echo "Recovery OIDC enrolled under separate protected nonprod-recovery environment"
+fi
 echo "Bootstrap complete: backend account=$state_account container=tfstate; application RG=$rg"
 echo "Verify inherited permissions; this script cannot remove pre-existing broad grants."
