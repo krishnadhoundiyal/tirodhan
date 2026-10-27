@@ -60,6 +60,10 @@ def validate_destroy_plan(
     for change in plan.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
         if "delete" not in actions:
+            if actions not in ([], ["no-op"], ["read"]):
+                raise RuntimeError(
+                    f"Refusing non-destroy Terraform action for {change.get('address')}: {actions}"
+                )
             continue
 
         address = change.get("address", "<unknown>")
