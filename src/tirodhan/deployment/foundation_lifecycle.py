@@ -254,7 +254,6 @@ def ensure_postgres_sku(config: dict[str, Any]) -> None:
 def preflight(*, baseline: Path | None = None) -> str:
     cfg = settings()
     assert_bootstrap(cfg)
-    addresses = state_addresses()
     if any("azurerm_key_vault.runtime" in line for line in managed_addresses()):
         raise GateError(
             "Legacy Key Vault remains in application Terraform state; "
