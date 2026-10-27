@@ -137,7 +137,9 @@ def release_legacy_state() -> None:
         "--container-name", "tfstate", "--name", "tirodhan/nonprod.tfstate",
         "--auth-mode", "login", "--output", "json"
     )
-    if not (snapshot.get("snapshot") or snapshot.get("snapshotTime")):
+    if not isinstance(snapshot, dict) or not (
+        snapshot.get("snapshot") or snapshot.get("snapshotTime")
+    ):
         raise GateError("Backend snapshot missing; refusing Terraform state mutation")
     print("Verified backend snapshot before legacy state ownership release")
     run("terraform", "state", "rm", "-lock=true", address)
