@@ -224,3 +224,74 @@ def test_partial_inventory_must_be_subset_of_remote_state(
         )
     with pytest.raises(lifecycle.GateError, match="out-of-scope"):
         lifecycle.tracked_managed_ids({**config, "resource_group_name": "other-rg"})
+
+
+def test_clean_first_apply_rollback_removes_only_owned_resources(
+    monkeypatch: pytest.MonkeyPatch,
+    config: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "classification": "CLEAN",
+                "subscription_id": config["subscription_id"],
+                "resource_group_name": config["resource_group_name"],
+                "initial_state_count": 0,
+                "initial_inventory_count": 0,
+            }
+        )
+    )
+    resource_id = (
+        lifecycle.scope(config)
+        + "/providers/Microsoft.ServiceBus/namespaces/synthetic-bus"
+    )
+    active = {"value": True}
+    monkeypatch.setenv("STATE_ACCOUNT_NAME", "protectedstate")
+    monkeypatch.setattr(
+        lifecycle,
+        "state_addresses",
+        lambda: ["azurerm_servicebus_namespace.bus"] if active["value"] else [],
+    )
+    monkeypatch.setattr(
+        lifecycle, "disposable_ids",
+        lambda *_: {resource_id.lower()} if active["value"] else set(),
+    )
+    plan = {
+        "resource_changes": [
+            {
+                "address": "azurerm_servicebus_namespace.bus",
+                "type": "azurerm_servicebus_namespace",
+                "mode": "managed",
+                "change": {"actions": ["delete"], "before": {"id": resource_id}},
+            }
+        ]
+    }
+
+    def json_result(*args: str) -> dict:
+        if args[-1].endswith(".tfplan"):
+            return plan
+        return {
+            "values": {
+                "root_module": {
+                    "resources": [
+                        {"mode": "managed", "values": {"id": resource_id}}
+                    ]
+                }
+            }
+        }
+
+    applied: list[str] = []
+
+    def run(*args: str) -> str:
+        if args[:2] == ("terraform", "apply"):
+            active["value"] = False
+            applied.append("rollback")
+        return ""
+
+    monkeypatch.setattr(lifecycle, "json_command", json_result)
+    monkeypatch.setattr(lifecycle, "command", run)
+    lifecycle.rollback(baseline)
+    assert applied == ["rollback"]
+    assert active["value"] is False
