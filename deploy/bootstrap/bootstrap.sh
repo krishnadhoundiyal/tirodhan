@@ -141,11 +141,14 @@ if [[ -n "${RECOVERY_OBJECT_ID:-}" || -n "${RECOVERY_FEDERATED_APP_OBJECT_ID:-}"
   jq -n --arg scope "$scope" --arg name "$recovery_role" '{
     Name: $name,
     IsCustom: true,
-    Description: "Read vaults and recover soft-deleted vaults; no create, purge or delete",
+    Description: "Recover exact-name soft-deleted vault via vault write; no purge/delete",
     Actions: [
+      "Microsoft.Resources/subscriptions/resourceGroups/read",
       "Microsoft.KeyVault/vaults/read",
+      "Microsoft.KeyVault/vaults/write",
+      "Microsoft.KeyVault/deletedVaults/read",
       "Microsoft.KeyVault/locations/deletedVaults/read",
-      "Microsoft.KeyVault/locations/deletedVaults/recover/action"
+      "Microsoft.KeyVault/locations/operationResults/read"
     ],
     NotActions: [],
     DataActions: [],
