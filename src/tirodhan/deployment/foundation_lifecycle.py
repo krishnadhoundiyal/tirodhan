@@ -220,7 +220,7 @@ def approved_postgres_sku() -> str:
     )
     if len(matches) != 1 or not isinstance(matches[0], str):
         raise GateError("Exactly one literal Terraform PostgreSQL SKU must be approved")
-    return cast(str, matches[0])
+    return matches[0]
 
 
 def ensure_postgres_sku(config: dict[str, Any]) -> None:
