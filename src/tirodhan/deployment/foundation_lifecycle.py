@@ -255,7 +255,7 @@ def preflight(*, baseline: Path | None = None) -> str:
     cfg = settings()
     assert_bootstrap(cfg)
     addresses = state_addresses()
-    if any("azurerm_key_vault.runtime" in line for line in addresses):
+    if any("azurerm_key_vault.runtime" in line for line in managed_addresses()):
         raise GateError(
             "Legacy Key Vault remains in application Terraform state; "
             "an approved state ownership migration is required"
