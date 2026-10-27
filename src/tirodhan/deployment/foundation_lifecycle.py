@@ -102,10 +102,7 @@ def tracked_managed_ids(config: dict[str, Any]) -> set[str]:
 
 def assert_owned_inventory(config: dict[str, Any], active: set[str]) -> None:
     owned = tracked_managed_ids(config)
-    if any(
-        item not in owned and not any(item.startswith(parent + "/") for parent in owned)
-        for item in active
-    ):
+    if not active.issubset(owned):
         raise GateError("BLOCKED_RECONCILIATION: untracked/foreign Azure resources")
 
 
