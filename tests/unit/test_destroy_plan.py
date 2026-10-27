@@ -126,3 +126,17 @@ def test_destroy_guard_requires_at_least_one_delete() -> None:
 
     with pytest.raises(RuntimeError, match="no managed deletes"):
         _validate(plan)
+
+
+def test_destroy_guard_rejects_unexpected_creation_even_with_allow_empty() -> None:
+    plan = deepcopy(_plan())
+    plan["resource_changes"][0]["change"]["actions"] = ["create"]
+    with pytest.raises(RuntimeError, match="non-destroy Terraform action"):
+        validate_destroy_plan(
+            plan,
+            expected_subscription_id=SUBSCRIPTION_ID,
+            expected_resource_group=RESOURCE_GROUP,
+            protected_state_account="tdnpstatetdnp01",
+            protected_state_container="tfstate",
+            allow_empty=True,
+        )

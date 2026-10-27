@@ -17,7 +17,83 @@ env:
   NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 jobs:
+  # Dedicated, approval-protected recovery principal. Requires pre-established
+  # OIDC trust; MUST NOT reuse or broaden the ordinary Terraform identity.
+  recovery:
+    if: github.ref == 'refs/heads/main'
+    environment: nonprod-recovery
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce GitHub recovery environment protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/environments/nonprod-recovery" \
+            | jq -e '
+                (.deployment_branch_policy.protected_branches == true)
+                and (any(.protection_rules[]?; .type == "required_reviewers"))
+              ' >/dev/null || {
+                echo "::error::nonprod-recovery requires protected branches and human reviewers."
+                exit 1
+              }
+      - name: Validate privileged recovery identity configuration
+        env:
+          RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$RECOVERY_CLIENT_ID" ]] || {
+            echo "::error::Configure protected nonprod-recovery OIDC and recovery identity."
+            exit 1
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Authenticate scoped recovery identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Recover exact approved bootstrap Key Vault
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[dev]'
+          # No backend initialization or mutation under recovery identity.
+          mkdir -p infra/terraform/nonprod
+          printf '%s' "$NONPROD_TFVARS_JSON" > infra/terraform/nonprod/nonprod.auto.tfvars.json
+          cd infra/terraform/nonprod
+          python -m tirodhan.deployment.foundation_reconcile recover-vault
+
+  # Restricted deployment OIDC owns only application Terraform remote state.
+  # It reconciles the previously managed vault address with a verified,
+  # persisted state snapshot, without ever deleting Azure Key Vault.
+  state-reconcile:
+    needs: recovery
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: nonprod-plan
+      deployment: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - name: Reconcile verified legacy Key Vault state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          python -m tirodhan.deployment.foundation_reconcile release-legacy-state
+
   foundation-plan:
+    needs: state-reconcile
     if: github.ref == 'refs/heads/main'
     environment: nonprod-plan
     runs-on: ubuntu-latest
@@ -37,7 +113,10 @@ jobs:
               exit 1
             fi
           fi
-          # Stage 0 is deliberately rerunnable so a partial failed first apply can converge safely.
+          # Azure preflight is read-only; it rejects stale names, SKU mismatch,
+          # bootstrap drift and foreign resources BEFORE any Azure creation.
+          python -m tirodhan.deployment.foundation_lifecycle preflight
+          # Stage 0 remains resumable after a known partial apply.
           TF_VAR_deployment_stage=0 terraform plan -input=false -out=foundation.tfplan
           terraform show -json foundation.tfplan | python -m tirodhan.deployment.check_state
       - uses: actions/upload-artifact@v4
@@ -69,8 +148,26 @@ jobs:
               exit 1
             fi
           fi
+          # Recheck immediately before the saved plan; classify existing state.
+          # A fresh attempt may be rolled back. A partial/established attempt
+          # must NEVER be destroyed automatically.
+          python -m tirodhan.deployment.foundation_lifecycle preflight \
+            --baseline /tmp/nonprod-foundation-baseline.json
+          on_failure() {
+            status=$?
+            trap - ERR
+            echo "::error::Foundation apply/verification failed. Checking guarded rollback."
+            if ! python -m tirodhan.deployment.foundation_lifecycle rollback \
+                --baseline /tmp/nonprod-foundation-baseline.json; then
+              echo "::error::BLOCKED_RECONCILIATION; no unverified cleanup was attempted."
+            fi
+            exit "$status"
+          }
+          trap on_failure ERR
           terraform apply -input=false foundation.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
           terraform output -json >/tmp/nonprod-foundation-output.json
           jq -e '.deployment_stage.value == 0' /tmp/nonprod-foundation-output.json >/dev/null
-          echo "NONPROD foundation applied at deployment_stage=0."
+          python -m tirodhan.deployment.foundation_lifecycle verify-foundation
+          trap - ERR
+          echo "FOUNDATION_READY: NONPROD foundation applied at deployment_stage=0."

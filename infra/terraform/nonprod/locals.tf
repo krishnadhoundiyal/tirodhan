@@ -74,15 +74,15 @@ locals {
     TIRODHAN_FINANCIAL_WEBHOOK_QUEUE_NAME = local.queues.financial_webhook
   }
   migration_secret_refs = {
-    ghcr-pull-pat  = "${azurerm_key_vault.runtime.vault_uri}secrets/ghcr-pull-pat"
-    fluent-bit-sas = "${azurerm_key_vault.runtime.vault_uri}secrets/fluent-bit-sas"
+    ghcr-pull-pat  = "${data.azurerm_key_vault.runtime.vault_uri}secrets/ghcr-pull-pat"
+    fluent-bit-sas = "${data.azurerm_key_vault.runtime.vault_uri}secrets/fluent-bit-sas"
   }
   runtime_secret_env = {
     for env, name in var.runtime_secret_names : env => name
     if contains(var.enabled_runtime_secret_names, name)
   }
   runtime_secret_refs = {
-    for env, name in local.runtime_secret_env : name => "${azurerm_key_vault.runtime.vault_uri}secrets/${name}"
+    for env, name in local.runtime_secret_env : name => "${data.azurerm_key_vault.runtime.vault_uri}secrets/${name}"
   }
   secret_refs = merge(local.runtime_secret_refs, local.migration_secret_refs)
   sidecar_env = {

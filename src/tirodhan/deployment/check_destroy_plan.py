@@ -13,7 +13,7 @@ ALLOWED_DESTROY_TYPES = frozenset(
         "azurerm_container_app",
         "azurerm_container_app_environment",
         "azurerm_container_app_job",
-        "azurerm_key_vault",
+        # The purge-protected Key Vault belongs to the permanent bootstrap layer.
         "azurerm_postgresql_flexible_server",
         "azurerm_postgresql_flexible_server_active_directory_administrator",
         "azurerm_postgresql_flexible_server_configuration",
@@ -52,6 +52,7 @@ def validate_destroy_plan(
     expected_resource_group: str,
     protected_state_account: str,
     protected_state_container: str,
+    allow_empty: bool = False,
 ) -> int:
     delete_count = 0
     expected_scope = _expected_scope(expected_subscription_id, expected_resource_group)
@@ -59,6 +60,10 @@ def validate_destroy_plan(
     for change in plan.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
         if "delete" not in actions:
+            if actions not in ([], ["no-op"], ["read"]):
+                raise RuntimeError(
+                    f"Refusing non-destroy Terraform action for {change.get('address')}: {actions}"
+                )
             continue
 
         address = change.get("address", "<unknown>")
@@ -95,7 +100,7 @@ def validate_destroy_plan(
 
         delete_count += 1
 
-    if delete_count == 0:
+    if delete_count == 0 and not allow_empty:
         raise RuntimeError("Destroy plan contains no managed deletes")
 
     return delete_count
@@ -107,6 +112,7 @@ def main() -> None:
     parser.add_argument("--expected-resource-group", required=True)
     parser.add_argument("--protected-state-account", required=True)
     parser.add_argument("--protected-state-container", required=True)
+    parser.add_argument("--allow-empty", action="store_true")
     args = parser.parse_args()
 
     plan = json.load(sys.stdin)
@@ -116,6 +122,7 @@ def main() -> None:
         expected_resource_group=args.expected_resource_group,
         protected_state_account=args.protected_state_account,
         protected_state_container=args.protected_state_container,
+        allow_empty=args.allow_empty,
     )
     print(
         f"PASS: destroy plan contains {count} approved managed deletes inside "

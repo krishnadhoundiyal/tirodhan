@@ -35,7 +35,82 @@ env:
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 
 jobs:
+  # Existing application state may still own the legacy purge-protected vault.
+  # Reconcile the same trust boundary before planning a destructive teardown.
+  destroy-recovery:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment: nonprod-recovery
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce GitHub recovery environment protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/environments/nonprod-recovery" \
+            | jq -e '
+                (.deployment_branch_policy.protected_branches == true)
+                and (any(.protection_rules[]?; .type == "required_reviewers"))
+              ' >/dev/null || {
+                echo "::error::nonprod-recovery requires protected branches and human reviewers."
+                exit 1
+              }
+      - name: Verify separate OIDC recovery configuration
+        env:
+          RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$RECOVERY_CLIENT_ID" ]] || {
+            echo "::error::Protected NONPROD recovery identity is not configured."
+            exit 1
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify or recover persistent bootstrap vault
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[dev]'
+          mkdir -p infra/terraform/nonprod
+          printf '%s' "$NONPROD_TFVARS_JSON" > infra/terraform/nonprod/nonprod.auto.tfvars.json
+          cd infra/terraform/nonprod
+          python -m tirodhan.deployment.foundation_reconcile recover-vault
+
+  destroy-state-reconcile:
+    needs: destroy-recovery
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment:
+      name: nonprod-plan
+      deployment: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - name: Snapshot and release verified legacy vault state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          python -m tirodhan.deployment.foundation_reconcile release-legacy-state
+
   destroy-plan:
+    needs: destroy-state-reconcile
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
@@ -126,8 +201,16 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
+          # Empty teardown plans are accepted only after verifying the actual
+          # Azure disposable inventory and remote managed state are both empty.
+          delete_count="$(terraform show -json destroy.tfplan \
+            | jq '[.resource_changes[]? | select(.change.actions == ["delete"])] | length')"
+          if [[ "$delete_count" == "0" ]]; then
+            python -m tirodhan.deployment.foundation_lifecycle verify-clean
+          fi
           terraform show -json destroy.tfplan \
             | python -m tirodhan.deployment.check_state
 
@@ -215,7 +298,8 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
       - name: Apply approved destroy plan
         working-directory: infra/terraform/nonprod
@@ -226,12 +310,17 @@ jobs:
             -input=false \
             destroy.tfplan
 
+      - name: Verify disposable Azure resources are removed
+        working-directory: infra/terraform/nonprod
+        run: python -m tirodhan.deployment.foundation_lifecycle verify-clean
+
       - name: Verify Terraform application state is empty
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
 
-          remaining="$(terraform state list)"
+          # Read-only bootstrap data sources may remain; no managed resources may.
+          remaining="$(terraform state list | grep -v '^data\.' || true)"
 
           if [[ -n "$remaining" ]]; then
             echo "Terraform-managed resources remain after destroy:" >&2
@@ -268,4 +357,7 @@ jobs:
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
           echo "Preserved Terraform state account: $STATE_ACCOUNT_NAME"
           echo "Preserved Terraform state container: tfstate"
-          echo "NONPROD Terraform-managed application resources are destroyed."
+          # The purge-protected Key Vault is bootstrap-owned and intentionally retained.
+          az keyvault show --name "td-np-${{ inputs.expected_suffix }}-kv" \
+            --resource-group "$NONPROD_RESOURCE_GROUP" --output none
+          echo "NONPROD disposable resources destroyed; bootstrap resources preserved."
