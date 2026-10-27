@@ -88,9 +88,20 @@ if az keyvault show --name "$vault" --resource-group "$rg" --output none 2>/dev/
   echo "Persistent Key Vault already exists."
 else
   deleted="$(az keyvault list-deleted --subscription "$AZURE_SUBSCRIPTION_ID" --resource-type vault --output json)"
-  if jq -e --arg name "$vault" '.[] | select(.name == $name)' <<<"$deleted" >/dev/null; then
+  exact_vault_id="$scope/resourceGroups/$rg/providers/Microsoft.KeyVault/vaults/$vault"
+  if jq -e --arg name "$vault" --arg id "$exact_vault_id" --arg loc "$AZURE_LOCATION" '
+    [.[] | select((.name | ascii_downcase) == ($name | ascii_downcase))] as $matches
+    | ($matches | length) == 1
+      and (($matches[0].properties.vaultId | ascii_downcase) == ($id | ascii_downcase))
+      and (($matches[0].location | ascii_downcase) == ($loc | ascii_downcase))
+  ' <<<"$deleted" >/dev/null; then
     az keyvault recover --subscription "$AZURE_SUBSCRIPTION_ID" --name "$vault" \
       --resource-group "$rg" --location "$AZURE_LOCATION" --output none
+  elif jq -e --arg name "$vault" '
+    any(.[]; (.name | ascii_downcase) == ($name | ascii_downcase))
+  ' <<<"$deleted" >/dev/null; then
+    echo "Deleted vault has unexpected Azure identity or location; refusing recovery" >&2
+    exit 1
   else
     az keyvault create --subscription "$AZURE_SUBSCRIPTION_ID" --name "$vault" \
       --resource-group "$rg" --location "$AZURE_LOCATION" --sku standard \
