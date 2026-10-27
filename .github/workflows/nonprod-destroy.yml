@@ -235,7 +235,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          remaining="$(terraform state list)"
+          # Read-only bootstrap data sources may remain; no managed resources may.
+          remaining="$(terraform state list | grep -v '^data\.' || true)"
 
           if [[ -n "$remaining" ]]; then
             echo "Terraform-managed resources remain after destroy:" >&2
