@@ -23,9 +23,7 @@ def config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     monkeypatch.setattr(lifecycle, "settings", lambda: values)
     monkeypatch.setattr(lifecycle, "assert_bootstrap", lambda *_: None)
     monkeypatch.setattr(lifecycle, "ensure_postgres_sku", lambda *_: None)
-    monkeypatch.setattr(
-        lifecycle, "json_command", lambda *a: {} if a[:3] == ("terraform", "output", "-json") else {}
-    )
+    monkeypatch.setattr(lifecycle, "json_command", lambda *a: {})
     return values
 
 
