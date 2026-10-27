@@ -10,6 +10,8 @@ import pytest
 
 from tirodhan.deployment import foundation_lifecycle as lifecycle
 
+ACTUAL_SKU_CHECK = lifecycle.ensure_postgres_sku
+
 
 @pytest.fixture
 def config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
@@ -91,13 +93,13 @@ def test_sku_preflight_fails_closed_on_unadvertised_sku(
         lambda *a: {"supportedFlexibleServerEditions": [{"name": "Standard_D2s_v3"}]},
     )
     with pytest.raises(lifecycle.GateError, match="b_standard_b1ms"):
-        lifecycle.ensure_postgres_sku(config)
+        ACTUAL_SKU_CHECK(config)
     monkeypatch.setattr(
         lifecycle,
         "json_command",
         lambda *a: {"supportedFlexibleServerEditions": [{"name": "Standard_B1ms"}]},
     )
-    lifecycle.ensure_postgres_sku(config)
+    ACTUAL_SKU_CHECK(config)
 
 
 def test_rollback_does_not_delete_foreign_azure_resources(
