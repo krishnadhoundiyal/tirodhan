@@ -35,7 +35,68 @@ env:
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 
 jobs:
+  # Existing application state may still own the legacy purge-protected vault.
+  # Reconcile the same trust boundary before planning a destructive teardown.
+  destroy-recovery:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment: nonprod-recovery
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify separate OIDC recovery configuration
+        env:
+          RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$RECOVERY_CLIENT_ID" ]] || {
+            echo "::error::Protected NONPROD recovery identity is not configured."
+            exit 1
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify or recover persistent bootstrap vault
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[dev]'
+          mkdir -p infra/terraform/nonprod
+          printf '%s' "$NONPROD_TFVARS_JSON" > infra/terraform/nonprod/nonprod.auto.tfvars.json
+          cd infra/terraform/nonprod
+          python -m tirodhan.deployment.foundation_reconcile recover-vault
+
+  destroy-state-reconcile:
+    needs: destroy-recovery
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DESTROY_NONPROD'
+    environment:
+      name: nonprod-plan
+      deployment: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - name: Snapshot and release verified legacy vault state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          python -m tirodhan.deployment.foundation_reconcile release-legacy-state
+
   destroy-plan:
+    needs: destroy-state-reconcile
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
