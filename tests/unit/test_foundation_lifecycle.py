@@ -219,6 +219,8 @@ def test_partial_inventory_must_be_subset_of_remote_state(
     )
     lifecycle.assert_owned_inventory(config, {managed_id.lower()})
     with pytest.raises(lifecycle.GateError, match="untracked/foreign"):
-        lifecycle.assert_owned_inventory(config, {root.lower() + "/providers/Microsoft.App/jobs/foreign"})
+        lifecycle.assert_owned_inventory(
+            config, {root.lower() + "/providers/Microsoft.App/jobs/foreign"}
+        )
     with pytest.raises(lifecycle.GateError, match="out-of-scope"):
         lifecycle.tracked_managed_ids({**config, "resource_group_name": "other-rg"})
