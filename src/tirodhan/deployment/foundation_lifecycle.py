@@ -78,6 +78,36 @@ def disposable_ids(config: dict[str, Any]) -> set[str]:
     return result
 
 
+def tracked_managed_ids(config: dict[str, Any]) -> set[str]:
+    state = json_command("terraform", "show", "-json")
+    root = (state.get("values") or {}).get("root_module", {})
+    prefix = scope(config).lower() + "/"
+    ids: set[str] = set()
+
+    def visit(module: dict[str, Any]) -> None:
+        for resource in module.get("resources", []):
+            if resource.get("mode") != "managed":
+                continue
+            resource_id = resource.get("values", {}).get("id")
+            if not isinstance(resource_id, str) or not resource_id.lower().startswith(prefix):
+                raise GateError("Managed Terraform state contains an out-of-scope ID")
+            ids.add(resource_id.lower())
+        for child in module.get("child_modules", []):
+            visit(child)
+
+    visit(root)
+    return ids
+
+
+def assert_owned_inventory(config: dict[str, Any], active: set[str]) -> None:
+    owned = tracked_managed_ids(config)
+    if any(
+        item not in owned and not any(item.startswith(parent + "/") for parent in owned)
+        for item in active
+    ):
+        raise GateError("BLOCKED_RECONCILIATION: untracked/foreign Azure resources")
+
+
 def state_addresses() -> list[str]:
     return [line for line in command("terraform", "state", "list").splitlines() if line]
 
@@ -227,6 +257,8 @@ def preflight(*, baseline: Path | None = None) -> str:
             "Foreign/untracked Azure resources exist in application RG; "
             "no automatic adoption or deletion"
         )
+    if managed_addresses():
+        assert_owned_inventory(cfg, ids)
     ensure_postgres_sku(cfg)
     state = "CLEAN" if not addresses and not ids else "PARTIAL"
     if baseline is not None:
@@ -288,18 +320,7 @@ def rollback(baseline: Path) -> None:
 
     # Do not delete untracked Azure assets, even after a failed apply.
     existing = disposable_ids(cfg)
-    state = json_command("terraform", "show", "-json")
-    resources = (state.get("values") or {}).get("root_module", {}).get("resources", [])
-    owned = {
-        str(item.get("values", {}).get("id", "")).lower()
-        for item in resources
-        if item.get("mode") == "managed"
-    }
-    if any(
-        asset not in owned and not any(asset.startswith(v + "/") for v in owned)
-        for asset in existing
-    ):
-        raise GateError("BLOCKED_RECONCILIATION: untracked Azure asset before rollback")
+    assert_owned_inventory(cfg, existing)
     command("terraform", "apply", "-input=false", "foundation-rollback.tfplan")
     verify_clean()
 
