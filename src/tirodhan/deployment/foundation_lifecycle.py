@@ -11,7 +11,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
 
@@ -31,7 +31,10 @@ def json_command(*args: str) -> Any:
 
 
 def settings() -> dict[str, Any]:
-    return json.loads(Path("nonprod.auto.tfvars.json").read_text(encoding="utf-8"))
+    values = json.loads(Path("nonprod.auto.tfvars.json").read_text(encoding="utf-8"))
+    if not isinstance(values, dict):
+        raise GateError("NONPROD Terraform inputs must be a JSON object")
+    return cast(dict[str, Any], values)
 
 
 def scope(config: dict[str, Any]) -> str:
