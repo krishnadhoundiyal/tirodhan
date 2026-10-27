@@ -96,9 +96,7 @@ def test_repeated_teardown_requires_verified_clean_azure_inventory() -> None:
     }
     with pytest.raises(RuntimeError, match="no managed deletes"):
         validate_destroy_plan({"resource_changes": []}, **kwargs)
-    assert validate_destroy_plan(
-        {"resource_changes": []}, allow_empty=True, **kwargs
-    ) == 0
+    assert validate_destroy_plan({"resource_changes": []}, allow_empty=True, **kwargs) == 0
     text = WORKFLOW.read_text()
     assert text.count("--allow-empty") == 2
     assert 'if [[ "$delete_count" == "0" ]]; then' in text
