@@ -214,7 +214,7 @@ def sku_candidates(tree: Any) -> set[str]:
 def approved_postgres_sku() -> str:
     path = Path(__file__).resolve().parents[3] / "infra/terraform/nonprod/database.tf"
     matches = re.findall(
-        r'^\\s*sku_name\\s*=\\s*"([^"]+)"',
+        r'^\s*sku_name\s*=\s*"([^"]+)"',
         path.read_text(encoding="utf-8"),
         flags=re.MULTILINE,
     )
