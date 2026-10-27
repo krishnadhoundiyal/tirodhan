@@ -17,7 +17,69 @@ env:
   NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 jobs:
+  # Dedicated, approval-protected recovery principal. Requires pre-established
+  # OIDC trust; MUST NOT reuse or broaden the ordinary Terraform identity.
+  recovery:
+    if: github.ref == 'refs/heads/main'
+    environment: nonprod-recovery
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate privileged recovery identity configuration
+        env:
+          RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$RECOVERY_CLIENT_ID" ]] || {
+            echo "::error::Configure protected nonprod-recovery OIDC and recovery identity."
+            exit 1
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Authenticate scoped recovery identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Recover exact approved bootstrap Key Vault
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[dev]'
+          # No backend initialization or mutation under recovery identity.
+          mkdir -p infra/terraform/nonprod
+          printf '%s' "$NONPROD_TFVARS_JSON" > infra/terraform/nonprod/nonprod.auto.tfvars.json
+          cd infra/terraform/nonprod
+          python -m tirodhan.deployment.foundation_reconcile recover-vault
+
+  # Restricted deployment OIDC owns only application Terraform remote state.
+  # It reconciles the previously managed vault address with a verified,
+  # persisted state snapshot, without ever deleting Azure Key Vault.
+  state-reconcile:
+    needs: recovery
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: nonprod-plan
+      deployment: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - name: Reconcile verified legacy Key Vault state
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          python -m tirodhan.deployment.foundation_reconcile release-legacy-state
+
   foundation-plan:
+    needs: state-reconcile
     if: github.ref == 'refs/heads/main'
     environment: nonprod-plan
     runs-on: ubuntu-latest
