@@ -249,8 +249,8 @@ def preflight(*, baseline: Path | None = None) -> str:
 def verify_clean() -> None:
     cfg = settings()
     assert_bootstrap(cfg)
-    if state_addresses():
-        raise GateError("Terraform application state is not empty")
+    if managed_addresses():
+        raise GateError("Terraform managed application state is not empty")
     remaining = disposable_ids(cfg)
     if remaining:
         raise GateError(
@@ -325,7 +325,7 @@ def main() -> None:
             assert_bootstrap(cfg)
             if command("terraform", "output", "-raw", "deployment_stage") != "0":
                 raise GateError("Foundation stage is not zero")
-            if not state_addresses() or not disposable_ids(cfg):
+            if not managed_addresses() or not disposable_ids(cfg):
                 raise GateError("Foundation resources are missing")
             print("FOUNDATION_READY: verified bootstrap and deployed foundation")
     except (
