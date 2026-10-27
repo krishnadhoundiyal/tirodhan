@@ -28,6 +28,19 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce GitHub recovery environment protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/environments/nonprod-recovery" \
+            | jq -e '
+                (.deployment_branch_policy.protected_branches == true)
+                and (any(.protection_rules[]?; .type == "required_reviewers"))
+              ' >/dev/null || {
+                echo "::error::nonprod-recovery requires protected branches and human reviewers."
+                exit 1
+              }
       - name: Validate privileged recovery identity configuration
         env:
           RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
