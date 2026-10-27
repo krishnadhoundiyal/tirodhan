@@ -58,8 +58,15 @@ def recover_persistent_vault() -> None:
     # Never create bootstrap resources here. Bootstrap script owns first creation.
     name = key_vault_name(cfg)
     active = query(
-        "az", "keyvault", "list", "--resource-group", cfg["resource_group_name"],
-        "--subscription", cfg["subscription_id"], "--output", "json"
+        "az",
+        "keyvault",
+        "list",
+        "--resource-group",
+        cfg["resource_group_name"],
+        "--subscription",
+        cfg["subscription_id"],
+        "--output",
+        "json",
     )
     if not isinstance(active, list):
         raise GateError("Active Key Vault inventory unavailable")
@@ -72,8 +79,15 @@ def recover_persistent_vault() -> None:
         return
 
     deleted = query(
-        "az", "keyvault", "list-deleted", "--subscription", cfg["subscription_id"],
-        "--resource-type", "vault", "--output", "json"
+        "az",
+        "keyvault",
+        "list-deleted",
+        "--subscription",
+        cfg["subscription_id"],
+        "--resource-type",
+        "vault",
+        "--output",
+        "json",
     )
     if not isinstance(deleted, list):
         raise GateError("Deleted Key Vault inventory unavailable")
@@ -87,14 +101,32 @@ def recover_persistent_vault() -> None:
     ):
         raise GateError("Soft-deleted Key Vault has a foreign identity or location")
     run(
-        "az", "keyvault", "recover", "--subscription", cfg["subscription_id"],
-        "--name", name, "--resource-group", cfg["resource_group_name"],
-        "--location", cfg["location"], "--output", "none"
+        "az",
+        "keyvault",
+        "recover",
+        "--subscription",
+        cfg["subscription_id"],
+        "--name",
+        name,
+        "--resource-group",
+        cfg["resource_group_name"],
+        "--location",
+        cfg["location"],
+        "--output",
+        "none",
     )
     verified = query(
-        "az", "keyvault", "show", "--subscription", cfg["subscription_id"],
-        "--name", name, "--resource-group", cfg["resource_group_name"],
-        "--output", "json"
+        "az",
+        "keyvault",
+        "show",
+        "--subscription",
+        cfg["subscription_id"],
+        "--name",
+        name,
+        "--resource-group",
+        cfg["resource_group_name"],
+        "--output",
+        "json",
     )
     verify_vault(cfg, verified)
     print("PERSISTENT_VAULT_RECOVERED: exact identity verified; no purge")
@@ -121,9 +153,17 @@ def release_legacy_state() -> None:
     if str(matching[0].get("values", {}).get("id", "")).lower() != vault_id(cfg).lower():
         raise GateError("Legacy Key Vault state ID is not the bootstrap vault")
     active = query(
-        "az", "keyvault", "show", "--subscription", cfg["subscription_id"],
-        "--name", key_vault_name(cfg), "--resource-group", cfg["resource_group_name"],
-        "--output", "json"
+        "az",
+        "keyvault",
+        "show",
+        "--subscription",
+        cfg["subscription_id"],
+        "--name",
+        key_vault_name(cfg),
+        "--resource-group",
+        cfg["resource_group_name"],
+        "--output",
+        "json",
     )
     verify_vault(cfg, active)
 
@@ -133,9 +173,20 @@ def release_legacy_state() -> None:
         raise GateError("Backend resource group cannot be application group")
     # Write-once Azure blob snapshot before Terraform state mutation.
     snapshot = query(
-        "az", "storage", "blob", "snapshot", "--account-name", account,
-        "--container-name", "tfstate", "--name", "tirodhan/nonprod.tfstate",
-        "--auth-mode", "login", "--output", "json"
+        "az",
+        "storage",
+        "blob",
+        "snapshot",
+        "--account-name",
+        account,
+        "--container-name",
+        "tfstate",
+        "--name",
+        "tirodhan/nonprod.tfstate",
+        "--auth-mode",
+        "login",
+        "--output",
+        "json",
     )
     if not isinstance(snapshot, dict) or not (
         snapshot.get("snapshot") or snapshot.get("snapshotTime")
@@ -157,8 +208,14 @@ def main() -> None:
             recover_persistent_vault()
         else:
             release_legacy_state()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, KeyError, OSError,
-            ValueError, GateError) as exc:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        KeyError,
+        OSError,
+        ValueError,
+        GateError,
+    ) as exc:
         raise SystemExit(f"BLOCKED_RECONCILIATION: {type(exc).__name__}: {exc}") from exc
 
 
