@@ -90,7 +90,7 @@ def test_sku_preflight_fails_closed_on_unadvertised_sku(
         "json_command",
         lambda *a: {"supportedFlexibleServerEditions": [{"name": "Standard_D2s_v3"}]},
     )
-    with pytest.raises(lifecycle.GateError, match="B_Standard_B1ms"):
+    with pytest.raises(lifecycle.GateError, match="b_standard_b1ms"):
         lifecycle.ensure_postgres_sku(config)
     monkeypatch.setattr(
         lifecycle,
@@ -291,3 +291,7 @@ def test_clean_first_apply_rollback_removes_only_owned_resources(
     lifecycle.rollback(baseline)
     assert applied == ["rollback"]
     assert active["value"] is False
+
+
+def test_approved_postgres_sku_is_loaded_from_committed_terraform() -> None:
+    assert lifecycle.approved_postgres_sku() == "B_Standard_B1ms"
