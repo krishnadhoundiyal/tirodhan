@@ -244,8 +244,7 @@ def test_clean_first_apply_rollback_removes_only_owned_resources(
         )
     )
     resource_id = (
-        lifecycle.scope(config)
-        + "/providers/Microsoft.ServiceBus/namespaces/synthetic-bus"
+        lifecycle.scope(config) + "/providers/Microsoft.ServiceBus/namespaces/synthetic-bus"
     )
     active = {"value": True}
     monkeypatch.setenv("STATE_ACCOUNT_NAME", "protectedstate")
@@ -255,7 +254,8 @@ def test_clean_first_apply_rollback_removes_only_owned_resources(
         lambda: ["azurerm_servicebus_namespace.bus"] if active["value"] else [],
     )
     monkeypatch.setattr(
-        lifecycle, "disposable_ids",
+        lifecycle,
+        "disposable_ids",
         lambda *_: {resource_id.lower()} if active["value"] else set(),
     )
     plan = {
@@ -274,11 +274,7 @@ def test_clean_first_apply_rollback_removes_only_owned_resources(
             return plan
         return {
             "values": {
-                "root_module": {
-                    "resources": [
-                        {"mode": "managed", "values": {"id": resource_id}}
-                    ]
-                }
+                "root_module": {"resources": [{"mode": "managed", "values": {"id": resource_id}}]}
             }
         }
 
