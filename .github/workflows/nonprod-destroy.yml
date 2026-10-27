@@ -201,8 +201,16 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
+          # Empty teardown plans are accepted only after verifying the actual
+          # Azure disposable inventory and remote managed state are both empty.
+          delete_count="$(terraform show -json destroy.tfplan \
+            | jq '[.resource_changes[]? | select(.change.actions == ["delete"])] | length')"
+          if [[ "$delete_count" == "0" ]]; then
+            python -m tirodhan.deployment.foundation_lifecycle verify-clean
+          fi
           terraform show -json destroy.tfplan \
             | python -m tirodhan.deployment.check_state
 
@@ -290,7 +298,8 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
       - name: Apply approved destroy plan
         working-directory: infra/terraform/nonprod
