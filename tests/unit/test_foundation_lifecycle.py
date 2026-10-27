@@ -48,9 +48,7 @@ def test_partial_foundation_is_resumable_but_never_rollback_eligible(
     config: dict[str, str],
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(
-        lifecycle, "state_addresses", lambda: ["azurerm_servicebus_namespace.bus"]
-    )
+    monkeypatch.setattr(lifecycle, "state_addresses", lambda: ["azurerm_servicebus_namespace.bus"])
     monkeypatch.setattr(
         lifecycle, "disposable_ids", lambda *_: {"/subscriptions/111/resourcegroups/rg/bus"}
     )
@@ -78,9 +76,7 @@ def test_legacy_vault_state_address_is_blocked(
     monkeypatch: pytest.MonkeyPatch,
     config: dict[str, str],
 ) -> None:
-    monkeypatch.setattr(
-        lifecycle, "state_addresses", lambda: ["azurerm_key_vault.runtime"]
-    )
+    monkeypatch.setattr(lifecycle, "state_addresses", lambda: ["azurerm_key_vault.runtime"])
     with pytest.raises(lifecycle.GateError, match="state ownership migration"):
         lifecycle.preflight()
 
@@ -90,7 +86,8 @@ def test_sku_preflight_fails_closed_on_unadvertised_sku(
     config: dict[str, str],
 ) -> None:
     monkeypatch.setattr(
-        lifecycle, "json_command",
+        lifecycle,
+        "json_command",
         lambda *a: {"supportedFlexibleServerEditions": [{"name": "Standard_D2s_v3"}]},
     )
     with pytest.raises(lifecycle.GateError, match="B_Standard_B1ms"):
@@ -144,15 +141,11 @@ def test_rollback_does_not_delete_foreign_azure_resources(
         raise AssertionError(f"Unexpected JSON command: {args}")
 
     monkeypatch.setattr(lifecycle, "json_command", fake_json)
-    monkeypatch.setattr(
-        lifecycle, "disposable_ids", lambda *_: {resource_id.lower()}
-    )
+    monkeypatch.setattr(lifecycle, "disposable_ids", lambda *_: {resource_id.lower()})
     monkeypatch.setenv("STATE_ACCOUNT_NAME", "protected-state")
     monkeypatch.setenv("STATE_RESOURCE_GROUP", "protected-rg")
     commands: list[tuple[str, ...]] = []
-    monkeypatch.setattr(
-        lifecycle, "command", lambda *args: commands.append(args) or ""
-    )
+    monkeypatch.setattr(lifecycle, "command", lambda *args: commands.append(args) or "")
     with pytest.raises(lifecycle.GateError, match="untracked/foreign Azure resources"):
         lifecycle.rollback(record)
     assert not any(args[:2] == ("terraform", "apply") for args in commands)
@@ -169,9 +162,7 @@ def test_state_and_bootstrap_security_guards(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("STATE_ACCOUNT_NAME", "protectedstate")
     monkeypatch.setenv("STATE_RESOURCE_GROUP", "protected-rg")
     app_id = lifecycle.scope(cfg)
-    state_id = (
-        f"/subscriptions/{cfg['subscription_id']}/resourceGroups/protected-rg"
-    )
+    state_id = f"/subscriptions/{cfg['subscription_id']}/resourceGroups/protected-rg"
     vault_id = app_id + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv"
 
     def query(*args: str) -> dict:
