@@ -107,18 +107,22 @@ def test_legacy_release_requires_verified_snapshot_before_state_rm(
     calls: list[tuple[str, ...]] = []
     monkeypatch.setenv("STATE_ACCOUNT_NAME", "safe-state")
     monkeypatch.setenv("STATE_RESOURCE_GROUP", "safe-state-rg")
-    monkeypatch.setattr(
-        mod, "run", lambda *args: calls.append(args) or address
-    )
+    monkeypatch.setattr(mod, "run", lambda *args: calls.append(args) or address)
 
     def query(*args: str) -> Any:
         if args[:3] == ("terraform", "show", "-json"):
             return {
-                "values": {"root_module": {"resources": [{
-                    "address": address,
-                    "mode": "managed",
-                    "values": {"id": mod.vault_id(cfg)}
-                }]}}
+                "values": {
+                    "root_module": {
+                        "resources": [
+                            {
+                                "address": address,
+                                "mode": "managed",
+                                "values": {"id": mod.vault_id(cfg)},
+                            }
+                        ]
+                    }
+                }
             }
         if args[:3] == ("az", "keyvault", "show"):
             return vault(cfg)
