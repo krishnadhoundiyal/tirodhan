@@ -82,3 +82,23 @@ def test_reconciliation_precedes_any_foundation_or_destroy_plan() -> None:
         assert "foundation_reconcile release-legacy-state" in text
         assert "nonprod-recovery requires protected branches and human reviewers" in text
         assert "az keyvault purge" not in text
+
+
+def test_repeated_teardown_requires_verified_clean_azure_inventory() -> None:
+    from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
+
+    kwargs = {
+        "expected_subscription_id": "11111111-1111-1111-1111-111111111111",
+        "expected_resource_group": "tirodhan-np-test01",
+        "protected_state_account": "protectedstate",
+        "protected_state_container": "tfstate",
+    }
+    with __import__("pytest").raises(RuntimeError, match="no managed deletes"):
+        validate_destroy_plan({"resource_changes": []}, **kwargs)
+    assert validate_destroy_plan(
+        {"resource_changes": []}, allow_empty=True, **kwargs
+    ) == 0
+    text = WORKFLOW.read_text()
+    assert text.count("--allow-empty") == 2
+    assert 'if [[ "$delete_count" == "0" ]]; then' in text
+    assert "foundation_lifecycle verify-clean" in text
