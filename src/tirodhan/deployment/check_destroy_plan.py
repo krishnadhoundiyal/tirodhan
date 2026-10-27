@@ -13,7 +13,7 @@ ALLOWED_DESTROY_TYPES = frozenset(
         "azurerm_container_app",
         "azurerm_container_app_environment",
         "azurerm_container_app_job",
-        "azurerm_key_vault",
+        # The purge-protected Key Vault belongs to the permanent bootstrap layer.
         "azurerm_postgresql_flexible_server",
         "azurerm_postgresql_flexible_server_active_directory_administrator",
         "azurerm_postgresql_flexible_server_configuration",

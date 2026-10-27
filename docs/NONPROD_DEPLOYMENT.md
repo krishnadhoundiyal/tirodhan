@@ -79,9 +79,16 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
 
 ## Staged first deployment
 
-1. Apply a reviewed foundation plan at `deployment_stage=0`. This creates the
-   database, extension allowlist, firewall, queues, storage, vault, UAMI, RBAC and
-   Consumption-only ACA environment, **no live workloads**.
+1. Run the approved operator bootstrap before deploying. It now owns the
+   long-lived purge-protected Key Vault (create/recover/verify) as well as the
+   application resource group, OIDC/RBAC foundation, and separate Terraform state.
+   Then use a reviewed foundation plan at `deployment_stage=0`. The automated
+   read-only preflight verifies this bootstrap contract, supported PostgreSQL SKU,
+   Azure inventory and persisted Terraform state before any resource creation.
+   Terraform creates database, extension allowlist, firewall, queues, storage,
+   UAMIs, disposable RBAC and Consumption-only ACA environment; the vault is
+   referenced via a data source and **never destroyed by application Terraform**.
+   No live workloads exist at stage 0.
 2. As the configured Entra PostgreSQL administrator, bootstrap PostGIS and the
    UAMI-backed SQL principal. Set `POSTGRES_HOST`, `POSTGRES_ADMIN_NAME`,
    `RUNTIME_DATABASE_ROLE`, `RUNTIME_PRINCIPAL_ID` from Terraform outputs, then
@@ -269,3 +276,43 @@ The 300-second scheduled-Job timeout must be reconciled with enabled Web Push
 attempts (up to 22 seconds each) before adopting a schedule/batch size.
 The current native routing workers requiring OSRM and solver artifact packaging
 must not be auto-scheduled. Consult `docs/NONPROD_RUNTIME_INTEGRATION.md`.
+
+
+## NONPROD rebuild safety / bootstrap state contract
+
+`deploy/bootstrap/bootstrap.sh` is an authorized-operator operation. It owns
+the application RG (not its disposable children), remote backend RG/storage and
+`tfstate` container, scoped RBAC, immutable GitHub OIDC federation, and the
+stable purge-protected Key Vault `td-np-<suffix>-kv`. The vault and its secrets
+survive application teardown; it is not in the application Terraform state.
+The bootstrap script creates it once or recovers an exact-name soft-deleted
+vault and verifies location, RBAC mode and purge protection. It never purges.
+
+**State migration prerequisite:** This change moves a previously
+application-Terraform-owned vault to bootstrap ownership. If any existing remote
+application state still contains `azurerm_key_vault.runtime`, STOP. Inspect
+its actual Azure ID and ensure it is the approved active vault. A separate
+approved, backed-up Terraform state ownership transfer is required before
+running the new foundation/destroy workflows. No workflow silently drops the
+old state address or destroys that vault. The already failed foundation in
+October 2026 did not create the Key Vault; check remote state nonetheless.
+
+`foundation_lifecycle preflight` runs both at planning and immediately before
+apply. It fails closed on missing/misconfigured bootstrap resources, foreign
+application resources, unknown Azure SKU response shape or unsupported
+PostgreSQL SKU, or an old Key Vault Terraform state address. An existing
+stage-0 partial state is resumable but **never eligible for automatic rollback**.
+
+A first apply starting from *both* empty application Terraform state and empty
+disposable Azure inventory records a local baseline. If the apply or subsequent
+validation fails, the same approved apply job may generate a guarded Terraform
+destroy plan, validate it with `check_destroy_plan`, apply only approved
+disposable deletions, then validate empty Terraform state and Azure inventory.
+Unknown/untracked resources cause `BLOCKED_RECONCILIATION`, not speculative
+deletion. This is best-effort compensation, **not** an Azure atomic transaction.
+An upgrade or previously partial foundation cannot be automatically destroyed.
+
+`nonprod-destroy.yml` verifies the Azure inventory and bootstrap-vault
+availability as well as Terraform state; the state backend and existing OIDC
+bootstrap are never removed. The PostgreSQL SKU remains a separately approved,
+hardcoded choice; no automatic increase in compute cost or region substitution.

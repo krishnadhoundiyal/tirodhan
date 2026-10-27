@@ -34,6 +34,7 @@ scope="/subscriptions/$AZURE_SUBSCRIPTION_ID"
 rg="tirodhan-np-$NONPROD_SUFFIX"
 state_rg="$rg-state"
 state_account="tdnpstate$NONPROD_SUFFIX"
+vault="td-np-$NONPROD_SUFFIX-kv"
 for provider in Microsoft.App Microsoft.Storage Microsoft.KeyVault Microsoft.ServiceBus Microsoft.ManagedIdentity Microsoft.DBforPostgreSQL; do
   az provider register --namespace "$provider" --wait --output none
 done
@@ -79,6 +80,35 @@ done
 grant_role Reader "$state_id" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
 grant_role "Storage Blob Delegator" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
 grant_role "Key Vault Secrets Officer" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal
+
+# Bootstrap owns the permanent purge-protected vault and its stable name.
+# This is an authorized operator operation, never a restricted foundation apply.
+# We recover a prior soft-deletion rather than purging or generating a new name.
+if az keyvault show --name "$vault" --resource-group "$rg" --output none 2>/dev/null; then
+  echo "Persistent Key Vault already exists."
+else
+  deleted="$(az keyvault list-deleted --subscription "$AZURE_SUBSCRIPTION_ID" --resource-type vault --output json)"
+  if jq -e --arg name "$vault" '.[] | select(.name == $name)' <<<"$deleted" >/dev/null; then
+    az keyvault recover --subscription "$AZURE_SUBSCRIPTION_ID" --name "$vault" \
+      --resource-group "$rg" --location "$AZURE_LOCATION" --output none
+  else
+    az keyvault create --subscription "$AZURE_SUBSCRIPTION_ID" --name "$vault" \
+      --resource-group "$rg" --location "$AZURE_LOCATION" --sku standard \
+      --enable-rbac-authorization true --enable-purge-protection true --output none
+  fi
+fi
+vault_info="$(az keyvault show --name "$vault" --resource-group "$rg" --output json)"
+jq -e --arg rg "$rg" --arg sub "$AZURE_SUBSCRIPTION_ID" \
+  --arg loc "$AZURE_LOCATION" '
+  (.id | ascii_downcase | startswith(("/subscriptions/" + $sub + "/resourcegroups/" + $rg + "/providers/microsoft.keyvault/vaults/") | ascii_downcase))
+  and ((.location | ascii_downcase) == ($loc | ascii_downcase))
+  and (.properties.enablePurgeProtection == true)
+  and (.properties.enableRbacAuthorization == true)
+' <<<"$vault_info" >/dev/null || {
+  echo "Persistent Key Vault identity/security mismatch; refusing bootstrap." >&2
+  exit 1
+}
+echo "Persistent purge-protected Key Vault verified: $vault"
 # Deployment may manage only these runtime data roles, never Owner/Contributor.
 # Keep these built-in role IDs synchronized with Microsoft's published role IDs.
 roles="{69a216fc-b8fb-44d8-bc22-1f3c2cd27a39, 4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0, ba92f5b4-2d11-453d-a403-e96b0029c9fe, db58b8e5-c6ad-4a2a-8342-4190687cbf4a, 4633458b-17de-408a-b874-0445c86b69e6}"

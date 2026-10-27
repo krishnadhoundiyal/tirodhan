@@ -37,7 +37,10 @@ jobs:
               exit 1
             fi
           fi
-          # Stage 0 is deliberately rerunnable so a partial failed first apply can converge safely.
+          # Azure preflight is read-only; it rejects stale names, SKU mismatch,
+          # bootstrap drift and foreign resources BEFORE any Azure creation.
+          python -m tirodhan.deployment.foundation_lifecycle preflight
+          # Stage 0 remains resumable after a known partial apply.
           TF_VAR_deployment_stage=0 terraform plan -input=false -out=foundation.tfplan
           terraform show -json foundation.tfplan | python -m tirodhan.deployment.check_state
       - uses: actions/upload-artifact@v4
@@ -69,8 +72,26 @@ jobs:
               exit 1
             fi
           fi
+          # Recheck immediately before the saved plan; classify existing state.
+          # A fresh attempt may be rolled back. A partial/established attempt
+          # must NEVER be destroyed automatically.
+          python -m tirodhan.deployment.foundation_lifecycle preflight \
+            --baseline /tmp/nonprod-foundation-baseline.json
+          on_failure() {
+            status=$?
+            trap - ERR
+            echo "::error::Foundation apply/verification failed. Checking guarded rollback."
+            if ! python -m tirodhan.deployment.foundation_lifecycle rollback \
+                --baseline /tmp/nonprod-foundation-baseline.json; then
+              echo "::error::BLOCKED_RECONCILIATION; no unverified cleanup was attempted."
+            fi
+            exit "$status"
+          }
+          trap on_failure ERR
           terraform apply -input=false foundation.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
           terraform output -json >/tmp/nonprod-foundation-output.json
           jq -e '.deployment_stage.value == 0' /tmp/nonprod-foundation-output.json >/dev/null
-          echo "NONPROD foundation applied at deployment_stage=0."
+          python -m tirodhan.deployment.foundation_lifecycle verify-foundation
+          trap - ERR
+          echo "FOUNDATION_READY: NONPROD foundation applied at deployment_stage=0."

@@ -226,6 +226,10 @@ jobs:
             -input=false \
             destroy.tfplan
 
+      - name: Verify disposable Azure resources are removed
+        working-directory: infra/terraform/nonprod
+        run: python -m tirodhan.deployment.foundation_lifecycle verify-clean
+
       - name: Verify Terraform application state is empty
         working-directory: infra/terraform/nonprod
         run: |
@@ -268,4 +272,7 @@ jobs:
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
           echo "Preserved Terraform state account: $STATE_ACCOUNT_NAME"
           echo "Preserved Terraform state container: tfstate"
-          echo "NONPROD Terraform-managed application resources are destroyed."
+          # The purge-protected Key Vault is bootstrap-owned and intentionally retained.
+          az keyvault show --name "td-np-${{ inputs.expected_suffix }}-kv" \
+            --resource-group "$NONPROD_RESOURCE_GROUP" --output none
+          echo "NONPROD disposable resources destroyed; bootstrap resources preserved."

@@ -47,3 +47,20 @@ def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
     assert "--protected-state-container tfstate" in text
     assert "terraform state list" in text
     assert "az storage container show" in text
+
+
+def test_persistent_key_vault_and_preflight_rollback_wiring() -> None:
+    foundation = Path(".github/workflows/nonprod-foundation.yml").read_text()
+    teardown = WORKFLOW.read_text()
+    assert foundation.count("foundation_lifecycle preflight") == 2
+    assert "foundation_lifecycle rollback" in foundation
+    assert "foundation_lifecycle verify-foundation" in foundation
+    assert "trap on_failure ERR" in foundation
+    assert "foundation_lifecycle verify-clean" in teardown
+    assert "az keyvault show" in teardown
+    assert "az keyvault purge" not in teardown
+    check = Path("src/tirodhan/deployment/check_destroy_plan.py").read_text()
+    assert '"azurerm_key_vault",' not in check
+    stack = Path("infra/terraform/nonprod/key_vault.tf").read_text()
+    assert 'data "azurerm_key_vault" "runtime"' in stack
+    assert 'resource "azurerm_key_vault"' not in stack
