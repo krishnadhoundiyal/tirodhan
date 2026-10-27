@@ -22,7 +22,7 @@ class GateError(RuntimeError):
 
 
 def command(*args: str) -> str:
-    timeout = 1800 if args[:2] == ("terraform", "apply") else 180
+    timeout = 1800 if args[0] == "terraform" and args[1] in {"apply", "plan"} else 180
     result = subprocess.run(list(args), check=True, capture_output=True, text=True, timeout=timeout)
     return result.stdout.strip()
 
