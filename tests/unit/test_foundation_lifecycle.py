@@ -54,6 +54,7 @@ def test_partial_foundation_is_resumable_but_never_rollback_eligible(
     monkeypatch.setattr(
         lifecycle, "disposable_ids", lambda *_: {"/subscriptions/111/resourcegroups/rg/bus"}
     )
+    monkeypatch.setattr(lifecycle, "assert_owned_inventory", lambda *_: None)
     record = tmp_path / "baseline.json"
     assert lifecycle.preflight(baseline=record) == "PARTIAL"
     reject = MagicMock()
@@ -152,7 +153,7 @@ def test_rollback_does_not_delete_foreign_azure_resources(
     monkeypatch.setattr(
         lifecycle, "command", lambda *args: commands.append(args) or ""
     )
-    with pytest.raises(lifecycle.GateError, match="untracked Azure asset"):
+    with pytest.raises(lifecycle.GateError, match="untracked/foreign Azure resources"):
         lifecycle.rollback(record)
     assert not any(args[:2] == ("terraform", "apply") for args in commands)
 
@@ -203,3 +204,30 @@ def test_state_and_bootstrap_security_guards(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(lifecycle, "json_command", insecure_query)
     with pytest.raises(lifecycle.GateError, match="disable shared-key"):
         lifecycle.assert_bootstrap(cfg)
+
+
+def test_partial_inventory_must_be_subset_of_remote_state(
+    monkeypatch: pytest.MonkeyPatch,
+    config: dict[str, str],
+) -> None:
+    root = lifecycle.scope(config)
+    managed_id = root + "/providers/Microsoft.ServiceBus/namespaces/bus"
+    assert managed_id.startswith(root)
+    monkeypatch.setattr(
+        lifecycle,
+        "json_command",
+        lambda *_: {
+            "values": {
+                "root_module": {
+                    "resources": [
+                        {"mode": "managed", "values": {"id": managed_id}},
+                    ]
+                }
+            }
+        },
+    )
+    lifecycle.assert_owned_inventory(config, {managed_id.lower()})
+    with pytest.raises(lifecycle.GateError, match="untracked/foreign"):
+        lifecycle.assert_owned_inventory(config, {root.lower() + "/providers/Microsoft.App/jobs/foreign"})
+    with pytest.raises(lifecycle.GateError, match="out-of-scope"):
+        lifecycle.tracked_managed_ids({**config, "resource_group_name": "other-rg"})
