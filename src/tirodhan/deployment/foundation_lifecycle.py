@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, cast
@@ -210,9 +211,25 @@ def sku_candidates(tree: Any) -> set[str]:
     return found
 
 
+def approved_postgres_sku() -> str:
+    path = Path(__file__).resolve().parents[3] / "infra/terraform/nonprod/database.tf"
+    matches = re.findall(
+        r'^\\s*sku_name\\s*=\\s*"([^"]+)"',
+        path.read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    if len(matches) != 1:
+        raise GateError("Exactly one literal Terraform PostgreSQL SKU must be approved")
+    return matches[0]
+
+
 def ensure_postgres_sku(config: dict[str, Any]) -> None:
-    # The approved hardcoded SKU is not substituted with a more expensive one.
-    # The list API is a capability signal, not a guarantee of live Azure capacity.
+    # Read the approved source of truth; never auto-select a different SKU.
+    # Region listing is not a live capacity reservation.
+    requested = approved_postgres_sku().lower()
+    expected = {requested}
+    if requested.startswith(("b_", "gp_", "mo_")):
+        expected.add(requested.split("_", 1)[1])
     names = sku_candidates(
         json_command(
             "az",
@@ -227,9 +244,9 @@ def ensure_postgres_sku(config: dict[str, Any]) -> None:
             "json",
         )
     )
-    if not ({"b_standard_b1ms", "standard_b1ms"} & names):
+    if not (expected & names):
         raise GateError(
-            "B_Standard_B1ms is not advertised for this subscription/region; "
+            f"PostgreSQL SKU {requested} is not advertised for this subscription/region; "
             "review PostgreSQL cost/region and the approved Terraform SKU"
         )
 
