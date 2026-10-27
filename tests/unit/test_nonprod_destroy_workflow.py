@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW = Path(".github/workflows/nonprod-destroy.yml")
@@ -93,7 +94,7 @@ def test_repeated_teardown_requires_verified_clean_azure_inventory() -> None:
         "protected_state_account": "protectedstate",
         "protected_state_container": "tfstate",
     }
-    with __import__("pytest").raises(RuntimeError, match="no managed deletes"):
+    with pytest.raises(RuntimeError, match="no managed deletes"):
         validate_destroy_plan({"resource_changes": []}, **kwargs)
     assert validate_destroy_plan(
         {"resource_changes": []}, allow_empty=True, **kwargs
