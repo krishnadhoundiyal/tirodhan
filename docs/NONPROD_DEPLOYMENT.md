@@ -288,16 +288,32 @@ survive application teardown; it is not in the application Terraform state.
 The bootstrap script creates it once or recovers an exact-name soft-deleted
 vault and verifies location, RBAC mode and purge protection. It never purges.
 
-**State migration prerequisite:** This change moves a previously
-application-Terraform-owned vault to bootstrap ownership. If any existing remote
-application state still contains `azurerm_key_vault.runtime`, STOP. Inspect
-its actual Azure ID and ensure it is the approved active vault. A separate
-approved, backed-up Terraform state ownership transfer is required before
-running the new foundation/destroy workflows. No workflow silently drops the
-old state address or destroys that vault. The already failed foundation in
-October 2026 did not create the Key Vault; check remote state nonetheless.
+**Automated lifecycle reconciliation:** Both foundation and teardown
+first run a GitHub environment-protected `nonprod-recovery` job using a separate,
+narrowly scoped federated identity. It recovers only the exact-name deleted
+Key Vault after verifying the original vault ID and location; it does not
+create, delete or purge Azure resources. The next job runs with the existing
+restricted deployment identity, verifies the active vault's ID, tenant, RBAC
+and purge protection against its legacy `azurerm_key_vault.runtime` state
+record, snapshots `tfstate/tirodhan/nonprod.tfstate`, and releases only
+that verified legacy Terraform state address. Already-reconciled state is a
+no-op. Unknown ownership and absent permission fail closed. No manual
+Terraform import/state commands are part of routine deployment or teardown.
 
-`foundation_lifecycle preflight` runs both at planning and immediately before
+**One-time recovery trust enrollment:** Authorized bootstrap operators may
+provide `RECOVERY_OBJECT_ID` (distinct recovery service principal object ID)
+and `RECOVERY_FEDERATED_APP_OBJECT_ID` (matching Entra app object ID) to the
+existing bootstrap script. It creates a narrowly scoped, subscription-level
+deleted-vault read/recover custom role and federated subject for the immutable
+repository's `nonprod-recovery` environment. This is initial trust enrollment,
+not a per-deployment manual repair. The repository variable
+`AZURE_NONPROD_RECOVERY_CLIENT_ID` must be the corresponding client/application
+ID. The GitHub environment `nonprod-recovery` must restrict deployment to
+trusted `main` and require reviewer approval. The ordinary deployment identity
+never receives recovery or subscription Owner privileges. No pipeline may
+auto-enroll missing OIDC trust or bypass protected environment approval.
+
+`foundation_lifecycle preflight` runs after the protected reconciliation at planning and immediately before
 apply. It fails closed on missing/misconfigured bootstrap resources, foreign
 application resources, unknown Azure SKU response shape or unsupported
 PostgreSQL SKU, or an old Key Vault Terraform state address. An existing
