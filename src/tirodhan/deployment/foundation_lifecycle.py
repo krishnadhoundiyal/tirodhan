@@ -250,15 +250,16 @@ def preflight(*, baseline: Path | None = None) -> str:
     if stage not in (None, 0):
         raise GateError("Foundation-only operation cannot target a deployed environment")
     ids = disposable_ids(cfg)
-    if not addresses and ids:
+    managed = managed_addresses()
+    if not managed and ids:
         raise GateError(
             "Foreign/untracked Azure resources exist in application RG; "
             "no automatic adoption or deletion"
         )
-    if managed_addresses():
+    if managed:
         assert_owned_inventory(cfg, ids)
     ensure_postgres_sku(cfg)
-    state = "CLEAN" if not addresses and not ids else "PARTIAL"
+    state = "CLEAN" if not managed and not ids else "PARTIAL"
     if baseline is not None:
         baseline.write_text(
             json.dumps(
@@ -266,7 +267,7 @@ def preflight(*, baseline: Path | None = None) -> str:
                     "classification": state,
                     "subscription_id": cfg["subscription_id"],
                     "resource_group_name": cfg["resource_group_name"],
-                    "initial_state_count": len(addresses),
+                    "initial_state_count": len(managed),
                     "initial_inventory_count": len(ids),
                 }
             ),
