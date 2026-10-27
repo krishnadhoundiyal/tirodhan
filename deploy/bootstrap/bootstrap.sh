@@ -135,32 +135,42 @@ if [[ -n "${RECOVERY_OBJECT_ID:-}" || -n "${RECOVERY_FEDERATED_APP_OBJECT_ID:-}"
   [[ "$RECOVERY_OBJECT_ID" != "$DEPLOYMENT_OBJECT_ID" ]] || {
     echo "Recovery and deployment service principals must differ" >&2; exit 1
   }
-  recovery_role="Tirodhan NONPROD Vault Recovery $NONPROD_SUFFIX"
-  # Deleted vaults are subscription-level Azure resources, not application-RG
-  # children. Only exact-name recovery is permitted by workflow validation.
-  jq -n --arg scope "$scope" --arg name "$recovery_role" '{
-    Name: $name,
-    IsCustom: true,
-    Description: "Recover exact-name soft-deleted vault via vault write; no purge/delete",
+  # Read deleted-vault metadata at subscription scope only; allow the vault
+  # control-plane write operation ONLY inside the bootstrap application RG.
+  recovery_discovery_role="Tirodhan NONPROD Deleted Vault Discovery $NONPROD_SUFFIX"
+  recovery_write_role="Tirodhan NONPROD Vault Recovery Write $NONPROD_SUFFIX"
+  jq -n --arg scope "$scope" --arg name "$recovery_discovery_role" '{
+    Name: $name, IsCustom: true,
+    Description: "Subscription-scoped soft-deleted Key Vault metadata only",
     Actions: [
       "Microsoft.Resources/subscriptions/resourceGroups/read",
-      "Microsoft.KeyVault/vaults/read",
-      "Microsoft.KeyVault/vaults/write",
       "Microsoft.KeyVault/deletedVaults/read",
       "Microsoft.KeyVault/locations/deletedVaults/read",
       "Microsoft.KeyVault/locations/operationResults/read"
     ],
-    NotActions: [],
-    DataActions: [],
-    NotDataActions: [],
+    NotActions: [], DataActions: [], NotDataActions: [],
     AssignableScopes: [$scope]
   }' > "$temp_dir/recovery-role.json"
-  if az role definition list --name "$recovery_role" --query '[0].id' -o tsv | grep -q .; then
+  if az role definition list --name "$recovery_discovery_role" --query '[0].id' -o tsv | grep -q .; then
     az role definition update --role-definition "$temp_dir/recovery-role.json" --output none
   else
     az role definition create --role-definition "$temp_dir/recovery-role.json" --output none
   fi
-  grant_role "$recovery_role" "$scope" "$RECOVERY_OBJECT_ID" ServicePrincipal
+  grant_role "$recovery_discovery_role" "$scope" "$RECOVERY_OBJECT_ID" ServicePrincipal
+
+  jq -n --arg scope "$rg_scope" --arg name "$recovery_write_role" '{
+    Name: $name, IsCustom: true,
+    Description: "Nonprod RG-only vault read/write for verified exact-name recovery",
+    Actions: ["Microsoft.KeyVault/vaults/read", "Microsoft.KeyVault/vaults/write"],
+    NotActions: [], DataActions: [], NotDataActions: [],
+    AssignableScopes: [$scope]
+  }' > "$temp_dir/recovery-role.json"
+  if az role definition list --name "$recovery_write_role" --query '[0].id' -o tsv | grep -q .; then
+    az role definition update --role-definition "$temp_dir/recovery-role.json" --output none
+  else
+    az role definition create --role-definition "$temp_dir/recovery-role.json" --output none
+  fi
+  grant_role "$recovery_write_role" "$rg_scope" "$RECOVERY_OBJECT_ID" ServicePrincipal
   recovery_cred="tirodhan-nonprod-recovery"
   recovery_sub="repo:$github_subject_repo:environment:nonprod-recovery"
   jq -n --arg name "$recovery_cred" --arg subject "$recovery_sub" '{
