@@ -1,16 +1,18 @@
-import pytest
-from hypothesis import given, settings, strategies as st
-from uuid import UUID
 from datetime import datetime, timezone
+from uuid import UUID
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from tirodhan.modules.planning.routing.contracts import (
+    CargoLot,
+    RoutingLimits,
     RoutingProblem,
-    TimeWindow,
     RoutingStop,
     StopKind,
-    CargoLot,
-    RoutingLimits
+    TimeWindow,
 )
-from tirodhan.modules.planning.routing.validation import RoutingValidationError, validate_proposal
+
 
 def uid(i: int) -> UUID:
     return UUID(int=i)
