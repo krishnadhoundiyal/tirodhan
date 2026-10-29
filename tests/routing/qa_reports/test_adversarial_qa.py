@@ -1,23 +1,25 @@
-import pytest
-from hypothesis import given, strategies as st
-from hypothesis.stateful import RuleBasedStateMachine, rule, Bundle, initialize
-from uuid import uuid4
 from datetime import datetime
 
+from hypothesis import strategies as st
+from hypothesis.stateful import RuleBasedStateMachine, initialize, rule
+
 from tirodhan.modules.planning.routing.contracts import (
-    RoutingProblem,
-    VehicleSnapshot,
     CargoLot,
+    ResourceKind,
+    RoutingLimits,
+    RoutingProblem,
     RoutingStop,
     StopKind,
     TimeWindow,
-    RoutingLimits,
-    ResourceKind
+    VehicleSnapshot,
 )
+
 
 def uid(x):
     from uuid import UUID
+
     return UUID(int=x)
+
 
 class AdversarialRoutingStateMachine(RuleBasedStateMachine):
     def __init__(self):
@@ -26,9 +28,11 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
         self.lots = []
         self.stops = []
 
-    @initialize(vehicle_id=st.integers(min_value=1, max_value=10),
-                capacity_a=st.integers(min_value=1, max_value=100),
-                capacity_b=st.integers(min_value=1, max_value=100))
+    @initialize(
+        vehicle_id=st.integers(min_value=1, max_value=10),
+        capacity_a=st.integers(min_value=1, max_value=100),
+        capacity_b=st.integers(min_value=1, max_value=100),
+    )
     def init_vehicle(self, vehicle_id, capacity_a, capacity_b):
         v = VehicleSnapshot(
             vehicle_id=uid(vehicle_id),
@@ -44,17 +48,27 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
             capacity=(capacity_a, capacity_b),
             initial_cargo=(),
             protected_prefix=(),
-            breaks=()
+            breaks=(),
         )
         self.vehicles.append(v)
 
-    @rule(booking_idx=st.integers(min_value=200, max_value=300),
-          pickup_amount_a=st.integers(min_value=1, max_value=5),
-          pickup_amount_b=st.integers(min_value=1, max_value=5),
-          service_time=st.integers(min_value=30, max_value=100),
-          time_window_start=st.integers(min_value=0, max_value=1000),
-          time_window_end=st.integers(min_value=1001, max_value=2000))
-    def add_booking(self, booking_idx, pickup_amount_a, pickup_amount_b, service_time, time_window_start, time_window_end):
+    @rule(
+        booking_idx=st.integers(min_value=200, max_value=300),
+        pickup_amount_a=st.integers(min_value=1, max_value=5),
+        pickup_amount_b=st.integers(min_value=1, max_value=5),
+        service_time=st.integers(min_value=30, max_value=100),
+        time_window_start=st.integers(min_value=0, max_value=1000),
+        time_window_end=st.integers(min_value=1001, max_value=2000),
+    )
+    def add_booking(
+        self,
+        booking_idx,
+        pickup_amount_a,
+        pickup_amount_b,
+        service_time,
+        time_window_start,
+        time_window_end,
+    ):
         lot_id = uid(booking_idx)
         pickup_loc = uid(booking_idx + 1000)
         discharge_loc = uid(booking_idx + 2000)
@@ -67,7 +81,7 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
             unit_load=(pickup_amount_a, pickup_amount_b),
             authorized_receiving_point_ids=(uid(10000),),
             discharge_deadline=86400,
-            pickup_stop_id=uid(booking_idx + 4000)
+            pickup_stop_id=uid(booking_idx + 4000),
         )
         self.lots.append(lot)
 
@@ -82,7 +96,7 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
             required=True,
             eligible_vehicle_ids=tuple(v.vehicle_id for v in self.vehicles),
             bound_vehicle_id=None,
-            receiving_point_id=None
+            receiving_point_id=None,
         )
 
         discharge_stop = RoutingStop(
@@ -96,7 +110,7 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
             required=True,
             eligible_vehicle_ids=tuple(v.vehicle_id for v in self.vehicles),
             bound_vehicle_id=None,
-            receiving_point_id=uid(10000)
+            receiving_point_id=uid(10000),
         )
 
         self.stops.extend([pickup_stop, discharge_stop])
@@ -118,7 +132,7 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
             vehicles=tuple(self.vehicles),
             receiving_points=(),
             lots=tuple(self.lots),
-            stops=tuple(self.stops)
+            stops=tuple(self.stops),
         )
         assert len(problem.vehicles) == len(self.vehicles)
         assert len(problem.lots) == len(self.lots)
@@ -132,6 +146,7 @@ class AdversarialRoutingStateMachine(RuleBasedStateMachine):
         for stop in problem.stops:
             assert stop.service_start_window.start <= stop.service_start_window.end
             if stop.kind == StopKind.PICKUP:
-                assert stop.required == True
+                assert stop.required
+
 
 TestRoutingStateMachine = AdversarialRoutingStateMachine.TestCase
