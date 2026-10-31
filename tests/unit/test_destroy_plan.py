@@ -32,9 +32,7 @@ def _plan(resource_type: str = "azurerm_container_app") -> dict:
     }
 
 
-def _validate(
-    plan: dict, *, allow_empty: bool = False, require_empty: bool = False
-) -> int:
+def _validate(plan: dict, *, allow_empty: bool = False, require_empty: bool = False) -> int:
     return validate_destroy_plan(
         plan,
         expected_subscription_id=SUBSCRIPTION_ID,
