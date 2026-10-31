@@ -59,7 +59,7 @@ POLLING_ERROR = (
     'Error: deleting Managed Environment (Subscription: "362d539c-c919-481e-97f5-1a9cda362747" '
     'Resource Group Name: "tirodhan-np-tdnp01" '
     'Managed Environment Name: "tirodhan-np-tdnp01-aca"): '
-    'polling after Delete: internal-error: '
+    "polling after Delete: internal-error: "
     'polling support for the Content-Type "" was not implemented: <nil>'
 )
 
@@ -106,11 +106,11 @@ def _recovery(
         tools,
         "terraform",
         'case "$1" in\n'
-        '  plan) touch terminal-convergence.tfplan ;;\n'
+        "  plan) touch terminal-convergence.tfplan ;;\n"
         '  show) cat "$FAKE_PLAN_JSON" ;;\n'
         '  apply) printf "%s\\n" "$*" >> "$FAKE_APPLY_LOG" ;;\n'
-        '  *) exit 90 ;;\n'
-        'esac\n',
+        "  *) exit 90 ;;\n"
+        "esac\n",
     )
     before = {
         "id": (
