@@ -277,20 +277,34 @@ jobs:
             exit 1
           fi
 
-          application_child_scope_prefix="${DEPLOYMENT_SCOPE,,}/"
-          remaining_application_role_assignments="$(az role assignment list \
-            --all \
-            --output json \
-            | jq -r --arg prefix "$application_child_scope_prefix" '
-                .[]
-                | select(((.scope // "") | ascii_downcase | startswith($prefix)))
-                | [.scope, .roleDefinitionName]
-                | @tsv
-              ')"
+          resource_group_role_assignments="$(az role assignment list \
+            --resource-group "$NONPROD_RESOURCE_GROUP" \
+            --fill-principal-name false \
+            --output json)"
 
-          if [[ -n "$remaining_application_role_assignments" ]]; then
-            echo "Application-scoped Azure role assignments remain below the NONPROD RG:" >&2
-            echo "$remaining_application_role_assignments" >&2
+          if ! jq -e \
+            --arg scope "${DEPLOYMENT_SCOPE,,}" \
+            --arg deployment_role "Tirodhan NONPROD Deployment ${{ inputs.expected_suffix }}" \
+            '
+              ([.[] | select(((.scope // "") | ascii_downcase) == $scope)] | length) == 5
+              and ([.[] | select(((.scope // "") | ascii_downcase) != $scope)] | length) == 0
+              and ([.[].principalId] | unique | length) == 1
+              and (
+                [.[].roleDefinitionName] | sort
+              ) == (
+                [
+                  $deployment_role,
+                  "Key Vault Secrets Officer",
+                  "Role Based Access Control Administrator",
+                  "Storage Blob Data Contributor",
+                  "Storage Blob Delegator"
+                ] | sort
+              )
+            ' <<<"$resource_group_role_assignments" >/dev/null
+          then
+            echo "Unexpected direct role assignments remain on the NONPROD application RG:" >&2
+            jq -r '.[] | [.scope, .roleDefinitionName] | @tsv' \
+              <<<"$resource_group_role_assignments" >&2
             exit 1
           fi
 
