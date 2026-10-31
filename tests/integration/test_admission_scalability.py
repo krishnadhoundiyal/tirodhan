@@ -273,7 +273,8 @@ async def test_cursor_survives_quantum_yield_cold_reconstruction_and_elapsed_clo
     factory = database_session_factory
     data = await regional(factory, empty=True)
     clock, customer, context = data[6], data[8], data[9]
-    command = admission(context, clock[0])
+    # Give the synthetic clock room to advance past a half-hour boundary.
+    command = admission(context, clock[0] + timedelta(minutes=30))
     await request_admission(
         factory,
         customer_id=customer,
@@ -322,7 +323,8 @@ async def test_two_yielded_intents_resume_their_own_checkpoint(
     factory = database_session_factory
     data = await regional(factory, empty=True)
     clock, customer, context = data[6], data[8], data[9]
-    commands = [admission(context, clock[0]) for _ in range(2)]
+    # Both intents must remain slot-eligible after the simulated 15-second advance.
+    commands = [admission(context, clock[0] + timedelta(minutes=30)) for _ in range(2)]
     for command in commands:
         await request_admission(
             factory,

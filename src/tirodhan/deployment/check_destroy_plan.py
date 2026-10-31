@@ -52,20 +52,29 @@ def validate_destroy_plan(
     expected_resource_group: str,
     protected_state_account: str,
     protected_state_container: str,
+    allow_empty: bool = False,
 ) -> int:
     delete_count = 0
     expected_scope = _expected_scope(expected_subscription_id, expected_resource_group)
 
     for change in plan.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
-        if "delete" not in actions:
+        mode = change.get("mode", "managed")
+        address = change.get("address", "<unknown>")
+
+        if mode != "managed":
+            if "delete" in actions:
+                raise RuntimeError(f"Refusing non-managed delete: {address}")
             continue
 
-        address = change.get("address", "<unknown>")
+        if actions in ([], ["no-op"]):
+            continue
+
+        if "delete" not in actions:
+            raise RuntimeError(f"Refusing non-destroy managed action for {address}: {actions}")
+
         resource_type = change.get("type", "")
 
-        if change.get("mode", "managed") != "managed":
-            raise RuntimeError(f"Refusing non-managed delete: {address}")
         if actions != ["delete"]:
             raise RuntimeError(
                 f"Refusing replacement/mixed destroy action for {address}: {actions}"
@@ -95,7 +104,7 @@ def validate_destroy_plan(
 
         delete_count += 1
 
-    if delete_count == 0:
+    if delete_count == 0 and not allow_empty:
         raise RuntimeError("Destroy plan contains no managed deletes")
 
     return delete_count
@@ -107,6 +116,11 @@ def main() -> None:
     parser.add_argument("--expected-resource-group", required=True)
     parser.add_argument("--protected-state-account", required=True)
     parser.add_argument("--protected-state-container", required=True)
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Allow a zero-delete terminal convergence plan.",
+    )
     args = parser.parse_args()
 
     plan = json.load(sys.stdin)
@@ -116,11 +130,18 @@ def main() -> None:
         expected_resource_group=args.expected_resource_group,
         protected_state_account=args.protected_state_account,
         protected_state_container=args.protected_state_container,
+        allow_empty=args.allow_empty,
     )
-    print(
-        f"PASS: destroy plan contains {count} approved managed deletes inside "
-        "the expected application scope; backend resources are excluded"
-    )
+    if count == 0:
+        print(
+            "PASS: destroy plan contains no managed deletes and no non-destroy "
+            "managed actions; terminal convergence is safe"
+        )
+    else:
+        print(
+            f"PASS: destroy plan contains {count} approved managed deletes inside "
+            "the expected application scope; backend resources are excluded"
+        )
 
 
 if __name__ == "__main__":
