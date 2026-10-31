@@ -48,18 +48,18 @@ def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
     assert "az resource list \\" in text
     assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
     assert "Active Azure resources remain in the NONPROD application RG:" in text
-    assert "resource_group_role_assignments=" in text
+    assert "az account get-access-token \\" in text
+    assert "--resource https://management.azure.com/ \\" in text
+    assert "python -m tirodhan.deployment.check_nonprod_bootstrap_rbac principal" in text
+    assert '--client-id "$ARM_CLIENT_ID"' in text
+    assert '--tenant-id "$ARM_TENANT_ID"' in text
     assert "az role assignment list \\" in text
     assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
     assert "--fill-principal-name false \\" in text
-    assert '--arg scope "${DEPLOYMENT_SCOPE,,}"' in text
-    assert "Tirodhan NONPROD Deployment ${{ inputs.expected_suffix }}" in text
-    assert "([.[].principalId] | unique | length) == 1" in text
-    assert "Key Vault Secrets Officer" in text
-    assert "Role Based Access Control Administrator" in text
-    assert "Storage Blob Data Contributor" in text
-    assert "Storage Blob Delegator" in text
-    assert "Unexpected direct role assignments remain on the NONPROD application RG:" in text
+    assert "python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify" in text
+    assert '--expected-scope "$DEPLOYMENT_SCOPE"' in text
+    assert '--expected-principal-id "$deployment_principal_id"' in text
+    assert '--expected-suffix "${{ inputs.expected_suffix }}"' in text
 
 
 def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
