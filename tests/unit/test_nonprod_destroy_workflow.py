@@ -121,3 +121,31 @@ def test_direct_resource_deletion_is_required_before_state_reconciliation() -> N
     )
     assert job["timeout-minutes"] == 90
     assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}
+
+
+def test_preserved_state_verification_matches_bootstrap_least_privilege() -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["destroy-apply"]["steps"]
+    verify = next(s for s in steps if s.get("name") == "Verify preserved bootstrap resources")
+    script = verify["run"]
+    bootstrap = Path("deploy/bootstrap/bootstrap.sh").read_text(encoding="utf-8")
+
+    # Bootstrap only grants state-account Reader, never state-RG Reader.
+    assert 'grant_role Reader "$state_id" "$DEPLOYMENT_OBJECT_ID" ServicePrincipal' in bootstrap
+    assert 'grant_role Reader "$state_rg"' not in bootstrap
+    assert 'grant_role Reader "$rg_scope"' not in bootstrap
+
+    # Do not require an additional state resource-group read permission.
+    assert script.count("az group show") == 1
+    assert '--name "$NONPROD_RESOURCE_GROUP"' in script
+    assert 'az group show \\\n  --name "$STATE_RESOURCE_GROUP"' not in script
+    assert "expected_state_id=" in script
+    assert 'actual_state_id="$(az storage account show' in script
+    assert '--resource-group "$STATE_RESOURCE_GROUP"' in script
+    assert '--name "$STATE_ACCOUNT_NAME"' in script
+    assert "--query id" in script
+    assert 'if [[ "${actual_state_id,,}" != "${expected_state_id,,}" ]]; then' in script
+    assert "az storage container show" in script
+    assert "--auth-mode login" in script
+    assert "az resource list" in script
+    assert "check_nonprod_bootstrap_rbac verify" in script

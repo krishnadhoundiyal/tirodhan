@@ -347,14 +347,19 @@ jobs:
             --name "$NONPROD_RESOURCE_GROUP" \
             --output none
 
-          az group show \
-            --name "$STATE_RESOURCE_GROUP" \
-            --output none
-
-          az storage account show \
+          # Bootstrap intentionally grants Reader on the state storage account,
+          # not on its resource group. Checking that exact account also establishes
+          # that its containing RG exists, without widening deployment RBAC.
+          expected_state_id="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$STATE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STATE_ACCOUNT_NAME"
+          actual_state_id="$(az storage account show \
             --resource-group "$STATE_RESOURCE_GROUP" \
             --name "$STATE_ACCOUNT_NAME" \
-            --output none
+            --query id \
+            --output tsv)"
+          if [[ "${actual_state_id,,}" != "${expected_state_id,,}" ]]; then
+            echo "Preserved state account identity does not match the authorized backend." >&2
+            exit 1
+          fi
 
           az storage container show \
             --account-name "$STATE_ACCOUNT_NAME" \
