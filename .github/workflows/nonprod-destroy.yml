@@ -347,10 +347,9 @@ jobs:
             --name "$NONPROD_RESOURCE_GROUP" \
             --output none
 
-          az group show \
-            --name "$STATE_RESOURCE_GROUP" \
-            --output none
-
+          # Bootstrap intentionally grants Reader on the state storage account,
+          # not on its resource group. Checking that exact account also establishes
+          # that its containing RG exists, without widening deployment RBAC.
           az storage account show \
             --resource-group "$STATE_RESOURCE_GROUP" \
             --name "$STATE_ACCOUNT_NAME" \
