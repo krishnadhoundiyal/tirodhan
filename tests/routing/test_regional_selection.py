@@ -288,7 +288,8 @@ def test_fairness_escalation_across_multiple_vehicles_and_priorities():
         route(3, 30, [102], cost=50),
         route(4, 10, [103], cost=20),
     ]
-    # Here, lot 103 is cheaper but lower priority. Lexicographic priority (hybrid) should strictly prefer servicing higher-priority lots first,
+    # Here, lot 103 is cheaper but lower priority. Lexicographic priority (hybrid)
+    # should strictly prefer servicing higher-priority lots first,
     # despite candidate #4 being cheaper.
     priorities = {
         uid(100): 2,
@@ -306,8 +307,10 @@ def test_fairness_escalation_across_multiple_vehicles_and_priorities():
         seconds=2,
     )
 
-    assert uid(4) not in result.selected_ids, "Should not select cheaper but lower-priority route if it blocks a high priority one"
-    assert {uid(1), uid(2), uid(3)}.issubset(set(result.selected_ids)), "Must select all high priority candidates"
+    assert uid(4) not in result.selected_ids, \
+        "Should not select cheaper but lower-priority route if it blocks a high priority one"
+    assert {uid(1), uid(2), uid(3)}.issubset(set(result.selected_ids)), \
+        "Must select all high priority candidates"
 
 
 @pytest.mark.asyncio
