@@ -45,7 +45,7 @@ def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
     assert text.count("--allow-empty") == 2
     assert "terraform state list" in text
     assert "remaining_azure_resources=" in text
-    assert 'az resource list \\' in text
+    assert "az resource list \\" in text
     assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
     assert "Active Azure resources remain in the NONPROD application RG:" in text
 
