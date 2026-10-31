@@ -280,6 +280,36 @@ def test_one_contested_household_does_not_discard_other_serviceable_work(routing
     assert all(not ({uid(304), uid(305)} & set(c.stop_ids)) for c in adjusted if c.parent_id)
 
 
+def test_fairness_escalation_across_multiple_vehicles_and_priorities():
+    # 4 distinct lots, only one can be safely routed per vehicle
+    pool = [
+        route(1, 10, [100], cost=50),
+        route(2, 20, [101], cost=50),
+        route(3, 30, [102], cost=50),
+        route(4, 10, [103], cost=20),
+    ]
+    # Here, lot 103 is cheaper but lower priority. Lexicographic priority (hybrid) should strictly prefer servicing higher-priority lots first,
+    # despite candidate #4 being cheaper.
+    priorities = {
+        uid(100): 2,
+        uid(101): 2,
+        uid(102): 2,
+        uid(103): 0
+    }
+
+    result = consolidate(
+        pool,
+        {uid(10), uid(20), uid(30)},
+        set(),
+        priorities,
+        policy_version="hybrid",
+        seconds=2,
+    )
+
+    assert uid(4) not in result.selected_ids, "Should not select cheaper but lower-priority route if it blocks a high priority one"
+    assert {uid(1), uid(2), uid(3)}.issubset(set(result.selected_ids)), "Must select all high priority candidates"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("engine", ["vroom", "ortools"])
 async def test_real_native_collect_unload_and_resume(routing_problem, engine):
