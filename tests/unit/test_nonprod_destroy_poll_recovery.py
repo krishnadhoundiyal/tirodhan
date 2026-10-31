@@ -93,7 +93,7 @@ def test_destroy_apply_only_defers_known_aca_polling_error(
     result = _execute(_script("Apply approved destroy plan"), tmp_path, env)
     assert (result.returncode == 0) is expected_success
     outputs = (tmp_path / "outputs").read_text() if (tmp_path / "outputs").exists() else ""
-    assert outputs == (f"reconcile={expected_reconcile}\\n" if expected_reconcile else "")
+    assert outputs == (f"reconcile={expected_reconcile}\n" if expected_reconcile else "")
 
 
 def _recovery(
