@@ -90,7 +90,10 @@ def test_nonprod_destroy_aca_polling_error_requires_authoritative_convergence() 
     assert recovery["if"] == "steps.destroy_apply.outputs.reconcile == 'true'"
     assert "az resource list" in recovery["run"]
     assert "empty_observations >= 2" in recovery["run"]
-    assert "terraform plan -destroy -input=false -out=terminal-convergence.tfplan" in recovery["run"]
+    assert (
+        "terraform plan -destroy -input=false -out=terminal-convergence.tfplan"
+        in recovery["run"]
+    )
     assert "--require-empty" in recovery["run"]
     assert "terraform apply -input=false terminal-convergence.tfplan" in recovery["run"]
     assert "terraform state rm" not in recovery["run"]
