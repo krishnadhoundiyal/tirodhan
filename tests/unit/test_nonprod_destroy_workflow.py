@@ -39,11 +39,21 @@ def test_nonprod_destroy_is_resumable_after_partial_apply() -> None:
     assert text.count("python -m tirodhan.deployment.check_destroy_plan") == 2
 
 
+def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert text.count("--allow-empty") == 2
+    assert "terraform state list" in text
+    assert "remaining_azure_resources=" in text
+    assert 'az resource list \\' in text
+    assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
+    assert "Active Azure resources remain in the NONPROD application RG:" in text
+
+
 def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
     assert '[[ "$STATE_RESOURCE_GROUP" == "$NONPROD_RESOURCE_GROUP" ]]' in text
     assert '--protected-state-account "$STATE_ACCOUNT_NAME"' in text
     assert "--protected-state-container tfstate" in text
-    assert "terraform state list" in text
     assert "az storage container show" in text
