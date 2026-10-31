@@ -140,6 +140,7 @@ jobs:
 
   destroy-apply:
     needs: destroy-plan
+    timeout-minutes: 90
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
@@ -255,15 +256,33 @@ jobs:
           echo "Unexpected Terraform apply error; refusing recovery." >&2
           exit "$apply_status"
 
+      - name: Complete and verify approved ACA environment deletion
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          # The original saved plan is the authorization boundary, not a guessed name
+          # or an empty resource-group inventory. Run after both normal apply success
+          # and the recognized poller error. This must complete before reconciliation.
+          terraform show -json destroy.tfplan \
+            | python -m tirodhan.deployment.destroy_aca_environment \
+                --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
+                --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
+                --protected-state-account "$STATE_ACCOUNT_NAME" \
+                --protected-state-container tfstate \
+                --timeout-seconds 1800 \
+                --poll-seconds 10 \
+                --max-delete-attempts 3
+
       - name: Verify and reconcile only an empty post-failure destroy
         if: steps.destroy_apply.outputs.reconcile == 'true'
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
 
-          # A failed provider poll can accompany an Azure delete that finishes
-          # asynchronously. Treat only two successful, empty ARM inventories
-          # separated by a poll as evidence that the application RG is empty.
+          # Resource-specific GET already proved the approved environment absent.
+          # This broader inventory is an additional all-resources check; it cannot
+          # substitute for driving/confirming environment deletion in the prior step.
           empty_observations=0
           remaining_azure_resources=""
           for attempt in {1..18}; do

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -164,3 +165,58 @@ def test_refuses_reconciliation_if_terraform_has_remaining_delete(tmp_path: Path
     assert result.returncode != 0
     assert "requires zero remaining managed deletes" in result.stderr
     assert not applied
+
+
+@pytest.mark.parametrize("initial_status", [0, 1])
+def test_unverified_resource_blocks_reconciliation_after_apply(
+    tmp_path: Path,
+    initial_status: int,
+) -> None:
+    tools, env = _environment(tmp_path)
+    _fake_tool(
+        tools,
+        "terraform",
+        """
+case "$1" in
+  apply)
+    printf '%s\n' "$*" >> "$APPLY_LOG"
+    if [[ "$*" == *destroy.tfplan* ]]; then
+      printf '%s\n' "$FAKE_TERRAFORM_MESSAGE"
+      exit "$FAKE_TERRAFORM_EXIT"
+    fi ;;
+  show) printf '{}' ;;
+  *) echo 'Reconciliation must not run after resource verification failure' >&2; exit 97 ;;
+esac
+""",
+    )
+    _fake_tool(
+        tools,
+        "python",
+        """
+if [[ "$*" == *tirodhan.deployment.destroy_aca_environment* ]]; then
+  cat >/dev/null
+  echo 'ENVIRONMENT_DELETION_DEADLINE_EXCEEDED' >&2
+  exit 1
+fi
+exec "$REAL_PYTHON" "$@"
+""",
+    )
+    env.update(
+        FAKE_TERRAFORM_MESSAGE=POLLING_ERROR if initial_status else "Apply complete!",
+        FAKE_TERRAFORM_EXIT=str(initial_status),
+        REAL_PYTHON=sys.executable,
+        APPLY_LOG=str(tmp_path / "applies"),
+    )
+    # Each Actions step is its own shell. The first step exits after classification.
+    first = _execute(_script("Apply approved destroy plan"), tmp_path, env)
+    assert first.returncode == 0
+    script = "\n".join(
+        [
+            _script("Complete and verify approved ACA environment deletion"),
+            _script("Verify and reconcile only an empty post-failure destroy"),
+        ]
+    )
+    result = _execute(script, tmp_path, env)
+    assert result.returncode != 0
+    assert "ENVIRONMENT_DELETION_DEADLINE_EXCEEDED" in result.stderr
+    assert (tmp_path / "applies").read_text() == "apply -input=false destroy.tfplan\n"
