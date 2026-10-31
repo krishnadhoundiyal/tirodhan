@@ -53,15 +53,13 @@ def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
     assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
     assert "--fill-principal-name false \\" in text
     assert '--arg scope "${DEPLOYMENT_SCOPE,,}"' in text
-    assert 'Tirodhan NONPROD Deployment ${{ inputs.expected_suffix }}' in text
+    assert "Tirodhan NONPROD Deployment ${{ inputs.expected_suffix }}" in text
     assert "([.[].principalId] | unique | length) == 1" in text
     assert "Key Vault Secrets Officer" in text
     assert "Role Based Access Control Administrator" in text
     assert "Storage Blob Data Contributor" in text
     assert "Storage Blob Delegator" in text
-    assert (
-        "Unexpected direct role assignments remain on the NONPROD application RG:" in text
-    )
+    assert "Unexpected direct role assignments remain on the NONPROD application RG:" in text
 
 
 def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
