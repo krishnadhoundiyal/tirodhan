@@ -59,7 +59,7 @@ def principal_from_arm_token(token: str, *, client_id: str, tenant_id: str) -> s
         or not isinstance(principal_id, str)
         or not principal_id.strip()
     ):
-        raise ValueError("Authenticated deployment identity does not match configured tenant/client")
+        raise ValueError("Deployment token tenant/client does not match configuration")
     return principal_id
 
 
@@ -88,7 +88,7 @@ def verify_bootstrap_rbac(
             or not isinstance(principal, str)
             or principal.casefold() != expected_principal_id.casefold()
         ):
-            raise ValueError("NONPROD bootstrap RBAC scope or principal does not match deployment identity")
+            raise ValueError("NONPROD RBAC scope or principal does not match deployment identity")
     administrator = by_name[ADMIN_ROLE]
     condition = administrator.get("condition")
     if (
@@ -124,7 +124,7 @@ def main() -> None:
                 expected_principal_id=args.expected_principal_id,
                 expected_suffix=args.expected_suffix,
             )
-            print("PASS: NONPROD application RG retains only the expected restricted bootstrap RBAC")
+            print("PASS: NONPROD bootstrap role assignments retain the required restrictions")
     except (ValueError, TypeError) as error:
         parser.exit(2, f"NONPROD bootstrap RBAC verification failed: {error}\n")
 
