@@ -277,36 +277,25 @@ jobs:
             exit 1
           fi
 
-          resource_group_role_assignments="$(az role assignment list \
+          # The OIDC client ID is an app ID, not the role-assignment object ID.
+          # Read the object ID from Azure CLI's token for this logged-in identity,
+          # validating both the configured client and tenant without Graph access.
+          deployment_principal_id="$(az account get-access-token \
+            --resource https://management.azure.com/ \
+            --query accessToken \
+            --output tsv \
+            | python -m tirodhan.deployment.check_nonprod_bootstrap_rbac principal \
+                --client-id "$ARM_CLIENT_ID" \
+                --tenant-id "$ARM_TENANT_ID")"
+
+          az role assignment list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --fill-principal-name false \
-            --output json)"
-
-          if ! jq -e \
-            --arg scope "${DEPLOYMENT_SCOPE,,}" \
-            --arg deployment_role "Tirodhan NONPROD Deployment ${{ inputs.expected_suffix }}" \
-            '
-              ([.[] | select(((.scope // "") | ascii_downcase) == $scope)] | length) == 5
-              and ([.[] | select(((.scope // "") | ascii_downcase) != $scope)] | length) == 0
-              and ([.[].principalId] | unique | length) == 1
-              and (
-                [.[].roleDefinitionName] | sort
-              ) == (
-                [
-                  $deployment_role,
-                  "Key Vault Secrets Officer",
-                  "Role Based Access Control Administrator",
-                  "Storage Blob Data Contributor",
-                  "Storage Blob Delegator"
-                ] | sort
-              )
-            ' <<<"$resource_group_role_assignments" >/dev/null
-          then
-            echo "Unexpected direct role assignments remain on the NONPROD application RG:" >&2
-            jq -r '.[] | [.scope, .roleDefinitionName] | @tsv' \
-              <<<"$resource_group_role_assignments" >&2
-            exit 1
-          fi
+            --output json \
+            | python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify \
+                --expected-scope "$DEPLOYMENT_SCOPE" \
+                --expected-principal-id "$deployment_principal_id" \
+                --expected-suffix "${{ inputs.expected_suffix }}"
 
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
