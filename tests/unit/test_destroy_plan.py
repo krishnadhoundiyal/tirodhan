@@ -32,7 +32,7 @@ def _plan(resource_type: str = "azurerm_container_app") -> dict:
     }
 
 
-def _validate(plan: dict, *, allow_empty: bool = False) -> int:
+def _validate(plan: dict, *, allow_empty: bool = False, require_empty: bool = False) -> int:
     return validate_destroy_plan(
         plan,
         expected_subscription_id=SUBSCRIPTION_ID,
@@ -40,6 +40,7 @@ def _validate(plan: dict, *, allow_empty: bool = False) -> int:
         protected_state_account="tdnpstatetdnp01",
         protected_state_container="tfstate",
         allow_empty=allow_empty,
+        require_empty=require_empty,
     )
 
 
@@ -160,3 +161,23 @@ def test_destroy_guard_ignores_non_managed_read_in_terminal_plan() -> None:
     }
 
     assert _validate(plan, allow_empty=True) == 0
+
+
+def test_post_failure_convergence_rejects_any_remaining_delete() -> None:
+    with pytest.raises(RuntimeError, match="requires zero remaining managed deletes"):
+        _validate(_plan("azurerm_container_app_environment"), require_empty=True)
+
+
+def test_post_failure_convergence_accepts_only_zero_delete() -> None:
+    plan = deepcopy(_plan())
+    plan["resource_changes"][0]["change"]["actions"] = ["no-op"]
+
+    assert _validate(plan, require_empty=True) == 0
+
+
+def test_post_failure_convergence_rejects_new_resource_creation() -> None:
+    plan = deepcopy(_plan())
+    plan["resource_changes"][0]["change"]["actions"] = ["create"]
+
+    with pytest.raises(RuntimeError, match="non-destroy managed action"):
+        _validate(plan, require_empty=True)

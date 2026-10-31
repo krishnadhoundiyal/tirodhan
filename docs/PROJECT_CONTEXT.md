@@ -1,5 +1,10 @@
 # Project Context
 
+NONPROD destroy now actively completes an exact plan-approved ACA environment deletion through
+ARM recovery and requires direct ResourceNotFound confirmation before Terraform reconciliation.
+No workflow was dispatched or Azure resource changed during implementation. See
+[recovery protocol and validation](NONPROD_DESTROY_RECOVERY.md).
+
 CB-04 closes stalled Web Push creation through private POSIX worker process-group ownership
 and a watchdog that terminates the group if cleanup exceeds two seconds (22 seconds total
 attempt budget). Enabled Web Push requires that worker boundary; production flags remain false.

@@ -1,5 +1,10 @@
 # Azure NONPROD deployment substrate
 
+NONPROD destroy now completes and verifies the exact approved ACA environment DELETE through
+an independent ARM recovery client before terminal Terraform reconciliation. A polling exception
+or empty resource-group listing alone is not successful deletion. See
+[scope, state machine, retry limits and acceptance](NONPROD_DESTROY_RECOVERY.md).
+
 This stack implements the accepted NONPROD deployment brief on top of main
 `1d8560dcd580e5ba06fb9a0b7820045f82b15953`. It does not create PROD infrastructure,
 alter business lifecycles, or add production pricing. `UnconfiguredPricingPort`

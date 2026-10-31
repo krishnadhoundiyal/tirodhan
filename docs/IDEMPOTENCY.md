@@ -1,5 +1,11 @@
 # Idempotency
 
+NONPROD ACA deletion recovery uses the exact DELETE ID from the approved Terraform plan,
+read-before-retry ARM resource idempotence, bounded attempts and existing serialized workflow
+execution. Unknown provider responses do not imply absence; two direct ResourceNotFound reads
+precede guarded Terraform state reconciliation. A crash never authorizes a different resource
+or direct state removal. See [operation boundaries and tests](NONPROD_DESTROY_RECOVERY.md).
+
 CB-04 unknown-launch cleanup terminates the isolated notification worker group rather than
 discarding a potentially live child. The committed SENDING lease remains pending recovery
 after expiry; retries retain the notification identity and may duplicate a provider-accepted

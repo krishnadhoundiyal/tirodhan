@@ -36,7 +36,7 @@ def test_nonprod_destroy_is_resumable_after_partial_apply() -> None:
     assert "configured_suffix=" in text
     assert '--expected-subscription-id "$ARM_SUBSCRIPTION_ID"' in text
     assert '--expected-resource-group "$NONPROD_RESOURCE_GROUP"' in text
-    assert text.count("python -m tirodhan.deployment.check_destroy_plan") == 2
+    assert text.count("python -m tirodhan.deployment.check_destroy_plan") == 3
 
 
 def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
@@ -69,3 +69,55 @@ def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
     assert '--protected-state-account "$STATE_ACCOUNT_NAME"' in text
     assert "--protected-state-container tfstate" in text
     assert "az storage container show" in text
+
+
+def test_nonprod_destroy_aca_polling_error_requires_authoritative_convergence() -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["destroy-apply"]["steps"]
+    apply = next(step for step in steps if step.get("id") == "destroy_apply")
+    recovery = next(
+        step
+        for step in steps
+        if step.get("name") == "Verify and reconcile only an empty post-failure destroy"
+    )
+    assert "terraform apply -input=false destroy.tfplan" in apply["run"]
+    assert "apply_status=$?" in apply["run"]
+    assert "grep -c 'Error:'" in apply["run"]
+    assert 'polling support for the Content-Type "" was not implemented' in apply["run"]
+    assert "Managed Environment Name:" in apply["run"]
+    assert "reconcile=true" in apply["run"]
+    assert 'exit "$apply_status"' in apply["run"]
+
+    assert recovery["if"] == "steps.destroy_apply.outputs.reconcile == 'true'"
+    assert "az resource list" in recovery["run"]
+    assert "empty_observations >= 2" in recovery["run"]
+    assert (
+        "terraform plan -destroy -input=false -out=terminal-convergence.tfplan" in recovery["run"]
+    )
+    assert "--require-empty" in recovery["run"]
+    assert "terraform apply -input=false terminal-convergence.tfplan" in recovery["run"]
+    assert "terraform state rm" not in recovery["run"]
+
+
+def test_direct_resource_deletion_is_required_before_state_reconciliation() -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["destroy-apply"]
+    steps = job["steps"]
+    names = [step.get("name") for step in steps]
+    complete = next(
+        s for s in steps if s.get("name") == "Complete and verify approved ACA environment deletion"
+    )
+    assert "if" not in complete  # Required after normal success as well as recognized poll failure.
+    assert "terraform show -json destroy.tfplan" in complete["run"]
+    assert "python -m tirodhan.deployment.destroy_aca_environment" in complete["run"]
+    assert '--expected-subscription-id "$ARM_SUBSCRIPTION_ID"' in complete["run"]
+    assert '--expected-resource-group "$NONPROD_RESOURCE_GROUP"' in complete["run"]
+    assert "--protected-state-container tfstate" in complete["run"]
+    assert (
+        names.index("Apply approved destroy plan")
+        < names.index(complete["name"])
+        < names.index("Verify and reconcile only an empty post-failure destroy")
+        < names.index("Verify Terraform application state is empty")
+    )
+    assert job["timeout-minutes"] == 90
+    assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}

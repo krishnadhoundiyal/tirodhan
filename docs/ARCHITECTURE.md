@@ -934,6 +934,12 @@ Terraform is the selected IaC tool.
 - modules remove harmful duplication but do not become a large generic internal platform;
 - recovery-critical configuration is reproducible from source control.
 
+NONPROD teardown retains Terraform ownership and protected saved-plan approval. A narrowly
+scoped recovery client may repeat only the exact approved ACA environment DELETE when the
+AzureRM poller fails or deletion remains unverified. Direct authenticated absence checks must
+precede normal locked Terraform state reconciliation; direct state removal is prohibited.
+See [retry/ownership boundaries and tests](NONPROD_DESTROY_RECOVERY.md).
+
 ## 23. CI/CD
 
 Provider intentionally remains open between:

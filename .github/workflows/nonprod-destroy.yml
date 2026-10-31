@@ -140,6 +140,7 @@ jobs:
 
   destroy-apply:
     needs: destroy-plan
+    timeout-minutes: 90
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
@@ -220,13 +221,108 @@ jobs:
                 --allow-empty
 
       - name: Apply approved destroy plan
+        id: destroy_apply
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
 
-          terraform apply \
-            -input=false \
-            destroy.tfplan
+          apply_log="$(mktemp "$RUNNER_TEMP/nonprod-destroy-apply.XXXXXX")"
+          trap 'rm -f "$apply_log"' EXIT
+
+          set +e
+          terraform apply -input=false destroy.tfplan 2>&1 | tee "$apply_log"
+          apply_status=$?
+          set -e
+
+          if (( apply_status == 0 )); then
+            echo "reconcile=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # AzureRM can fail while polling a successful Managed Environment
+          # deletion if Azure returns an empty response Content-Type. This is
+          # a possible success, never proof of success.
+          error_count="$(grep -c 'Error:' "$apply_log" || true)"
+          if [[ "$error_count" == "1" ]] \
+             && grep -Fq 'polling support for the Content-Type "" was not implemented' "$apply_log" \
+             && grep -Fq 'deleting Managed Environment' "$apply_log" \
+             && grep -Fq "Managed Environment Name: \"$NONPROD_RESOURCE_GROUP-aca\"" "$apply_log"
+          then
+            echo "::warning::AzureRM Managed Environment deletion polling failed; actual deletion must be verified."
+            echo "reconcile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Unexpected Terraform apply error; refusing recovery." >&2
+          exit "$apply_status"
+
+      - name: Complete and verify approved ACA environment deletion
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          # The original saved plan is the authorization boundary, not a guessed name
+          # or an empty resource-group inventory. Run after both normal apply success
+          # and the recognized poller error. This must complete before reconciliation.
+          terraform show -json destroy.tfplan \
+            | python -m tirodhan.deployment.destroy_aca_environment \
+                --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
+                --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
+                --protected-state-account "$STATE_ACCOUNT_NAME" \
+                --protected-state-container tfstate \
+                --timeout-seconds 1800 \
+                --poll-seconds 10 \
+                --max-delete-attempts 3
+
+      - name: Verify and reconcile only an empty post-failure destroy
+        if: steps.destroy_apply.outputs.reconcile == 'true'
+        working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+
+          # Resource-specific GET already proved the approved environment absent.
+          # This broader inventory is an additional all-resources check; it cannot
+          # substitute for driving/confirming environment deletion in the prior step.
+          empty_observations=0
+          remaining_azure_resources=""
+          for attempt in {1..18}; do
+            remaining_azure_resources="$(az resource list \
+              --resource-group "$NONPROD_RESOURCE_GROUP" \
+              --query "[].id" \
+              --output tsv)"
+            if [[ -z "$remaining_azure_resources" ]]; then
+              empty_observations=$((empty_observations + 1))
+              if (( empty_observations >= 2 )); then
+                break
+              fi
+            else
+              empty_observations=0
+            fi
+            sleep 10
+          done
+
+          if (( empty_observations < 2 )); then
+            echo "Azure application resources remain after the polling error:" >&2
+            echo "$remaining_azure_resources" >&2
+            echo "Rerun the protected destroy workflow after Azure converges." >&2
+            exit 1
+          fi
+
+          # This is NOT another destroy attempt. Terraform first refreshes the
+          # remote state; it must now propose absolutely zero further deletes.
+          # Applying this empty saved plan records refreshed state under the
+          # normal backend lock without touching Azure resources.
+          terraform plan -destroy -input=false -out=terminal-convergence.tfplan
+          terraform show -json terminal-convergence.tfplan \
+            | python -m tirodhan.deployment.check_destroy_plan \
+                --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
+                --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
+                --protected-state-account "$STATE_ACCOUNT_NAME" \
+                --protected-state-container tfstate \
+                --require-empty
+
+          terraform apply -input=false terminal-convergence.tfplan
+          echo "AzureRM polling error reconciled with an approved zero-delete plan."
 
       - name: Verify Terraform application state is empty
         working-directory: infra/terraform/nonprod
