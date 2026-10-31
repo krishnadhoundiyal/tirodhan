@@ -126,7 +126,8 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
           terraform show -json destroy.tfplan \
             | python -m tirodhan.deployment.check_state
@@ -215,7 +216,8 @@ jobs:
                 --expected-subscription-id "$ARM_SUBSCRIPTION_ID" \
                 --expected-resource-group "$NONPROD_RESOURCE_GROUP" \
                 --protected-state-account "$STATE_ACCOUNT_NAME" \
-                --protected-state-container tfstate
+                --protected-state-container tfstate \
+                --allow-empty
 
       - name: Apply approved destroy plan
         working-directory: infra/terraform/nonprod
@@ -263,6 +265,17 @@ jobs:
             --name tfstate \
             --auth-mode login \
             --output none
+
+          remaining_azure_resources="$(az resource list \
+            --resource-group "$NONPROD_RESOURCE_GROUP" \
+            --query "[].id" \
+            --output tsv)"
+
+          if [[ -n "$remaining_azure_resources" ]]; then
+            echo "Active Azure resources remain in the NONPROD application RG:" >&2
+            echo "$remaining_azure_resources" >&2
+            exit 1
+          fi
 
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
