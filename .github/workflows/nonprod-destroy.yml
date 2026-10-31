@@ -277,6 +277,23 @@ jobs:
             exit 1
           fi
 
+          application_child_scope_prefix="${DEPLOYMENT_SCOPE,,}/"
+          remaining_application_role_assignments="$(az role assignment list \
+            --all \
+            --output json \
+            | jq -r --arg prefix "$application_child_scope_prefix" '
+                .[]
+                | select(((.scope // "") | ascii_downcase | startswith($prefix)))
+                | [.scope, .roleDefinitionName]
+                | @tsv
+              ')"
+
+          if [[ -n "$remaining_application_role_assignments" ]]; then
+            echo "Application-scoped Azure role assignments remain below the NONPROD RG:" >&2
+            echo "$remaining_application_role_assignments" >&2
+            exit 1
+          fi
+
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"
           echo "Preserved Terraform state account: $STATE_ACCOUNT_NAME"
