@@ -48,6 +48,11 @@ def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
     assert "az resource list \\" in text
     assert '--resource-group "$NONPROD_RESOURCE_GROUP"' in text
     assert "Active Azure resources remain in the NONPROD application RG:" in text
+    assert 'application_child_scope_prefix="${DEPLOYMENT_SCOPE,,}/"' in text
+    assert "az role assignment list \\" in text
+    assert "--all \\" in text
+    assert 'startswith($prefix)' in text
+    assert "Application-scoped Azure role assignments remain below the NONPROD RG:" in text
 
 
 def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:
