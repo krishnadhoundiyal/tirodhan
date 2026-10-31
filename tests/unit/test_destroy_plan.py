@@ -32,13 +32,14 @@ def _plan(resource_type: str = "azurerm_container_app") -> dict:
     }
 
 
-def _validate(plan: dict) -> int:
+def _validate(plan: dict, *, allow_empty: bool = False) -> int:
     return validate_destroy_plan(
         plan,
         expected_subscription_id=SUBSCRIPTION_ID,
         expected_resource_group=RESOURCE_GROUP,
         protected_state_account="tdnpstatetdnp01",
         protected_state_container="tfstate",
+        allow_empty=allow_empty,
     )
 
 
@@ -120,9 +121,42 @@ def test_destroy_guard_rejects_missing_resource_id() -> None:
         _validate(plan)
 
 
-def test_destroy_guard_requires_at_least_one_delete() -> None:
+def test_destroy_guard_requires_at_least_one_delete_by_default() -> None:
     plan = deepcopy(_plan())
     plan["resource_changes"][0]["change"]["actions"] = ["no-op"]
 
     with pytest.raises(RuntimeError, match="no managed deletes"):
         _validate(plan)
+
+
+def test_destroy_guard_allows_empty_terminal_convergence_when_explicit() -> None:
+    plan = deepcopy(_plan())
+    plan["resource_changes"][0]["change"]["actions"] = ["no-op"]
+
+    assert _validate(plan, allow_empty=True) == 0
+
+
+def test_destroy_guard_rejects_create_even_when_empty_is_allowed() -> None:
+    plan = deepcopy(_plan())
+    plan["resource_changes"][0]["change"]["actions"] = ["create"]
+
+    with pytest.raises(RuntimeError, match="non-destroy managed action"):
+        _validate(plan, allow_empty=True)
+
+
+def test_destroy_guard_ignores_non_managed_read_in_terminal_plan() -> None:
+    plan = {
+        "resource_changes": [
+            {
+                "address": "data.azurerm_resource_group.nonprod",
+                "mode": "data",
+                "type": "azurerm_resource_group",
+                "change": {
+                    "actions": ["read"],
+                    "before": None,
+                },
+            }
+        ]
+    }
+
+    assert _validate(plan, allow_empty=True) == 0
