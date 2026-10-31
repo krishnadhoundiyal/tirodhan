@@ -53,6 +53,7 @@ def validate_destroy_plan(
     protected_state_account: str,
     protected_state_container: str,
     allow_empty: bool = False,
+    require_empty: bool = False,
 ) -> int:
     delete_count = 0
     expected_scope = _expected_scope(expected_subscription_id, expected_resource_group)
@@ -104,7 +105,9 @@ def validate_destroy_plan(
 
         delete_count += 1
 
-    if delete_count == 0 and not allow_empty:
+    if require_empty and delete_count:
+        raise RuntimeError("Terminal reconciliation requires zero remaining managed deletes")
+    if delete_count == 0 and not (allow_empty or require_empty):
         raise RuntimeError("Destroy plan contains no managed deletes")
 
     return delete_count
@@ -121,6 +124,11 @@ def main() -> None:
         action="store_true",
         help="Allow a zero-delete terminal convergence plan.",
     )
+    parser.add_argument(
+        "--require-empty",
+        action="store_true",
+        help="Require a zero-delete terminal reconciliation plan.",
+    )
     args = parser.parse_args()
 
     plan = json.load(sys.stdin)
@@ -131,6 +139,7 @@ def main() -> None:
         protected_state_account=args.protected_state_account,
         protected_state_container=args.protected_state_container,
         allow_empty=args.allow_empty,
+        require_empty=args.require_empty,
     )
     if count == 0:
         print(
