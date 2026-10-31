@@ -71,9 +71,7 @@ def validate_destroy_plan(
             continue
 
         if "delete" not in actions:
-            raise RuntimeError(
-                f"Refusing non-destroy managed action for {address}: {actions}"
-            )
+            raise RuntimeError(f"Refusing non-destroy managed action for {address}: {actions}")
 
         resource_type = change.get("type", "")
 
