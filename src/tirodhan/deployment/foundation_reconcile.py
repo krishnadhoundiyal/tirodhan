@@ -19,9 +19,7 @@ from tirodhan.deployment.lifecycle_evidence import BackendState, Observations, s
 from tirodhan.deployment.prerequisites import Controller, Grant, emit_grant
 
 
-def admitted_with_grant(
-    operation: str, **parameters: Any
-) -> tuple[Checks, Observations, Grant]:
+def admitted_with_grant(operation: str, **parameters: Any) -> tuple[Checks, Observations, Grant]:
     """Retain the verified admission grant for checks at the mutation boundary."""
     auth = require_release_authorization(operation)
     from tirodhan.deployment.database_verification_request import refresh_database_evidence
