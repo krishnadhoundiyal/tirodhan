@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from lifecycle_fakes import SCOPE, MemoryObservations, auth
 
-from tirodhan.deployment import foundation_reconcile, prerequisites, release
+from tirodhan.deployment import foundation_reconcile, migration_start, prerequisites, release
 from tirodhan.deployment.deployment_admission import AdmissionDenied, validate_authorization
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.migration_evidence import API_VERSION
@@ -51,12 +51,32 @@ def migration(monkeypatch):
             }
         },
     }
+    job["properties"]["template"]["containers"][0]["env"] = [
+        {
+            "name": migration_start.MARKER,
+            "value": migration_start.operation_key(auth("migration-start"), JOB, IMAGE),
+        }
+    ]
     executions = {}
     reads = []
+
+    class Claims:
+        def __init__(self, _):
+            pass
+
+        def acquire(self, key, owner):
+            return True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(migration_start, "ClaimStore", Claims)
 
     def arm(resource_id, version):
         assert version == API_VERSION
         reads.append(resource_id)
+        if resource_id == JOB + "/executions":
+            return {"value": copy.deepcopy(list(executions.values()))}
         return copy.deepcopy(job if resource_id == JOB else executions.get(resource_id))
 
     io.arm = arm
@@ -64,7 +84,14 @@ def migration(monkeypatch):
 
 
 def completed(job, name):
-    return {"name": name, "properties": job["properties"] | {"status": "Succeeded"}}
+    value = {"name": name, "properties": copy.deepcopy(job["properties"]) | {"status": "Succeeded"}}
+    value["properties"]["template"]["containers"][0]["env"] = [
+        {
+            "name": migration_start.MARKER,
+            "value": migration_start.operation_key(auth("migration-start"), JOB, IMAGE),
+        }
+    ]
+    return value
 
 
 @pytest.mark.parametrize("operation", ["runtime-plan", "runtime-apply"])
@@ -151,6 +178,7 @@ def test_signed_authorization_before_execution_exists_can_follow_workflow_output
         "args",
         "template",
         "duplicate-application",
+        "release-marker",
     ],
 )
 def test_exact_execution_and_immutable_template_required(migration, monkeypatch, invalid):
@@ -173,6 +201,8 @@ def test_exact_execution_and_immutable_template_required(migration, monkeypatch,
         application[invalid] = "unapproved"
     elif invalid == "template":
         del value["properties"]["template"]
+    elif invalid == "release-marker":
+        application["env"][0]["value"] = "another-release"
     else:
         value["properties"]["template"]["containers"].append(copy.deepcopy(application))
     monkeypatch.setenv("TIRODHAN_MIGRATION_EXECUTION", name)

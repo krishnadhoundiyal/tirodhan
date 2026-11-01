@@ -37,6 +37,10 @@ resource "azurerm_container_app_job" "migration" {
       memory  = "0.5Gi"
       command = ["python", "-m", "tirodhan.deployment.entrypoint"]
       args    = ["python", "-m", "tirodhan.deployment.job", "--", "alembic", "upgrade", "head"]
+      env {
+        name  = "TIRODHAN_MIGRATION_OPERATION_KEY"
+        value = var.migration_operation_key
+      }
       dynamic "env" {
         for_each = local.common_env
         content {
@@ -89,6 +93,10 @@ resource "azurerm_container_app_job" "migration" {
     precondition {
       condition     = var.migration_image != null && var.fluent_bit_image != null
       error_message = "Publish migration and logging images before stage 1."
+    }
+    precondition {
+      condition     = var.migration_operation_key != null
+      error_message = "Supply the verified release-scoped migration operation key."
     }
   }
   depends_on = [azurerm_role_assignment.secrets, azurerm_postgresql_flexible_server_configuration.extensions, azurerm_postgresql_flexible_server_active_directory_administrator.administrator]

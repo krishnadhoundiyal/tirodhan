@@ -9,9 +9,20 @@ Original deployment failure remains failure after cleanup. No new business DB/in
 protocol is introduced. See [operation boundaries](NONPROD_LIFECYCLE_INTEGRATION.md).
 Migration start publishes its generated execution name only after exact ARM success and
 immutable-template verification; both runtime operations independently recheck that evidence.
-Missing, failed or uncertain execution never produces a success output or triggers an
-automatic second start. A workflow retry still requires current operation authorization
-and prerequisites; Alembic's version history reconciles already committed schema revisions.
+Missing, failed or uncertain execution never produces a success output. Migration start
+first conditionally creates an immutable blob claim under the existing backend account's
+`tfstate/tirodhan/migration-starts/` prefix, separate from Terraform state. The logical key
+hashes the signed release session, commit, configuration/source, exact Job and image; token
+renewal, job attempt and Terraform serial do not change it. Only the creating process may
+POST once. A lost claim-upload response requires exact owner read-back before that POST.
+Every execution carries the operation key in its immutable application environment.
+Concurrent calls, lost start responses and retries reconcile that exact execution; they
+never send another start for an existing claim. Ambiguous/failed/unavailable or aged-out
+execution evidence blocks. Crash after claim but before start leaves UNKNOWN and requires
+operator investigation/new authorization; absence from retained history cannot clear a claim.
+Claims have no automatic expiry, deletion or takeover. Every retry still requires current
+authorization and prerequisites. D uses its existing account-scoped blob role and Azure CLI
+identity; no state-RG Reader, account keys, new service or SQL-admin access is introduced.
 SQL verification requests use a digest of repository/run/attempt/job/operation/release and
 configuration/source/authorization context. An exclusive local claim admits one dispatch;
 uncertain responses reconcile the exact verifier run instead of resending. Concurrent

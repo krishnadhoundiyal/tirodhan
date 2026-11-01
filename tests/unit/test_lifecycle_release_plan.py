@@ -3,12 +3,14 @@
 import hashlib
 import json
 import subprocess
+from types import SimpleNamespace
 
 import pytest
-from lifecycle_fakes import MemoryObservations, auth, write_plan
+from lifecycle_fakes import CONFIG, MemoryObservations, auth, write_plan
 
-from tirodhan.deployment import prerequisites, release
+from tirodhan.deployment import deployment_admission, prerequisites, release
 from tirodhan.deployment.lifecycle_checks import Checks
+from tirodhan.deployment.migration_start import expected_job_id, operation_key
 
 APP = "ghcr.io/krishnadhoundiyal/tirodhan:" + "a" * 40
 SIDECAR = "ghcr.io/krishnadhoundiyal/tirodhan-log-sidecar:" + "a" * 40
@@ -20,7 +22,10 @@ OLD_SIDECAR = SIDECAR.replace("a" * 40, "b" * 40)
 def test_only_migration_job_is_reconciled_before_schema_success(monkeypatch, mode):
     monkeypatch.setenv("APPLICATION_IMAGE", APP)
     monkeypatch.setenv("FLUENT_BIT_IMAGE", SIDECAR)
-    monkeypatch.setattr(prerequisites, "require_provisioning", lambda _: object())
+    monkeypatch.setattr(
+        prerequisites, "require_provisioning", lambda op: SimpleNamespace(authorization=auth(op))
+    )
+    monkeypatch.setattr(deployment_admission, "configuration", lambda: CONFIG)
     monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
     monkeypatch.setattr(release, "assert_no_list_keys", lambda: None)
     monkeypatch.setattr(
@@ -34,13 +39,18 @@ def test_only_migration_job_is_reconciled_before_schema_success(monkeypatch, mod
     )
     monkeypatch.setattr(release, "enabled_secret_names", lambda _: release.MIGRATION_SECRET_NAMES)
     commands = []
+    environments = []
 
     def run(args, **kwargs):
         commands.append(args)
+        environments.append(kwargs.get("env"))
         return subprocess.CompletedProcess(args, 0, json.dumps({}), "")
 
     monkeypatch.setattr(release.subprocess, "run", run)
     release.plan(mode, "reviewed.tfplan")
+    assert environments[0]["TF_VAR_migration_operation_key"] == operation_key(
+        auth(f"{mode}-plan"), expected_job_id(CONFIG), APP
+    )
     targets = [value for value in commands[0] if value.startswith("-target=")]
     assert targets == (
         ["-target=azurerm_container_app_job.migration[0]"] if mode == "migration" else []
@@ -51,7 +61,10 @@ def test_only_migration_job_is_reconciled_before_schema_success(monkeypatch, mod
 def test_terraform_plan_timeout_blocks_without_inspecting_unfinished_plan(monkeypatch, mode):
     monkeypatch.setenv("APPLICATION_IMAGE", APP)
     monkeypatch.setenv("FLUENT_BIT_IMAGE", SIDECAR)
-    monkeypatch.setattr(prerequisites, "require_provisioning", lambda _: object())
+    monkeypatch.setattr(
+        prerequisites, "require_provisioning", lambda op: SimpleNamespace(authorization=auth(op))
+    )
+    monkeypatch.setattr(deployment_admission, "configuration", lambda: CONFIG)
     monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
     monkeypatch.setattr(release, "assert_no_list_keys", lambda: None)
     monkeypatch.setattr(release, "output_values", lambda: {"deployment_stage": 1})
@@ -72,7 +85,8 @@ def test_terraform_plan_timeout_blocks_without_inspecting_unfinished_plan(monkey
 
 @pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply"])
 @pytest.mark.parametrize(
-    "changed", [None, "migration_image", "application_image", "fluent_bit_image"]
+    "changed",
+    [None, "migration_image", "application_image", "fluent_bit_image", "migration_operation_key"],
 )
 def test_saved_plan_binds_images_to_release_and_preserved_runtime(
     monkeypatch, tmp_path, operation, changed
@@ -99,6 +113,9 @@ def plan_case(monkeypatch, tmp_path, operation):
             for key, value in {
                 "deployment_stage": 4,
                 "migration_image": APP,
+                "migration_operation_key": operation_key(
+                    auth(operation), expected_job_id(io.config), APP
+                ),
                 "application_image": APP if runtime else OLD_APP,
                 "fluent_bit_image": SIDECAR if runtime else OLD_SIDECAR,
                 "enabled_runtime_secret_names": sorted(release.RUNTIME_SECRET_NAMES),

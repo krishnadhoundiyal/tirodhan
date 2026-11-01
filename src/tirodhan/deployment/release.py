@@ -9,6 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from tirodhan.deployment.azure_controls import assert_no_list_keys
 from tirodhan.deployment.check_state import populated_key_paths
@@ -67,6 +68,8 @@ def require_secrets(available: frozenset[str], required: frozenset[str]) -> None
 
 
 def plan(mode: str, path: str) -> None:
+    from tirodhan.deployment.deployment_admission import configuration
+    from tirodhan.deployment.migration_start import expected_job_id, operation_key
     from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
 
     grant = require_provisioning(f"{mode}-plan")
@@ -76,6 +79,9 @@ def plan(mode: str, path: str) -> None:
     require_secrets(available, MIGRATION_SECRET_NAMES)
     image, sidecar = os.environ["APPLICATION_IMAGE"], os.environ["FLUENT_BIT_IMAGE"]
     values = migration_variables(state, image, sidecar)
+    values["migration_operation_key"] = operation_key(
+        grant.authorization, expected_job_id(configuration()), image
+    )
     if mode == "runtime":
         values.update(
             deployment_stage=4,
@@ -110,39 +116,65 @@ def plan(mode: str, path: str) -> None:
 
 def run_migration() -> None:
     from tirodhan.deployment.foundation_reconcile import admitted_with_grant
+    from tirodhan.deployment.lifecycle_evidence import ObservationError
     from tirodhan.deployment.migration_evidence import (
         API_VERSION,
         execution_name,
         successful_execution,
     )
+    from tirodhan.deployment.migration_start import (
+        ClaimStore,
+        belongs_to_release,
+        operation_key,
+        reconcile,
+    )
     from tirodhan.deployment.prerequisites import revalidate_database
 
     checks, io, grant = admitted_with_grant("migration-start")
-    job_id = checks.job()["id"]
+    job = checks.job()
+    job_id = job["id"]
+    image = os.environ["APPLICATION_IMAGE"]
+    key = operation_key(checks.auth, job_id, image)
     revalidate_database(grant)
-    execution = io.runner.json(
-        "az",
-        "containerapp",
-        "job",
-        "start",
-        "--subscription",
-        io.tf["subscription_id"],
-        "-g",
-        io.tf["resource_group_name"],
-        "-n",
-        job_id.rsplit("/", 1)[-1],
-        "-o",
-        "json",
-    )
-    name = execution.get("name")
-    if not execution_name(name):
-        raise ReleaseBlocked("Migration start returned no valid execution identity")
+    name = None
+    store = ClaimStore(io)
+    try:
+        owns_start = store.acquire(key, uuid4().hex)
+    finally:
+        store.close()
+    if owns_start:
+        revalidate_database(grant)  # Claim acquisition cannot extend stale SQL/authority.
+        try:
+            # No execution-template override: preserve native volumes/mounts/sidecars.
+            execution = io.runner.json(
+                "az",
+                "rest",
+                "--method",
+                "post",
+                "--url",
+                "https://management.azure.com" + job_id + "/start?api-version=" + API_VERSION,
+                "-o",
+                "json",
+            )
+            if execution_name(execution.get("name")):
+                name = execution["name"]
+        except ObservationError:
+            pass  # A lost response can only be resolved by actual execution evidence.
     deadline = time.monotonic() + 1200
     while time.monotonic() < deadline:
+        if name is None:
+            name = reconcile(io, job_id, key)
+        if name is None:
+            time.sleep(10)
+            continue
         value = io.arm(job_id + "/executions/" + name, API_VERSION)
         status = value.get("properties", {}).get("status") if value else None
         if status == "Succeeded":
-            if not successful_execution(value, job_id, name, os.environ["APPLICATION_IMAGE"]):
+            if (
+                value is None
+                or not successful_execution(value, job_id, name, image)
+                or not belongs_to_release(value, key)
+            ):
                 raise ReleaseBlocked("Migration execution template does not match this release")
             if output := os.environ.get("GITHUB_OUTPUT"):
                 with Path(output).open("a", encoding="utf-8") as stream:

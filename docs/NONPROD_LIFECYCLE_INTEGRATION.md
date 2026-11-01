@@ -194,6 +194,21 @@ value, which receives the same ARM verification. ARM's single-execution API may 
 the scoped request and returned name identify it, and any returned ID must match the request.
 See [the ARM execution schema](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/job-execution/job-execution?view=rest-resource-manager-containerapps-2025-07-01).
 
+Before starting a migration, D conditionally creates an immutable release-scoped claim in
+the existing backend account at `tfstate/tirodhan/migration-starts/<operation-key>.json`.
+This never writes `tirodhan/nonprod.tfstate` or changes its ETag/lineage/serial. The key binds
+session, commit, configuration/source, exact Job and image, across hosts and job attempts.
+Only the successful claimant may issue one start POST. Terraform installs the operation-key
+environment marker and saved-plan admission verifies its exact value. The Job read verifies
+the marker before start; start sends no template override, preserving shared volumes and
+the logging sidecar. Retries/concurrent callers
+and lost responses reconcile the marked execution and independently verify its exact ARM
+record before success; runtime admission also requires the marker for its own release.
+No matching retained execution means UNKNOWN, never permission for another start. A crash
+between claim and POST can therefore require operator investigation and fresh release
+authorization. Claims have no expiry/takeover/delete path. Existing account-scoped Blob Data
+Contributor is sufficient; no state-resource-group Reader or new identity role is assumed.
+
 The automated release no longer consumes a repository-stored SQL report. Immediately
 before each database-gated controller evaluation, after that D job's environment approval,
 D dispatches `nonprod-database-verify.yml` using the ephemeral repository `GITHUB_TOKEN`.

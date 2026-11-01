@@ -658,9 +658,11 @@ class Checks:
         return True
 
     def job(self) -> dict[str, Any]:
+        from tirodhan.deployment.migration_start import expected_job_id
+
         resources = self.foundation_ids()
         resource_id = resources.get("azurerm_container_app_job.migration[0]")
-        if not resource_id:
+        if not resource_id or resource_id.casefold() != expected_job_id(self.config).casefold():
             raise AdmissionDenied("MIGRATION_JOB_MISSING")
         value = self.io.arm(resource_id, API_VERSION)
         if value is None or str(value.get("id", "")).casefold() != resource_id.casefold():
@@ -668,9 +670,17 @@ class Checks:
         return value
 
     def check_migration_job(self) -> bool:
-        return migration_template(self.job(), os.environ.get("APPLICATION_IMAGE", ""))
+        from tirodhan.deployment.migration_start import belongs_to_release, operation_key
+
+        job = self.job()
+        image = os.environ.get("APPLICATION_IMAGE", "")
+        return migration_template(job, image) and belongs_to_release(
+            job, operation_key(self.auth, job["id"], image)
+        )
 
     def check_migration(self) -> bool:
+        from tirodhan.deployment.migration_start import belongs_to_release, operation_key
+
         job = self.job()
         if not migration_template(job, os.environ.get("APPLICATION_IMAGE", "")):
             return False
@@ -681,8 +691,11 @@ class Checks:
             return False
         job_id = job["id"]
         value = self.io.arm(job_id + "/executions/" + execution, API_VERSION)
-        return successful_execution(
-            value, job_id, execution, os.environ.get("APPLICATION_IMAGE", "")
+        image = os.environ.get("APPLICATION_IMAGE", "")
+        return (
+            value is not None
+            and successful_execution(value, job_id, execution, image)
+            and belongs_to_release(value, operation_key(self.auth, job_id, image))
         )
 
     def check_saved_plan(self) -> bool:
@@ -728,9 +741,14 @@ class Checks:
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
         if self.auth.operation in {"migration-apply", "runtime-apply"}:
+            from tirodhan.deployment.migration_start import expected_job_id, operation_key
+
             outputs = (current.document or {}).get("outputs", {})
             runtime = self.auth.operation == "runtime-apply"
             expected_images = {
+                "migration_operation_key": operation_key(
+                    self.auth, expected_job_id(self.config), os.environ.get("APPLICATION_IMAGE", "")
+                ),
                 "migration_image": os.environ.get("APPLICATION_IMAGE"),
                 "application_image": os.environ.get("APPLICATION_IMAGE")
                 if runtime
