@@ -162,6 +162,17 @@ def test_duplicate_correlated_executions_are_ambiguous_and_block(migration):
         migration_start.reconcile(io, JOB, key)
 
 
+@pytest.mark.parametrize("secret_ref", [None, "", "another-secret"])
+def test_literal_marker_accepts_optional_null_fields_but_never_secret_substitution(
+    migration, secret_ref
+):
+    _, job, _, _ = migration
+    value = completed(job, "migration-one")
+    key = migration_start.operation_key(auth("migration-start"), JOB, IMAGE)
+    value["properties"]["template"]["containers"][0]["env"][0]["secretRef"] = secret_ref
+    assert migration_start.belongs_to_release(value, key) is (secret_ref in (None, ""))
+
+
 def test_real_blob_sdk_sends_atomic_create_condition_to_separate_claim_blob(monkeypatch):
     requests = []
 

@@ -98,7 +98,11 @@ def belongs_to_release(value: dict[str, Any], key: str) -> bool:
     if len(applications) != 1:
         return False
     markers = [item for item in applications[0].get("env", []) if item.get("name") == MARKER]
-    return len(markers) == 1 and markers[0] == {"name": MARKER, "value": key}
+    return (
+        len(markers) == 1
+        and markers[0].get("value") == key
+        and markers[0].get("secretRef") in (None, "")
+    )
 
 
 def reconcile(io: Observations, job_id: str, key: str) -> str | None:
