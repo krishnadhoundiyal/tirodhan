@@ -16,17 +16,27 @@ from tirodhan.deployment.deployment_admission import (
 )
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.lifecycle_evidence import BackendState, Observations, state_resources
-from tirodhan.deployment.prerequisites import Controller, emit_grant
+from tirodhan.deployment.prerequisites import Controller, Grant, emit_grant
 
 
-def admitted(operation: str, **parameters: Any) -> tuple[Checks, Observations]:
+def admitted_with_grant(
+    operation: str, **parameters: Any
+) -> tuple[Checks, Observations, Grant]:
+    """Retain the verified admission grant for checks at the mutation boundary."""
     auth = require_release_authorization(operation)
     from tirodhan.deployment.database_verification_request import refresh_database_evidence
 
     refresh_database_evidence(auth)
     io = Observations(configuration())
     checks = Checks(auth, io.config, parameters, io)
-    emit_grant(Controller(auth, checks).evaluate(operation))
+    grant = Controller(auth, checks).evaluate(operation)
+    emit_grant(grant)
+    return checks, io, grant
+
+
+def admitted(operation: str, **parameters: Any) -> tuple[Checks, Observations]:
+    """Preserve the existing two-value contract for non-apply lifecycle operations."""
+    checks, io, _ = admitted_with_grant(operation, **parameters)
     return checks, io
 
 

@@ -24,7 +24,15 @@ from tirodhan.deployment.prerequisites import Controller
 def observed(monkeypatch: pytest.MonkeyPatch) -> MemoryObservations:
     monkeypatch.chdir(ROOT / "infra/terraform/nonprod")
     for key in tuple(os.environ):
-        if key.startswith("TF_") or key in {"GITHUB_ACTIONS", "DEPLOYMENT_SCOPE", "KEY_VAULT_URL"}:
+        if key.startswith("TF_") or key in {
+            "ARM_CLIENT_SECRET",
+            "ARM_ACCESS_KEY",
+            "ARM_SAS_TOKEN",
+            "ARM_USE_MSI",
+            "GITHUB_ACTIONS",
+            "DEPLOYMENT_SCOPE",
+            "KEY_VAULT_URL",
+        }:
             monkeypatch.delenv(key, raising=False)
     io = MemoryObservations()
     io.current = BackendState("STATE_ABSENT", None, None, {})
@@ -176,14 +184,19 @@ def test_direct_terraform_routes_cannot_change_workspace_or_disable_locks(
 
 @pytest.mark.parametrize("consumer", ["setup", "existing-backend"])
 def test_unverified_inputs_block_every_context_consumer(observed, consumer):
-    observed.inputs_verified = False
     checks = Checks(auth("foundation-plan"), observed.config, {}, observed)
-    accepted = (
-        backend.initialization_context(observed)
+    verify = (
+        lambda: backend.initialization_context(observed)
         if consumer == "setup"
         else checks.check_terraform_context()
     )
-    assert accepted is False
+    # A clean environment with valid inputs must reach and pass this gate.
+    assert verify() is True
+    observed.runner.commands.clear()
+
+    observed.inputs_verified = False
+    assert verify() is False
+    # Denial is due to input verification, before any native Terraform call.
     assert observed.runner.commands == []
 
 

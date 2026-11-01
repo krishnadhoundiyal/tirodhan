@@ -16,10 +16,10 @@ from tirodhan.deployment.deployment_admission import (
     configuration,
     require_release_authorization,
 )
-from tirodhan.deployment.foundation_reconcile import admitted
+from tirodhan.deployment.foundation_reconcile import admitted_with_grant
 from tirodhan.deployment.lifecycle_checks import Checks, automatic_compensation_context
 from tirodhan.deployment.lifecycle_evidence import Observations, classify_state
-from tirodhan.deployment.prerequisites import Controller
+from tirodhan.deployment.prerequisites import Controller, revalidate_database
 
 
 def verify_clean(io: Observations) -> None:
@@ -143,11 +143,14 @@ def read_baseline(io: Observations, run_id: str, plan_hash: str) -> dict[str, An
 def apply(operation: str, plan: Path) -> None:
     if operation not in {"foundation-apply", "migration-apply", "runtime-apply"}:
         raise AdmissionDenied("UNKNOWN_DEPLOYMENT_APPLY_OPERATION")
-    checks, io = admitted(operation, plan=plan)
+    checks, io, grant = admitted_with_grant(operation, plan=plan)
     baseline: dict[str, Any] | None = None
     if operation == "foundation-apply":
         baseline = record_baseline(checks, plan)
     try:
+        # The admitted token can expire while preparing a foundation baseline or
+        # waiting for the provider call. Fail closed before the Terraform effect.
+        revalidate_database(grant)
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")

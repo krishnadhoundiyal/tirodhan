@@ -18,9 +18,10 @@ from lifecycle_fakes import (
 )
 
 from tirodhan.deployment import foundation_lifecycle as lifecycle
+from tirodhan.deployment import prerequisites
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_checks import Checks
-from tirodhan.deployment.prerequisites import Controller
+from tirodhan.deployment.prerequisites import Controller, Grant
 
 ADDRESS = "azurerm_container_app_environment.nonprod"
 ENVIRONMENT = SCOPE + "/providers/Microsoft.App/managedEnvironments/tirodhan-np-test01-aca"
@@ -214,7 +215,11 @@ def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
     authorization = auth("foundation-apply")
     authorization.claims["operations"] = operations
     checks = Checks(authorization, io.config, {}, io)
-    monkeypatch.setattr(lifecycle, "admitted", lambda *a, **k: (checks, io))
+    monkeypatch.setattr(
+        lifecycle,
+        "admitted_with_grant",
+        lambda *a, **k: (checks, io, Grant(authorization, "foundation-apply", None, (), {})),
+    )
     monkeypatch.setattr(lifecycle, "record_baseline", lambda *a: {"classification": classification})
     monkeypatch.setattr(lifecycle, "automatic_compensation_context", lambda: serialized)
     io.runner.run = Mock(side_effect=AdmissionDenied("APPLY_FAILED"))
@@ -228,6 +233,40 @@ def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
     assert io.runner.run.call_count == 1
 
 
+@pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply"])
+@pytest.mark.parametrize("evidence_current", [True, False])
+def test_apply_revalidates_database_evidence_immediately_before_terraform(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    operation: str,
+    evidence_current: bool,
+) -> None:
+    from unittest.mock import Mock
+
+    io = MemoryObservations()
+    authorization = auth(operation)
+    checks = Checks(authorization, io.config, {}, io)
+    grant = Grant(authorization, operation, io.current.fingerprint, ("database",), {})
+    monkeypatch.setattr(lifecycle, "admitted_with_grant", lambda *a, **k: (checks, io, grant))
+    monkeypatch.setattr(prerequisites, "require_release_authorization", lambda _: authorization)
+    monkeypatch.setattr(prerequisites, "configuration", lambda: io.config)
+    monkeypatch.setattr(Checks, "check_database", lambda _: evidence_current)
+    monkeypatch.setattr(checks, "check_migration_job", lambda: True)
+    native_apply = Mock()
+    io.runner.run = native_apply
+
+    plan = tmp_path / "approved.tfplan"
+    if evidence_current:
+        lifecycle.apply(operation, plan)
+        native_apply.assert_called_once_with(
+            "terraform", "apply", "-input=false", str(plan), timeout=1800
+        )
+    else:
+        with pytest.raises(AdmissionDenied, match="DATABASE_EVIDENCE_NO_LONGER_CURRENT"):
+            lifecycle.apply(operation, plan)
+        native_apply.assert_not_called()
+
+
 def test_crash_replay_does_not_overwrite_existing_baseline_or_repeat_apply(
     monkeypatch, tmp_path
 ) -> None:
@@ -236,7 +275,11 @@ def test_crash_replay_does_not_overwrite_existing_baseline_or_repeat_apply(
     io = MemoryObservations()
     authorization = auth("foundation-apply", state_fingerprint=io.current.fingerprint)
     checks = Checks(authorization, io.config, {}, io)
-    monkeypatch.setattr(lifecycle, "admitted", lambda *a, **k: (checks, io))
+    monkeypatch.setattr(
+        lifecycle,
+        "admitted_with_grant",
+        lambda *a, **k: (checks, io, Grant(authorization, "foundation-apply", None, (), {})),
+    )
     plan = tmp_path / "plan"
     plan.write_bytes(b"approved-plan")
     calls = []
