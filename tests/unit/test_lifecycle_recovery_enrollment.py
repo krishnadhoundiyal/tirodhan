@@ -122,6 +122,73 @@ def test_concurrent_enrollment_converges_on_same_grants(enrolled_context):
     assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
 
 
+@pytest.mark.parametrize("form", ["provider", "subscription", "resource-group", "uppercase"])
+def test_assignment_response_role_id_aliases_preserve_verified_identity(enrolled_context, form):
+    io, _ = enrolled_context
+    original = io.json
+
+    def response(*args):
+        value = original(*args)
+        if isinstance(value, dict) and "/roleAssignments/" in str(value.get("id", "")):
+            identifier = value["properties"]["roleDefinitionId"].rsplit("/", 1)[-1]
+            prefix = "/providers/Microsoft.Authorization/roleDefinitions/"
+            if form == "subscription":
+                prefix = "/subscriptions/" + io.tf["subscription_id"] + prefix
+            elif form == "resource-group":
+                prefix = io.scope + prefix
+            value["properties"] = value["properties"] | {"roleDefinitionId": prefix + identifier}
+            if form == "uppercase":
+                value["properties"]["roleDefinitionId"] = value["properties"][
+                    "roleDefinitionId"
+                ].upper()
+        return value
+
+    io.runner.json = response
+    recovery_enrollment.enroll()
+    recovery_enrollment.enroll()
+    assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+
+
+@pytest.mark.parametrize(
+    "invalid", ["role", "malformed-role", "principal", "principal-type", "scope", "condition"]
+)
+def test_normalized_role_id_never_bypasses_other_assignment_postconditions(
+    enrolled_context, invalid
+):
+    io, _ = enrolled_context
+    original = io.json
+
+    def response(*args):
+        value = original(*args)
+        if not isinstance(value, dict) or "/roleAssignments/" not in str(value.get("id", "")):
+            return value
+        properties = copy.deepcopy(value["properties"])
+        if invalid == "role":
+            properties["roleDefinitionId"] = (
+                "/providers/Microsoft.Authorization/roleDefinitions/" + V
+            )
+        elif invalid == "malformed-role":
+            properties["roleDefinitionId"] = (
+                "/providers/Microsoft.Authorization/roleDefinitions/not-a-guid"
+            )
+        elif invalid == "principal":
+            properties["principalId"] = V
+        elif invalid == "principal-type":
+            properties["principalType"] = "User"
+        elif invalid == "scope":
+            value["id"] = value["id"].replace(io.tf["subscription_id"], V)
+        else:
+            properties["condition"] = "unapproved-condition"
+        return value | {"properties": properties}
+
+    io.runner.json = response
+    with pytest.raises(
+        AdmissionDenied, match="RECOVERY_ENROLLMENT_ASSIGNMENT_POSTCONDITION_FAILED"
+    ):
+        recovery_enrollment.enroll()
+    assert not io.credentials
+
+
 @pytest.mark.parametrize(
     "invalid", ["missing-authority", "wrong-owner", "wrong-subject", "extra-trust"]
 )

@@ -124,6 +124,14 @@ def role(io: Observations, name: str, scope: str, actions: list[str]) -> str:
     return str(value["id"])
 
 
+def same_role_definition(actual: Any, expected: str) -> bool:
+    """Azure may return a scope-qualified or provider-relative ID for the same role."""
+    try:
+        return uuid.UUID(str(actual).rsplit("/", 1)[-1]) == uuid.UUID(expected.rsplit("/", 1)[-1])
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def enroll() -> None:
     checks, io = admitted("enroll-recovery")
     app, principal = verify_application(checks)
@@ -153,8 +161,11 @@ def enroll() -> None:
         properties = value.get("properties", {})
         if (
             str(value.get("id", "")).casefold() != target.casefold()
+            or not same_role_definition(properties.get("roleDefinitionId"), definition)
             or any(
-                str(properties.get(k, "")).casefold() != v.casefold() for k, v in expected.items()
+                str(properties.get(k, "")).casefold() != v.casefold()
+                for k, v in expected.items()
+                if k != "roleDefinitionId"
             )
             or properties.get("condition")
         ):

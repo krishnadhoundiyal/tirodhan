@@ -193,7 +193,11 @@ def revalidate_database(grant: Grant) -> None:
         return
     from tirodhan.deployment.lifecycle_checks import Checks
 
-    if Checks(current, configuration(), {}).check_database() is not True:
+    try:
+        current_evidence = Checks(current, configuration(), {}).check_database()
+    except Exception as exc:
+        raise AdmissionDenied("DATABASE_EVIDENCE_NO_LONGER_CURRENT") from exc
+    if current_evidence is not True:
         raise AdmissionDenied("DATABASE_EVIDENCE_NO_LONGER_CURRENT")
 
 
