@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run once/repeatedly as an authorized operator, not the restricted deploy identity.
 set -euo pipefail
+python3 src/tirodhan/deployment/deployment_admission.py
 : "${AZURE_SUBSCRIPTION_ID:?}" "${AZURE_TENANT_ID:?}" "${AZURE_LOCATION:?}"
 : "${NONPROD_SUFFIX:?}" "${DEPLOYMENT_OBJECT_ID:?}" "${OPERATOR_OBJECT_ID:?}"
 : "${FEDERATED_APP_OBJECT_ID:?}" "${GITHUB_REPOSITORY:?}"
