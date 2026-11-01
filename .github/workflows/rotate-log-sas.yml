@@ -10,7 +10,16 @@ concurrency:
   group: nonprod-log-sas
   cancel-in-progress: false
 jobs:
+  release-admission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce integration deployment hold before Azure authentication
+        run: python src/tirodhan/deployment/deployment_admission.py
   rotate:
+    needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment: nonprod-plan
     runs-on: ubuntu-latest

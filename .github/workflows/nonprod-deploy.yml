@@ -21,7 +21,16 @@ env:
   APPLICATION_IMAGE: ghcr.io/krishnadhoundiyal/tirodhan:${{ github.sha }}
   FLUENT_BIT_IMAGE: ghcr.io/krishnadhoundiyal/tirodhan-log-sidecar:${{ github.sha }}
 jobs:
+  release-admission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce integration deployment hold before Azure authentication
+        run: python src/tirodhan/deployment/deployment_admission.py
   build:
+    needs: release-admission
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

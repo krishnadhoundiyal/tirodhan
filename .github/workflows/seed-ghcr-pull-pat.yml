@@ -8,7 +8,16 @@ concurrency:
   group: nonprod-ghcr-pat-seed
   cancel-in-progress: false
 jobs:
+  release-admission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce integration deployment hold before Azure authentication
+        run: python src/tirodhan/deployment/deployment_admission.py
   seed:
+    needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment: nonprod
     runs-on: ubuntu-latest

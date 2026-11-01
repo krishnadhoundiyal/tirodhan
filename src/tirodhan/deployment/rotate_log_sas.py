@@ -39,4 +39,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from tirodhan.deployment.deployment_admission import require_release_authorization
+
+    require_release_authorization()
     main()
