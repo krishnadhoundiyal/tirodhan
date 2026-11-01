@@ -147,10 +147,10 @@ def apply(operation: str, plan: Path) -> None:
     baseline: dict[str, Any] | None = None
     if operation == "foundation-apply":
         baseline = record_baseline(checks, plan)
+    # Fail closed on stale authorization before entering compensation handling:
+    # rejected admission must never be mistaken for a failed Terraform apply.
+    revalidate_database(grant)
     try:
-        # The admitted token can expire while preparing a foundation baseline or
-        # waiting for the provider call. Fail closed before the Terraform effect.
-        revalidate_database(grant)
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
