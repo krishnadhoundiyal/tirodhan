@@ -43,13 +43,12 @@ jobs:
       contents: read
       actions: read
       id-token: write
-    env:
-      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
     needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment: nonprod
     runs-on: ubuntu-latest
     env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
       DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
       KEY_VAULT_URL: ${{ vars.NONPROD_KEY_VAULT_URL }}
       GHCR_PULL_PAT: ${{ secrets.NONPROD_GHCR_PULL_PAT }}

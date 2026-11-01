@@ -112,7 +112,8 @@ def auth(operation: str, *, kind: str = "deployment", **binding: Any) -> Authori
 
 def write_plan(path: Path, prior: BackendState) -> None:
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("tfstate-prev", json.dumps(prior.document))
+        archive.writestr("tfstate", json.dumps(prior.document))
+        archive.writestr("tfstate-prev", json.dumps({"lineage": "", "serial": 0}))
         archive.writestr("tfplan", b"synthetic native plan payload")
 
 

@@ -23,6 +23,21 @@ def test_all_mandatory_capabilities_have_real_registered_evaluators() -> None:
     assert policy["authorization_keys"] == {}
 
 
+def test_workflow_mappings_cannot_silently_overwrite_gates() -> None:
+    class UniqueKeysLoader(yaml.SafeLoader):
+        pass
+
+    def mapping(loader, node, deep=False):
+        pairs = loader.construct_pairs(node, deep=deep)
+        keys = [key for key, _ in pairs]
+        assert len(keys) == len(set(keys)), keys
+        return dict(pairs)
+
+    UniqueKeysLoader.add_constructor("tag:yaml.org,2002:map", mapping)
+    for path in Path(".github").rglob("*.yml"):
+        yaml.load(path.read_text(), Loader=UniqueKeysLoader)
+
+
 @pytest.mark.parametrize(
     "operation",
     [

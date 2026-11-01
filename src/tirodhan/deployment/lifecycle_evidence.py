@@ -102,11 +102,14 @@ def classify_state(
 
 
 def plan_prior_state(path: Path) -> dict[str, Any]:
+    """Read Terraform's refreshed prior-state identity used by its native stale-plan fence."""
     import zipfile
 
     try:
         with zipfile.ZipFile(path) as archive:
-            info = archive.getinfo("tfstate-prev")
+            # tfstate-prev deliberately has a stub header. Terraform 1.13.5 stores
+            # PlannedStateUpdate lineage/serial in tfstate (backend_plan.go:140-156).
+            info = archive.getinfo("tfstate")
             if info.file_size > 32 * 1024 * 1024:
                 raise ObservationError("PLAN_STATE_TOO_LARGE")
             value = json.loads(archive.read(info))
