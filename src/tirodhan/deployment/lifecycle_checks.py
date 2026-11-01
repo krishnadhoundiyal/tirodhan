@@ -94,9 +94,9 @@ class Checks:
         return self.backend().kind == "INITIALIZED"
 
     def check_terraform_context(self) -> bool:
-        if any(os.environ.get(k) for k in ("ARM_CLIENT_SECRET", "ARM_ACCESS_KEY", "ARM_SAS_TOKEN")):
-            return False
-        if os.environ.get("ARM_USE_MSI", "false").lower() != "false":
+        from tirodhan.deployment.backend_setup import terraform_environment_safe
+
+        if not terraform_environment_safe():
             return False
         version = self.io.runner.json("terraform", "version", "-json")
         if (

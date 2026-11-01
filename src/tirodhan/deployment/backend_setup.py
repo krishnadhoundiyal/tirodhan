@@ -20,12 +20,8 @@ from tirodhan.deployment.deployment_admission import (
 from tirodhan.deployment.lifecycle_evidence import Observations
 
 
-def initialization_context(io: Observations) -> bool:
-    """Safe before init: version reads local metadata and never opens remote state."""
-    if Path.cwd().resolve() != (ROOT / "infra/terraform/nonprod").resolve():
-        return False
-    if any(Path(name).exists() for name in ("terraform.tfstate", "terraform.tfstate.backup")):
-        return False  # No local state may be implicitly migrated into the Azure backend.
+def terraform_environment_safe() -> bool:
+    """Ambient arguments/workspaces must not bypass target selection or native locks."""
     if any(
         value
         for key, value in os.environ.items()
@@ -43,6 +39,17 @@ def initialization_context(io: Observations) -> bool:
     if os.environ.get("TF_WORKSPACE", "default") != "default":
         return False
     if os.environ.get("ARM_USE_MSI", "false").lower() != "false":
+        return False
+    return True
+
+
+def initialization_context(io: Observations) -> bool:
+    """Safe before init: version reads local metadata and never opens remote state."""
+    if Path.cwd().resolve() != (ROOT / "infra/terraform/nonprod").resolve():
+        return False
+    if any(Path(name).exists() for name in ("terraform.tfstate", "terraform.tfstate.backup")):
+        return False  # No local state may be implicitly migrated into the Azure backend.
+    if not terraform_environment_safe():
         return False
     return bool(
         io.runner.json("terraform", "version", "-json").get("terraform_version") == "1.13.5"

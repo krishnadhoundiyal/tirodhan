@@ -68,6 +68,9 @@ Applies can require a new binding after plan review.
 Apply bindings include exact plan SHA-256 and remote state fingerprint, including lineage,
 serial and ETag. Native Terraform locks/stale-plan rejection remain enabled. There is no
 force-unlock, lock=false, raw state editing or `terraform state rm` implementation.
+Every Terraform operation profile also rejects ambient `TF_CLI_ARGS*`, alternate data/CLI
+configuration paths and nondefault workspaces before native access. A signed local command
+cannot bypass locking or select another workspace through its environment.
 
 Actual trusted-main/environment protection is checked. Local execution requires an explicit
 signed local-execution binding. Repository CI and required review remain independent gates;

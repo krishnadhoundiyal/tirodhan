@@ -155,6 +155,25 @@ def test_unsafe_backend_context_blocks_before_native_access(
     assert not backend.initialization_context(observed)
 
 
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("TF_CLI_ARGS_apply", "-lock=false"),
+        ("TF_CLI_ARGS_plan", "-lock=false"),
+        ("TF_WORKSPACE", "unapproved"),
+        ("TF_DATA_DIR", "/unapproved"),
+        ("TF_CLI_CONFIG_FILE", "/unapproved"),
+    ],
+)
+def test_direct_terraform_routes_cannot_change_workspace_or_disable_locks(
+    observed: MemoryObservations, monkeypatch: pytest.MonkeyPatch, key: str, value: str
+) -> None:
+    monkeypatch.setenv(key, value)
+    checks = Checks(auth("foundation-plan"), observed.config, {}, observed)
+    assert not checks.check_terraform_context()
+    assert observed.runner.commands == []
+
+
 @pytest.mark.parametrize("failure", ["exit", "timeout"])
 def test_native_failure_is_sanitized_and_never_claimed_success(
     monkeypatch: pytest.MonkeyPatch, failure: str
