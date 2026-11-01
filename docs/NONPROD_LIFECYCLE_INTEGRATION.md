@@ -119,9 +119,33 @@ and D must reevaluate actual prerequisites. Enrollment does not establish readin
 | ESTABLISHED_OWNED | Disposable inventory belongs to authoritative state; stage checks still required |
 | CONFLICT/UNKNOWN | Foreign/untracked resources, denied reads, malformed observations or ambiguity block |
 
-Empty outputs or an empty RG listing never establish readiness. Initialization uses an
-explicitly authorized refresh-only zero-managed-change saved plan, then rereads the real
-backend. No synthetic state is uploaded and no existing state is overwritten.
+Empty outputs or an empty RG listing never establish readiness. Before any native backend
+setup, the `terraform-setup` profile verifies signed release authority, actual identity,
+protected execution environment, account-scoped initialized backend, preserved grants/vault
+and owned state/inventory. Its signed binding explicitly names `execution_environment`
+(`nonprod-plan` or `nonprod`). Every plan/apply job's authorization must include this setup
+operation as well as its later, complete deployment operation. Setup is not deployment readiness.
+
+Terraform's pinned [Azure StateMgr](https://github.com/hashicorp/terraform/blob/v1.13.5/internal/backend/remote-state/azure/backend_state.go#L99-L134)
+can create empty remote state while opening a missing backend, before an ordinary plan can
+be reviewed. Consequently `initialize-state-plan` creates only a reviewable
+`initialization-intent.json`, with no native remote-state command. It binds exact backend,
+vault, absent-state fingerprint, commit, configuration/source, principal and release session.
+Separately signed `initialize-state-apply` requires `initialization_authorized: true`, the
+exact `intent_sha256` and `state_fingerprint`, and rechecks actual absence/empty disposable
+inventory. Only then may native init/state-pull create Terraform's empty state under its
+Azure lease protocol. Fresh isolated Terraform metadata, fixed backend/default workspace,
+and rejected CLI/credential overrides prevent local-state migration. No synthetic state is
+uploaded. Actual clean state, retained vault and unchanged RBAC are required afterward.
+An uncertain outcome or replay after state has appeared blocks without overwriting; inspect
+actual state and reevaluate the ordinary initialized-backend profile. Initialization never
+reports readiness for application deployment.
+
+Teardown uses its exact protected main workflow and an independent setup mode: it requires
+an actual initialized backend but no release authorization, preserving run #8's legacy
+initialized-empty case even without a vault. It cannot initialize a missing backend, and
+the mode cannot be used by provisioning workflows. Exact final preservation, RBAC and ACA
+recovery checks remain mandatory.
 
 The persistent vault is operator-bootstrap-owned and a Terraform data source. Transfer:
 verify exact legacy binding/security, plan a targeted `removed { destroy = false }`, take
@@ -263,12 +287,16 @@ pending approved retention, never silently purged.
 
 ## Validation limits
 
-Local evidence: the focused controller/compensation/inventory/architecture/database suite
-has 91 passes; strict mypy passes for 280 source modules. The full Linux Python 3.13 unit
+Local evidence: the controller/compensation/inventory/architecture/database/backend and
+teardown suite has 307 passes and two pinned-native fixtures skipped locally; strict mypy
+passes for 284 source modules. The full Linux Python 3.13 unit
 run before the inventory addition had 855 passes, one skipped pinned-Terraform fixture
 and one failure in the untouched OTP traceback test. That exact failure also reproduces
 on baseline main in an isolated checkout; the repository targets Python 3.12 in CI.
-It is reported, not suppressed or converted to success. Final PR checks remain required.
+It is reported, not suppressed or converted to success. Subsequent Python 3.12/PostGIS
+[repository CI](https://github.com/krishnadhoundiyal/tirodhan/actions/runs/41291802757)
+passed 1,878 tests with 77 skips on the earlier integration head, including the sidecar
+probe and offline Terraform validation. Final-head PR checks remain required.
 Pinned Terraform 1.13.5/AzureRM 5.8.0 backend-disabled init/validate and Terraform formatting
 passed locally, with no Azure authentication; the native forget-plan fixture also passed.
 

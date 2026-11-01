@@ -70,13 +70,15 @@ def configuration() -> dict[str, Any]:
             "state_account": os.environ["STATE_ACCOUNT_NAME"],
             "state_resource_group": os.environ["STATE_RESOURCE_GROUP"],
             "deployment_client_id": os.environ["ARM_CLIENT_ID"],
-            "recovery_client_id": os.environ.get("AZURE_NONPROD_RECOVERY_CLIENT_ID"),
+            "recovery_client_id": os.environ.get("AZURE_NONPROD_RECOVERY_CLIENT_ID") or None,
             "database_verification_client_id": os.environ.get(
                 "AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID"
-            ),
+            )
+            or None,
             "database_verification_principal_id": os.environ.get(
                 "AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID"
-            ),
+            )
+            or None,
         }
     except (ValueError, KeyError, TypeError) as exc:
         raise AdmissionDenied("CONFIGURATION_UNAVAILABLE_OR_INCONSISTENT") from exc

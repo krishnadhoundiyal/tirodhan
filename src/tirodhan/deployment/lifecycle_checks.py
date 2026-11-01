@@ -133,6 +133,11 @@ class Checks:
             if self.auth.operation.endswith("-plan") or self.auth.operation == "rotate-log-sas"
             else "nonprod"
         )
+        if self.auth.operation == "terraform-setup":
+            setup_environment = binding.get("execution_environment")
+            if setup_environment not in {"nonprod", "nonprod-plan"}:
+                return False
+            expected_environment = str(setup_environment)
         if os.environ.get("GITHUB_REPOSITORY") != "krishnadhoundiyal/tirodhan":
             return False
         if os.environ.get("GITHUB_REF") != "refs/heads/main":
@@ -246,7 +251,7 @@ class Checks:
             expected_principal_id=self.auth.principal_id,
             expected_suffix=self.tf["suffix"],
             recovery_principal_id=self.binding().get("recovery_principal_id"),
-            verification_principal_id=self.config.get("database_verification_principal_id"),
+            verification_principal_id=self.config.get("database_verification_principal_id") or None,
         )
         return True
 
@@ -711,12 +716,6 @@ class Checks:
             if r.get("mode", "managed") == "managed"
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
-        if self.auth.operation == "initialize-state-apply":
-            return (
-                not changes
-                and current.kind == "STATE_ABSENT"
-                and plan.get("variables", {}).get("deployment_stage", {}).get("value") == 0
-            )
         if self.auth.operation == "transfer-vault":
             return len(changes) == 1 and (
                 changes[0].get("address") == "azurerm_key_vault.runtime"
@@ -1044,6 +1043,17 @@ class Checks:
             )
             == "STATE_ABSENT"
         )
+
+    def check_initialization_context(self) -> bool:
+        from tirodhan.deployment.backend_setup import initialization_context
+
+        return initialization_context(self.io)
+
+    def check_initialization_intent(self) -> bool:
+        from tirodhan.deployment.backend_setup import validate_intent
+
+        validate_intent(self, self.parameters.get("plan"))
+        return True
 
 
 def automatic_compensation_context() -> bool:

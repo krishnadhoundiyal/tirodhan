@@ -122,15 +122,14 @@ jobs:
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
-          python -m tirodhan.deployment.prerequisites migration-plan
           current_stage="$(terraform output -raw deployment_stage)"
+          python -m tirodhan.deployment.prerequisites migration-plan
           if [[ "$current_stage" =~ ^[0-9]+$ ]] && (( current_stage >= 1 )); then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "::notice::NONPROD is already at deployment stage $current_stage; foundation prerequisites are satisfied."
             exit 0
           fi
 
-          python -m tirodhan.deployment.prerequisites migration-plan
           set +e
           TF_VAR_deployment_stage=0 terraform plan -input=false -detailed-exitcode -out=/tmp/foundation-readiness.tfplan
           plan_status=$?

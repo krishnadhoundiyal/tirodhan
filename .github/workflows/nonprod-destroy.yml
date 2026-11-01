@@ -38,6 +38,8 @@ env:
 
 jobs:
   destroy-plan:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
     outputs:
       vault_required: ${{ steps.bootstrap-preservation.outputs.vault_required }}
     if: >-
@@ -56,6 +58,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/nonprod-setup
+        with:
+          mode: destroy
 
       - name: Configure destroy-only Key Vault behaviour
         run: |
@@ -152,6 +156,7 @@ jobs:
 
   destroy-apply:
     env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
       REQUIRE_PERSISTENT_VAULT: ${{ needs.destroy-plan.outputs.vault_required }}
     needs: destroy-plan
     timeout-minutes: 90
@@ -169,6 +174,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/nonprod-setup
+        with:
+          mode: destroy
 
       - name: Configure destroy-only Key Vault behaviour
         run: |

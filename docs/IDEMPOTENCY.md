@@ -13,6 +13,14 @@ uncertain responses reconcile the exact verifier run instead of resending. Concu
 replay waits for the same report. SQL has no writes; failed/expired/ambiguous evidence never
 admits deployment. Crash before a confirmed dispatch may require a new job attempt.
 
+Backend initialization uses the reviewed intent SHA-256 plus exact target/session/source
+and absent-state fingerprint as its operation key. Intent preparation performs no remote
+Terraform access. Separately authorized native creation uses Terraform's Azure lease and
+recheck protocol. Uncertain completion, concurrent creation or a retry after state appeared
+never overwrites existing state or reports success from absence alone: it blocks and requires
+fresh initialized-state evaluation. Ordinary provisioning setup and independent protected
+teardown reject missing state before any native backend command.
+
 
 NONPROD ACA deletion recovery uses the exact DELETE ID from the approved Terraform plan,
 read-before-retry ARM resource idempotence, bounded attempts and existing serialized workflow

@@ -49,6 +49,13 @@ def consumer(monkeypatch, tmp_path):
         "RUNNER_TEMP": str(tmp_path),
     }.items():
         monkeypatch.setenv(key, value)
+    for key in (
+        "TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE",
+        "TIRODHAN_DATABASE_EVIDENCE_OUTPUT",
+        "TIRODHAN_DATABASE_EVIDENCE_PRIVATE_KEY_FILE",
+    ):
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
     return authorization, config, requests.consumer_context(authorization)
 
 
@@ -455,6 +462,16 @@ def test_database_check_runs_after_other_mandatory_observations(consumer):
     checks.registry.return_value = {key: lambda k=key: check(k) for key in CHECK_IDS}
     Controller(authorization, checks).evaluate(authorization.operation)
     assert observed[-1] == "database"
+
+
+def test_unconfigured_verifier_does_not_invent_an_extra_rbac_grant():
+    from lifecycle_fakes import MemoryObservations
+
+    observations = MemoryObservations()
+    observations.config["database_verification_principal_id"] = ""
+    assert Checks(
+        auth("foundation-plan"), observations.config, {}, observations
+    ).check_permissions()
 
 
 def test_unproven_request_never_dispatches_or_reaches_azure_auth(monkeypatch, consumer):

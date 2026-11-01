@@ -141,6 +141,8 @@ def read_baseline(io: Observations, run_id: str, plan_hash: str) -> dict[str, An
 
 
 def apply(operation: str, plan: Path) -> None:
+    if operation not in {"foundation-apply", "migration-apply", "runtime-apply"}:
+        raise AdmissionDenied("UNKNOWN_DEPLOYMENT_APPLY_OPERATION")
     checks, io = admitted(operation, plan=plan)
     baseline: dict[str, Any] | None = None
     if operation == "foundation-apply":
@@ -149,9 +151,6 @@ def apply(operation: str, plan: Path) -> None:
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
-        if operation == "initialize-state-apply":
-            verify_clean(io)
-            verify_preserved_permissions(checks)
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
     except AdmissionDenied:
@@ -280,12 +279,13 @@ def main() -> None:
     parser.add_argument("--plan", type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.operation in {"foundation-plan", "initialize-state-plan"}:
+        if args.operation.startswith("initialize-state-"):
+            from tirodhan.deployment.backend_setup import initialize
+
+            initialize(args.operation, args.plan)
+        elif args.operation == "foundation-plan":
             _, io = admitted(args.operation)
-            flags = ["-refresh-only"] if args.operation == "initialize-state-plan" else []
-            io.runner.run(
-                "terraform", "plan", "-input=false", *flags, f"-out={args.plan}", timeout=1800
-            )
+            io.runner.run("terraform", "plan", "-input=false", f"-out={args.plan}", timeout=1800)
         elif args.operation == "prepare-compensation":
             prepare_compensation(args.plan)
         elif args.operation == "compensate-foundation":

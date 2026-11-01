@@ -91,12 +91,9 @@ jobs:
           python -m pip install -e .
           cd infra/terraform/nonprod
           python -m tirodhan.deployment.inputs
-          if [[ "$REQUESTED_OPERATION" != recover-vault ]]; then
+          if [[ "$REQUESTED_OPERATION" != recover-vault && "$REQUESTED_OPERATION" != initialize-state-* ]]; then
             python -m tirodhan.deployment.azure_controls
-            terraform init -input=false -lockfile=readonly \
-              -backend-config="storage_account_name=$STATE_ACCOUNT_NAME" \
-              -backend-config="container_name=tfstate" \
-              -backend-config="resource_group_name=$STATE_RESOURCE_GROUP"
+            python -m tirodhan.deployment.backend_setup provisioning
           fi
       - uses: actions/download-artifact@v4
         if: inputs.artifact_run_id != ''
@@ -113,7 +110,7 @@ jobs:
             recover-vault|plan-transfer|transfer-vault)
               python -m tirodhan.deployment.foundation_reconcile "$REQUESTED_OPERATION" ;;
             initialize-state-plan|initialize-state-apply)
-              python -m tirodhan.deployment.foundation_lifecycle "$REQUESTED_OPERATION" --plan initialization.tfplan ;;
+              python -m tirodhan.deployment.foundation_lifecycle "$REQUESTED_OPERATION" --plan initialization-intent.json ;;
             prepare-compensation|compensate-foundation)
               python -m tirodhan.deployment.foundation_lifecycle "$REQUESTED_OPERATION" --plan compensation.tfplan ;;
             *) echo 'Unknown lifecycle operation; no mutation authorized.' >&2; exit 1 ;;
@@ -125,6 +122,6 @@ jobs:
           path: |
             infra/terraform/nonprod/vault-transfer.tfplan
             infra/terraform/nonprod/vault-transfer-backup.json
-            infra/terraform/nonprod/initialization.tfplan
+            infra/terraform/nonprod/initialization-intent.json
             infra/terraform/nonprod/compensation.tfplan
           retention-days: 1

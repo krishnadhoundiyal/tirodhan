@@ -22,8 +22,12 @@ FOUNDATION = DEPLOYMENT | {"providers", "postgres_sku", "features"}
 MIGRATION = DEPLOYMENT | {"foundation", "database", "secrets", "images", "features"}
 REQUIRED: dict[str, frozenset[str]] = {
     "bootstrap": COMMON | {"bootstrap_authority"},
-    "initialize-state-plan": COMMON | {"initialization", "permissions", "vault"},
-    "initialize-state-apply": COMMON | {"initialization", "permissions", "vault", "saved_plan"},
+    "terraform-setup": COMMON
+    | {"backend", "initialization_context", "permissions", "vault", "state"},
+    "initialize-state-plan": COMMON
+    | {"initialization", "initialization_context", "permissions", "vault"},
+    "initialize-state-apply": COMMON
+    | {"initialization", "initialization_context", "permissions", "vault", "initialization_intent"},
     "recover-vault": COMMON | {"recovery_authority", "recovery_target"},
     "enroll-recovery": COMMON | {"recovery_enrollment_authority"},
     "state-backup": COMMON | {"backend", "permissions", "vault", "legacy_ownership"},
@@ -46,8 +50,6 @@ REQUIRED: dict[str, frozenset[str]] = {
 }
 TERRAFORM_OPERATIONS = frozenset(
     {
-        "initialize-state-plan",
-        "initialize-state-apply",
         "state-backup",
         "transfer-vault",
         "foundation-plan",

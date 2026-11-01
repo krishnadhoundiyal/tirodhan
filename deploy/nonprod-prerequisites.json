@@ -184,10 +184,10 @@
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "initialization": {
-      "authority": "exact backend object absence and approved initialization operation",
+      "authority": "Actual secure backend state absence, exact empty disposable inventory and explicit signed initialization authorization",
       "identity": "D",
       "scope": "exact configured backend with verified persistent bootstrap inventory",
-      "allowed_operation": "refresh-only zero-managed-change Terraform plan/apply, never readiness by omission",
+      "allowed_operation": "Observe absence before intent creation or separately admitted native initialization; never run a remote Terraform plan during intent preparation",
       "failure": "BLOCK absent authority, unknown state or conflicting inventory"
     },
     "execution_authority": {
@@ -224,6 +224,20 @@
       "scope": "Exact recovery SP/app, subscription metadata discovery role and app-RG recovery role",
       "allowed_operation": "Enroll narrow deterministic RBAC and protected recovery OIDC only; never create/recover a vault or touch Terraform state",
       "failure": "BLOCK missing authority, identity/owner mismatch, incompatible trust/roles or unknown outcome; replay reconciles exact postconditions"
+    },
+    "initialization_context": {
+      "authority": "Pinned Terraform, exact checked-out project and fixed backend arguments; no native remote access",
+      "identity": "D",
+      "scope": "nonprod backend initialization only",
+      "allowed_operation": "Verify local version and reject CLI/workspace/credential overrides before backend access",
+      "failure": "BLOCK; unknown context or override never passes"
+    },
+    "initialization_intent": {
+      "authority": "Reviewed immutable JSON intent, independently signed SHA256 and before-state fingerprint",
+      "identity": "D",
+      "scope": "exact secure account/tfstate/tirodhan/nonprod.tfstate and preserved vault",
+      "allowed_operation": "Verify commit/config/source/session/identity and actual empty pre-initialization inventory before native locked state creation",
+      "failure": "BLOCK; tamper, changed backend, replay after initialization or unknown outcome requires fresh evaluation"
     }
   },
   "operations": {
@@ -233,23 +247,33 @@
       "identity",
       "target"
     ],
+    "terraform-setup": [
+      "backend",
+      "execution_authority",
+      "identity",
+      "initialization_context",
+      "permissions",
+      "state",
+      "target",
+      "vault"
+    ],
     "initialize-state-plan": [
       "execution_authority",
       "identity",
       "initialization",
+      "initialization_context",
       "permissions",
       "target",
-      "terraform_context",
       "vault"
     ],
     "initialize-state-apply": [
       "execution_authority",
       "identity",
       "initialization",
+      "initialization_context",
+      "initialization_intent",
       "permissions",
-      "saved_plan",
       "target",
-      "terraform_context",
       "vault"
     ],
     "recover-vault": [
