@@ -175,3 +175,76 @@ output "vault" { value = data.azurerm_key_vault.runtime.id }
         )
         assert result.returncode == 0, result.stdout + result.stderr
     assert state.read_bytes() == original
+
+
+def test_native_migration_target_preserves_existing_runtime_with_changed_inputs(
+    tmp_path: Path,
+) -> None:
+    binary = os.environ.get("TIRODHAN_TEST_TERRAFORM_BINARY")
+    if not binary:
+        pytest.skip("Pinned Terraform supplied by lifecycle CI")
+    (tmp_path / "main.tf").write_text("""
+terraform { required_version = "= 1.13.5" }
+resource "terraform_data" "api" { input = "new-runtime-configuration" }
+resource "terraform_data" "migration" { input = "new-migration-image" }
+""")
+    state = tmp_path / "terraform.tfstate"
+    state.write_text(
+        json.dumps(
+            {
+                "version": 4,
+                "terraform_version": "1.13.5",
+                "serial": 1,
+                "lineage": "00000000-0000-0000-0000-000000000001",
+                "outputs": {},
+                "resources": [
+                    {
+                        "mode": "managed",
+                        "type": "terraform_data",
+                        "name": name,
+                        "provider": 'provider["terraform.io/builtin/terraform"]',
+                        "instances": [
+                            {
+                                "schema_version": 0,
+                                "attributes": {
+                                    "id": name,
+                                    "input": {"value": "old", "type": "string"},
+                                    "output": {"value": "old", "type": "string"},
+                                    "triggers_replace": None,
+                                },
+                                "sensitive_attributes": [],
+                            }
+                        ],
+                    }
+                    for name in ("api", "migration")
+                ],
+            }
+        )
+    )
+    original = state.read_bytes()
+
+    def run(*args):
+        result = subprocess.run(
+            [binary, *args], cwd=tmp_path, capture_output=True, text=True, timeout=60
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    run("init", "-backend=false", "-input=false")
+    run(
+        "plan",
+        "-refresh=false",
+        "-input=false",
+        "-target=terraform_data.migration",
+        "-out=migration.tfplan",
+    )
+    plan = json.loads(run("show", "-json", "migration.tfplan"))
+    changes = [
+        row
+        for row in plan.get("resource_changes", [])
+        if row.get("change", {}).get("actions") != ["no-op"]
+    ]
+    assert [(row["address"], row["change"]["actions"]) for row in changes] == [
+        ("terraform_data.migration", ["update"])
+    ]
+    assert state.read_bytes() == original

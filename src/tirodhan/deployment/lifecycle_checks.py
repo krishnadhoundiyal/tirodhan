@@ -98,6 +98,8 @@ class Checks:
 
         if not terraform_environment_safe():
             return False
+        if self.io.terraform_inputs() is not True:
+            return False
         version = self.io.runner.json("terraform", "version", "-json")
         if (
             version.get("terraform_version") != "1.13.5"
@@ -556,7 +558,7 @@ class Checks:
             and self.binding().get("database_verification_authorized") is True
         )
 
-    def check_secrets(self) -> bool:
+    def required_secret_names(self) -> set[str]:
         from tirodhan.deployment.release import MIGRATION_SECRET_NAMES
 
         required = set(MIGRATION_SECRET_NAMES)
@@ -581,6 +583,10 @@ class Checks:
                     "customer-data-encryption-keys",
                     "customer-data-hmac-key",
                 }
+        return required
+
+    def check_secrets(self) -> bool:
+        required = self.required_secret_names()
         rows = self.io.runner.json(
             "az",
             "keyvault",
@@ -716,6 +722,44 @@ class Checks:
             if r.get("mode", "managed") == "managed"
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
+        if self.auth.operation in {"migration-apply", "runtime-apply"}:
+            outputs = (current.document or {}).get("outputs", {})
+            runtime = self.auth.operation == "runtime-apply"
+            expected_images = {
+                "migration_image": os.environ.get("APPLICATION_IMAGE"),
+                "application_image": os.environ.get("APPLICATION_IMAGE")
+                if runtime
+                else outputs.get("application_image", {}).get("value"),
+                "fluent_bit_image": os.environ.get("FLUENT_BIT_IMAGE")
+                if runtime
+                else outputs.get("fluent_bit_image", {}).get("value")
+                or os.environ.get("FLUENT_BIT_IMAGE"),
+            }
+            if not expected_images["migration_image"] or not expected_images["fluent_bit_image"]:
+                return False
+            if any(
+                variables.get(key, {}).get("value") != value
+                for key, value in expected_images.items()
+            ):
+                return False
+        if self.auth.operation == "migration-apply" and any(
+            row.get("type") in {"azurerm_container_app", "azurerm_container_app_job"}
+            and row.get("address") != "azurerm_container_app_job.migration[0]"
+            for row in changes
+        ):
+            return False
+        if self.auth.operation == "runtime-apply":
+            from tirodhan.deployment.release import MIGRATION_SECRET_NAMES, RUNTIME_SECRET_NAMES
+
+            names = variables.get("enabled_runtime_secret_names", {}).get("value")
+            if (
+                not isinstance(names, list)
+                or any(not isinstance(name, str) for name in names)
+                or len(names) != len(set(names))
+                or not set(names).issubset(RUNTIME_SECRET_NAMES)
+                or not (self.required_secret_names() - MIGRATION_SECRET_NAMES).issubset(names)
+            ):
+                return False
         if self.auth.operation == "transfer-vault":
             return len(changes) == 1 and (
                 changes[0].get("address") == "azurerm_key_vault.runtime"

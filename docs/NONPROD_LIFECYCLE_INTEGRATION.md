@@ -71,6 +71,10 @@ force-unlock, lock=false, raw state editing or `terraform state rm` implementati
 Every Terraform operation profile also rejects ambient `TF_CLI_ARGS*`, alternate data/CLI
 configuration paths and nondefault workspaces before native access. A signed local command
 cannot bypass locking or select another workspace through its environment.
+The generated `nonprod.auto.tfvars.json` must exactly equal the authoritative protected
+configuration. Extra automatic variable files and ambient `TF_VAR_*` inputs are rejected;
+the release-owned deployment stage is the explicit exception, still checked against the
+saved plan's operation profile. Both HCL and JSON Terraform configuration enter the source hash.
 
 Actual trusted-main/environment protection is checked. Local execution requires an explicit
 signed local-execution binding. Repository CI and required review remain independent gates;
@@ -173,6 +177,12 @@ pinned A key. Missing signer configuration blocks before grants. `bootstrap_data
 --verify-only` refreshes evidence without repeating grants. Evidence contains no Azure token
 or SQL data and is bound to current server/UAMI/configuration/source and configured expiry.
 D compares it against fresh ARM identities. Missing evidence cannot become PASS.
+
+Migration plans target the native migration Job and dependencies, preserving established
+runtime workloads until schema success. The migration apply profile rejects changes to
+API/worker/scheduled workloads. Saved plans bind migration/runtime image variables to the
+verified release images (preserving established images during migration), and runtime plans
+must include the required secret-name bindings; verifying unused material is insufficient.
 
 The automated release no longer consumes a repository-stored SQL report. Immediately
 before each database-gated controller evaluation, after that D job's environment approval,

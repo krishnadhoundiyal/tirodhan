@@ -11,8 +11,25 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tirodhan.deployment.deployment_admission import contract_digest
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.prerequisites import CHECK_IDS, assert_manifest_complete
+
+
+def test_all_terraform_configuration_formats_are_bound_to_release_source(tmp_path: Path) -> None:
+    directory = tmp_path / "infra/terraform/nonprod"
+    directory.mkdir(parents=True)
+    (directory / "main.tf").write_text("terraform {}")
+    baseline = contract_digest(tmp_path)
+    variables = directory / "nonprod.auto.tfvars.json"
+    variables.write_text('{"suffix":"reviewed-separately"}')
+    assert contract_digest(tmp_path) == baseline
+    override = directory / "local_override.tf.json"
+    override.write_text('{"provider":{"azurerm":{"subscription_id":"other"}}}')
+    changed = contract_digest(tmp_path)
+    assert changed != baseline
+    override.write_text('{"provider":{"azurerm":{"subscription_id":"another"}}}')
+    assert contract_digest(tmp_path) != changed
 
 
 def test_all_mandatory_capabilities_have_real_registered_evaluators() -> None:

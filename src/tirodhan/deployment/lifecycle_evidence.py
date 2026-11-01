@@ -213,6 +213,26 @@ class Observations:
         value = json.loads((data / "terraform.tfstate").read_text(encoding="utf-8-sig"))
         return dict(value.get("backend", {}))
 
+    def terraform_inputs(self) -> bool:
+        """Only the authoritative generated input file and release-owned stage are ambient."""
+        expected = (ROOT / "infra/terraform/nonprod").resolve()
+        if Path.cwd().resolve() != expected:
+            raise ObservationError("TERRAFORM_PROJECT_CONTEXT_MISMATCH")
+        approved = expected / "nonprod.auto.tfvars.json"
+        files = set(expected.glob("*.auto.tfvars")) | set(expected.glob("*.auto.tfvars.json"))
+        files |= {
+            p
+            for p in (expected / "terraform.tfvars", expected / "terraform.tfvars.json")
+            if p.exists()
+        }
+        if files != {approved} or json.loads(approved.read_text(encoding="utf-8-sig")) != self.tf:
+            raise ObservationError("TERRAFORM_INPUTS_NOT_AUTHORITATIVE")
+        if any(
+            key.startswith("TF_VAR_") and key != "TF_VAR_deployment_stage" for key in os.environ
+        ):
+            raise ObservationError("TERRAFORM_AMBIENT_VARIABLE_OVERRIDE")
+        return True
+
     def inventory(self) -> set[str]:
         rows = self.runner.json(
             "az",

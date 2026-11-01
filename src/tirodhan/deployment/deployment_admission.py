@@ -37,6 +37,7 @@ def contract_digest(root: Path = ROOT) -> str:
             *root.glob(".github/workflows/*.yml"),
             *root.glob(".github/actions/nonprod-*/*.yml"),
             *root.glob("infra/terraform/nonprod/*.tf"),
+            *root.glob("infra/terraform/nonprod/*.tf.json"),
             *root.glob("infra/terraform/nonprod/*.hcl"),
         }
     )

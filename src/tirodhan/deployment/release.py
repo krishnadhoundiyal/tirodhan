@@ -89,9 +89,12 @@ def plan(mode: str, path: str) -> None:
     }
     # null default means no established application image at initial stage 0/1.
     revalidate_database(grant)
-    subprocess.run(
-        ["terraform", "plan", "-input=false", f"-out={path}"], env=environment, check=True
-    )
+    arguments = ["terraform", "plan", "-input=false", f"-out={path}"]
+    if mode == "migration":
+        # An established stage-4 stack must not reconcile running applications with
+        # new inputs (or the empty default secret set) before migrations succeed.
+        arguments.append("-target=azurerm_container_app_job.migration[0]")
+    subprocess.run(arguments, env=environment, check=True)
     data = json.loads(
         subprocess.run(
             ["terraform", "show", "-json", path], check=True, capture_output=True, text=True

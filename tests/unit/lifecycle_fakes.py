@@ -163,6 +163,9 @@ class MemoryObservations(Observations):
             },
         }
 
+    def terraform_inputs(self) -> bool:
+        return True
+
     def identity(self) -> dict[str, Any]:
         return {"oid": OID, "appid": CLIENT, "tid": TENANT}
 

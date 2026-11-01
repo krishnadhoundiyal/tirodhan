@@ -281,3 +281,54 @@ def test_cached_workspace_cannot_override_the_bound_backend(
     else:
         with pytest.raises(AdmissionDenied, match="TERRAFORM_WORKSPACE_CONTEXT_MISMATCH"):
             io.terraform_context()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        None,
+        "stage",
+        "missing",
+        "changed",
+        "terraform.tfvars",
+        "terraform.tfvars.json",
+        "extra.auto.tfvars",
+        "extra.auto.tfvars.json",
+        "ambient",
+    ],
+)
+def test_real_input_reader_rejects_unsigned_parameter_overlays(monkeypatch, tmp_path, change):
+    from tirodhan.deployment import lifecycle_evidence
+
+    project = tmp_path / "infra/terraform/nonprod"
+    project.mkdir(parents=True)
+    approved = project / "nonprod.auto.tfvars.json"
+    approved.write_text(json.dumps(CONFIG["terraform"]))
+    monkeypatch.setattr(lifecycle_evidence, "ROOT", tmp_path)
+    monkeypatch.chdir(project)
+    for key in tuple(os.environ):
+        if key.startswith("TF_VAR_"):
+            monkeypatch.delenv(key)
+    if change == "missing":
+        approved.unlink()
+    elif change == "changed":
+        approved.write_text(
+            json.dumps(CONFIG["terraform"] | {"runtime_env": {"unreviewed": "true"}})
+        )
+    elif change in {
+        "terraform.tfvars",
+        "terraform.tfvars.json",
+        "extra.auto.tfvars",
+        "extra.auto.tfvars.json",
+    }:
+        (project / change).write_text("{}")
+    elif change == "ambient":
+        monkeypatch.setenv("TF_VAR_runtime_env", '{"unreviewed":"true"}')
+    elif change == "stage":
+        monkeypatch.setenv("TF_VAR_deployment_stage", "0")
+    io = lifecycle_evidence.Observations(CONFIG)
+    if change in (None, "stage"):
+        assert io.terraform_inputs()
+    else:
+        with pytest.raises(AdmissionDenied):
+            io.terraform_inputs()

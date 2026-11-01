@@ -51,6 +51,8 @@ def initialization_context(io: Observations) -> bool:
         return False  # No local state may be implicitly migrated into the Azure backend.
     if not terraform_environment_safe():
         return False
+    if io.terraform_inputs() is not True:
+        return False
     return bool(
         io.runner.json("terraform", "version", "-json").get("terraform_version") == "1.13.5"
     )
