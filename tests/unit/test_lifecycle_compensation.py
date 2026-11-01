@@ -288,7 +288,9 @@ def test_apply_refuses_expired_or_replaced_release_before_native_effect(
     checks = Checks(authorization, io.config, {}, io)
     grant = Grant(authorization, operation, io.current.fingerprint, (), {})
     monkeypatch.setattr(lifecycle, "admitted_with_grant", lambda *a, **k: (checks, io, grant))
-    monkeypatch.setattr(lifecycle, "record_baseline", lambda *_: {"classification": "CLEAN_INITIALIZED"})
+    monkeypatch.setattr(
+        lifecycle, "record_baseline", lambda *_: {"classification": "CLEAN_INITIALIZED"}
+    )
     monkeypatch.setattr(lifecycle, "automatic_compensation_context", lambda: True)
     monkeypatch.setattr(checks, "check_foundation", lambda: True)
     monkeypatch.setattr(checks, "check_migration_job", lambda: True)
