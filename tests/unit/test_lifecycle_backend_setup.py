@@ -229,3 +229,13 @@ def test_source_dominates_all_native_backend_setup_with_admission() -> None:
                     assert (step.get("with", {}).get("mode") == "destroy") == (
                         path.name == "nonprod-destroy.yml"
                     )
+
+
+@pytest.mark.parametrize("lineage,serial", [("", 0), (" ", 0), ("valid", -1), ("valid", True)])
+def test_empty_resources_do_not_validate_missing_backend_identity(
+    lineage: str, serial: int
+) -> None:
+    from tirodhan.deployment.lifecycle_evidence import state_resources
+
+    with pytest.raises(AdmissionDenied, match="INVALID_STATE_IDENTITY"):
+        state_resources({"version": 4, "resources": [], "lineage": lineage, "serial": serial})

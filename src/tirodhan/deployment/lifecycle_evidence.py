@@ -55,7 +55,12 @@ def state_resources(state: dict[str, Any]) -> dict[str, str]:
     """Inspect raw backend state, including modules, rather than Terraform outputs."""
     if state.get("version") != 4 or not isinstance(state.get("resources"), list):
         raise ObservationError("UNSUPPORTED_STATE_FORMAT")
-    if not isinstance(state.get("lineage"), str) or type(state.get("serial")) is not int:
+    if (
+        not isinstance(state.get("lineage"), str)
+        or not state["lineage"].strip()
+        or type(state.get("serial")) is not int
+        or state["serial"] < 0
+    ):
         raise ObservationError("INVALID_STATE_IDENTITY")
     result: dict[str, str] = {}
     for row in state["resources"]:
