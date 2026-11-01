@@ -13,6 +13,11 @@ from tirodhan.deployment.azure_controls import assert_no_list_keys
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.seed_secrets import SECRET_NAMES
 
+
+class ReleaseBlocked(RuntimeError):
+    """An operator-actionable message containing only controlled deployment identifiers."""
+
+
 MIGRATION_SECRET_NAMES = frozenset({"ghcr-pull-pat", "fluent-bit-sas"})
 RUNTIME_SECRET_NAMES = SECRET_NAMES - MIGRATION_SECRET_NAMES
 
@@ -26,7 +31,7 @@ def output_values() -> dict[str, Any]:
 
 def migration_variables(state: dict[str, Any], image: str, sidecar: str) -> dict[str, Any]:
     if "deployment_stage" not in state:
-        raise RuntimeError("Apply foundation and bootstrap PostgreSQL first")
+        raise ReleaseBlocked("Apply foundation and bootstrap PostgreSQL first")
     return {
         "deployment_stage": max(1, int(state["deployment_stage"])),
         "migration_image": image,
@@ -57,7 +62,7 @@ def require_secrets(available: frozenset[str], required: frozenset[str]) -> None
     missing = required - available
     if missing:
         names = ", ".join(sorted(missing))
-        raise RuntimeError(f"Required enabled Key Vault secrets are missing: {names}")
+        raise ReleaseBlocked(f"Required enabled Key Vault secrets are missing: {names}")
 
 
 def plan(mode: str, path: str) -> None:
@@ -92,7 +97,7 @@ def plan(mode: str, path: str) -> None:
         ).stdout
     )
     if populated_key_paths(data):
-        raise RuntimeError("Deployment plan contains populated storage credential attributes")
+        raise ReleaseBlocked("Deployment plan contains populated storage credential attributes")
 
 
 def run_migration() -> None:
@@ -102,7 +107,7 @@ def run_migration() -> None:
     state = output_values()
     group, job = state["resource_group_name"], state["migration_job_name"]
     if not job:
-        raise RuntimeError("Migration job must be applied first")
+        raise ReleaseBlocked("Migration job must be applied first")
     execution = cli_json(["az", "containerapp", "job", "start", "-g", group, "-n", job])
     name = execution["name"]
     deadline = time.monotonic() + 1200
@@ -117,9 +122,9 @@ def run_migration() -> None:
             print("Migration and bounded log-sidecar execution succeeded")
             return
         if status in {"Failed", "Stopped"}:
-            raise RuntimeError("Migration job did not succeed; runtime rollout is blocked")
+            raise ReleaseBlocked("Migration job did not succeed; runtime rollout is blocked")
         time.sleep(10)
-    raise RuntimeError("Migration completion timed out; runtime rollout is blocked")
+    raise ReleaseBlocked("Migration completion timed out; runtime rollout is blocked")
 
 
 def main() -> None:
@@ -153,5 +158,7 @@ if __name__ == "__main__":
         main()
     except AdmissionDenied as exc:
         raise SystemExit(str(exc)) from None
+    except ReleaseBlocked as exc:
+        raise SystemExit(f"RELEASE_UNVERIFIED: {exc}") from None
     except Exception:
         raise SystemExit("RELEASE_UNVERIFIED: rollout is blocked") from None

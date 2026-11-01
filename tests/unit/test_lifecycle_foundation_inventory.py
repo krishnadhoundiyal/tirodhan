@@ -5,7 +5,7 @@ from pathlib import Path
 
 import hcl2
 import pytest
-from test_nonprod_lifecycle_contract import MemoryObservations, auth, state
+from lifecycle_fakes import MemoryObservations, auth, state
 
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.foundation_inventory import required_addresses

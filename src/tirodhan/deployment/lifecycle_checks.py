@@ -897,6 +897,11 @@ class Checks:
 
     def check_clean_baseline(self) -> bool:
         baseline = self.parameters.get("baseline")
+        if (
+            self.binding().get("automatic_owned_initial_apply_compensation") is True
+            and not automatic_compensation_context()
+        ):
+            return False
         stage = (
             (self.backend().document or {})
             .get("outputs", {})
@@ -929,3 +934,11 @@ class Checks:
             )
             == "STATE_ABSENT"
         )
+
+
+def automatic_compensation_context() -> bool:
+    # The trusted foundation workflow holds nonprod-release across apply AND cleanup.
+    # A native state lease alone cannot serialize the gap between those operations.
+    return os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_WORKFLOW_REF") == (
+        "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-foundation.yml@refs/heads/main"
+    )

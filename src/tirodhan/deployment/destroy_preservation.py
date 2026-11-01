@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any
 
@@ -33,16 +34,43 @@ def disposable_inventory(lines: list[str], io: Observations) -> list[str]:
     return remaining
 
 
+def retention_required(io: Observations) -> bool:
+    if io.arm(io.vault_id, "2023-07-01") is not None:
+        verify_retained_vault(io)
+        return True
+    state = io.backend()
+    if state.kind != "INITIALIZED" or state.resources or io.inventory():
+        raise AdmissionDenied("MISSING_PERSISTENT_VAULT_OUTSIDE_VERIFIED_LEGACY_CLEAN_BACKEND")
+    return False
+
+
 def main() -> None:
+    record = "--record-required" in sys.argv[1:]
+    enforce = "--verify-expectation" in sys.argv[1:]
     lines = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
-    if not lines:
+    if not lines and not record and not enforce:
         return
     try:
         io = Observations(configuration())
+        if record:
+            print("true" if retention_required(io) else "false")
+            return
+        if enforce:
+            expectation = os.environ.get("REQUIRE_PERSISTENT_VAULT")
+            if expectation == "true":
+                verify_retained_vault(io)
+            elif expectation == "false":
+                retention_required(
+                    io
+                )  # Recheck actual legacy-clean facts or an active exact vault.
+            else:
+                raise AdmissionDenied("MISSING_PLAN_JOB_RETENTION_EXPECTATION")
         print("\n".join(disposable_inventory(lines, io)))
     except (AdmissionDenied, OSError, ValueError, KeyError):
+        if record:
+            raise SystemExit("BOOTSTRAP_PRESERVATION_NOT_VERIFIED") from None
         # Unknown observations remain visible and block the calling teardown step.
-        print("\n".join(lines))
+        print("\n".join(lines) or "RETAINED_BOOTSTRAP_VAULT_NOT_VERIFIED")
 
 
 if __name__ == "__main__":

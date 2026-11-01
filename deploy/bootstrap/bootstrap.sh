@@ -66,7 +66,7 @@ for attempt in {1..12}; do
 done
 [[ "$created" == true ]] || { echo "State data-plane RBAC not ready"; exit 1; }
 temp_dir="$(mktemp -d)"
-trap 'rm -f "$temp_dir/role.json" "$temp_dir/discovery-role.json" "$temp_dir/recovery-role.json" "$temp_dir/federation.json"; rmdir "$temp_dir"' EXIT
+trap 'rm -f "$temp_dir/role.json" "$temp_dir/discovery-role.json" "$temp_dir/recovery-role.json" "$temp_dir/federation.json" "$temp_dir/vault-show.stderr"; rmdir "$temp_dir"' EXIT
 jq --arg scope "$rg_scope" --arg name "Tirodhan NONPROD Deployment $NONPROD_SUFFIX" \
   '.AssignableScopes=[$scope] | .Name=$name' deploy/bootstrap/deployment-role.json > "$temp_dir/role.json"
 if az role definition list --name "Tirodhan NONPROD Deployment $NONPROD_SUFFIX" --query '[0].id' -o tsv | grep -q .; then
@@ -95,8 +95,11 @@ grant_role "Key Vault Secrets Officer" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" Servi
 # Bootstrap owns the permanent purge-protected vault and its stable name.
 # This is an authorized operator operation, never a restricted foundation apply.
 # Soft-deletion requires the separately approved R operation; O never recovers implicitly.
-if az keyvault show --name "$vault" --resource-group "$rg" --output none 2>/dev/null; then
+if az keyvault show --name "$vault" --resource-group "$rg" --output none 2>"$temp_dir/vault-show.stderr"; then
   echo "Persistent Key Vault already exists."
+elif [[ "$(python3 -c 'import sys; from pathlib import Path; from tirodhan.deployment.lifecycle_evidence import azure_error_code; print(azure_error_code(Path(sys.argv[1]).read_text()))' "$temp_dir/vault-show.stderr")" != @(ResourceNotFound|VaultNotFound) ]]; then
+  echo "Persistent vault observation failed; refusing create or recovery" >&2
+  exit 1
 else
   deleted="$(az keyvault list-deleted --subscription "$AZURE_SUBSCRIPTION_ID" --resource-type vault --output json)"
   exact_vault_id="$scope/resourceGroups/$rg/providers/Microsoft.KeyVault/vaults/$vault"

@@ -193,8 +193,14 @@ DB idempotency and planning `session_id=cell_id` remain authoritative. Planning
 alone enables queue sessions; all consumers retain PeekLock. Worker apps have no
 ingress, min 0, MI-authenticated Azure Container Apps Service Bus scale rules.
 
-The OIDC rotation workflow runs every third day (month boundaries may shorten the
-gap). Each run creates a new HTTPS-only **user-delegation**, container-scoped
+The OIDC rotation workflow is scheduled every third day (month boundaries may shorten the
+gap), subject to an explicitly signed recurring rotation session. Configure the separate
+`NONPROD_LOG_SAS_AUTHORIZATION` and session ID described in the lifecycle contract; renew
+on every main commit and before authorization expiry. A missing/expired authorization is
+a failed workflow, not a successful rotation. Check workflow failures and the current
+`fluent-bit-sas` secret's expiry metadata at least daily while NONPROD is active, and
+use an explicitly authorized manual dispatch before expiry if recurrence is blocked.
+Each successful run creates a new HTTPS-only **user-delegation**, container-scoped
 `app-logs` SAS with write permission only, six-day expiry and five-minute clock
 skew allowance (<7 days). Old versions remain usable during overlap. The pinned
 plugin skips container checks/creation with auto-create disabled, so no read/list

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_nonprod_lifecycle_contract import (
+from lifecycle_fakes import (
     SCOPE,
     VAULT,
     MemoryObservations,
@@ -52,7 +52,6 @@ def case(tmp_path: Path) -> tuple[MemoryObservations, Any, dict[str, Any], Path]
         original_plan_sha256="a" * 64,
         clean_start_fingerprint=state().fingerprint,
         compensation_authorized=True,
-        automatic_owned_initial_apply_compensation=True,
         terminal_reconciliation_authorized=True,
     )
     baseline = {
@@ -68,6 +67,12 @@ def case(tmp_path: Path) -> tuple[MemoryObservations, Any, dict[str, Any], Path]
     }
     plan = tmp_path / "compensation.tfplan"
     write_plan(plan, io.current)
+    import hashlib
+
+    authorization.claims["bindings"]["compensate-foundation"].update(
+        plan_sha256=hashlib.sha256(plan.read_bytes()).hexdigest(),
+        state_fingerprint=io.current.fingerprint,
+    )
     return io, authorization, baseline, plan
 
 
@@ -188,3 +193,85 @@ def test_actual_compensation_postconditions(
             "compensation-convergence.tfplan" in " ".join(e) and e[:2] == ("terraform", "apply")
             for e in effects
         )
+
+
+@pytest.mark.parametrize(
+    "classification,serialized",
+    [
+        ("CLEAN_INITIALIZED", True),
+        ("CLEAN_INITIALIZED", False),
+        ("PARTIAL_OWNED", True),
+    ],
+)
+def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
+    monkeypatch, tmp_path, classification, serialized
+) -> None:
+    from unittest.mock import Mock
+
+    io = MemoryObservations()
+    authorization = auth("foundation-apply")
+    authorization.claims["operations"] = ["prepare-compensation", "compensate-foundation"]
+    checks = Checks(authorization, io.config, {}, io)
+    monkeypatch.setattr(lifecycle, "admitted", lambda *a, **k: (checks, io))
+    monkeypatch.setattr(lifecycle, "record_baseline", lambda *a: {"classification": classification})
+    monkeypatch.setattr(lifecycle, "automatic_compensation_context", lambda: serialized)
+    io.runner.run = Mock(side_effect=AdmissionDenied("APPLY_FAILED"))
+    prepare, compensate = Mock(), Mock()
+    monkeypatch.setattr(lifecycle, "prepare_compensation", prepare)
+    monkeypatch.setattr(lifecycle, "compensate", compensate)
+    with pytest.raises(AdmissionDenied):
+        lifecycle.apply("foundation-apply", tmp_path / "plan")
+    eligible = classification == "CLEAN_INITIALIZED" and serialized
+    assert prepare.called is eligible and compensate.called is eligible
+    assert io.runner.run.call_count == 1
+
+
+def test_crash_replay_does_not_overwrite_existing_baseline_or_repeat_apply(
+    monkeypatch, tmp_path
+) -> None:
+    from unittest.mock import Mock
+
+    io = MemoryObservations()
+    authorization = auth("foundation-apply", state_fingerprint=io.current.fingerprint)
+    checks = Checks(authorization, io.config, {}, io)
+    monkeypatch.setattr(lifecycle, "admitted", lambda *a, **k: (checks, io))
+    plan = tmp_path / "plan"
+    plan.write_bytes(b"approved-plan")
+    calls = []
+
+    def existing(*args, **kwargs):
+        calls.append(args)
+        raise AdmissionDenied("BlobAlreadyExists")
+
+    io.runner.run = existing
+    compensate = Mock()
+    monkeypatch.setattr(lifecycle, "compensate", compensate)
+    with pytest.raises(AdmissionDenied, match="BlobAlreadyExists"):
+        lifecycle.apply("foundation-apply", plan)
+    assert len(calls) == 1 and calls[0][:4] == ("az", "storage", "blob", "upload")
+    assert "--if-none-match" in calls[0]
+    compensate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "workflow,allowed",
+    [
+        ("nonprod-foundation.yml", True),
+        ("nonprod-reconcile.yml", False),
+        ("local", False),
+    ],
+)
+def test_automatic_cleanup_requires_the_serialized_foundation_workflow(
+    monkeypatch, tmp_path, workflow, allowed
+) -> None:
+    io, authorization, baseline, plan = case(tmp_path)
+    authorization.claims["bindings"]["compensate-foundation"][
+        "automatic_owned_initial_apply_compensation"
+    ] = True
+    monkeypatch.setenv("GITHUB_ACTIONS", "true" if workflow != "local" else "false")
+    monkeypatch.setenv(
+        "GITHUB_WORKFLOW_REF",
+        f"krishnadhoundiyal/tirodhan/.github/workflows/{workflow}@refs/heads/main",
+    )
+    checks = Checks(authorization, io.config, {"baseline": baseline, "plan": plan}, io)
+    assert checks.check_clean_baseline() is allowed

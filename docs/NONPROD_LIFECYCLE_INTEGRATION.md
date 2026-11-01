@@ -57,7 +57,14 @@ locked Terraform configuration; generated tfvars/plans/backups are excluded.
 Use masked GitHub secrets `NONPROD_RELEASE_AUTHORIZATION` and protected
 `NONPROD_APPLY_AUTHORIZATION`; authorization tokens are not public dispatch inputs.
 The dispatch `authorization_id` identifies the signed session. Main pushes and schedules
-have no implicit authorization. Applies can require a new binding after plan review.
+have no implicit authorization. Scheduled SAS rotation requires its own
+`NONPROD_LOG_SAS_AUTHORIZATION` secret and `NONPROD_LOG_SAS_AUTHORIZATION_ID` session,
+with an exact signed cron binding and `scheduled_execution_authorized: true`. The usual
+expiry/commit/configuration/contract/identity checks still apply on every occurrence;
+this is an explicitly authorized recurring session, never a wildcard release. Renew the
+authorization after each main commit and before expiry. Missing/stale authority fails
+the workflow visibly and must be acted on before the six-day log credential expires.
+Applies can require a new binding after plan review.
 Apply bindings include exact plan SHA-256 and remote state fingerprint, including lineage,
 serial and ETag. Native Terraform locks/stale-plan rejection remain enabled. There is no
 force-unlock, lock=false, raw state editing or `terraform state rm` implementation.
@@ -145,6 +152,12 @@ clean-start fingerprint, `compensation_authorized` and
 addresses and a destroy-only plan qualify. Otherwise cleanup requires a separately authorized
 reviewed plan/hash/current-state binding. Initial apply approval alone never implies cleanup.
 Original deployment failure remains failure even if compensation succeeds.
+Automatic cleanup is limited to the trusted foundation workflow, whose `nonprod-release`
+concurrency group spans both apply and cleanup. A native Terraform lease alone cannot
+serialize the interval between those operations. Local or independent attempts retain
+their partial state for separately reviewed cleanup. A pre-existing baseline blob never
+gets overwritten or implicitly authorizes another apply; after a crash, inspect actual
+state and obtain fresh resume/cleanup authorization.
 
 ACA recovery retains current main's exact original-plan-derived target, bounded retries and
 direct resource-specific absence confirmation. Only the recognized single polling failure
@@ -152,6 +165,10 @@ can enter terminal reconciliation, which requires explicit authority and a zero-
 Final verification requires zero managed/disposable resources, the exact preserved backend,
 private container and strict bootstrap RBAC. A retained vault is exempted only by exact ID
 and freshly verified tenant/location/security. Every foreign vault remains blocking.
+The protected plan job records whether the exact vault existed before destruction. A
+required vault must be verified even when the list inventory is empty. The legacy run 8
+case is separately admitted only from actual initialized, zero-managed, zero-application
+state with verified vault absence; a missing job expectation never defaults to that case.
 
 [Destroy run 8](https://github.com/krishnadhoundiyal/tirodhan/actions/runs/41215047550) is the
 regression baseline: zero deletes, empty state and preserved backend/RBAC. It did not exercise

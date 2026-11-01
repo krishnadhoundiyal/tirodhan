@@ -17,7 +17,7 @@ from tirodhan.deployment.deployment_admission import (
     require_release_authorization,
 )
 from tirodhan.deployment.foundation_reconcile import admitted
-from tirodhan.deployment.lifecycle_checks import Checks
+from tirodhan.deployment.lifecycle_checks import Checks, automatic_compensation_context
 from tirodhan.deployment.lifecycle_evidence import Observations, classify_state
 from tirodhan.deployment.prerequisites import Controller
 
@@ -159,6 +159,7 @@ def apply(operation: str, plan: Path) -> None:
         if (
             baseline is not None
             and baseline["classification"] == "CLEAN_INITIALIZED"
+            and automatic_compensation_context()
             and {"prepare-compensation", "compensate-foundation"}.issubset(set(allowed))
         ):
             rollback_plan = plan.with_name("foundation-compensation.tfplan")

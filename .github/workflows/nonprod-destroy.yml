@@ -37,6 +37,8 @@ env:
 
 jobs:
   destroy-plan:
+    outputs:
+      vault_required: ${{ steps.bootstrap-preservation.outputs.vault_required }}
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
@@ -112,6 +114,14 @@ jobs:
 
           echo "Destroy configuration boundary checks passed."
 
+      - name: Record authoritative bootstrap preservation expectation
+        id: bootstrap-preservation
+        run: |
+          set -euo pipefail
+          required="$(python -m tirodhan.deployment.destroy_preservation --record-required </dev/null)"
+          [[ "$required" == true || "$required" == false ]] || exit 1
+          echo "vault_required=$required" >> "$GITHUB_OUTPUT"
+
       - name: Create guarded destroy plan
         working-directory: infra/terraform/nonprod
         run: |
@@ -140,6 +150,8 @@ jobs:
           retention-days: 1
 
   destroy-apply:
+    env:
+      REQUIRE_PERSISTENT_VAULT: ${{ needs.destroy-plan.outputs.vault_required }}
     needs: destroy-plan
     timeout-minutes: 90
     if: >-
@@ -291,7 +303,7 @@ jobs:
               --resource-group "$NONPROD_RESOURCE_GROUP" \
               --query "[].id" \
               --output tsv \
-              | python -m tirodhan.deployment.destroy_preservation)"
+              | python -m tirodhan.deployment.destroy_preservation --verify-expectation)"
             if [[ -z "$remaining_azure_resources" ]]; then
               empty_observations=$((empty_observations + 1))
               if (( empty_observations >= 2 )); then
@@ -374,7 +386,7 @@ jobs:
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --query "[].id" \
             --output tsv \
-            | python -m tirodhan.deployment.destroy_preservation)"
+            | python -m tirodhan.deployment.destroy_preservation --verify-expectation)"
 
           if [[ -n "$remaining_azure_resources" ]]; then
             echo "Active Azure resources remain in the NONPROD application RG:" >&2

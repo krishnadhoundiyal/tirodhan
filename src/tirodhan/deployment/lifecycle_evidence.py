@@ -19,6 +19,18 @@ class ObservationError(AdmissionDenied):
     pass
 
 
+def azure_error_code(stderr: str) -> str:
+    for pattern in (
+        r"\(([A-Za-z][A-Za-z0-9]{1,63})\)",
+        r'"code"\s*:\s*"([A-Za-z][A-Za-z0-9]{1,63})"',
+        r"ErrorCode:\s*([A-Za-z][A-Za-z0-9]{1,63})\b",
+    ):
+        match = re.search(pattern, stderr)
+        if match:
+            return match.group(1)
+    return "COMMAND_FAILED"
+
+
 class Runner:
     def run(self, *args: str, timeout: int = 180) -> str:
         try:
@@ -29,9 +41,7 @@ class Runner:
             raise ObservationError("OBSERVATION_UNAVAILABLE") from exc
         if result.returncode:
             # Do not emit command arguments, stderr, Terraform state or provider bodies.
-            matches = re.findall(r"\(([A-Za-z][A-Za-z0-9]{1,63})\)", result.stderr)
-            code = matches[0] if matches else "COMMAND_FAILED"
-            raise ObservationError(code)
+            raise ObservationError(azure_error_code(result.stderr))
         return result.stdout.strip()
 
     def json(self, *args: str) -> Any:

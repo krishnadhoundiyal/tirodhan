@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from test_nonprod_lifecycle_contract import MemoryObservations, auth
+from lifecycle_fakes import MemoryObservations, auth
 
 from tirodhan.deployment import bootstrap_database, database_evidence, lifecycle_checks
 from tirodhan.deployment.lifecycle_checks import Checks

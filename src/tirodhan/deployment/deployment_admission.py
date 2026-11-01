@@ -153,6 +153,19 @@ def validate_authorization(
     )
 
 
+def validate_scheduled_context(authorization: Authorization) -> None:
+    if os.environ.get("GITHUB_EVENT_NAME") != "schedule":
+        return
+    binding = authorization.claims.get("bindings", {}).get(authorization.operation, {})
+    if (
+        authorization.operation != "rotate-log-sas"
+        or binding.get("scheduled_execution_authorized") is not True
+        or not os.environ.get("TIRODHAN_SCHEDULE")
+        or binding.get("schedule") != os.environ["TIRODHAN_SCHEDULE"]
+    ):
+        raise AdmissionDenied("SCHEDULED_OPERATION_NOT_AUTHORIZED")
+
+
 def require_release_authorization(operation: str | None = None) -> Authorization:
     """Never accept caller-provided PASS flags or unsigned evidence."""
     try:
@@ -176,7 +189,7 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             text=True,
             timeout=10,
         ).stdout.strip()
-        return validate_authorization(
+        authorization = validate_authorization(
             os.environ.get("TIRODHAN_NONPROD_RELEASE_AUTHORIZATION", ""),
             operation=operation or os.environ.get("TIRODHAN_NONPROD_OPERATION", ""),
             policy=policy,
@@ -186,6 +199,8 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             run_id=os.environ.get("TIRODHAN_OPERATOR_RUN_ID")
             or os.environ.get("GITHUB_RUN_ID", ""),
         )
+        validate_scheduled_context(authorization)
+        return authorization
     except AdmissionDenied:
         raise
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
