@@ -174,6 +174,19 @@ def test_direct_terraform_routes_cannot_change_workspace_or_disable_locks(
     assert observed.runner.commands == []
 
 
+@pytest.mark.parametrize("consumer", ["setup", "existing-backend"])
+def test_unverified_inputs_block_every_context_consumer(observed, consumer):
+    observed.inputs_verified = False
+    checks = Checks(auth("foundation-plan"), observed.config, {}, observed)
+    accepted = (
+        backend.initialization_context(observed)
+        if consumer == "setup"
+        else checks.check_terraform_context()
+    )
+    assert accepted is False
+    assert observed.runner.commands == []
+
+
 @pytest.mark.parametrize("failure", ["exit", "timeout"])
 def test_native_failure_is_sanitized_and_never_claimed_success(
     monkeypatch: pytest.MonkeyPatch, failure: str

@@ -150,6 +150,7 @@ class MemoryObservations(Observations):
         self.current = state()
         self.active = {VAULT}
         self.vault_present = True
+        self.inputs_verified = True
 
     def terraform_context(self) -> dict[str, Any]:
         return {
@@ -164,7 +165,7 @@ class MemoryObservations(Observations):
         }
 
     def terraform_inputs(self) -> bool:
-        return True
+        return self.inputs_verified
 
     def identity(self) -> dict[str, Any]:
         return {"oid": OID, "appid": CLIENT, "tid": TENANT}
