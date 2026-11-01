@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from lifecycle_fakes import RESOURCE, MemoryObservations, auth, state
+from lifecycle_fakes import CONFIG, RESOURCE, MemoryObservations, auth, state
 
 from tirodhan.deployment import backend_setup as backend
 from tirodhan.deployment import foundation_reconcile as reconcile
@@ -258,3 +258,26 @@ def test_empty_resources_do_not_validate_missing_backend_identity(
 
     with pytest.raises(AdmissionDenied, match="INVALID_STATE_IDENTITY"):
         state_resources({"version": 4, "resources": [], "lineage": lineage, "serial": serial})
+
+
+@pytest.mark.parametrize("cached_workspace", [None, "default", "unapproved", ""])
+def test_cached_workspace_cannot_override_the_bound_backend(
+    monkeypatch, tmp_path, cached_workspace
+):
+    from tirodhan.deployment import lifecycle_evidence
+
+    project = tmp_path / "infra/terraform/nonprod"
+    data = project / ".terraform"
+    data.mkdir(parents=True)
+    (data / "terraform.tfstate").write_text(json.dumps({"backend": {"type": "azurerm"}}))
+    if cached_workspace is not None:
+        (data / "environment").write_text(cached_workspace)
+    monkeypatch.setattr(lifecycle_evidence, "ROOT", tmp_path)
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("TF_DATA_DIR", raising=False)
+    io = lifecycle_evidence.Observations(CONFIG)
+    if cached_workspace in (None, "default"):
+        assert io.terraform_context() == {"type": "azurerm"}
+    else:
+        with pytest.raises(AdmissionDenied, match="TERRAFORM_WORKSPACE_CONTEXT_MISMATCH"):
+            io.terraform_context()

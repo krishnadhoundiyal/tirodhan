@@ -207,6 +207,9 @@ class Observations:
         if Path.cwd().resolve() != expected:
             raise ObservationError("TERRAFORM_PROJECT_CONTEXT_MISMATCH")
         data = Path(os.environ.get("TF_DATA_DIR", str(expected / ".terraform")))
+        workspace = data / "environment"
+        if workspace.exists() and workspace.read_text(encoding="utf-8").strip() != "default":
+            raise ObservationError("TERRAFORM_WORKSPACE_CONTEXT_MISMATCH")
         value = json.loads((data / "terraform.tfstate").read_text(encoding="utf-8-sig"))
         return dict(value.get("backend", {}))
 
