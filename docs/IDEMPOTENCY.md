@@ -1,5 +1,14 @@
 # Idempotency
 
+NONPROD lifecycle operations use signed operation/configuration/source/principal bindings,
+authoritative state lineage/serial/ETag, native locking and saved-plan stale-state rejection.
+Ownership transfer verifies an immutable snapshot and applies only a non-destructive forget;
+replay verifies actual already-transferred state. Clean compensation uses a conditional
+baseline and original approved create addresses; partial/foreign state is never auto-destroyed.
+Original deployment failure remains failure after cleanup. No new business DB/inbox/outbox
+protocol is introduced. See [operation boundaries](NONPROD_LIFECYCLE_INTEGRATION.md).
+
+
 NONPROD ACA deletion recovery uses the exact DELETE ID from the approved Terraform plan,
 read-before-retry ARM resource idempotence, bounded attempts and existing serialized workflow
 execution. Unknown provider responses do not imply absence; two direct ResourceNotFound reads

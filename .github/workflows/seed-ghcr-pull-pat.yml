@@ -1,22 +1,50 @@
 name: Seed NONPROD GHCR pull PAT
 on:
   workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: Explicit signed release session ID
+        required: true
+        type: string
 permissions:
   contents: read
-  id-token: write
 concurrency:
   group: nonprod-ghcr-pat-seed
   cancel-in-progress: false
+env:
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
+  STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
+  NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
+  AZURE_NONPROD_RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+  TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
+  TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+  TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE: ${{ secrets.NONPROD_DATABASE_PREREQUISITE_EVIDENCE }}
+  GH_TOKEN: ${{ github.token }}
+
 jobs:
   release-admission:
+    env:
+      TIRODHAN_NONPROD_OPERATION: seed-secrets
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Enforce integration deployment hold before Azure authentication
-        run: python src/tirodhan/deployment/deployment_admission.py
+        run: |
+          python -m pip install -e .
+          python -m tirodhan.deployment.deployment_admission
   seed:
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
     needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment: nonprod

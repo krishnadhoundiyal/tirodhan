@@ -31,7 +31,7 @@ resource "azurerm_role_assignment" "delegation" {
   principal_id         = azurerm_user_assigned_identity.runtime.principal_id
 }
 resource "azurerm_role_assignment" "secrets" {
-  scope                = azurerm_key_vault.runtime.id
+  scope                = data.azurerm_key_vault.runtime.id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_user_assigned_identity.runtime.principal_id
 }

@@ -1,5 +1,11 @@
 # Azure NONPROD deployment substrate
 
+Current lifecycle integration is **held**, without authorization/evidence keys enrolled.
+Before provisioning, use the [release contract and identity-specific prerequisites](NONPROD_LIFECYCLE_INTEGRATION.md).
+The vault is bootstrap-owned rather than created/destroyed by the application stack.
+No integration merge authorizes Azure provisioning, recovery, RBAC or state mutation.
+
+
 NONPROD destroy now completes and verifies the exact approved ACA environment DELETE through
 an independent ARM recovery client before terminal Terraform reconciliation. A polling exception
 or empty resource-group listing alone is not successful deletion. See
@@ -85,7 +91,7 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
 ## Staged first deployment
 
 1. Apply a reviewed foundation plan at `deployment_stage=0`. This creates the
-   database, extension allowlist, firewall, queues, storage, vault, UAMI, RBAC and
+   database, extension allowlist, firewall, queues, storage, UAMI, RBAC and
    Consumption-only ACA environment, **no live workloads**.
 2. As the configured Entra PostgreSQL administrator, bootstrap PostGIS and the
    UAMI-backed SQL principal. Set `POSTGRES_HOST`, `POSTGRES_ADMIN_NAME`,

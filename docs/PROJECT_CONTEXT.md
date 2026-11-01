@@ -1,5 +1,11 @@
 # Project Context
 
+The NONPROD lifecycle integration retains PR #84 recovery/ownership/compensation behind
+signed release admission and one complete mandatory prerequisite contract. The policy
+denies provisioning; merge is not deployment authority. Protected teardown remains available.
+See [contract and review order](NONPROD_LIFECYCLE_INTEGRATION.md).
+
+
 NONPROD destroy now actively completes an exact plan-approved ACA environment deletion through
 ARM recovery and requires direct ResourceNotFound confirmation before Terraform reconciliation.
 No workflow was dispatched or Azure resource changed during implementation. See

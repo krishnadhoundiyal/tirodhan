@@ -1,0 +1,13 @@
+{
+  "Name": "Tirodhan NONPROD Prerequisite Discovery",
+  "IsCustom": true,
+  "Description": "Read-only provider registration and PostgreSQL capability metadata; no RG Reader or writes.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/providers/read",
+    "Microsoft.DBforPostgreSQL/locations/capabilities/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": []
+}

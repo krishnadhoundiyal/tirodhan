@@ -1,0 +1,36 @@
+name: NONPROD lifecycle safety checks
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'deploy/**'
+      - 'src/tirodhan/deployment/**'
+      - 'infra/terraform/nonprod/**'
+      - 'tests/unit/test_*lifecycle*'
+      - 'tests/unit/test_*nonprod*'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check . && ruff format --check . && mypy
+      - run: |
+          bash -n deploy/bootstrap/bootstrap.sh
+          terraform fmt -check -recursive infra/terraform
+          terraform -chdir=infra/terraform/nonprod init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/terraform/nonprod validate
+      - name: Contract, faults and native ownership plan without Azure login
+        env:
+          TIRODHAN_TEST_TERRAFORM_BINARY: terraform
+        run: |
+          pytest -q tests/unit/test_*lifecycle*.py tests/unit/test_deployment_hold.py tests/unit/test_destroy_aca_environment.py tests/unit/test_nonprod_destroy_poll_recovery.py tests/unit/test_nonprod_destroy_workflow.py tests/unit/test_nonprod_bootstrap_rbac.py

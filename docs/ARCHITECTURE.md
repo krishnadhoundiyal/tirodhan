@@ -1,5 +1,13 @@
 # Architecture
 
+The approved NONPROD lifecycle controller separates observations from authorized bootstrap,
+recovery, snapshot-backed ownership transfer and compensation. Every supported provisioning
+entry point requires signed release authority and its complete operation prerequisite profile.
+The policy remains held. Persistent Key Vault ownership moves to bootstrap through a reviewed
+non-destructive Terraform removal plan. Destruction recovery never removes state directly.
+See [identity/scope mapping and invariants](NONPROD_LIFECYCLE_INTEGRATION.md).
+
+
 CB-04 makes unknown Web Push launch ownership fail-stop: the finite POSIX worker creates a
 private process group before spawning, and independent watchdogs terminate that group if
 launch/cleanup cannot settle within the 20-second attempt plus two-second cleanup budget.

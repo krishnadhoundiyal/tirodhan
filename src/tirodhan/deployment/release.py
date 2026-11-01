@@ -61,6 +61,9 @@ def require_secrets(available: frozenset[str], required: frozenset[str]) -> None
 
 
 def plan(mode: str, path: str) -> None:
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    require_provisioning(f"{mode}-plan")
     assert_no_list_keys()  # Before the provider can refresh storage state.
     state = output_values()
     available = enabled_secret_names(state)
@@ -93,6 +96,9 @@ def plan(mode: str, path: str) -> None:
 
 
 def run_migration() -> None:
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    require_provisioning("migration-start")
     state = output_values()
     group, job = state["resource_group_name"], state["migration_job_name"]
     if not job:
@@ -128,7 +134,24 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    from tirodhan.deployment.deployment_admission import require_release_authorization
+    import sys
 
-    require_release_authorization()
-    main()
+    from tirodhan.deployment.deployment_admission import (
+        AdmissionDenied,
+        require_release_authorization,
+    )
+
+    try:
+        operation = (
+            "migration-start"
+            if "migrate" in sys.argv
+            else "runtime-plan"
+            if "runtime-plan" in sys.argv
+            else "migration-plan"
+        )
+        require_release_authorization(operation)
+        main()
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        raise SystemExit("RELEASE_UNVERIFIED: rollout is blocked") from None

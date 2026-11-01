@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "contract_version": "nonprod-lifecycle-v1",
+  "release_enabled": false,
+  "authorization_keys": {},
+  "database_evidence_keys": {},
+  "maximum_evidence_age_seconds": 300
+}

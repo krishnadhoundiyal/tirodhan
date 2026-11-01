@@ -48,7 +48,7 @@ def test_workflow_admission_precedes_every_credentialed_job(name: str) -> None:
     assert admission["permissions"] == {"contents": "read"}
     assert "environment" not in admission
     assert all("azure/login" not in str(step) for step in admission["steps"])
-    assert any("deployment_admission.py" in step.get("run", "") for step in admission["steps"])
+    assert any("deployment_admission" in step.get("run", "") for step in admission["steps"])
 
     def depends_on_admission(job: str) -> bool:
         needs = jobs[job].get("needs", [])

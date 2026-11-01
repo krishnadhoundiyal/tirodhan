@@ -12,6 +12,9 @@ from tirodhan.deployment.azure_controls import vault_put
 
 
 def main() -> None:
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    require_provisioning("rotate-log-sas")
     account = os.environ["LOG_ACCOUNT_NAME"]
     vault = os.environ["KEY_VAULT_URL"]
     now = datetime.now(timezone.utc)
@@ -39,7 +42,15 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    from tirodhan.deployment.deployment_admission import require_release_authorization
+    from tirodhan.deployment.deployment_admission import (
+        AdmissionDenied,
+        require_release_authorization,
+    )
 
-    require_release_authorization()
-    main()
+    try:
+        require_release_authorization("rotate-log-sas")
+        main()
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        raise SystemExit("PROVISIONING_UNVERIFIED: inspect operation status safely") from None

@@ -1,22 +1,53 @@
-"""Entra-admin bootstrap only. Pre-create PostGIS; UAMI owns its migration-created tables."""
+"""Explicit Entra-admin bootstrap and fresh, signed verification of actual SQL facts."""
 
 from __future__ import annotations
 
 import asyncio
 import os
 import ssl
+import time
+from typing import Any
 
 import asyncpg
+import jwt
 from azure.identity import AzureCliCredential
 
+from tirodhan.deployment.deployment_admission import Authorization
 
-async def bootstrap() -> None:
-    role = os.environ["RUNTIME_DATABASE_ROLE"]
-    oid = os.environ["RUNTIME_PRINCIPAL_ID"]
+
+def authorized_target() -> tuple[dict[str, str], Authorization]:
+    from tirodhan.deployment.deployment_admission import configuration
+    from tirodhan.deployment.lifecycle_checks import Checks
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    grant = require_provisioning("database-bootstrap")
+    config = configuration()
+    target = Checks(grant.authorization, config, {}).database_target()
+    expected = {
+        "POSTGRES_HOST": target["host"],
+        "RUNTIME_DATABASE_ROLE": target["role"],
+        "RUNTIME_PRINCIPAL_ID": target["principal_id"],
+        "POSTGRES_ADMIN_NAME": config["terraform"]["postgres_admin_name"],
+    }
+    if any(os.environ.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("Database bootstrap target differs from authorized resources")
+    return target, grant.authorization
+
+
+def database_token() -> str:
     with AzureCliCredential() as credential:
-        token = credential.get_token("https://ossrdbms-aad.database.windows.net/.default").token
+        return str(credential.get_token("https://ossrdbms-aad.database.windows.net/.default").token)
+
+
+async def bootstrap(*, verify_only: bool = False) -> None:
+    target, authorization = await asyncio.to_thread(authorized_target)
+    if verify_only:
+        await write_verified_evidence(target, authorization)
+        return
+    role, oid = target["role"], target["principal_id"]
+    token = await asyncio.to_thread(database_token)
     connection = await asyncpg.connect(
-        host=os.environ["POSTGRES_HOST"],
+        host=target["host"],
         database="postgres",
         user=os.environ["POSTGRES_ADMIN_NAME"],
         password=token,
@@ -34,19 +65,18 @@ async def bootstrap() -> None:
             principals = await connection.fetch("SELECT * FROM pgaadauth_list_principals(false)")
             if not any(
                 str(row.get("rolename")) == role
-                and str(row.get("objectId", row.get("objectid"))) == oid
+                and str(row.get("objectId", row.get("objectid"))).casefold() == oid.casefold()
                 and row.get("principalType", row.get("principaltype")) == "service"
                 and row.get("isAdmin", row.get("isadmin")) == 0
                 for row in principals
             ):
                 raise RuntimeError("Existing DB role is not the expected Entra principal")
-        # Role names are server-generated, but still quote them rather than interpolate raw input.
         quoted_role = '"' + role.replace('"', '""') + '"'
         await connection.execute(f"GRANT CONNECT ON DATABASE tirodhan TO {quoted_role}")
     finally:
         await connection.close()
     application = await asyncpg.connect(
-        host=os.environ["POSTGRES_HOST"],
+        host=target["host"],
         database="tirodhan",
         user=os.environ["POSTGRES_ADMIN_NAME"],
         password=token,
@@ -58,11 +88,117 @@ async def bootstrap() -> None:
         await application.execute(f"GRANT SELECT ON public.spatial_ref_sys TO {quoted_role}")
     finally:
         await application.close()
-    print("PostGIS and UAMI schema privileges prepared; no admin role granted to runtime")
+    await write_verified_evidence(target, authorization)
+    print("PostGIS and UAMI schema privileges verified; no runtime administrator role")
+
+
+async def write_verified_evidence(target: dict[str, str], authorization: Authorization) -> None:
+    from tirodhan.deployment.database_evidence import signer, write_evidence
+
+    key_id, private, age = await asyncio.to_thread(signer, authorization)
+    token = await asyncio.to_thread(database_token)
+    connection = await asyncpg.connect(
+        host=target["host"],
+        database="postgres",
+        user=os.environ["POSTGRES_ADMIN_NAME"],
+        password=token,
+        ssl=ssl.create_default_context(),
+    )
+    try:
+        principals = await connection.fetch("SELECT * FROM pgaadauth_list_principals(false)")
+        principal: dict[str, Any] = dict(
+            next((row for row in principals if row.get("rolename") == target["role"]), {})
+        )
+        elevated = bool(
+            await connection.fetchval(
+                "SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls "
+                "FROM pg_roles WHERE rolname=$1",
+                target["role"],
+            )
+        ) or bool(
+            await connection.fetchval(
+                "SELECT pg_has_role($1, 'azure_pg_admin', 'MEMBER')",
+                target["role"],
+            )
+        )
+    finally:
+        await connection.close()
+    connection = await asyncpg.connect(
+        host=target["host"],
+        database=target["database"],
+        user=os.environ["POSTGRES_ADMIN_NAME"],
+        password=token,
+        ssl=ssl.create_default_context(),
+    )
+    try:
+        checks = {
+            "principal_oid": str(principal.get("objectId", principal.get("objectid"))).casefold()
+            == target["principal_id"].casefold()
+            and principal.get("principalType", principal.get("principaltype")) == "service",
+            "non_admin": principal.get("isAdmin", principal.get("isadmin")) == 0 and not elevated,
+            "postgis": bool(
+                await connection.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis')"
+                )
+            ),
+            "connect": bool(
+                await connection.fetchval(
+                    "SELECT has_database_privilege($1, 'tirodhan', 'CONNECT')", target["role"]
+                )
+            ),
+            "schema_usage": bool(
+                await connection.fetchval(
+                    "SELECT has_schema_privilege($1, 'public', 'USAGE')", target["role"]
+                )
+            ),
+            "schema_create": bool(
+                await connection.fetchval(
+                    "SELECT has_schema_privilege($1, 'public', 'CREATE')", target["role"]
+                )
+            ),
+            "spatial_reference_select": bool(
+                await connection.fetchval(
+                    "SELECT has_table_privilege($1, 'public.spatial_ref_sys', 'SELECT')",
+                    target["role"],
+                )
+            ),
+        }
+    finally:
+        await connection.close()
+    if not all(checks.values()):
+        raise RuntimeError("Database bootstrap postconditions are incomplete")
+    now = int(time.time())
+    evidence = jwt.encode(
+        {
+            "iss": "tirodhan-database-bootstrap",
+            "aud": "tirodhan-nonprod-prerequisites",
+            "sub": authorization.principal_id,
+            "iat": now,
+            "exp": now + age,
+            "configuration_hash": authorization.configuration_hash,
+            "contract_hash": authorization.contract_hash,
+            "target": target,
+            "checks": checks,
+        },
+        private,
+        algorithm="EdDSA",
+        headers={"kid": key_id},
+    )
+    await asyncio.to_thread(write_evidence, evidence)
 
 
 if __name__ == "__main__":
-    from tirodhan.deployment.deployment_admission import require_release_authorization
+    import sys
 
-    require_release_authorization()
-    asyncio.run(bootstrap())
+    from tirodhan.deployment.deployment_admission import (
+        AdmissionDenied,
+        require_release_authorization,
+    )
+
+    try:
+        require_release_authorization("database-bootstrap")
+        asyncio.run(bootstrap(verify_only="--verify-only" in sys.argv))
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        raise SystemExit("DATABASE_BOOTSTRAP_UNVERIFIED: no readiness evidence issued") from None

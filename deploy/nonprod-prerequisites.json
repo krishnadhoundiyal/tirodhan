@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "checks": {
+    "backend": {
+      "authority": "backend.tf, protected state account/RG variables",
+      "identity": "D",
+      "scope": "exact account/tfstate/tirodhan/nonprod.tfstate",
+      "allowed_operation": "account-scoped GET; Entra container/blob read",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "bootstrap_authority": {
+      "authority": "bootstrap inputs, approved enrollment and permissions",
+      "identity": "O",
+      "scope": "named bootstrap resources and federated applications",
+      "allowed_operation": "verify authority before registration/create/grants",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "clean_baseline": {
+      "authority": "signed pre-apply state binding, immutable baseline blob and saved plan",
+      "identity": "D",
+      "scope": "original clean backend/application inventory",
+      "allowed_operation": "verify clean-start provenance, current ownership and compensation authorization",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "database": {
+      "authority": "bootstrap_database.py, actual SQL facts and pinned database attester",
+      "identity": "D verifies A-produced evidence",
+      "scope": "exact PostgreSQL server/database/UAMI OID",
+      "allowed_operation": "verify fresh signed post-bootstrap SQL evidence and current ARM identity",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "database_authority": {
+      "authority": "configured PostgreSQL Entra administrator and SQL identity",
+      "identity": "A",
+      "scope": "exact server/admin role",
+      "allowed_operation": "verify configured admin identity and target before bootstrap SQL",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "features": {
+      "authority": "runtime validators, enabled flags, optional schedules, integration release gates",
+      "identity": "D",
+      "scope": "enabled workload definitions",
+      "allowed_operation": "validate all enabled capability prerequisites; fail unsupported activation",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "foundation": {
+      "authority": "Terraform stage/resources and live ARM foundation",
+      "identity": "D or A",
+      "scope": "exact database/UAMI/storage/broker/ACA environment",
+      "allowed_operation": "verify every required stage-zero resource",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "identity": {
+      "authority": "bootstrap federation, release signature subject, protected client IDs",
+      "identity": "O/D/R/A according to operation",
+      "scope": "configured tenant and principal",
+      "allowed_operation": "verify authenticated CLI token and tenant",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "images": {
+      "authority": "reviewed commit and GHCR artifacts",
+      "identity": "D/G",
+      "scope": "exact private GHCR images bound to ACA",
+      "allowed_operation": "verify SHA artifacts and secret metadata",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "legacy_ownership": {
+      "authority": "exact legacy vault address and authoritative state",
+      "identity": "D",
+      "scope": "exact backend state and persistent vault",
+      "allowed_operation": "verify authorized transfer and state fingerprint",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "log_storage": {
+      "authority": "Terraform application storage output and log rotation policy",
+      "identity": "D",
+      "scope": "exact application account/app-logs",
+      "allowed_operation": "verify account/container and delegation permission before rotation",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "migration": {
+      "authority": "exact Job execution and reviewed migration image",
+      "identity": "D",
+      "scope": "exact migration Job/execution",
+      "allowed_operation": "verify terminal success of expected committed image",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "migration_job": {
+      "authority": "Terraform outputs and exact applied migration Job",
+      "identity": "D",
+      "scope": "approved Job and reviewed image",
+      "allowed_operation": "verify job configuration before start",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "ownership": {
+      "authority": "remote backend state and exact Azure inventory",
+      "identity": "D",
+      "scope": "exact application RG managed resource IDs",
+      "allowed_operation": "reject legacy managed vault or foreign/untracked inventory",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "permissions": {
+      "authority": "bootstrap.sh, deployment-role.json, conditional role delegation",
+      "identity": "D",
+      "scope": "application RG and exact state account",
+      "allowed_operation": "verify effective no-listKeys and exact authorized grants",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "postgres_sku": {
+      "authority": "committed database.tf and Azure regional capabilities",
+      "identity": "D",
+      "scope": "subscription/approved region",
+      "allowed_operation": "GET capabilities, exact approved SKU; no cost/region substitution",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "providers": {
+      "authority": "bootstrap provider list and committed provider versions",
+      "identity": "D",
+      "scope": "subscription provider registration",
+      "allowed_operation": "GET registration; never register here",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "recoverable_backup": {
+      "authority": "verified backend snapshot, lease and signed transfer binding",
+      "identity": "D",
+      "scope": "exact state blob/snapshot",
+      "allowed_operation": "read back backup and compare state bytes/lineage/serial before transfer",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "recovery_authority": {
+      "authority": "separate recovery OIDC and protected recovery approval",
+      "identity": "R",
+      "scope": "approved discovery scope and application RG",
+      "allowed_operation": "verify separate principal and narrow effective actions",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "recovery_target": {
+      "authority": "stable vault ID, original deleted vault ID/location",
+      "identity": "R",
+      "scope": "exact approved vault",
+      "allowed_operation": "GET active/deleted metadata; reject foreign or ambiguous target",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "saved_plan": {
+      "authority": "signed operation binding, Terraform saved plan and state",
+      "identity": "D",
+      "scope": "exact authorized resource actions and backend identity",
+      "allowed_operation": "validate digest, state identity, scope, stage and protected resources",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "secret_batch": {
+      "authority": "seed_secrets approved batches or exact GHCR PAT operation",
+      "identity": "D",
+      "scope": "exact vault/approved names",
+      "allowed_operation": "validate batch, target and material without logging",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "secrets": {
+      "authority": "runtime_secret_names, enabled features and Settings validators",
+      "identity": "D",
+      "scope": "exact vault/required version metadata",
+      "allowed_operation": "verify required enabled unexpired references; never log values",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "state": {
+      "authority": "remote state lineage/serial/etag and actual inventory",
+      "identity": "D",
+      "scope": "exact backend and application RG",
+      "allowed_operation": "classify initialized-clean, partial, established, absent, conflict",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "target": {
+      "authority": "inputs.py, variables.tf, protected GitHub variables",
+      "identity": "current authorized principal",
+      "scope": "exact tenant/subscription/RG/backend",
+      "allowed_operation": "validate consistent target",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "vault": {
+      "authority": "bootstrap.sh persistent vault ownership; Key Vault data source",
+      "identity": "D or A",
+      "scope": "exact td-np-<suffix>-kv",
+      "allowed_operation": "GET verified active vault; no recovery",
+      "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
+    },
+    "initialization": {
+      "authority": "exact backend object absence and approved initialization operation",
+      "identity": "D",
+      "scope": "exact configured backend with verified persistent bootstrap inventory",
+      "allowed_operation": "refresh-only zero-managed-change Terraform plan/apply, never readiness by omission",
+      "failure": "BLOCK absent authority, unknown state or conflicting inventory"
+    },
+    "execution_authority": {
+      "authority": "actual GitHub protected environment/main policy or explicit signed local execution authorization",
+      "identity": "G/O/D/R/A according to operation",
+      "scope": "repository/environment/operation-bound authorization",
+      "allowed_operation": "verify protection and explicit execution authorization; never create trust",
+      "failure": "BLOCK inaccessible protection, missing approval policy or unauthorized local execution"
+    },
+    "terraform_context": {
+      "authority": "pinned repository Terraform project, actual initialized azurerm backend and native saved-plan prior state",
+      "identity": "D",
+      "scope": "exact repository project and configured backend account/container/key",
+      "allowed_operation": "verify working directory/backend metadata, prohibit cached credentials and bind plan lineage/serial/variables",
+      "failure": "BLOCK unknown/foreign context, missing backend, plan state or variable mismatch"
+    }
+  },
+  "operations": {
+    "bootstrap": [
+      "bootstrap_authority",
+      "execution_authority",
+      "identity",
+      "target"
+    ],
+    "initialize-state-plan": [
+      "execution_authority",
+      "identity",
+      "initialization",
+      "permissions",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "initialize-state-apply": [
+      "execution_authority",
+      "identity",
+      "initialization",
+      "permissions",
+      "saved_plan",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "recover-vault": [
+      "execution_authority",
+      "identity",
+      "recovery_authority",
+      "recovery_target",
+      "target"
+    ],
+    "state-backup": [
+      "backend",
+      "execution_authority",
+      "identity",
+      "legacy_ownership",
+      "permissions",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "transfer-vault": [
+      "backend",
+      "execution_authority",
+      "identity",
+      "legacy_ownership",
+      "permissions",
+      "recoverable_backup",
+      "saved_plan",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "foundation-plan": [
+      "backend",
+      "execution_authority",
+      "features",
+      "identity",
+      "ownership",
+      "permissions",
+      "postgres_sku",
+      "providers",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "foundation-apply": [
+      "backend",
+      "execution_authority",
+      "features",
+      "identity",
+      "ownership",
+      "permissions",
+      "postgres_sku",
+      "providers",
+      "saved_plan",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "database-bootstrap": [
+      "database_authority",
+      "execution_authority",
+      "foundation",
+      "identity",
+      "target"
+    ],
+    "migration-plan": [
+      "backend",
+      "database",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "images",
+      "ownership",
+      "permissions",
+      "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "migration-apply": [
+      "backend",
+      "database",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "images",
+      "ownership",
+      "permissions",
+      "saved_plan",
+      "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "migration-start": [
+      "backend",
+      "database",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "images",
+      "migration_job",
+      "ownership",
+      "permissions",
+      "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "runtime-plan": [
+      "backend",
+      "database",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "images",
+      "migration",
+      "ownership",
+      "permissions",
+      "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "runtime-apply": [
+      "backend",
+      "database",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "images",
+      "migration",
+      "ownership",
+      "permissions",
+      "saved_plan",
+      "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "seed-secrets": [
+      "execution_authority",
+      "identity",
+      "permissions",
+      "secret_batch",
+      "target",
+      "vault"
+    ],
+    "rotate-log-sas": [
+      "execution_authority",
+      "identity",
+      "log_storage",
+      "permissions",
+      "target",
+      "vault"
+    ],
+    "compensate-foundation": [
+      "backend",
+      "clean_baseline",
+      "execution_authority",
+      "identity",
+      "ownership",
+      "permissions",
+      "saved_plan",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "prepare-compensation": [
+      "backend",
+      "clean_baseline",
+      "execution_authority",
+      "identity",
+      "ownership",
+      "permissions",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ]
+  }
+}

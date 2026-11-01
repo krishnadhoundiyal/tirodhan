@@ -94,6 +94,9 @@ def test_secret_seeding_does_not_echo_values(
         "customer": seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         "vapid": seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
     }
+    from tirodhan.deployment import prerequisites
+
+    monkeypatch.setattr(prerequisites, "require_provisioning", lambda *_, **__: None)
     credentials = {key: "test-value-not-a-secret" for key in groups[kind]}
     path = tmp_path / "secrets.json"
     path.write_text(json.dumps(credentials), encoding="utf-8")

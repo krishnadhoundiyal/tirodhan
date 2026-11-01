@@ -30,6 +30,7 @@ env:
   STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
   STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
   NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  NONPROD_RECOVERY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_RECOVERY_PRINCIPAL_ID }}
   NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
 
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
@@ -289,7 +290,8 @@ jobs:
             remaining_azure_resources="$(az resource list \
               --resource-group "$NONPROD_RESOURCE_GROUP" \
               --query "[].id" \
-              --output tsv)"
+              --output tsv \
+              | python -m tirodhan.deployment.destroy_preservation)"
             if [[ -z "$remaining_azure_resources" ]]; then
               empty_observations=$((empty_observations + 1))
               if (( empty_observations >= 2 )); then
@@ -329,7 +331,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          remaining="$(terraform state list)"
+          all_state="$(terraform state list)"
+          remaining="$(printf '%s\n' "$all_state" | sed '/^data\./d')"
 
           if [[ -n "$remaining" ]]; then
             echo "Terraform-managed resources remain after destroy:" >&2
@@ -370,7 +373,8 @@ jobs:
           remaining_azure_resources="$(az resource list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --query "[].id" \
-            --output tsv)"
+            --output tsv \
+            | python -m tirodhan.deployment.destroy_preservation)"
 
           if [[ -n "$remaining_azure_resources" ]]; then
             echo "Active Azure resources remain in the NONPROD application RG:" >&2
@@ -389,6 +393,10 @@ jobs:
                 --client-id "$ARM_CLIENT_ID" \
                 --tenant-id "$ARM_TENANT_ID")"
 
+          recovery_args=()
+          if [[ -n "${NONPROD_RECOVERY_PRINCIPAL_ID:-}" ]]; then
+            recovery_args+=(--recovery-principal-id "$NONPROD_RECOVERY_PRINCIPAL_ID")
+          fi
           az role assignment list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --fill-principal-name false \
@@ -396,7 +404,8 @@ jobs:
             | python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify \
                 --expected-scope "$DEPLOYMENT_SCOPE" \
                 --expected-principal-id "$deployment_principal_id" \
-                --expected-suffix "${{ inputs.expected_suffix }}"
+                --expected-suffix "${{ inputs.expected_suffix }}" \
+                "${recovery_args[@]}"
 
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"

@@ -53,13 +53,24 @@ def main() -> None:
         )
     if any(not isinstance(value, str) or not value.strip() for value in values.values()):
         raise SystemExit("Every secret must be a nonempty string")
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    require_provisioning("seed-secrets", batch=values)
     for name, value in values.items():
         vault_put(os.environ["KEY_VAULT_URL"], name, value)
     print("Approved secret versions seeded; no values printed")
 
 
 if __name__ == "__main__":
-    from tirodhan.deployment.deployment_admission import require_release_authorization
+    from tirodhan.deployment.deployment_admission import (
+        AdmissionDenied,
+        require_release_authorization,
+    )
 
-    require_release_authorization()
-    main()
+    try:
+        require_release_authorization("seed-secrets")
+        main()
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        raise SystemExit("PROVISIONING_UNVERIFIED: inspect operation status safely") from None
