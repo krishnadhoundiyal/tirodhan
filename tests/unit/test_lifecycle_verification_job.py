@@ -186,6 +186,25 @@ def test_concurrent_same_request_dispatches_only_once(monkeypatch, consumer):
     assert github.dispatches == 1
 
 
+def test_verifier_on_advanced_main_is_rejected_without_waiting_or_redispatch(monkeypatch, consumer):
+    authorization, _, request = consumer
+    github = GithubFake(request)
+    github.started = True
+    github.run["head_sha"] = "b" * 40
+    original = github.read
+
+    def read(path):
+        assert "head_sha=" not in path
+        return original(path)
+
+    github.read = read
+    monkeypatch.setattr(requests, "Github", lambda: github)
+    monkeypatch.setattr(requests.time, "sleep", lambda _: pytest.fail("must reject immediately"))
+    with pytest.raises(AdmissionDenied, match="DATABASE_VERIFICATION_RUN_UNTRUSTED"):
+        requests.refresh_database_evidence(authorization)
+    assert github.dispatches == 0
+
+
 @pytest.mark.parametrize("outcome", ["failure", "timeout", "bad-archive", "ambiguous-run"])
 def test_failed_unknown_or_malformed_verification_never_returns_readiness(
     monkeypatch, consumer, outcome

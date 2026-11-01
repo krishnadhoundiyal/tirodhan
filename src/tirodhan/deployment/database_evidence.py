@@ -43,12 +43,15 @@ def signer(authorization: Authorization) -> tuple[str, Ed25519PrivateKey, int]:
     )
     if not isinstance(private, Ed25519PrivateKey):
         raise AdmissionDenied("DATABASE_EVIDENCE_SIGNER_INVALID")
-    public = (
-        private.public_key()
-        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-        .decode()
+    public = private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )
-    if issuer["principal_id"] != authorization.principal_id or issuer["public_key"] != public:
+    pinned = serialization.load_pem_public_key(str(issuer["public_key"]).encode())
+    if (
+        issuer["principal_id"] != authorization.principal_id
+        or not isinstance(pinned, Ed25519PublicKey)
+        or pinned.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw) != public
+    ):
         raise AdmissionDenied("DATABASE_EVIDENCE_SIGNER_NOT_AUTHORIZED")
     if (
         authorization.identity_kind == "database_verification"

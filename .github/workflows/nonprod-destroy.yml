@@ -40,6 +40,7 @@ jobs:
   destroy-plan:
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      EXPECTED_SUFFIX: ${{ inputs.expected_suffix }}
     outputs:
       vault_required: ${{ steps.bootstrap-preservation.outputs.vault_required }}
     if: >-
@@ -112,7 +113,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+          if [[ "$configured_suffix" != "$EXPECTED_SUFFIX" ]]; then
             echo "Expected suffix does not match NONPROD Terraform input." >&2
             exit 1
           fi
@@ -157,6 +158,7 @@ jobs:
   destroy-apply:
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      EXPECTED_SUFFIX: ${{ inputs.expected_suffix }}
       REQUIRE_PERSISTENT_VAULT: ${{ needs.destroy-plan.outputs.vault_required }}
     needs: destroy-plan
     timeout-minutes: 90
@@ -228,7 +230,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+          if [[ "$configured_suffix" != "$EXPECTED_SUFFIX" ]]; then
             echo "NONPROD suffix changed after planning; refusing apply." >&2
             exit 1
           fi
@@ -427,7 +429,7 @@ jobs:
             | python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify \
                 --expected-scope "$DEPLOYMENT_SCOPE" \
                 --expected-principal-id "$deployment_principal_id" \
-                --expected-suffix "${{ inputs.expected_suffix }}" \
+                --expected-suffix "$EXPECTED_SUFFIX" \
                 "${recovery_args[@]}"
 
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"

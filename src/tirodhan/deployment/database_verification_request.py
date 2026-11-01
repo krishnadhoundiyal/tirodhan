@@ -185,7 +185,7 @@ def matching_run(github: Github, request: dict[str, str]) -> dict[str, Any] | No
     found: list[dict[str, Any]] = []
     for page in range(1, 11):
         result = github.read(
-            f"actions/workflows/{VERIFY_WORKFLOW}/runs?event=workflow_dispatch&head_sha={request['commit']}&per_page=100&page={page}"
+            f"actions/workflows/{VERIFY_WORKFLOW}/runs?event=workflow_dispatch&per_page=100&page={page}"
         )
         rows = result.get("workflow_runs")
         if not isinstance(rows, list):

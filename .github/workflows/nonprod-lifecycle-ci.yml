@@ -8,6 +8,10 @@ on:
       - 'infra/terraform/nonprod/**'
       - 'tests/unit/test_*lifecycle*'
       - 'tests/unit/test_*nonprod*'
+      - 'tests/unit/lifecycle_fakes.py'
+      - 'tests/unit/test_deployment_hold.py'
+      - 'tests/unit/test_destroy_aca_environment.py'
+      - 'pyproject.toml'
 permissions:
   contents: read
 jobs:

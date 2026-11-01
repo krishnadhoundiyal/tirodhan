@@ -9,7 +9,63 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from lifecycle_fakes import MemoryObservations, auth
 
 from tirodhan.deployment import bootstrap_database, database_evidence, lifecycle_checks
+from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_checks import Checks
+
+
+@pytest.mark.parametrize(
+    "representation", ["canonical", "crlf", "no-newline", "wrong-key", "wrong-principal"]
+)
+def test_attester_enrollment_compares_actual_key_material(monkeypatch, tmp_path, representation):
+    authorization = auth("database-bootstrap", kind="database")
+    private = Ed25519PrivateKey.generate()
+    public_key = (
+        Ed25519PrivateKey.generate().public_key()
+        if representation == "wrong-key"
+        else private.public_key()
+    )
+    public = public_key.public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    if representation == "crlf":
+        public = public.replace("\n", "\r\n")
+    if representation == "no-newline":
+        public = public.rstrip()
+    policy = {
+        "maximum_evidence_age_seconds": 300,
+        "database_evidence_keys": {
+            "test": {
+                "principal_id": "other"
+                if representation == "wrong-principal"
+                else authorization.principal_id,
+                "public_key": public,
+            }
+        },
+    }
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy/nonprod-release-policy.json").write_text(json.dumps(policy))
+    path = tmp_path / "private.pem"
+    path.write_bytes(
+        private.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setattr(database_evidence, "ROOT", tmp_path)
+    monkeypatch.setenv("TIRODHAN_DATABASE_EVIDENCE_KEY_ID", "test")
+    monkeypatch.setenv("TIRODHAN_DATABASE_EVIDENCE_PRIVATE_KEY_FILE", str(path))
+    if representation.startswith("wrong-"):
+        with pytest.raises(AdmissionDenied, match="DATABASE_EVIDENCE_SIGNER_NOT_AUTHORIZED"):
+            database_evidence.signer(authorization)
+    else:
+        identifier, key, age = database_evidence.signer(authorization)
+        assert identifier == "test" and age == 300
+        assert key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        ) == private.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
 
 
 @pytest.mark.asyncio
