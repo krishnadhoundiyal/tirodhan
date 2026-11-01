@@ -59,7 +59,17 @@ def test_nonprod_destroy_allows_only_explicit_terminal_convergence() -> None:
     assert "python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify" in text
     assert '--expected-scope "$DEPLOYMENT_SCOPE"' in text
     assert '--expected-principal-id "$deployment_principal_id"' in text
-    assert '--expected-suffix "${{ inputs.expected_suffix }}"' in text
+    assert '--expected-suffix "$EXPECTED_SUFFIX"' in text
+
+
+def test_destroy_suffix_is_data_instead_of_interpolated_shell_code() -> None:
+    jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+    for name in ("destroy-plan", "destroy-apply"):
+        assert jobs[name]["env"]["EXPECTED_SUFFIX"] == "${{ inputs.expected_suffix }}"
+        assert all(
+            "${{ inputs.expected_suffix }}" not in step.get("run", "")
+            for step in jobs[name]["steps"]
+        )
 
 
 def test_nonprod_destroy_preserves_backend_boundary_checks() -> None:

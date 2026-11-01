@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import subprocess
 import sys
 from typing import Any
 
@@ -16,6 +17,7 @@ BOOTSTRAP_ROLES = (
     "4633458b-17de-408a-b874-0445c86b69e6",
 )
 ADMIN_ROLE = "Role Based Access Control Administrator"
+READER_ROLE_ID = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
 BOOTSTRAP_ROLE_NAMES = (
     "Storage Blob Data Contributor",
     "Storage Blob Delegator",
@@ -35,6 +37,25 @@ def expected_admin_condition() -> str:
         "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] "
         f"ForAnyOfAnyValues:GuidEquals {roles}))"
     )
+
+
+def verify_recovery_definition(rows: list[dict[str, Any]], scope: str) -> None:
+    expected = {
+        "Microsoft.KeyVault/vaults/read",
+        "Microsoft.KeyVault/vaults/write",
+        "Microsoft.Authorization/permissions/read",
+    }
+    scopes = rows[0].get("assignableScopes", []) if len(rows) == 1 else []
+    if len(scopes) != 1 or str(scopes[0]).casefold() != scope.casefold():
+        raise ValueError("Recovery role scope differs from explicit bootstrap policy")
+    permissions = rows[0].get("permissions", [])
+    if len(permissions) != 1 or (
+        set(permissions[0].get("actions", [])) != expected
+        or permissions[0].get("notActions")
+        or permissions[0].get("dataActions")
+        or permissions[0].get("notDataActions")
+    ):
+        raise ValueError("Recovery role operations differ from explicit bootstrap policy")
 
 
 def principal_from_arm_token(token: str, *, client_id: str, tenant_id: str) -> str:
@@ -69,9 +90,53 @@ def verify_bootstrap_rbac(
     expected_scope: str,
     expected_principal_id: str,
     expected_suffix: str,
+    recovery_principal_id: str | None = None,
+    verification_principal_id: str | None = None,
 ) -> None:
     """Accept only the five original RG grants to the authenticated deployment SP."""
     names = (*BOOTSTRAP_ROLE_NAMES, f"Tirodhan NONPROD Deployment {expected_suffix}")
+    if not isinstance(assignments, list) or any(not isinstance(row, dict) for row in assignments):
+        raise ValueError("Malformed NONPROD RG role assignment")
+    if verification_principal_id is not None:
+        if not verification_principal_id or verification_principal_id.casefold() in {
+            expected_principal_id.casefold(),
+            str(recovery_principal_id).casefold(),
+        }:
+            raise ValueError("Verifier must be separate from deployment and recovery")
+        matches = [
+            row
+            for row in assignments
+            if str(row.get("principalId", "")).casefold() == verification_principal_id.casefold()
+        ]
+        if len(matches) != 1 or (
+            str(matches[0].get("scope", "")).casefold() != expected_scope.casefold()
+            or matches[0].get("roleDefinitionName") != "Reader"
+            or str(matches[0].get("roleDefinitionId", "")).rsplit("/", 1)[-1].casefold()
+            != READER_ROLE_ID
+            or matches[0].get("principalType") != "ServicePrincipal"
+            or matches[0].get("condition") not in (None, "")
+        ):
+            raise ValueError("Verifier grant must be exactly the configured builtin Reader")
+        assignments = [row for row in assignments if row is not matches[0]]
+    if recovery_principal_id is not None:
+        if (
+            not recovery_principal_id
+            or recovery_principal_id.casefold() == expected_principal_id.casefold()
+        ):
+            raise ValueError("Recovery principal must be separate from deployment")
+        recovery_name = f"Tirodhan NONPROD Vault Recovery Write {expected_suffix}"
+        expected_recovery = [
+            row for row in assignments if row.get("roleDefinitionName") == recovery_name
+        ]
+        if len(expected_recovery) != 1 or (
+            str(expected_recovery[0].get("scope", "")).casefold() != expected_scope.casefold()
+            or str(expected_recovery[0].get("principalId", "")).casefold()
+            != recovery_principal_id.casefold()
+            or expected_recovery[0].get("condition") not in (None, "")
+        ):
+            raise ValueError("Recovery bootstrap grant differs from explicit policy")
+        # Remove only the exactly verified extra grant, never filter arbitrary principals.
+        assignments = [row for row in assignments if row is not expected_recovery[0]]
     if not isinstance(assignments, list) or len(assignments) != len(names):
         raise ValueError("NONPROD RG must have exactly five direct bootstrap role assignments")
     if any(not isinstance(row, dict) for row in assignments):
@@ -109,6 +174,8 @@ def main() -> None:
     verify.add_argument("--expected-scope", required=True)
     verify.add_argument("--expected-principal-id", required=True)
     verify.add_argument("--expected-suffix", required=True)
+    verify.add_argument("--recovery-principal-id")
+    verify.add_argument("--verification-principal-id")
     args = parser.parse_args()
     try:
         if args.action == "principal":
@@ -118,13 +185,38 @@ def main() -> None:
                 )
             )
         else:
+            assignments = json.load(sys.stdin)
+            if args.recovery_principal_id:
+                result = subprocess.run(
+                    [
+                        "az",
+                        "role",
+                        "definition",
+                        "list",
+                        "--name",
+                        f"Tirodhan NONPROD Vault Recovery Write {args.expected_suffix}",
+                        "--scope",
+                        args.expected_scope,
+                        "--output",
+                        "json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=True,
+                )
+                verify_recovery_definition(json.loads(result.stdout), args.expected_scope)
             verify_bootstrap_rbac(
-                json.load(sys.stdin),
+                assignments,
                 expected_scope=args.expected_scope,
                 expected_principal_id=args.expected_principal_id,
                 expected_suffix=args.expected_suffix,
+                recovery_principal_id=args.recovery_principal_id,
+                verification_principal_id=args.verification_principal_id,
             )
             print("PASS: NONPROD bootstrap role assignments retain the required restrictions")
+    except subprocess.SubprocessError:
+        parser.exit(2, "NONPROD recovery role definition could not be verified\n")
     except (ValueError, TypeError) as error:
         parser.exit(2, f"NONPROD bootstrap RBAC verification failed: {error}\n")
 

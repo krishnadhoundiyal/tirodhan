@@ -1,12 +1,24 @@
 name: NONPROD foundation
 on:
   workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: Explicit signed release session ID
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
   group: nonprod-release
   cancel-in-progress: false
 env:
+  NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  AZURE_NONPROD_RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
+  TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
+  TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+  GH_TOKEN: ${{ github.token }}
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -18,14 +30,23 @@ env:
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 jobs:
   release-admission:
+    env:
+      TIRODHAN_NONPROD_OPERATION: foundation-plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Enforce integration deployment hold before Azure authentication
-        run: python src/tirodhan/deployment/deployment_admission.py
+        run: |
+          python -m pip install -e .
+          python -m tirodhan.deployment.deployment_admission
   foundation-plan:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
     needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment: nonprod-plan
@@ -33,6 +54,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
@@ -47,7 +70,7 @@ jobs:
             fi
           fi
           # Stage 0 is deliberately rerunnable so a partial failed first apply can converge safely.
-          TF_VAR_deployment_stage=0 terraform plan -input=false -out=foundation.tfplan
+          TF_VAR_deployment_stage=0 python -m tirodhan.deployment.foundation_lifecycle foundation-plan --plan foundation.tfplan
           terraform show -json foundation.tfplan | python -m tirodhan.deployment.check_state
       - uses: actions/upload-artifact@v4
         with:
@@ -55,12 +78,17 @@ jobs:
           path: infra/terraform/nonprod/foundation.tfplan
           retention-days: 1
   foundation-apply:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
     needs: foundation-plan
     environment: nonprod
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+      actions: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
@@ -78,7 +106,7 @@ jobs:
               exit 1
             fi
           fi
-          terraform apply -input=false foundation.tfplan
+          python -m tirodhan.deployment.foundation_lifecycle foundation-apply --plan foundation.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
           terraform output -json >/tmp/nonprod-foundation-output.json
           jq -e '.deployment_stage.value == 0' /tmp/nonprod-foundation-output.json >/dev/null

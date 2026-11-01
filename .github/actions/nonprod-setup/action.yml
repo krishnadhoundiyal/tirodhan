@@ -1,5 +1,9 @@
 name: Trusted NONPROD Terraform setup
 description: OIDC and Entra-only backend; call only on protected main/environment jobs.
+inputs:
+  mode:
+    description: Provisioning admission or independent protected teardown
+    default: provisioning
 runs:
   using: composite
   steps:
@@ -16,14 +20,13 @@ runs:
         tenant-id: ${{ env.ARM_TENANT_ID }}
         subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
     - shell: bash
+      env:
+        BACKEND_SETUP_MODE: ${{ inputs.mode }}
       run: |
         set -euo pipefail
         python -m pip install -e '.[dev]'
         python -m tirodhan.deployment.azure_controls
         cd infra/terraform/nonprod
         python -m tirodhan.deployment.inputs
-        terraform init -input=false -lockfile=readonly \
-          -backend-config="storage_account_name=$STATE_ACCOUNT_NAME" \
-          -backend-config="container_name=tfstate" \
-          -backend-config="resource_group_name=$STATE_RESOURCE_GROUP"
+        python -m tirodhan.deployment.backend_setup "$BACKEND_SETUP_MODE"
         terraform validate

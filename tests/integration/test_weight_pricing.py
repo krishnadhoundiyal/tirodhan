@@ -37,6 +37,7 @@ from tirodhan.modules.collection_requests.ports import (
     DeclaredRequestItem,
     PricingNotConfiguredError,
 )
+from tirodhan.modules.collection_requests.scheduling import SERVICE_TIMEZONE, operating_grid
 from tirodhan.modules.collection_requests.service import (
     CreateCollectionRequestCommand,
     create_collection_request,
@@ -83,6 +84,12 @@ ITEMS = (
     DeclaredRequestItem("TEST_A", 2, weight_band="BELOW_B"),
     DeclaredRequestItem("TEST_B", 3, weight_band="B_TO_T"),
 )
+# These tests exercise the real Delhi policy. Tomorrow at the current UTC hour
+# can be outside operating hours; choose an offered slot independently of run time.
+_BOOKING_SLOT = operating_grid((utc_now().astimezone(SERVICE_TIMEZONE) + timedelta(days=1)).date())[
+    0
+]
+SLOT_START, SLOT_END = _BOOKING_SLOT.start, _BOOKING_SLOT.end
 
 
 def confirmation(quote):
@@ -103,8 +110,6 @@ async def setup(factory):
 
 
 async def create(factory, customer, context, quote, **changes):
-    from test_collection_payment import SLOT_END, SLOT_START
-
     command = CreateCollectionRequestCommand(
         customer_id=customer,
         client_request_id=new_uuid7(),
@@ -356,8 +361,6 @@ async def test_quote_config_change_during_booking_is_fenced(database_session_fac
             await release.wait()
             return result
 
-    from test_collection_payment import SLOT_END, SLOT_START
-
     command = CreateCollectionRequestCommand(
         user.user_id,
         new_uuid7(),
@@ -571,8 +574,6 @@ async def test_missing_policy_and_numerical_inputs_fail_closed(database_session_
 async def test_draft_activation_retirement_and_legacy_booking_no_volume_bypass(
     database_session_factory,
 ):
-    from test_collection_payment import SLOT_END, SLOT_START
-
     from tirodhan.modules.business_admin.commands import PriceEdit
 
     factory = database_session_factory

@@ -30,12 +30,19 @@ env:
   STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
   STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
   NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  NONPROD_RECOVERY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_RECOVERY_PRINCIPAL_ID }}
+  NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
   NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
 
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 
 jobs:
   destroy-plan:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      EXPECTED_SUFFIX: ${{ inputs.expected_suffix }}
+    outputs:
+      vault_required: ${{ steps.bootstrap-preservation.outputs.vault_required }}
     if: >-
       github.ref == 'refs/heads/main' &&
       inputs.confirmation == 'DESTROY_NONPROD'
@@ -52,6 +59,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/nonprod-setup
+        with:
+          mode: destroy
 
       - name: Configure destroy-only Key Vault behaviour
         run: |
@@ -104,12 +113,20 @@ jobs:
             exit 1
           fi
 
-          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+          if [[ "$configured_suffix" != "$EXPECTED_SUFFIX" ]]; then
             echo "Expected suffix does not match NONPROD Terraform input." >&2
             exit 1
           fi
 
           echo "Destroy configuration boundary checks passed."
+
+      - name: Record authoritative bootstrap preservation expectation
+        id: bootstrap-preservation
+        run: |
+          set -euo pipefail
+          required="$(python -m tirodhan.deployment.destroy_preservation --record-required </dev/null)"
+          [[ "$required" == true || "$required" == false ]] || exit 1
+          echo "vault_required=$required" >> "$GITHUB_OUTPUT"
 
       - name: Create guarded destroy plan
         working-directory: infra/terraform/nonprod
@@ -139,6 +156,10 @@ jobs:
           retention-days: 1
 
   destroy-apply:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      EXPECTED_SUFFIX: ${{ inputs.expected_suffix }}
+      REQUIRE_PERSISTENT_VAULT: ${{ needs.destroy-plan.outputs.vault_required }}
     needs: destroy-plan
     timeout-minutes: 90
     if: >-
@@ -155,6 +176,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/nonprod-setup
+        with:
+          mode: destroy
 
       - name: Configure destroy-only Key Vault behaviour
         run: |
@@ -207,7 +230,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$configured_suffix" != "${{ inputs.expected_suffix }}" ]]; then
+          if [[ "$configured_suffix" != "$EXPECTED_SUFFIX" ]]; then
             echo "NONPROD suffix changed after planning; refusing apply." >&2
             exit 1
           fi
@@ -289,7 +312,8 @@ jobs:
             remaining_azure_resources="$(az resource list \
               --resource-group "$NONPROD_RESOURCE_GROUP" \
               --query "[].id" \
-              --output tsv)"
+              --output tsv \
+              | python -m tirodhan.deployment.destroy_preservation --verify-expectation)"
             if [[ -z "$remaining_azure_resources" ]]; then
               empty_observations=$((empty_observations + 1))
               if (( empty_observations >= 2 )); then
@@ -329,7 +353,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          remaining="$(terraform state list)"
+          all_state="$(terraform state list)"
+          remaining="$(printf '%s\n' "$all_state" | sed '/^data\./d')"
 
           if [[ -n "$remaining" ]]; then
             echo "Terraform-managed resources remain after destroy:" >&2
@@ -370,7 +395,8 @@ jobs:
           remaining_azure_resources="$(az resource list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --query "[].id" \
-            --output tsv)"
+            --output tsv \
+            | python -m tirodhan.deployment.destroy_preservation --verify-expectation)"
 
           if [[ -n "$remaining_azure_resources" ]]; then
             echo "Active Azure resources remain in the NONPROD application RG:" >&2
@@ -389,6 +415,13 @@ jobs:
                 --client-id "$ARM_CLIENT_ID" \
                 --tenant-id "$ARM_TENANT_ID")"
 
+          recovery_args=()
+          if [[ -n "${NONPROD_RECOVERY_PRINCIPAL_ID:-}" ]]; then
+            recovery_args+=(--recovery-principal-id "$NONPROD_RECOVERY_PRINCIPAL_ID")
+          fi
+          if [[ -n "${NONPROD_DATABASE_VERIFY_PRINCIPAL_ID:-}" ]]; then
+            recovery_args+=(--verification-principal-id "$NONPROD_DATABASE_VERIFY_PRINCIPAL_ID")
+          fi
           az role assignment list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \
             --fill-principal-name false \
@@ -396,7 +429,8 @@ jobs:
             | python -m tirodhan.deployment.check_nonprod_bootstrap_rbac verify \
                 --expected-scope "$DEPLOYMENT_SCOPE" \
                 --expected-principal-id "$deployment_principal_id" \
-                --expected-suffix "${{ inputs.expected_suffix }}"
+                --expected-suffix "$EXPECTED_SUFFIX" \
+                "${recovery_args[@]}"
 
           echo "Preserved application RG: $NONPROD_RESOURCE_GROUP"
           echo "Preserved Terraform state RG: $STATE_RESOURCE_GROUP"

@@ -1,5 +1,11 @@
 # Azure NONPROD deployment substrate
 
+Current lifecycle integration is **held**, without authorization/evidence keys enrolled.
+Before provisioning, use the [release contract and identity-specific prerequisites](NONPROD_LIFECYCLE_INTEGRATION.md).
+The vault is bootstrap-owned rather than created/destroyed by the application stack.
+No integration merge authorizes Azure provisioning, recovery, RBAC or state mutation.
+
+
 NONPROD destroy now completes and verifies the exact approved ACA environment DELETE through
 an independent ARM recovery client before terminal Terraform reconciliation. A polling exception
 or empty resource-group listing alone is not successful deletion. See
@@ -85,7 +91,7 @@ No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sou
 ## Staged first deployment
 
 1. Apply a reviewed foundation plan at `deployment_stage=0`. This creates the
-   database, extension allowlist, firewall, queues, storage, vault, UAMI, RBAC and
+   database, extension allowlist, firewall, queues, storage, UAMI, RBAC and
    Consumption-only ACA environment, **no live workloads**.
 2. As the configured Entra PostgreSQL administrator, bootstrap PostGIS and the
    UAMI-backed SQL principal. Set `POSTGRES_HOST`, `POSTGRES_ADMIN_NAME`,
@@ -187,8 +193,14 @@ DB idempotency and planning `session_id=cell_id` remain authoritative. Planning
 alone enables queue sessions; all consumers retain PeekLock. Worker apps have no
 ingress, min 0, MI-authenticated Azure Container Apps Service Bus scale rules.
 
-The OIDC rotation workflow runs every third day (month boundaries may shorten the
-gap). Each run creates a new HTTPS-only **user-delegation**, container-scoped
+The OIDC rotation workflow is scheduled every third day (month boundaries may shorten the
+gap), subject to an explicitly signed recurring rotation session. Configure the separate
+`NONPROD_LOG_SAS_AUTHORIZATION` and session ID described in the lifecycle contract; renew
+on every main commit and before authorization expiry. A missing/expired authorization is
+a failed workflow, not a successful rotation. Check workflow failures and the current
+`fluent-bit-sas` secret's expiry metadata at least daily while NONPROD is active, and
+use an explicitly authorized manual dispatch before expiry if recurrence is blocked.
+Each successful run creates a new HTTPS-only **user-delegation**, container-scoped
 `app-logs` SAS with write permission only, six-day expiry and five-minute clock
 skew allowance (<7 days). Old versions remain usable during overlap. The pinned
 plugin skips container checks/creation with auto-create disabled, so no read/list

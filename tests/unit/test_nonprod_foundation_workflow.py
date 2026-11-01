@@ -19,7 +19,10 @@ def test_foundation_workflow_is_manual_main_only_and_approval_gated() -> None:
     assert jobs["foundation-apply"]["needs"] == "foundation-plan"
 
     text = (WORKFLOWS / "nonprod-foundation.yml").read_text()
-    assert "TF_VAR_deployment_stage=0 terraform plan" in text
+    assert (
+        "TF_VAR_deployment_stage=0 python -m tirodhan.deployment.foundation_lifecycle "
+        "foundation-plan" in text
+    )
     assert 'existing_stage" != "0"' in text
     assert "Foundation state is already beyond stage 0; refusing foundation plan." in text
     assert "Foundation state advanced after planning; refusing stage-0 apply." in text

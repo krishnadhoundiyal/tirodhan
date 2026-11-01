@@ -54,6 +54,15 @@ variable "migration_image" {
     error_message = "Use a GHCR image tagged with a full lowercase Git SHA."
   }
 }
+variable "migration_operation_key" {
+  description = "Release-owned migration identity, verified against the signed operation context."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.migration_operation_key == null ? true : can(regex("^[a-f0-9]{64}$", var.migration_operation_key))
+    error_message = "Use the release controller's SHA-256 operation key."
+  }
+}
 variable "fluent_bit_image" {
   description = "Repository-built sidecar based on the pinned Fluent Bit base; SHA-tagged."
   type        = string

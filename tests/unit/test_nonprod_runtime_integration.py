@@ -94,6 +94,14 @@ def test_secret_seeding_does_not_echo_values(
         "customer": seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         "vapid": seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
     }
+    from tirodhan.deployment import prerequisites
+
+    admission_calls = []
+    monkeypatch.setattr(
+        prerequisites,
+        "require_provisioning",
+        lambda operation, **kwargs: admission_calls.append((operation, kwargs)),
+    )
     credentials = {key: "test-value-not-a-secret" for key in groups[kind]}
     path = tmp_path / "secrets.json"
     path.write_text(json.dumps(credentials), encoding="utf-8")
@@ -102,5 +110,25 @@ def test_secret_seeding_does_not_echo_values(
     monkeypatch.setenv("KEY_VAULT_URL", "https://test.vault.azure.net/")
     monkeypatch.setattr(sys, "argv", ["seed", str(path)])
     seed_secrets.main()
+    assert admission_calls == [("seed-secrets", {"batch": credentials})]
     assert set(sent) == set(credentials)
     assert "test-value-not-a-secret" not in capsys.readouterr().out
+
+
+def test_secret_seeding_denial_prevents_every_vault_write(tmp_path, monkeypatch) -> None:
+    from unittest.mock import Mock
+
+    from tirodhan.deployment import prerequisites
+    from tirodhan.deployment.deployment_admission import AdmissionDenied
+
+    path = tmp_path / "secrets.json"
+    path.write_text(json.dumps({key: "not-to-be-sent" for key in seed_secrets.LEGACY_SECRET_NAMES}))
+    monkeypatch.setattr(
+        prerequisites, "require_provisioning", Mock(side_effect=AdmissionDenied("DENIED"))
+    )
+    sent = Mock()
+    monkeypatch.setattr(seed_secrets, "vault_put", sent)
+    monkeypatch.setattr(sys, "argv", ["seed", str(path)])
+    with pytest.raises(AdmissionDenied, match="DENIED"):
+        seed_secrets.main()
+    sent.assert_not_called()

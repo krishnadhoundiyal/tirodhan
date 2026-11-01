@@ -3,12 +3,24 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: Explicit signed release session ID
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
   group: nonprod-release
   cancel-in-progress: false
 env:
+  NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  AZURE_NONPROD_RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
+  TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
+  TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+  GH_TOKEN: ${{ github.token }}
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -22,13 +34,20 @@ env:
   FLUENT_BIT_IMAGE: ghcr.io/krishnadhoundiyal/tirodhan-log-sidecar:${{ github.sha }}
 jobs:
   release-admission:
+    env:
+      TIRODHAN_NONPROD_OPERATION: migration-plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Enforce integration deployment hold before Azure authentication
-        run: python src/tirodhan/deployment/deployment_admission.py
+        run: |
+          python -m pip install -e .
+          python -m tirodhan.deployment.deployment_admission
   build:
     needs: release-admission
     if: github.ref == 'refs/heads/main'
@@ -74,6 +93,8 @@ jobs:
             -v "$PWD/deploy/fluent-bit:/source:ro" \
             "$FLUENT_BIT_IMAGE" /verification/fluent_bit_probe.py
   foundation-ready:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
     needs: build
     environment:
       name: nonprod-plan
@@ -82,16 +103,27 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write
+      packages: read
     outputs:
       ready: ${{ steps.state.outputs.ready }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-plan
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: state
         working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
-          current_stage="$(terraform output -raw deployment_stage 2>/dev/null || true)"
+          current_stage="$(terraform output -raw deployment_stage)"
+          python -m tirodhan.deployment.prerequisites migration-plan
           if [[ "$current_stage" =~ ^[0-9]+$ ]] && (( current_stage >= 1 )); then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "::notice::NONPROD is already at deployment stage $current_stage; foundation prerequisites are satisfied."
@@ -116,6 +148,8 @@ jobs:
               ;;
           esac
   migration-plan:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
     needs: [build, foundation-ready]
     if: needs.foundation-ready.outputs.ready == 'true'
     environment:
@@ -125,9 +159,19 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-plan
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - working-directory: infra/terraform/nonprod
         run: python -m tirodhan.deployment.release migration-plan --plan migration.tfplan
       - uses: actions/upload-artifact@v4
@@ -136,25 +180,47 @@ jobs:
           path: infra/terraform/nonprod/migration.tfplan
           retention-days: 1
   migration-apply:
+    outputs:
+      migration_execution: ${{ steps.migration.outputs.migration_execution }}
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
     needs: migration-plan
     environment: nonprod
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+      actions: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-apply,migration-start
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@v4
         with:
           name: migration-plan
           path: infra/terraform/nonprod
       - working-directory: infra/terraform/nonprod
         run: |
-          terraform apply -input=false migration.tfplan
+          python -m tirodhan.deployment.foundation_lifecycle migration-apply --plan migration.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
-          python -m tirodhan.deployment.release migrate
+      - id: migration
+        working-directory: infra/terraform/nonprod
+        run: python -m tirodhan.deployment.release migrate
   runtime-plan:
+    outputs:
+      migration_execution: ${{ needs.migration-apply.outputs.migration_execution }}
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      TIRODHAN_MIGRATION_EXECUTION: ${{ needs.migration-apply.outputs.migration_execution }}
     needs: migration-apply
     environment:
       name: nonprod-plan
@@ -163,9 +229,19 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: runtime-plan
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - working-directory: infra/terraform/nonprod
         run: python -m tirodhan.deployment.release runtime-plan --plan runtime.tfplan
       - uses: actions/upload-artifact@v4
@@ -174,15 +250,29 @@ jobs:
           path: infra/terraform/nonprod/runtime.tfplan
           retention-days: 1
   runtime-apply:
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      TIRODHAN_MIGRATION_EXECUTION: ${{ needs.runtime-plan.outputs.migration_execution }}
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
     needs: runtime-plan
     environment: nonprod
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+      actions: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: runtime-apply
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@v4
         with:
           name: runtime-plan
@@ -190,7 +280,7 @@ jobs:
       - working-directory: infra/terraform/nonprod
         run: |
           set -euo pipefail
-          terraform apply -input=false runtime.tfplan
+          python -m tirodhan.deployment.foundation_lifecycle runtime-apply --plan runtime.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
           url="$(terraform output -raw api_url)"
           curl --fail --retry 12 --retry-all-errors --retry-delay 10 "$url/health"

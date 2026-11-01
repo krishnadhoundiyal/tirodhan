@@ -14,12 +14,23 @@ def main() -> None:
     value = os.environ["GHCR_PULL_PAT"]
     if not value.strip():
         raise SystemExit("GHCR_PULL_PAT must be nonempty")
+    from tirodhan.deployment.prerequisites import require_provisioning
+
+    require_provisioning("seed-secrets", batch={SECRET_NAME: value})
     vault_put(vault_url, SECRET_NAME, value)
     print("GHCR pull credential seeded")
 
 
 if __name__ == "__main__":
-    from tirodhan.deployment.deployment_admission import require_release_authorization
+    from tirodhan.deployment.deployment_admission import (
+        AdmissionDenied,
+        require_release_authorization,
+    )
 
-    require_release_authorization()
-    main()
+    try:
+        require_release_authorization("seed-secrets")
+        main()
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
+    except Exception:
+        raise SystemExit("PROVISIONING_UNVERIFIED: inspect operation status safely") from None

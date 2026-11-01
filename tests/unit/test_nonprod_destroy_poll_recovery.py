@@ -98,10 +98,26 @@ def test_destroy_apply_only_defers_known_aca_polling_error(
 
 
 def _recovery(
-    tmp_path: Path, *, azure_resources: str = "", remaining_deletes: bool = False
+    tmp_path: Path,
+    *,
+    azure_resources: str = "",
+    remaining_deletes: bool = False,
+    vault_present: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     tools, env = _environment(tmp_path)
-    _fake_tool(tools, "az", 'printf "%s" "$FAKE_AZ_RESOURCES"\n')
+    _fake_tool(
+        tools,
+        "az",
+        """
+case "$1 $2" in
+  "resource list") printf "%s" "$FAKE_AZ_RESOURCES" ;;
+  "rest --method")
+    if [[ "$FAKE_VAULT_PRESENT" != true ]]; then echo '(ResourceNotFound)' >&2; exit 1; fi
+    printf "%s" "$FAKE_VAULT_JSON" ;;
+  *) exit 90 ;;
+esac
+""",
+    )
     _fake_tool(tools, "sleep", ":\n")
     _fake_tool(
         tools,
@@ -135,6 +151,35 @@ def _recovery(
     plan.write_text(json.dumps({"resource_changes": changes}), encoding="utf-8")
     env.update(
         {
+            "REQUIRE_PERSISTENT_VAULT": "true",
+            "FAKE_VAULT_PRESENT": str(vault_present).lower(),
+            "ARM_TENANT_ID": "synthetic-tenant",
+            "ARM_CLIENT_ID": "synthetic-client",
+            "STATE_RESOURCE_GROUP": "synthetic-state-rg",
+            "NONPROD_TFVARS_JSON": json.dumps(
+                {
+                    "subscription_id": SUBSCRIPTION,
+                    "tenant_id": "synthetic-tenant",
+                    "resource_group_name": RESOURCE_GROUP,
+                    "suffix": "tdnp01",
+                    "location": "centralindia",
+                }
+            ),
+            "FAKE_VAULT_JSON": json.dumps(
+                {
+                    "id": (
+                        f"/subscriptions/{SUBSCRIPTION}/resourceGroups/{RESOURCE_GROUP}"
+                        "/providers/Microsoft.KeyVault/vaults/td-np-tdnp01-kv"
+                    ),
+                    "location": "centralindia",
+                    "properties": {
+                        "tenantId": "synthetic-tenant",
+                        "enablePurgeProtection": True,
+                        "enableRbacAuthorization": True,
+                        "provisioningState": "Succeeded",
+                    },
+                }
+            ),
             "FAKE_AZ_RESOURCES": azure_resources,
             "FAKE_PLAN_JSON": str(plan),
             "FAKE_APPLY_LOG": str(tmp_path / "applies"),
@@ -151,6 +196,12 @@ def test_reconciles_only_when_azure_empty_and_terraform_plan_zero_delete(tmp_pat
     result, applied = _recovery(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     assert applied == "apply -input=false terminal-convergence.tfplan\n"
+
+
+def test_missing_retained_vault_blocks_even_with_empty_inventory(tmp_path: Path) -> None:
+    result, applied = _recovery(tmp_path, vault_present=False)
+    assert result.returncode != 0 and not applied
+    assert "RETAINED_BOOTSTRAP_VAULT_NOT_VERIFIED" in result.stderr
 
 
 def test_refuses_reconciliation_if_azure_has_remaining_resources(tmp_path: Path) -> None:

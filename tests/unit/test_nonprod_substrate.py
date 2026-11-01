@@ -259,7 +259,10 @@ def test_migration_release_never_reverts_established_runtime(stage: int) -> None
 def test_sas_rotation_is_user_delegation_write_only_with_overlap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from tirodhan.deployment import prerequisites
     from tirodhan.deployment import rotate_log_sas as module
+
+    monkeypatch.setattr(prerequisites, "require_provisioning", lambda _: None)
 
     monkeypatch.setenv("LOG_ACCOUNT_NAME", "syntheticnonprod")
     monkeypatch.setenv("KEY_VAULT_URL", "https://synthetic.vault.azure.net")

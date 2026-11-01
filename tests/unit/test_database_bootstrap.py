@@ -7,6 +7,35 @@ import pytest
 from tirodhan.deployment import bootstrap_database as module
 
 
+@pytest.fixture(autouse=True)
+def authorized_sql_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise SQL invariants after admission; admission denial has separate effect tests."""
+    from types import SimpleNamespace
+
+    from tirodhan.deployment import deployment_admission, lifecycle_checks, prerequisites
+
+    monkeypatch.setattr(
+        prerequisites, "require_provisioning", lambda _: SimpleNamespace(authorization=None)
+    )
+    monkeypatch.setattr(
+        deployment_admission,
+        "configuration",
+        lambda: {"terraform": {"postgres_admin_name": "admin"}},
+    )
+    monkeypatch.setattr(
+        lifecycle_checks,
+        "Checks",
+        lambda *_: SimpleNamespace(
+            database_target=lambda: {
+                "host": "synthetic",
+                "role": "synthetic-runtime",
+                "principal_id": "oid",
+            }
+        ),
+    )
+    monkeypatch.setattr(module, "write_verified_evidence", AsyncMock())
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("existing", [False, True])
 async def test_database_bootstrap_is_rerunnable_and_grants_only_schema_privileges(
