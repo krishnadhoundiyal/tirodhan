@@ -324,11 +324,15 @@
       "target"
     ],
     "database-verify": [
+      "backend",
       "database_verification_authority",
       "execution_authority",
       "foundation",
       "identity",
+      "ownership",
+      "state",
       "target",
+      "vault",
       "verification_request"
     ],
     "migration-plan": [

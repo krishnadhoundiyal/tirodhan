@@ -1,0 +1,20 @@
+name: Record approved database verification requests
+description: Bind nonsecret requests to the trusted consumer run before contacting the verifier
+inputs:
+  operations:
+    required: true
+    description: Complete database operation set for this trusted job
+runs:
+  using: composite
+  steps:
+    - id: request
+      shell: bash
+      env:
+        DATABASE_REQUEST_OPERATIONS: ${{ inputs.operations }}
+      run: python -m tirodhan.deployment.database_verification_request
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.request.outputs.artifact_name }}
+        path: ${{ steps.request.outputs.directory }}
+        if-no-files-found: error
+        retention-days: 1

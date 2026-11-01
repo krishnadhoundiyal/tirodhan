@@ -48,7 +48,9 @@ def test_every_foundation_binding_is_mandatory_before_database_bootstrap() -> No
     io = MemoryObservations()
     required = required_addresses(io.config["terraform"])
     for missing in required:
-        io.current = state({key: "/synthetic/" + key for key in required - {missing}})
+        io.current = state(
+            {key: io.scope + "/providers/Synthetic/" + key for key in required - {missing}}
+        )
         assert not Checks(
             auth("database-bootstrap", kind="database"), io.config, {}, io
         ).check_foundation()

@@ -94,6 +94,10 @@ class GithubFake:
         with zipfile.ZipFile(archive, "w") as value:
             value.writestr("database-evidence.jwt", "new-signed-evidence")
         self.archive = archive.getvalue()
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as value:
+            value.writestr(request["request_id"] + ".json", json.dumps(request))
+        self.input_archive = archive.getvalue()
 
     def read(self, path):
         if path == "actions/runs/123":
@@ -111,6 +115,17 @@ class GithubFake:
             return {
                 "total_count": 1,
                 "jobs": [{"name": self.request["job"], "status": "in_progress"}],
+            }
+        if path.startswith("actions/runs/123/artifacts?"):
+            return {
+                "artifacts": [
+                    {
+                        "id": 43,
+                        "name": requests.request_artifact_name(self.request),
+                        "expired": False,
+                        "size_in_bytes": len(self.input_archive),
+                    }
+                ]
             }
         if "/artifacts?" in path:
             return {
@@ -134,6 +149,8 @@ class GithubFake:
             raise AdmissionDenied("DISPATCH_RESPONSE_LOST")
 
     def command(self, path):
+        if path.endswith("/artifacts/43/zip"):
+            return self.input_archive
         assert path.endswith("/artifacts/42/zip")
         return self.archive
 
@@ -374,7 +391,12 @@ def test_verifier_erases_private_file_and_previous_report_after_denial(
     from tirodhan.deployment import database_verifier as module
 
     authorization, config, request = consumer
-    monkeypatch.setattr(module, "authorize", lambda: (verifier(authorization), request))
+
+    def authorize_without_key():
+        assert "DATABASE_EVIDENCE_PRIVATE_KEY_PEM" not in module.os.environ
+        return verifier(authorization), request
+
+    monkeypatch.setattr(module, "authorize", authorize_without_key)
     monkeypatch.setattr(module, "configuration", lambda: config)
     monkeypatch.setenv("DATABASE_EVIDENCE_PRIVATE_KEY_PEM", "must-not-survive")
     previous = tmp_path / "database-evidence.jwt"
@@ -433,3 +455,38 @@ def test_database_check_runs_after_other_mandatory_observations(consumer):
     checks.registry.return_value = {key: lambda k=key: check(k) for key in CHECK_IDS}
     Controller(authorization, checks).evaluate(authorization.operation)
     assert observed[-1] == "database"
+
+
+def test_unproven_request_never_dispatches_or_reaches_azure_auth(monkeypatch, consumer):
+    authorization, _, request = consumer
+    github = GithubFake(request)
+    github.input_archive = b"not-a-trusted-request"
+    monkeypatch.setattr(requests, "Github", lambda: github)
+    with pytest.raises(AdmissionDenied, match="REQUEST_ARTIFACT_UNVERIFIED"):
+        requests.refresh_database_evidence(authorization)
+    with pytest.raises(AdmissionDenied, match="REQUEST_ARTIFACT_UNVERIFIED"):
+        requests.validate_request(verifier(authorization), request, github)
+    assert github.dispatches == 0
+
+
+def test_trusted_job_prepares_complete_nonsecret_request_bundle(monkeypatch, tmp_path, consumer):
+    authorization, _, request = consumer
+    monkeypatch.setenv("DATABASE_REQUEST_OPERATIONS", "migration-apply,migration-start")
+    output = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    monkeypatch.setattr(
+        requests,
+        "require_release_authorization",
+        lambda operation: replace(authorization, operation=operation),
+    )
+    requests.prepare_requests()
+    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    from pathlib import Path
+
+    files = list(Path(values["directory"]).glob("*.json"))
+    assert len(files) == 2 and values["artifact_name"] == requests.request_artifact_name(request)
+    assert {json.loads(path.read_text())["operation"] for path in files} == {
+        "migration-apply",
+        "migration-start",
+    }
+    assert all("TIRODHAN_NONPROD_RELEASE_AUTHORIZATION" not in path.read_text() for path in files)

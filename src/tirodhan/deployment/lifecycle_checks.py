@@ -374,6 +374,11 @@ class Checks:
         state = self.io.backend()
         if state.kind != "INITIALIZED":
             raise AdmissionDenied("FOUNDATION_STATE_UNAVAILABLE")
+        if any(
+            not value.casefold().startswith(self.io.scope.casefold() + "/")
+            for value in state.resources.values()
+        ):
+            raise AdmissionDenied("FOUNDATION_STATE_OUTSIDE_APPROVED_SCOPE")
         return state.resources
 
     def check_foundation(self) -> bool:
@@ -513,6 +518,8 @@ class Checks:
         from tirodhan.deployment.database_evidence import signer
 
         signer(self.auth)
+        if not self.check_ownership():
+            return False
         client = self.config.get("database_verification_client_id")
         principal = self.config.get("database_verification_principal_id")
         for scope in (self.io.scope, self.io.state_id):

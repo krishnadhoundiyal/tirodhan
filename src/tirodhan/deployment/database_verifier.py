@@ -32,6 +32,7 @@ def authorize() -> tuple[Authorization, dict[str, str]]:
 
 
 def verify() -> None:
+    key = os.environ.pop("DATABASE_EVIDENCE_PRIVATE_KEY_PEM")
     authorization, request = authorize()  # Recheck the consumer after any approval delay.
     config = configuration()
     root = Path(os.environ["RUNNER_TEMP"])
@@ -39,7 +40,6 @@ def verify() -> None:
     output.unlink(missing_ok=True)  # A failed rerun cannot upload a prior successful report.
     with tempfile.TemporaryDirectory(prefix="tirodhan-database-verifier-", dir=root) as temporary:
         key_path = Path(temporary) / "attester.pem"
-        key = os.environ.pop("DATABASE_EVIDENCE_PRIVATE_KEY_PEM")
         descriptor = os.open(key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(key)

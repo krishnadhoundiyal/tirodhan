@@ -11,7 +11,12 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from tirodhan.deployment.deployment_admission import AdmissionDenied, Authorization, digest
+from tirodhan.deployment.deployment_admission import (
+    AdmissionDenied,
+    Authorization,
+    digest,
+    require_release_authorization,
+)
 
 REPOSITORY = "krishnadhoundiyal/tirodhan"
 DEPLOY_WORKFLOW = ".github/workflows/nonprod-deploy.yml"
@@ -171,6 +176,7 @@ def validate_request(
         or active[0].get("status") != "in_progress"
     ):
         raise AdmissionDenied("DATABASE_VERIFICATION_CONSUMER_NOT_TRUSTED_OR_ACTIVE")
+    verify_request_artifact(github, request)
     return dict(request)
 
 
@@ -209,13 +215,9 @@ def matching_run(github: Github, request: dict[str, str]) -> dict[str, Any] | No
     return dict(row)
 
 
-def download_evidence(github: Github, run_id: int, request: dict[str, str]) -> str:
+def artifact_bytes(github: Github, run_id: int, name: str) -> bytes:
     values = github.read(f"actions/runs/{run_id}/artifacts?per_page=100")
-    rows = [
-        row
-        for row in values.get("artifacts", [])
-        if row.get("name") == "database-evidence-" + request["request_id"]
-    ]
+    rows = [row for row in values.get("artifacts", []) if row.get("name") == name]
     if (
         len(rows) != 1
         or rows[0].get("expired") is not False
@@ -226,6 +228,43 @@ def download_evidence(github: Github, run_id: int, request: dict[str, str]) -> s
     if type(artifact_id) is not int:
         raise AdmissionDenied("DATABASE_VERIFICATION_ARTIFACT_UNAVAILABLE")
     value = github.command(f"repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip")
+    if len(value) > 65536:
+        raise AdmissionDenied("DATABASE_VERIFICATION_ARTIFACT_TOO_LARGE")
+    return value
+
+
+def request_artifact_name(request: dict[str, str]) -> str:
+    return f"database-requests-{request['job']}-{request['attempt']}"
+
+
+def verify_request_artifact(github: Github, request: dict[str, str]) -> None:
+    import re
+
+    value = artifact_bytes(github, int(request["run_id"]), request_artifact_name(request))
+    try:
+        with zipfile.ZipFile(io.BytesIO(value)) as archive:
+            names = archive.namelist()
+            if (
+                not names
+                or len(names) > len(CONSUMERS[request["job"]])
+                or len(names) != len(set(names))
+                or any(not re.fullmatch(r"[a-f0-9]{64}\.json", name) for name in names)
+                or any(archive.getinfo(name).file_size > 8192 for name in names)
+            ):
+                raise ValueError
+            with archive.open(request["request_id"] + ".json") as handle:
+                body = handle.read(8193)
+            if len(body) > 8192:
+                raise ValueError
+            actual = json.loads(body)
+            if actual != request:
+                raise ValueError
+    except (ValueError, KeyError, zipfile.BadZipFile, UnicodeError) as exc:
+        raise AdmissionDenied("DATABASE_REQUEST_ARTIFACT_UNVERIFIED") from exc
+
+
+def download_evidence(github: Github, run_id: int, request: dict[str, str]) -> str:
+    value = artifact_bytes(github, run_id, "database-evidence-" + request["request_id"])
     try:
         with zipfile.ZipFile(io.BytesIO(value)) as archive:
             if archive.namelist() != ["database-evidence.jwt"]:
@@ -233,7 +272,11 @@ def download_evidence(github: Github, run_id: int, request: dict[str, str]) -> s
             info = archive.getinfo("database-evidence.jwt")
             if not 0 < info.file_size <= 32768:
                 raise ValueError
-            return archive.read(info).decode().strip()
+            with archive.open(info) as handle:
+                body = handle.read(32769)
+            if len(body) > 32768:
+                raise ValueError
+            return body.decode().strip()
     except (ValueError, KeyError, zipfile.BadZipFile, UnicodeError) as exc:
         raise AdmissionDenied("DATABASE_VERIFICATION_ARTIFACT_MALFORMED") from exc
 
@@ -257,10 +300,11 @@ def _refresh_database_evidence(authorization: Authorization) -> None:
         return
     os.environ.pop("TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE", None)
     request = consumer_context(authorization)
+    github = Github()
+    verify_request_artifact(github, request)
     directory = Path(os.environ["RUNNER_TEMP"]) / "tirodhan-database-requests"
     directory.mkdir(mode=0o700, exist_ok=True)
     claim = directory / (request["request_id"] + ".json")
-    github = Github()
     try:
         with claim.open("x", encoding="utf-8") as handle:
             handle.write(json.dumps(request, sort_keys=True))
@@ -286,3 +330,33 @@ def _refresh_database_evidence(authorization: Authorization) -> None:
         time.sleep(min(5, max(0, github.deadline - time.monotonic())))
         current = None
     raise AdmissionDenied("DATABASE_EVIDENCE_DEADLINE_EXCEEDED")
+
+
+def prepare_requests() -> None:
+    operations = os.environ["DATABASE_REQUEST_OPERATIONS"].split(",")
+    job = os.environ.get("GITHUB_JOB", "")
+    if set(operations) != CONSUMERS.get(job) or len(operations) != len(set(operations)):
+        raise AdmissionDenied("DATABASE_REQUEST_OPERATIONS_INVALID")
+    values = [consumer_context(require_release_authorization(op)) for op in operations]
+    directory = Path(os.environ["RUNNER_TEMP"]) / (
+        "database-request-inputs-" + job + "-" + values[0]["attempt"]
+    )
+    directory.mkdir(mode=0o700, exist_ok=True)
+    for value in values:
+        path = directory / (value["request_id"] + ".json")
+        body = json.dumps(value, sort_keys=True)
+        if path.exists():
+            if path.read_text() != body:
+                raise AdmissionDenied("DATABASE_REQUEST_REPLAY_CONFLICT")
+        else:
+            with path.open("x", encoding="utf-8") as handle:
+                handle.write(body)
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+        handle.write(f"directory={directory}\nartifact_name={request_artifact_name(values[0])}\n")
+
+
+if __name__ == "__main__":
+    try:
+        prepare_requests()
+    except Exception:
+        raise SystemExit("DATABASE_REQUEST_NOT_AUTHORIZED: no request artifact prepared") from None

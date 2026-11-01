@@ -110,6 +110,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-plan
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -162,6 +165,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-plan
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -189,6 +195,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: migration-apply,migration-start
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -219,6 +228,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: runtime-plan
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -246,6 +258,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/nonprod-setup
+      - uses: ./.github/actions/nonprod-database-request
+        with:
+          operations: runtime-apply
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io

@@ -32,7 +32,7 @@ REQUIRED: dict[str, frozenset[str]] = {
     "foundation-plan": FOUNDATION,
     "foundation-apply": FOUNDATION | {"saved_plan"},
     "database-bootstrap": COMMON | {"database_authority", "foundation"},
-    "database-verify": COMMON
+    "database-verify": (DEPLOYMENT - {"permissions"})
     | {"database_verification_authority", "verification_request", "foundation"},
     "migration-plan": MIGRATION,
     "migration-apply": MIGRATION | {"saved_plan"},

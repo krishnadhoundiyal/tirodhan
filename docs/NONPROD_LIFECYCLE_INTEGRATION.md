@@ -163,6 +163,13 @@ ID, commit, configuration/source hashes and requesting principal. D rejects a re
 another consumer even if its signature and timestamp are valid. The verifier has a separate
 concurrency group, avoiding deadlock with the waiting release's global group.
 
+Before dispatch, a composite action verifies D's signed authority and uploads an immutable,
+nonsecret request bundle in that exact consumer run. V checks the bundle's bytes against
+the request before Azure login. A caller with only workflow-dispatch permission cannot
+invent a request absent from the trusted run's artifacts. The bundle contains identifiers
+and hashes, not authorization JWTs, OAuth tokens or private keys. Artifact names include
+job and attempt; contents include the exact per-operation request digest.
+
 V uses `READ ONLY` transactions, bounded connection/statement timeouts and no DML/DDL/grants.
 It verifies its own service-principal OID and non-admin status, rejects elevated/data-wide or
 runtime-role membership, then checks the runtime role's exact OID/privileges/PostGIS facts.
