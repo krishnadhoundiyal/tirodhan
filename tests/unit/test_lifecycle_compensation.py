@@ -308,6 +308,7 @@ def test_apply_refuses_expired_or_replaced_release_before_native_effect(
         return authorization
 
     monkeypatch.setattr(prerequisites, "require_release_authorization", authorized)
+    monkeypatch.setattr(prerequisites, "configuration", lambda: io.config)
     if authorization_status == "current":
         lifecycle.apply(operation, tmp_path / "reviewed.tfplan")
         native.assert_called_once()
