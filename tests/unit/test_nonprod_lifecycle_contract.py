@@ -604,3 +604,39 @@ def test_concurrent_transfer_uses_saved_plan_serial_fence(
         results = list(pool.map(lambda _: execute(), range(2)))
     assert sorted(results) == ["blocked", "committed"]
     assert current["mutations"] == 1
+
+
+def test_bootstrap_never_recovers_a_soft_deleted_vault(monkeypatch: pytest.MonkeyPatch) -> None:
+    io = MemoryObservations()
+    io.config["state_resource_group"] = io.tf["resource_group_name"] + "-state"
+    io.config["state_account"] = "tdnpstate" + io.tf["suffix"]
+    io.vault_present = False
+    authorization = auth("bootstrap", kind="operator", deployment_principal_id="deployment-oid")
+    for name, value in {
+        "AZURE_SUBSCRIPTION_ID": SUB,
+        "AZURE_TENANT_ID": TENANT,
+        "AZURE_LOCATION": io.tf["location"],
+        "NONPROD_SUFFIX": io.tf["suffix"],
+        "OPERATOR_OBJECT_ID": OID,
+        "DEPLOYMENT_OBJECT_ID": "deployment-oid",
+    }.items():
+        monkeypatch.setenv(name, value)
+    io.runner.json = lambda *args: [{"name": VAULT.rsplit("/", 1)[-1]}]
+    with pytest.raises(AdmissionDenied, match="SEPARATELY_AUTHORIZED_VAULT_RECOVERY_REQUIRED"):
+        Checks(authorization, io.config, {}, io).check_bootstrap_authority()
+    assert io.runner.commands == []
+    assert "az keyvault recover" not in Path("deploy/bootstrap/bootstrap.sh").read_text()
+
+
+def test_wrong_terraform_context_stops_before_other_observations() -> None:
+    observed = []
+
+    def run(key: str) -> bool:
+        observed.append(key)
+        return key != "terraform_context"
+
+    checks = Mock()
+    checks.registry.return_value = {key: lambda k=key: run(k) for key in CHECK_IDS}
+    with pytest.raises(AdmissionDenied, match="terraform_context"):
+        Controller(auth("foundation-apply"), checks).evaluate("foundation-apply")
+    assert observed == ["target", "identity", "execution_authority", "terraform_context"]

@@ -47,6 +47,14 @@ def baseline_name(run_id: str, plan_hash: str) -> str:
     return f"lifecycle/baselines/{run_id}/{plan_hash}.json"
 
 
+def verify_preserved_permissions(checks: Checks) -> None:
+    try:
+        if checks.check_permissions() is not True:
+            raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED")
+    except (ValueError, KeyError, TypeError, AdmissionDenied) as exc:
+        raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED") from exc
+
+
 def baseline_blob_args(io: Observations, name: str) -> tuple[str, ...]:
     return (
         "--account-name",
@@ -143,8 +151,7 @@ def apply(operation: str, plan: Path) -> None:
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
         if operation == "initialize-state-apply":
             verify_clean(io)
-            if not checks.check_permissions():
-                raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED")
+            verify_preserved_permissions(checks)
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
     except AdmissionDenied:
@@ -239,8 +246,7 @@ def compensate(plan: Path) -> None:
         # Only a zero-managed-change plan may record the resource-specific absence proof.
         io.runner.run("terraform", "apply", "-input=false", str(terminal), timeout=1800)
     verify_clean(io)
-    if not Checks(auth, io.config, {}, io).check_permissions():
-        raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED")
+    verify_preserved_permissions(Checks(auth, io.config, {}, io))
     print("CLEAN_COMPENSATION_VERIFIED: original deployment remains failed")
 
 

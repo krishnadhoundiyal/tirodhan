@@ -716,6 +716,27 @@ class Checks:
             not expected or os.environ.get(key) != expected for key, expected in aliases.items()
         ):
             return False
+        if self.io.arm(self.io.vault_id, "2023-07-01") is not None:
+            if not self.check_vault():
+                return False
+        else:
+            deleted = self.io.runner.json(
+                "az",
+                "keyvault",
+                "list-deleted",
+                "--subscription",
+                self.tf["subscription_id"],
+                "--resource-type",
+                "vault",
+                "--output",
+                "json",
+            )
+            if not isinstance(deleted, list) or any(
+                str(row.get("name", "")).casefold()
+                == self.io.vault_id.rsplit("/", 1)[-1].casefold()
+                for row in deleted
+            ):
+                raise AdmissionDenied("SEPARATELY_AUTHORIZED_VAULT_RECOVERY_REQUIRED")
         subscription = "/subscriptions/" + self.tf["subscription_id"]
         if not self.permits(
             subscription,

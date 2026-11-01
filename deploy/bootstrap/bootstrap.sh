@@ -94,7 +94,7 @@ grant_role "Key Vault Secrets Officer" "$rg_scope" "$DEPLOYMENT_OBJECT_ID" Servi
 
 # Bootstrap owns the permanent purge-protected vault and its stable name.
 # This is an authorized operator operation, never a restricted foundation apply.
-# We recover a prior soft-deletion rather than purging or generating a new name.
+# Soft-deletion requires the separately approved R operation; O never recovers implicitly.
 if az keyvault show --name "$vault" --resource-group "$rg" --output none 2>/dev/null; then
   echo "Persistent Key Vault already exists."
 else
@@ -106,8 +106,8 @@ else
       and (($matches[0].properties.vaultId | ascii_downcase) == ($id | ascii_downcase))
       and (($matches[0].location | ascii_downcase) == ($loc | ascii_downcase))
   ' <<<"$deleted" >/dev/null; then
-    az keyvault recover --subscription "$AZURE_SUBSCRIPTION_ID" --name "$vault" \
-      --resource-group "$rg" --location "$AZURE_LOCATION" --output none
+    echo "Persistent vault is soft-deleted; run separately authorized recovery, then reevaluate prerequisites" >&2
+    exit 1
   elif jq -e --arg name "$vault" '
     any(.[]; (.name | ascii_downcase) == ($name | ascii_downcase))
   ' <<<"$deleted" >/dev/null; then

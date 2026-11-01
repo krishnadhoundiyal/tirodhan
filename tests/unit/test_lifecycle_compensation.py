@@ -71,7 +71,9 @@ def case(tmp_path: Path) -> tuple[MemoryObservations, Any, dict[str, Any], Path]
     return io, authorization, baseline, plan
 
 
-@pytest.mark.parametrize("invalid", ["partial", "foreign", "later-owned", "wrong-initial-plan"])
+@pytest.mark.parametrize(
+    "invalid", ["partial", "foreign", "later-owned", "advanced-stage", "wrong-initial-plan"]
+)
 def test_ineligible_baselines_never_authorize_cleanup(tmp_path: Path, invalid: str) -> None:
     io, authorization, baseline, plan = case(tmp_path)
     if invalid == "partial":
@@ -82,6 +84,8 @@ def test_ineligible_baselines_never_authorize_cleanup(tmp_path: Path, invalid: s
         io.current.resources["azurerm_container_app.later"] = (
             SCOPE + "/providers/Microsoft.App/containerApps/later"
         )
+    elif invalid == "advanced-stage":
+        io.current.document["outputs"]["deployment_stage"] = {"value": 1}
     else:
         baseline["original_plan_sha256"] = "b" * 64
     with pytest.raises(AdmissionDenied):
@@ -102,7 +106,15 @@ def test_ineligible_baselines_never_authorize_cleanup(tmp_path: Path, invalid: s
 
 @pytest.mark.parametrize(
     "outcome",
-    ["success", "unverified-aca", "unexpected-error", "polling-error", "nonempty-terminal"],
+    [
+        "success",
+        "unverified-aca",
+        "unexpected-error",
+        "polling-error",
+        "nonempty-terminal",
+        "missing-vault",
+        "lost-rbac",
+    ],
 )
 def test_actual_compensation_postconditions(
     tmp_path: Path,
@@ -151,6 +163,13 @@ def test_actual_compensation_postconditions(
                 args, 1, "", "ENVIRONMENT_DELETION_DEADLINE_EXCEEDED"
             )
         io.active = {VAULT}
+        if outcome == "missing-vault":
+            io.vault_present = False
+        if outcome == "lost-rbac":
+            original_json = io.runner.json
+            io.runner.json = lambda *a: (
+                [] if a[:4] == ("az", "role", "assignment", "list") else original_json(*a)
+            )
         return subprocess.CompletedProcess(args, 0, "", "")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", child)
