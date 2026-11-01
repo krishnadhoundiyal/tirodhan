@@ -30,10 +30,11 @@ def verify_clean(io: Observations) -> None:
     if remaining:
         raise AdmissionDenied("DISPOSABLE_AZURE_RESOURCES_REMAIN")
     vault = io.arm(io.vault_id, "2023-07-01")
-    if vault is not None:
-        from tirodhan.deployment.destroy_preservation import verify_retained_vault
+    if vault is None:
+        raise AdmissionDenied("PERSISTENT_VAULT_NOT_PRESERVED")
+    from tirodhan.deployment.destroy_preservation import verify_retained_vault
 
-        verify_retained_vault(io)
+    verify_retained_vault(io)
 
 
 def baseline_name(run_id: str, plan_hash: str) -> str:
@@ -142,6 +143,8 @@ def apply(operation: str, plan: Path) -> None:
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
         if operation == "initialize-state-apply":
             verify_clean(io)
+            if not checks.check_permissions():
+                raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED")
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
     except AdmissionDenied:
@@ -236,6 +239,8 @@ def compensate(plan: Path) -> None:
         # Only a zero-managed-change plan may record the resource-specific absence proof.
         io.runner.run("terraform", "apply", "-input=false", str(terminal), timeout=1800)
     verify_clean(io)
+    if not Checks(auth, io.config, {}, io).check_permissions():
+        raise AdmissionDenied("BOOTSTRAP_RBAC_NOT_PRESERVED")
     print("CLEAN_COMPENSATION_VERIFIED: original deployment remains failed")
 
 
