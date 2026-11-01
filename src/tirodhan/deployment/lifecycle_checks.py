@@ -29,6 +29,12 @@ from tirodhan.deployment.lifecycle_evidence import (
     plan_prior_state,
     state_resources,
 )
+from tirodhan.deployment.migration_evidence import (
+    API_VERSION,
+    execution_name,
+    migration_template,
+    successful_execution,
+)
 from tirodhan.deployment.prerequisites import CHECK_IDS
 
 
@@ -656,29 +662,28 @@ class Checks:
         resource_id = resources.get("azurerm_container_app_job.migration[0]")
         if not resource_id:
             raise AdmissionDenied("MIGRATION_JOB_MISSING")
-        value = self.io.arm(resource_id, "2025-07-01")
-        if value is None:
+        value = self.io.arm(resource_id, API_VERSION)
+        if value is None or str(value.get("id", "")).casefold() != resource_id.casefold():
             raise AdmissionDenied("MIGRATION_JOB_MISSING")
         return value
 
     def check_migration_job(self) -> bool:
-        job = self.job()
-        containers = job.get("properties", {}).get("template", {}).get("containers", [])
-        application: dict[str, Any] = next(
-            (r for r in containers if r.get("name") == "application"), {}
-        )
-        return application.get("image") == os.environ.get("APPLICATION_IMAGE") and application.get(
-            "args"
-        ) == ["python", "-m", "tirodhan.deployment.job", "--", "alembic", "upgrade", "head"]
+        return migration_template(self.job(), os.environ.get("APPLICATION_IMAGE", ""))
 
     def check_migration(self) -> bool:
-        if not self.check_migration_job():
+        job = self.job()
+        if not migration_template(job, os.environ.get("APPLICATION_IMAGE", "")):
             return False
-        execution = self.binding().get("migration_execution")
-        if not isinstance(execution, str) or not re.fullmatch(r"[a-z0-9-]+", execution):
+        execution = self.parameters.get(
+            "migration_execution", os.environ.get("TIRODHAN_MIGRATION_EXECUTION")
+        )
+        if not execution_name(execution):
             return False
-        value = self.io.arm(self.job()["id"] + "/executions/" + execution, "2025-07-01")
-        return value is not None and value.get("properties", {}).get("status") == "Succeeded"
+        job_id = job["id"]
+        value = self.io.arm(job_id + "/executions/" + execution, API_VERSION)
+        return successful_execution(
+            value, job_id, execution, os.environ.get("APPLICATION_IMAGE", "")
+        )
 
     def check_saved_plan(self) -> bool:
         path = self.parameters.get("plan")

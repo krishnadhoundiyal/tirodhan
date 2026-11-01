@@ -4,7 +4,7 @@ import copy
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from threading import Lock
+from threading import Barrier, Lock
 from urllib.parse import urlsplit
 
 import pytest
@@ -13,6 +13,7 @@ from lifecycle_fakes import OID, MemoryObservations, assignments, auth
 from tirodhan.deployment import foundation_reconcile, recovery_enrollment
 from tirodhan.deployment.check_nonprod_bootstrap_rbac import READER_ROLE_ID, verify_bootstrap_rbac
 from tirodhan.deployment.deployment_admission import AdmissionDenied, digest
+from tirodhan.deployment.lifecycle_evidence import ObservationError
 
 RCLIENT = "00000000-0000-0000-0000-000000000021"
 R = "00000000-0000-0000-0000-000000000022"
@@ -32,6 +33,8 @@ class Enrollment(MemoryObservations):
         self.lock = Lock()
         self.owner = True
         self.lost_response = False
+        self.post_barrier = None
+        self.conflicts = 0
         self.runner.json = self.json
         self.runner.run = self.run
 
@@ -70,10 +73,16 @@ class Enrollment(MemoryObservations):
             url
             == f"https://graph.microsoft.com/v1.0/applications/{APP}/federatedIdentityCredentials"
         )
+        if self.post_barrier is not None:
+            self.post_barrier.wait(timeout=10)
         with self.lock:
-            if not self.credentials:
-                self.credentials.append(copy.deepcopy(recovery_enrollment.FEDERATION))
             self.writes.append(url)
+            if self.credentials:
+                self.conflicts += 1
+                # Graph requires unique name and issuer/subject within the app:
+                # https://learn.microsoft.com/graph/api/resources/federatedidentitycredential
+                raise ObservationError("Request_BadRequest")
+            self.credentials.append(copy.deepcopy(recovery_enrollment.FEDERATION))
         if self.lost_response:
             raise AdmissionDenied("RESPONSE_LOST_AFTER_COMMIT")
         return ""
@@ -117,9 +126,24 @@ def test_actual_enrollment_before_soft_deleted_vault_recovery_replays(
 
 def test_concurrent_enrollment_converges_on_same_grants(enrolled_context):
     io, _ = enrolled_context
+    io.post_barrier = Barrier(2)
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda _: recovery_enrollment.enroll(), range(2)))
     assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+    assert io.conflicts == 1
+    assert sum("graph.microsoft.com" in target for target in io.writes) == 2
+
+
+def test_rejected_create_without_confirmed_credential_remains_failure(enrolled_context):
+    io, _ = enrolled_context
+
+    def rejected(*args, **kwargs):
+        raise ObservationError("Request_BadRequest")
+
+    io.runner.run = rejected
+    with pytest.raises(AdmissionDenied, match="Request_BadRequest"):
+        recovery_enrollment.enroll()
+    assert not io.credentials
 
 
 @pytest.mark.parametrize("form", ["provider", "subscription", "resource-group", "uppercase"])

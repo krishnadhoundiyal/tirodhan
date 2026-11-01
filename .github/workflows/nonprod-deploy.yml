@@ -180,6 +180,8 @@ jobs:
           path: infra/terraform/nonprod/migration.tfplan
           retention-days: 1
   migration-apply:
+    outputs:
+      migration_execution: ${{ steps.migration.outputs.migration_execution }}
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
       TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
@@ -210,10 +212,15 @@ jobs:
         run: |
           python -m tirodhan.deployment.foundation_lifecycle migration-apply --plan migration.tfplan
           terraform show -json | python -m tirodhan.deployment.check_state
-          python -m tirodhan.deployment.release migrate
+      - id: migration
+        working-directory: infra/terraform/nonprod
+        run: python -m tirodhan.deployment.release migrate
   runtime-plan:
+    outputs:
+      migration_execution: ${{ needs.migration-apply.outputs.migration_execution }}
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      TIRODHAN_MIGRATION_EXECUTION: ${{ needs.migration-apply.outputs.migration_execution }}
     needs: migration-apply
     environment:
       name: nonprod-plan
@@ -245,6 +252,7 @@ jobs:
   runtime-apply:
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      TIRODHAN_MIGRATION_EXECUTION: ${{ needs.runtime-plan.outputs.migration_execution }}
       TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
     needs: runtime-plan
     environment: nonprod

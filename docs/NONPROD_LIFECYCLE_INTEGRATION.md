@@ -10,11 +10,9 @@ and contains no authorization/evidence keys. Caller-provided PASS Booleans do no
 
 ## Review and merge order
 
-1. Review hold PR 96, including CodeRabbit and repository checks. Do not merge without
-   explicit user approval. Its commit is independent of the lifecycle integration.
-2. Review the integration stacked on that hold. Require final tests and CodeRabbit review.
-3. After separate explicit approvals, merge the hold first, then retarget/revalidate the
-   integration against main. Neither merge releases provisioning.
+1. Hold PR 96 has merged into main; PR 97 now targets main. The hold remains active.
+2. Review the integration against current main. Require final tests and CodeRabbit review.
+3. Merge PR 97 only after separate explicit approval. Neither merge releases provisioning.
 4. Separately approve and enroll authorization/evidence public keys and identity permissions.
    No bootstrap, recovery, ownership transfer, state initialization or deployment is
    authorized by preparing this source change.
@@ -183,6 +181,18 @@ runtime workloads until schema success. The migration apply profile rejects chan
 API/worker/scheduled workloads. Saved plans bind migration/runtime image variables to the
 verified release images (preserving established images during migration), and runtime plans
 must include the required secret-name bindings; verifying unused material is insufficient.
+
+The migration step publishes `migration_execution` only after reading the exact ARM
+execution and verifying terminal success, the release image, entrypoint and Alembic command.
+The workflow passes that output through `needs` to runtime-plan and runtime-apply as
+`TIRODHAN_MIGRATION_EXECUTION`. Each independently reads the exact state-owned Job/execution
+and verifies its immutable template again. This is observation evidence, not authorization:
+the signed release still binds the commit/configuration/source and operation but need not
+predict Azure's future execution name. Missing outputs block; signed execution-name bindings
+are not a fallback. Local runtime operations must explicitly supply the same environment
+value, which receives the same ARM verification. ARM's single-execution API may omit `id`;
+the scoped request and returned name identify it, and any returned ID must match the request.
+See [the ARM execution schema](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/job-execution/job-execution?view=rest-resource-manager-containerapps-2025-07-01).
 
 The automated release no longer consumes a repository-stored SQL report. Immediately
 before each database-gated controller evaluation, after that D job's environment approval,

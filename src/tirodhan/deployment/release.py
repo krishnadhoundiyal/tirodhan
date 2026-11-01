@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 from tirodhan.deployment.azure_controls import assert_no_list_keys
@@ -108,25 +109,44 @@ def plan(mode: str, path: str) -> None:
 
 
 def run_migration() -> None:
-    from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
+    from tirodhan.deployment.foundation_reconcile import admitted_with_grant
+    from tirodhan.deployment.migration_evidence import (
+        API_VERSION,
+        execution_name,
+        successful_execution,
+    )
+    from tirodhan.deployment.prerequisites import revalidate_database
 
-    grant = require_provisioning("migration-start")
-    state = output_values()
-    group, job = state["resource_group_name"], state["migration_job_name"]
-    if not job:
-        raise ReleaseBlocked("Migration job must be applied first")
+    checks, io, grant = admitted_with_grant("migration-start")
+    job_id = checks.job()["id"]
     revalidate_database(grant)
-    execution = cli_json(["az", "containerapp", "job", "start", "-g", group, "-n", job])
-    name = execution["name"]
+    execution = io.runner.json(
+        "az",
+        "containerapp",
+        "job",
+        "start",
+        "--subscription",
+        io.tf["subscription_id"],
+        "-g",
+        io.tf["resource_group_name"],
+        "-n",
+        job_id.rsplit("/", 1)[-1],
+        "-o",
+        "json",
+    )
+    name = execution.get("name")
+    if not execution_name(name):
+        raise ReleaseBlocked("Migration start returned no valid execution identity")
     deadline = time.monotonic() + 1200
     while time.monotonic() < deadline:
-        executions = cli_json(
-            ["az", "containerapp", "job", "execution", "list", "-g", group, "-n", job]
-        )
-        status = next(
-            (item["properties"]["status"] for item in executions if item["name"] == name), None
-        )
+        value = io.arm(job_id + "/executions/" + name, API_VERSION)
+        status = value.get("properties", {}).get("status") if value else None
         if status == "Succeeded":
+            if not successful_execution(value, job_id, name, os.environ["APPLICATION_IMAGE"]):
+                raise ReleaseBlocked("Migration execution template does not match this release")
+            if output := os.environ.get("GITHUB_OUTPUT"):
+                with Path(output).open("a", encoding="utf-8") as stream:
+                    stream.write(f"migration_execution={name}\n")
             print("Migration and bounded log-sidecar execution succeeded")
             return
         if status in {"Failed", "Stopped"}:

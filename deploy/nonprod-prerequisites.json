@@ -79,14 +79,14 @@
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "migration": {
-      "authority": "exact Job execution and reviewed migration image",
+      "authority": "successful migration job output plus exact ARM execution/template and reviewed image; independently verified by each runtime operation",
       "identity": "D",
       "scope": "exact migration Job/execution",
       "allowed_operation": "verify terminal success of expected committed image",
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "migration_job": {
-      "authority": "Terraform outputs and exact applied migration Job",
+      "authority": "raw Terraform state and exact applied migration Job/command/image",
       "identity": "D",
       "scope": "approved Job and reviewed image",
       "allowed_operation": "verify job configuration before start",

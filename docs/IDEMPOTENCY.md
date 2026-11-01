@@ -7,6 +7,11 @@ replay verifies actual already-transferred state. Clean compensation uses a cond
 baseline and original approved create addresses; partial/foreign state is never auto-destroyed.
 Original deployment failure remains failure after cleanup. No new business DB/inbox/outbox
 protocol is introduced. See [operation boundaries](NONPROD_LIFECYCLE_INTEGRATION.md).
+Migration start publishes its generated execution name only after exact ARM success and
+immutable-template verification; both runtime operations independently recheck that evidence.
+Missing, failed or uncertain execution never produces a success output or triggers an
+automatic second start. A workflow retry still requires current operation authorization
+and prerequisites; Alembic's version history reconciles already committed schema revisions.
 SQL verification requests use a digest of repository/run/attempt/job/operation/release and
 configuration/source/authorization context. An exclusive local claim admits one dispatch;
 uncertain responses reconcile the exact verifier run instead of resending. Concurrent
