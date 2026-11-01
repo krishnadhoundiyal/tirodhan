@@ -128,6 +128,7 @@ class GithubFake:
                 "artifacts": [
                     {
                         "id": 43,
+                        "created_at": "2026-11-01T12:00:00.999Z",
                         "name": requests.request_artifact_name(self.request),
                         "expired": False,
                         "size_in_bytes": len(self.input_archive),
@@ -201,6 +202,62 @@ def test_verifier_on_advanced_main_is_rejected_without_waiting_or_redispatch(mon
     monkeypatch.setattr(requests, "Github", lambda: github)
     monkeypatch.setattr(requests.time, "sleep", lambda _: pytest.fail("must reject immediately"))
     with pytest.raises(AdmissionDenied, match="DATABASE_VERIFICATION_RUN_UNTRUSTED"):
+        requests.refresh_database_evidence(authorization)
+    assert github.dispatches == 0
+
+
+def test_request_search_skips_large_retained_history_using_trusted_artifact_time(
+    monkeypatch, consumer
+):
+    from urllib.parse import parse_qs, urlsplit
+
+    authorization, _, request = consumer
+    github = GithubFake(request)
+    github.started = True
+    original = github.read
+    queries = []
+    old = [
+        github.run | {"id": i, "created_at": "2025-01-01T00:00:00Z", "display_title": f"old-{i}"}
+        for i in range(3000)
+    ]
+
+    def read(path):
+        if "/runs?" not in path:
+            return original(path)
+        query = parse_qs(urlsplit(path).query)
+        queries.append(query)
+        lower = query.get("created", [""])[0].removeprefix(">=")
+        rows = [
+            r
+            for r in [github.run | {"created_at": "2026-11-01T12:00:01Z"}, *old]
+            if r["created_at"] >= lower
+        ]
+        page = int(query["page"][0])
+        return {"total_count": len(rows), "workflow_runs": rows[(page - 1) * 100 : page * 100]}
+
+    github.read = read
+    monkeypatch.setattr(requests, "Github", lambda: github)
+    requests.refresh_database_evidence(authorization)
+    assert len(queries) == 1
+    assert queries[0]["created"] == [">=2026-11-01T12:00:00Z"]
+    assert github.dispatches == 0
+
+
+@pytest.mark.parametrize("created", [None, "not-a-date", "2026-11-01T12:00:00"])
+def test_unverified_request_creation_time_blocks_before_dispatch(monkeypatch, consumer, created):
+    authorization, _, request = consumer
+    github = GithubFake(request)
+    original = github.read
+
+    def read(path):
+        value = original(path)
+        if path.startswith("actions/runs/123/artifacts?"):
+            value["artifacts"][0]["created_at"] = created
+        return value
+
+    github.read = read
+    monkeypatch.setattr(requests, "Github", lambda: github)
+    with pytest.raises(AdmissionDenied, match="DATABASE_REQUEST_ARTIFACT_UNVERIFIED"):
         requests.refresh_database_evidence(authorization)
     assert github.dispatches == 0
 

@@ -176,6 +176,10 @@ before each database-gated controller evaluation, after that D job's environment
 D dispatches `nonprod-database-verify.yml` using the ephemeral repository `GITHUB_TOKEN`.
 GitHub explicitly supports [workflow_dispatch with that token](https://github.blog/changelog/2022-09-08-github-actions-use-github_token-with-workflow_dispatch-and-repository_dispatch/).
 Only trusted D jobs receive `actions: write` for this request; PR checks remain read-only.
+Verifier-run discovery starts at the exact trusted request artifact's GitHub creation
+timestamp, normalized to UTC seconds. Retained earlier history cannot fill the bounded
+search. Missing timestamp evidence blocks; a matching request on a different commit is
+rejected immediately instead of being hidden by a commit filter.
 This GitHub permission is repository-wide, so workflow protection and signed operation
 authorization remain necessary. It grants no Azure or SQL privilege to D.
 

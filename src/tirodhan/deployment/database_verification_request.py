@@ -8,6 +8,7 @@ import os
 import subprocess
 import time
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -180,13 +181,25 @@ def validate_request(
     return dict(request)
 
 
-def matching_run(github: Github, request: dict[str, str]) -> dict[str, Any] | None:
+def matching_run(
+    github: Github, request: dict[str, str], created_after: str
+) -> dict[str, Any] | None:
+    from urllib.parse import urlencode
+
     # Page the bounded recent window: concurrent requests must not hide this request.
+    # The trusted request artifact predates dispatch. Retained older runs can never
+    # consume this search's 1,000-result budget, even after main advances.
     found: list[dict[str, Any]] = []
     for page in range(1, 11):
-        result = github.read(
-            f"actions/workflows/{VERIFY_WORKFLOW}/runs?event=workflow_dispatch&per_page=100&page={page}"
+        query = urlencode(
+            {
+                "event": "workflow_dispatch",
+                "created": ">=" + created_after,
+                "per_page": 100,
+                "page": page,
+            }
         )
+        result = github.read(f"actions/workflows/{VERIFY_WORKFLOW}/runs?{query}")
         rows = result.get("workflow_runs")
         if not isinstance(rows, list):
             raise AdmissionDenied("DATABASE_VERIFICATION_RUNS_UNAVAILABLE")
@@ -215,7 +228,7 @@ def matching_run(github: Github, request: dict[str, str]) -> dict[str, Any] | No
     return dict(row)
 
 
-def artifact_bytes(github: Github, run_id: int, name: str) -> bytes:
+def artifact_bytes(github: Github, run_id: int, name: str) -> tuple[bytes, dict[str, Any]]:
     values = github.read(f"actions/runs/{run_id}/artifacts?per_page=100")
     rows = [row for row in values.get("artifacts", []) if row.get("name") == name]
     if (
@@ -230,18 +243,21 @@ def artifact_bytes(github: Github, run_id: int, name: str) -> bytes:
     value = github.command(f"repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip")
     if len(value) > 65536:
         raise AdmissionDenied("DATABASE_VERIFICATION_ARTIFACT_TOO_LARGE")
-    return value
+    return value, rows[0]
 
 
 def request_artifact_name(request: dict[str, str]) -> str:
     return f"database-requests-{request['job']}-{request['attempt']}"
 
 
-def verify_request_artifact(github: Github, request: dict[str, str]) -> None:
+def verify_request_artifact(github: Github, request: dict[str, str]) -> str:
     import re
 
-    value = artifact_bytes(github, int(request["run_id"]), request_artifact_name(request))
+    value, metadata = artifact_bytes(github, int(request["run_id"]), request_artifact_name(request))
     try:
+        created = datetime.fromisoformat(metadata["created_at"].replace("Z", "+00:00"))
+        if created.tzinfo is None:
+            raise ValueError
         with zipfile.ZipFile(io.BytesIO(value)) as archive:
             names = archive.namelist()
             if (
@@ -259,12 +275,22 @@ def verify_request_artifact(github: Github, request: dict[str, str]) -> None:
             actual = json.loads(body)
             if actual != request:
                 raise ValueError
-    except (ValueError, KeyError, zipfile.BadZipFile, UnicodeError) as exc:
+    except (
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        zipfile.BadZipFile,
+        UnicodeError,
+    ) as exc:
         raise AdmissionDenied("DATABASE_REQUEST_ARTIFACT_UNVERIFIED") from exc
+    # Workflow timestamps have second precision; floor rather than hiding a run
+    # created in the same second as an artifact with fractional timestamp precision.
+    return created.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def download_evidence(github: Github, run_id: int, request: dict[str, str]) -> str:
-    value = artifact_bytes(github, run_id, "database-evidence-" + request["request_id"])
+    value, _ = artifact_bytes(github, run_id, "database-evidence-" + request["request_id"])
     try:
         with zipfile.ZipFile(io.BytesIO(value)) as archive:
             if archive.namelist() != ["database-evidence.jwt"]:
@@ -301,7 +327,7 @@ def _refresh_database_evidence(authorization: Authorization) -> None:
     os.environ.pop("TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE", None)
     request = consumer_context(authorization)
     github = Github()
-    verify_request_artifact(github, request)
+    created_after = verify_request_artifact(github, request)
     directory = Path(os.environ["RUNNER_TEMP"]) / "tirodhan-database-requests"
     directory.mkdir(mode=0o700, exist_ok=True)
     claim = directory / (request["request_id"] + ".json")
@@ -313,14 +339,14 @@ def _refresh_database_evidence(authorization: Authorization) -> None:
         # The filename is the complete request's digest. A concurrent writer may
         # still be writing the audit body; existence alone prevents another dispatch.
         owner = False
-    current = matching_run(github, request)
+    current = matching_run(github, request, created_after)
     if owner and current is None:
         try:
             github.dispatch(request)
         except AdmissionDenied:
             pass  # Dispatch may have committed. Reconcile by request ID; never blindly resend.
     while time.monotonic() < github.deadline:
-        current = current or matching_run(github, request)
+        current = current or matching_run(github, request, created_after)
         if current is not None and current.get("status") == "completed":
             if current.get("conclusion") != "success":
                 raise AdmissionDenied("DATABASE_VERIFICATION_DID_NOT_SUCCEED")
