@@ -479,7 +479,6 @@ def test_bootstrap_never_recovers_a_soft_deleted_vault(monkeypatch: pytest.Monke
     assert "az keyvault recover" not in Path("deploy/bootstrap/bootstrap.sh").read_text()
 
 
-
 @pytest.mark.parametrize(
     "recovery,accepted",
     [("absent", True), ("object-only", False), ("app-only", False), ("both", True)],
@@ -543,9 +542,7 @@ def test_bootstrap_optional_recovery_pair_never_skips_deployment_identity(
     if accepted:
         assert ("az", "ad", "sp", "show", "--id", "deployment-oid") in calls
         assert ("az", "ad", "app", "show", "--id", "deployment-application") in calls
-        assert (
-            ("az", "ad", "sp", "show", "--id", "recovery-oid") in calls
-        ) is (recovery == "both")
+        assert (("az", "ad", "sp", "show", "--id", "recovery-oid") in calls) is (recovery == "both")
     else:
         assert not calls
 
