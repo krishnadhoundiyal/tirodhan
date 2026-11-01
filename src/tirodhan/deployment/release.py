@@ -94,7 +94,10 @@ def plan(mode: str, path: str) -> None:
         # An established stage-4 stack must not reconcile running applications with
         # new inputs (or the empty default secret set) before migrations succeed.
         arguments.append("-target=azurerm_container_app_job.migration[0]")
-    subprocess.run(arguments, env=environment, check=True)
+    try:
+        subprocess.run(arguments, env=environment, check=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        raise ReleaseBlocked("Terraform planning timed out; rollout is blocked") from None
     data = json.loads(
         subprocess.run(
             ["terraform", "show", "-json", path], check=True, capture_output=True, text=True

@@ -47,6 +47,29 @@ def test_only_migration_job_is_reconciled_before_schema_success(monkeypatch, mod
     )
 
 
+@pytest.mark.parametrize("mode", ["migration", "runtime"])
+def test_terraform_plan_timeout_blocks_without_inspecting_unfinished_plan(monkeypatch, mode):
+    monkeypatch.setenv("APPLICATION_IMAGE", APP)
+    monkeypatch.setenv("FLUENT_BIT_IMAGE", SIDECAR)
+    monkeypatch.setattr(prerequisites, "require_provisioning", lambda _: object())
+    monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
+    monkeypatch.setattr(release, "assert_no_list_keys", lambda: None)
+    monkeypatch.setattr(release, "output_values", lambda: {"deployment_stage": 1})
+    monkeypatch.setattr(release, "enabled_secret_names", lambda _: release.MIGRATION_SECRET_NAMES)
+    invoked = []
+
+    def hung(args, **kwargs):
+        invoked.append((args, kwargs))
+        raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+
+    monkeypatch.setattr(release.subprocess, "run", hung)
+    with pytest.raises(release.ReleaseBlocked, match="Terraform planning timed out"):
+        release.plan(mode, "reviewed.tfplan")
+    assert len(invoked) == 1
+    assert invoked[0][0][:2] == ["terraform", "plan"]
+    assert invoked[0][1]["timeout"] == 1800
+
+
 @pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply"])
 @pytest.mark.parametrize(
     "changed", [None, "migration_image", "application_image", "fluent_bit_image"]

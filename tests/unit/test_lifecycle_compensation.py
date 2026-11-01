@@ -222,6 +222,7 @@ def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
     )
     monkeypatch.setattr(lifecycle, "record_baseline", lambda *a: {"classification": classification})
     monkeypatch.setattr(lifecycle, "automatic_compensation_context", lambda: serialized)
+    monkeypatch.setattr(prerequisites, "require_release_authorization", lambda _: authorization)
     io.runner.run = Mock(side_effect=AdmissionDenied("APPLY_FAILED"))
     prepare, compensate = Mock(), Mock()
     monkeypatch.setattr(lifecycle, "prepare_compensation", prepare)
@@ -265,6 +266,55 @@ def test_apply_revalidates_database_evidence_immediately_before_terraform(
         with pytest.raises(AdmissionDenied, match="DATABASE_EVIDENCE_NO_LONGER_CURRENT"):
             lifecycle.apply(operation, plan)
         native_apply.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["foundation-apply", "migration-apply", "runtime-apply"])
+@pytest.mark.parametrize("authorization_status", ["expired", "replaced", "current"])
+def test_apply_refuses_expired_or_replaced_release_before_native_effect(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    operation: str,
+    authorization_status: str,
+) -> None:
+    from unittest.mock import Mock
+
+    io = MemoryObservations()
+    authorization = auth(operation)
+    authorization.claims["operations"] = [
+        operation,
+        "prepare-compensation",
+        "compensate-foundation",
+    ]
+    checks = Checks(authorization, io.config, {}, io)
+    grant = Grant(authorization, operation, io.current.fingerprint, (), {})
+    monkeypatch.setattr(lifecycle, "admitted_with_grant", lambda *a, **k: (checks, io, grant))
+    monkeypatch.setattr(lifecycle, "record_baseline", lambda *_: {"classification": "CLEAN_INITIALIZED"})
+    monkeypatch.setattr(lifecycle, "automatic_compensation_context", lambda: True)
+    monkeypatch.setattr(checks, "check_foundation", lambda: True)
+    monkeypatch.setattr(checks, "check_migration_job", lambda: True)
+    monkeypatch.setattr(Checks, "check_database", lambda _: True)
+    prepare, compensate, native = Mock(), Mock(), Mock()
+    monkeypatch.setattr(lifecycle, "prepare_compensation", prepare)
+    monkeypatch.setattr(lifecycle, "compensate", compensate)
+    io.runner.run = native
+
+    def authorized(_: str):
+        if authorization_status == "expired":
+            raise AdmissionDenied("RELEASE_AUTHORIZATION_INVALID")
+        if authorization_status == "replaced":
+            return auth(operation, replacement_claim=True)
+        return authorization
+
+    monkeypatch.setattr(prerequisites, "require_release_authorization", authorized)
+    if authorization_status == "current":
+        lifecycle.apply(operation, tmp_path / "reviewed.tfplan")
+        native.assert_called_once()
+    else:
+        with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION"):
+            lifecycle.apply(operation, tmp_path / "reviewed.tfplan")
+        native.assert_not_called()
+    prepare.assert_not_called()
+    compensate.assert_not_called()
 
 
 def test_crash_replay_does_not_overwrite_existing_baseline_or_repeat_apply(

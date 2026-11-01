@@ -479,6 +479,107 @@ def test_bootstrap_never_recovers_a_soft_deleted_vault(monkeypatch: pytest.Monke
     assert "az keyvault recover" not in Path("deploy/bootstrap/bootstrap.sh").read_text()
 
 
+
+@pytest.mark.parametrize(
+    "recovery,accepted",
+    [("absent", True), ("object-only", False), ("app-only", False), ("both", True)],
+)
+def test_bootstrap_optional_recovery_pair_never_skips_deployment_identity(
+    monkeypatch: pytest.MonkeyPatch, recovery: str, accepted: bool
+) -> None:
+    io = MemoryObservations()
+    io.config["state_resource_group"] = io.tf["resource_group_name"] + "-state"
+    io.config["state_account"] = "tdnpstate" + io.tf["suffix"]
+    authorization = auth(
+        "bootstrap",
+        kind="operator",
+        deployment_principal_id="deployment-oid",
+        bootstrap_enrollment_authorized=True,
+        bootstrap_discovery_authorized=True,
+    )
+    for name, value in {
+        "AZURE_SUBSCRIPTION_ID": SUB,
+        "AZURE_TENANT_ID": TENANT,
+        "AZURE_LOCATION": io.tf["location"],
+        "NONPROD_SUFFIX": io.tf["suffix"],
+        "OPERATOR_OBJECT_ID": OID,
+        "DEPLOYMENT_OBJECT_ID": "deployment-oid",
+        "FEDERATED_APP_OBJECT_ID": "deployment-application",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("RECOVERY_OBJECT_ID", raising=False)
+    monkeypatch.delenv("RECOVERY_FEDERATED_APP_OBJECT_ID", raising=False)
+    if recovery in {"object-only", "both"}:
+        monkeypatch.setenv("RECOVERY_OBJECT_ID", "recovery-oid")
+    if recovery in {"app-only", "both"}:
+        monkeypatch.setenv("RECOVERY_FEDERATED_APP_OBJECT_ID", "recovery-application")
+    monkeypatch.setattr(Checks, "permits", lambda *_: True)
+    calls = []
+
+    def directory(*args: str) -> Any:
+        calls.append(args)
+        if args[:4] == ("az", "ad", "sp", "show"):
+            oid = args[-1]
+            return {
+                "id": oid,
+                "appId": io.config["deployment_client_id"]
+                if oid == "deployment-oid"
+                else io.config["recovery_client_id"],
+            }
+        if args[:4] == ("az", "ad", "app", "show"):
+            app = args[-1]
+            return {
+                "id": app,
+                "appId": io.config["deployment_client_id"]
+                if app == "deployment-application"
+                else io.config["recovery_client_id"],
+            }
+        if args[:4] == ("az", "ad", "app", "owner"):
+            return [{"id": OID}]
+        raise AssertionError(args)
+
+    monkeypatch.setattr(io.runner, "json", directory)
+    assert Checks(authorization, io.config, {}, io).check_bootstrap_authority() is accepted
+    if accepted:
+        assert ("az", "ad", "sp", "show", "--id", "deployment-oid") in calls
+        assert ("az", "ad", "app", "show", "--id", "deployment-application") in calls
+        assert (
+            ("az", "ad", "sp", "show", "--id", "recovery-oid") in calls
+        ) is (recovery == "both")
+    else:
+        assert not calls
+
+
+def test_runtime_json_collection_values_match_terraform_map_strings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tirodhan.deployment.runtime_prerequisites import proposed_settings
+
+    monkeypatch.setenv("TIRODHAN_MEDIA_PHOTO_ALLOWED_CONTENT_TYPES", '["unapproved/type"]')
+    settings = proposed_settings(
+        {
+            "TIRODHAN_MEDIA_PHOTO_ALLOWED_CONTENT_TYPES": '["image/jpeg","image/png"]',
+            "TIRODHAN_CUSTOMER_WEB_PUSH_ORIGINS": '["https://example.org"]',
+            "TIRODHAN_MEDIA_PHOTO_MAX_SIZE_BYTES": "4096",
+        }
+    )
+    assert settings.media_photo_allowed_content_types == ["image/jpeg", "image/png"]
+    assert settings.customer_web_push_origins == ["https://example.org"]
+    assert settings.media_photo_max_size_bytes == 4096
+    assert proposed_settings({}).media_photo_allowed_content_types is None
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ['["image/jpeg"', '{"content_type":"image/jpeg"}', '"image/jpeg"'],
+)
+def test_malformed_runtime_collection_blocks_admission(invalid: str) -> None:
+    from tirodhan.deployment.runtime_prerequisites import proposed_settings
+
+    with pytest.raises(ValueError):
+        proposed_settings({"TIRODHAN_MEDIA_PHOTO_ALLOWED_CONTENT_TYPES": invalid})
+
+
 def test_wrong_terraform_context_stops_before_other_observations() -> None:
     observed = []
 

@@ -879,14 +879,29 @@ class Checks:
             },
         ):
             return False
-        for key, expected_client in (
-            ("DEPLOYMENT_OBJECT_ID", self.config["deployment_client_id"]),
-            ("RECOVERY_OBJECT_ID", self.config.get("recovery_client_id")),
-        ):
+        # bootstrap.sh permits recovery enrollment only when both IDs are present.
+        # Never let optional recovery settings bypass D's mandatory identity checks.
+        recovery_object = os.environ.get("RECOVERY_OBJECT_ID", "")
+        recovery_application = os.environ.get("RECOVERY_FEDERATED_APP_OBJECT_ID", "")
+        if bool(recovery_object) != bool(recovery_application):
+            return False
+        principals = [("DEPLOYMENT_OBJECT_ID", self.config["deployment_client_id"])]
+        applications = [("FEDERATED_APP_OBJECT_ID", self.config["deployment_client_id"])]
+        if recovery_object:
+            recovery_client = self.config.get("recovery_client_id")
+            if (
+                not recovery_client
+                or recovery_client == self.config["deployment_client_id"]
+                or recovery_object == os.environ["DEPLOYMENT_OBJECT_ID"]
+            ):
+                return False
+            principals.append(("RECOVERY_OBJECT_ID", recovery_client))
+            applications.append(("RECOVERY_FEDERATED_APP_OBJECT_ID", recovery_client))
+        for key, expected_client in principals:
             principal = self.io.runner.json("az", "ad", "sp", "show", "--id", os.environ[key])
             if principal.get("id") != os.environ[key] or principal.get("appId") != expected_client:
                 return False
-        for key in ("FEDERATED_APP_OBJECT_ID", "RECOVERY_FEDERATED_APP_OBJECT_ID"):
+        for key, expected_client in applications:
             application = self.io.runner.json("az", "ad", "app", "show", "--id", os.environ[key])
             if application.get("id") != os.environ[key]:
                 return False
@@ -895,11 +910,6 @@ class Checks:
             )
             if not any(row.get("id") == self.auth.principal_id for row in owners):
                 return False
-            expected_client = (
-                self.config["deployment_client_id"]
-                if key == "FEDERATED_APP_OBJECT_ID"
-                else self.config.get("recovery_client_id")
-            )
             if application.get("appId") != expected_client:
                 return False
         return (

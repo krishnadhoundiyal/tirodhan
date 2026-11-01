@@ -185,16 +185,15 @@ def emit_grant(grant: Grant) -> None:
 
 
 def revalidate_database(grant: Grant) -> None:
-    """After read-only release preparation, recheck expiry at the provider-effect boundary."""
+    """Recheck release authority on every effect; SQL evidence on database-gated effects."""
+    current = require_release_authorization(grant.operation)
+    if current != grant.authorization:
+        raise AdmissionDenied("RELEASE_AUTHORIZATION_NO_LONGER_CURRENT")
     if "database" not in REQUIRED[grant.operation]:
         return
     from tirodhan.deployment.lifecycle_checks import Checks
 
-    current = require_release_authorization(grant.operation)
-    if (
-        current != grant.authorization
-        or Checks(current, configuration(), {}).check_database() is not True
-    ):
+    if Checks(current, configuration(), {}).check_database() is not True:
         raise AdmissionDenied("DATABASE_EVIDENCE_NO_LONGER_CURRENT")
 
 

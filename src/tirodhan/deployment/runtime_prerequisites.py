@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, get_args, get_origin
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
@@ -22,10 +23,23 @@ class DeploymentSettings(Settings):
         return (init_settings,)
 
 
+def _collection_field(annotation: Any) -> bool:
+    origin = get_origin(annotation)
+    if origin in (list, dict, set, tuple):
+        return True
+    return any(_collection_field(value) for value in get_args(annotation))
+
+
 def proposed_settings(runtime: dict[str, Any], material: dict[str, str] | None = None) -> Settings:
+    # Terraform runtime_env is map(string); the application environment source
+    # JSON-decodes complex fields. Reproduce only that conversion on reviewed input.
     values = {k.removeprefix("TIRODHAN_").lower(): v for k, v in runtime.items()}
     if material:
         values.update({k.replace("-", "_"): v for k, v in material.items()})
+    for key, value in values.items():
+        field = DeploymentSettings.model_fields.get(key)
+        if field is not None and isinstance(value, str) and _collection_field(field.annotation):
+            values[key] = json.loads(value)
     return DeploymentSettings(**values)
 
 
