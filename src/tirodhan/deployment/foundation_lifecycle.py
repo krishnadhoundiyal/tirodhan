@@ -16,7 +16,7 @@ from tirodhan.deployment.deployment_admission import (
     configuration,
     require_release_authorization,
 )
-from tirodhan.deployment.foundation_reconcile import admitted_with_grant
+from tirodhan.deployment.foundation_reconcile import admitted, admitted_with_grant
 from tirodhan.deployment.lifecycle_checks import Checks, automatic_compensation_context
 from tirodhan.deployment.lifecycle_evidence import Observations, classify_state
 from tirodhan.deployment.prerequisites import Controller, revalidate_database

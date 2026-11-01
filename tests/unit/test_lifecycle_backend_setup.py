@@ -185,11 +185,10 @@ def test_direct_terraform_routes_cannot_change_workspace_or_disable_locks(
 @pytest.mark.parametrize("consumer", ["setup", "existing-backend"])
 def test_unverified_inputs_block_every_context_consumer(observed, consumer):
     checks = Checks(auth("foundation-plan"), observed.config, {}, observed)
-    verify = (
-        lambda: backend.initialization_context(observed)
-        if consumer == "setup"
-        else checks.check_terraform_context()
-    )
+    def verify() -> bool:
+        if consumer == "setup":
+            return backend.initialization_context(observed)
+        return checks.check_terraform_context()
     # A clean environment with valid inputs must reach and pass this gate.
     assert verify() is True
     observed.runner.commands.clear()
