@@ -80,3 +80,27 @@ resource "terraform_data" "unrelated" { input = "must-not-be-created" }
     prior = plan_prior_state(tmp_path / "transfer.tfplan")
     assert prior["lineage"] == document["lineage"] and prior["serial"] == document["serial"]
     assert state.read_bytes() == original
+
+
+def test_clean_destroy_does_not_require_missing_bootstrap_data(tmp_path: Path) -> None:
+    """Run #8's empty-backend case must not require provisioning a vault to tear down."""
+    binary = os.environ.get("TIRODHAN_TEST_TERRAFORM_BINARY")
+    if not binary:
+        pytest.skip("Pinned Terraform supplied by lifecycle CI or explicit local test invocation")
+    (tmp_path / "main.tf").write_text("""
+terraform { required_version = "= 1.13.5" }
+data "terraform_remote_state" "bootstrap" {
+  backend = "local"
+  config = { path = "genuinely-absent-bootstrap.tfstate" }
+}
+output "bootstrap" { value = data.terraform_remote_state.bootstrap.outputs }
+""")
+    for args in [
+        ["init", "-backend=false", "-input=false"],
+        ["plan", "-destroy", "-input=false", "-out=empty-destroy.tfplan"],
+    ]:
+        result = subprocess.run(
+            [binary, *args], cwd=tmp_path, capture_output=True, text=True, timeout=60
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert not (tmp_path / "terraform.tfstate").exists()
