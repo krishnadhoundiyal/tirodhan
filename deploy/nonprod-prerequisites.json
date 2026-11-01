@@ -23,8 +23,8 @@
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "database": {
-      "authority": "bootstrap_database.py, actual SQL facts and pinned database attester",
-      "identity": "D verifies A-produced evidence",
+      "authority": "Actual read-only SQL facts, independent pinned verifier key and exact current consumer context",
+      "identity": "D verifies V-produced automated evidence; A local manual evidence only",
       "scope": "exact PostgreSQL server/database/UAMI OID",
       "allowed_operation": "verify fresh signed post-bootstrap SQL evidence and current ARM identity",
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
@@ -203,6 +203,27 @@
       "scope": "exact repository project and configured backend account/container/key",
       "allowed_operation": "verify working directory/backend metadata, prohibit cached credentials and bind plan lineage/serial/variables",
       "failure": "BLOCK unknown/foreign context, missing backend, plan state or variable mismatch"
+    },
+    "database_verification_authority": {
+      "authority": "Approved separate verifier OIDC identity, nonprod-database protection, pinned verification key and read-only SQL enrollment",
+      "identity": "V, distinct from D/R/A and runtime UAMI",
+      "scope": "Exact configured verifier principal, approved PostgreSQL metadata access, application RG Reader and state account/blob Reader only",
+      "allowed_operation": "Verify distinct identity, independent signing key, read-only effective Azure permissions and explicit authority; never enroll or grant",
+      "failure": "BLOCK missing enrollment, shared/elevated identity, key mismatch or unknown authority"
+    },
+    "verification_request": {
+      "authority": "Signed release context plus actual trusted deployment run/attempt/job and deterministic request identity",
+      "identity": "V",
+      "scope": "Exact active main deployment consumer, commit, operation, session and context hashes",
+      "allowed_operation": "Read GitHub run/job metadata; reject stale, foreign, ambiguous or unauthorized consumers before SQL evidence",
+      "failure": "BLOCK any missing/changed/inactive consumer or unimplemented request validation"
+    },
+    "recovery_enrollment_authority": {
+      "authority": "Separately signed operator enrollment, actual RBAC authority and verified ownership of the exact recovery application",
+      "identity": "O, separate from R/D",
+      "scope": "Exact recovery SP/app, subscription metadata discovery role and app-RG recovery role",
+      "allowed_operation": "Enroll narrow deterministic RBAC and protected recovery OIDC only; never create/recover a vault or touch Terraform state",
+      "failure": "BLOCK missing authority, identity/owner mismatch, incompatible trust/roles or unknown outcome; replay reconciles exact postconditions"
     }
   },
   "operations": {
@@ -236,6 +257,12 @@
       "identity",
       "recovery_authority",
       "recovery_target",
+      "target"
+    ],
+    "enroll-recovery": [
+      "execution_authority",
+      "identity",
+      "recovery_enrollment_authority",
       "target"
     ],
     "state-backup": [
@@ -295,6 +322,14 @@
       "foundation",
       "identity",
       "target"
+    ],
+    "database-verify": [
+      "database_verification_authority",
+      "execution_authority",
+      "foundation",
+      "identity",
+      "target",
+      "verification_request"
     ],
     "migration-plan": [
       "backend",

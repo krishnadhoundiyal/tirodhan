@@ -4,6 +4,9 @@ The NONPROD lifecycle integration retains PR #84 recovery/ownership/compensation
 signed release admission and one complete mandatory prerequisite contract. The policy
 denies provisioning; merge is not deployment authority. Protected teardown remains available.
 See [contract and review order](NONPROD_LIFECYCLE_INTEGRATION.md).
+Fresh SQL prerequisite evidence is requested after each deployment job's approval from
+the separately protected verifier workload; no static five-minute report is reused.
+Verifier enrollment and actual Azure acceptance remain separately authorized.
 
 
 NONPROD destroy now actively completes an exact plan-approved ACA environment deletion through

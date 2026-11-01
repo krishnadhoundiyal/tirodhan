@@ -7,6 +7,11 @@ replay verifies actual already-transferred state. Clean compensation uses a cond
 baseline and original approved create addresses; partial/foreign state is never auto-destroyed.
 Original deployment failure remains failure after cleanup. No new business DB/inbox/outbox
 protocol is introduced. See [operation boundaries](NONPROD_LIFECYCLE_INTEGRATION.md).
+SQL verification requests use a digest of repository/run/attempt/job/operation/release and
+configuration/source/authorization context. An exclusive local claim admits one dispatch;
+uncertain responses reconcile the exact verifier run instead of resending. Concurrent
+replay waits for the same report. SQL has no writes; failed/expired/ambiguous evidence never
+admits deployment. Crash before a confirmed dispatch may require a new job attempt.
 
 
 NONPROD ACA deletion recovery uses the exact DELETE ID from the approved Terraform plan,

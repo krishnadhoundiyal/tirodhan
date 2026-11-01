@@ -28,3 +28,9 @@ ownership transfer requires a recoverable backend snapshot and a separately auth
 Terraform removed plan with destroy=false under normal locking. No raw state editing or
 state-removal shortcut is permitted for destruction recovery. See
 [contract and acceptance](../NONPROD_LIFECYCLE_INTEGRATION.md).
+
+The separately approved database-verification workload/job uses its own protected OIDC
+identity and independently pinned attestation key. It observes SQL through read-only
+transactions and publishes fresh evidence for an exact active deployment consumer.
+Deployment receives the signed report, never that identity's credentials or signing key.
+Identity, SQL and Azure permission enrollment still require separate authorization.

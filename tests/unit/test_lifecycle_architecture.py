@@ -77,7 +77,9 @@ def test_all_lifecycle_routes_held_without_credentials(operation: str, tmp_path:
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize("operation", ["recover-vault", "plan-transfer", "transfer-vault"])
+@pytest.mark.parametrize(
+    "operation", ["recover-vault", "enroll-recovery", "plan-transfer", "transfer-vault"]
+)
 def test_privileged_routes_held_without_credentials(operation: str) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "tirodhan.deployment.foundation_reconcile", operation],

@@ -83,6 +83,8 @@ the authorizer must verify their evidence before issuing a release authorization
   Azure vaults/write is broader than a recover-only permission; code bounds the target/action.
 - A: configured PostgreSQL administrator. D receives no database administrator authority;
   runtime UAMI remains non-admin.
+- V: separately approved verifier service principal, distinct from D/R/A/runtime. Protected
+  `nonprod-database` OIDC and its own pinned attestation key; no enrollment/grants in its job.
 
 Source-only enrollment changes require separate approval: D gets a custom subscription
 metadata role with only `Microsoft.Resources/subscriptions/providers/read` and
@@ -95,6 +97,16 @@ vault metadata discovery is separate. Role definitions are checked, not just dis
 All five original direct D grants and their delegation condition remain mandatory. Only an
 explicitly configured/verified R grant is additionally permitted. Unknown grants are not filtered.
 No live RBAC has been modified.
+
+If a vault is already soft-deleted before R was enrolled, O can use the separately signed
+`foundation_reconcile enroll-recovery` operation. It requires `recovery_enrollment_authorized`,
+the exact `recovery_principal_id` and `recovery_app_object_id`, actual role-definition and
+assignment authority, and verified application ownership. It never reads/writes the vault
+or Terraform state. Deterministic role/assignment IDs and the unique federation name make
+replay converge; incompatible existing roles/trust block rather than being rebound.
+This operator-only path is intentionally absent from the restricted D workflow. Afterwards,
+R must obtain its own separately approved recovery authorization, recover the exact vault,
+and D must reevaluate actual prerequisites. Enrollment does not establish readiness.
 
 ## Authoritative state cases
 
@@ -128,12 +140,79 @@ expansion coverage. Any source drift blocks until that inventory is reviewed aga
 Each required binding must exist both in remote state and in a fresh exact-ID ARM read.
 The conditional bootstrap firewall follows the authorized input, never an empty output.
 
-A verifies actual SQL principal OID/type, non-admin/elevated-role status, PostGIS, CONNECT,
+A bootstrap and V verification observe actual SQL principal OID/type, non-admin/elevated-role status, PostGIS, CONNECT,
 schema USAGE/CREATE and spatial-reference SELECT before signing evidence with a separately
 pinned A key. Missing signer configuration blocks before grants. `bootstrap_database
 --verify-only` refreshes evidence without repeating grants. Evidence contains no Azure token
 or SQL data and is bound to current server/UAMI/configuration/source and configured expiry.
 D compares it against fresh ARM identities. Missing evidence cannot become PASS.
+
+The automated release no longer consumes a repository-stored SQL report. Immediately
+before each database-gated controller evaluation, after that D job's environment approval,
+D dispatches `nonprod-database-verify.yml` using the ephemeral repository `GITHUB_TOKEN`.
+GitHub explicitly supports [workflow_dispatch with that token](https://github.blog/changelog/2022-09-08-github-actions-use-github_token-with-workflow_dispatch-and-repository_dispatch/).
+Only trusted D jobs receive `actions: write` for this request; PR checks remain read-only.
+This GitHub permission is repository-wide, so workflow protection and signed operation
+authorization remain necessary. It grants no Azure or SQL privilege to D.
+
+V's protected job rechecks signed `database-verify` authority and the actual requesting
+main run/attempt/job before Azure login and again before observing SQL. Authorization must
+include `database_verification_authorized: true` and explicit `consumer_operations`.
+The request and resulting signature bind consumer operation, release session, authorization
+ID, commit, configuration/source hashes and requesting principal. D rejects a report for
+another consumer even if its signature and timestamp are valid. The verifier has a separate
+concurrency group, avoiding deadlock with the waiting release's global group.
+
+V uses `READ ONLY` transactions, bounded connection/statement timeouts and no DML/DDL/grants.
+It verifies its own service-principal OID and non-admin status, rejects elevated/data-wide or
+runtime-role membership, then checks the runtime role's exact OID/privileges/PostGIS facts.
+Unknown role flags do not imply non-admin. Freshness starts at the earliest observation,
+not at signing: an overlong verification cannot issue a newly dated stale report.
+
+The GitHub exchange has a 15-minute caller budget and a 10-minute verifier runner budget.
+One digest-bound request per run/attempt/job/operation admits one dispatch. Lost responses
+are reconciled by exact run identity; no blind redispatch occurs. Duplicate/ambiguous runs,
+inactive consumers, failed jobs, missing/oversized artifacts, bad signatures or expired facts
+block. Artifacts contain only signed nonsecret facts and expire after one day. Private key
+files exist only in V's private temporary directory and are removed on exit; only the JWT
+is uploaded. D validates the signature and fresh ARM target after download. Approval that
+outlasts the caller budget fails closed and requires a new consumer job attempt.
+
+### Separate verifier enrollment (not performed by this implementation)
+
+Configure nonsecret `AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID` and
+`AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID` consistently in trusted workflow configuration.
+Protect `nonprod-database` with main-only access and explicit signed verifier authorization.
+As a read-only attester it does not add a mandatory human approval for every request;
+any environment reviewers configured by the owner are still honored, including the timeout.
+Mutating deployment/recovery approval requirements remain unchanged. Enroll V's OIDC trust
+for that environment only. Store `NONPROD_DATABASE_VERIFY_AUTHORIZATION` and
+`NONPROD_DATABASE_EVIDENCE_PRIVATE_KEY_PEM` only in that protected environment; set its
+`NONPROD_DATABASE_EVIDENCE_KEY_ID`. Public policy entries require `identity_kind:
+database_verification`, the exact V principal and a public key whose underlying key material
+differs from every release or other attester key. The policy remains disabled and empty here.
+
+V needs app-RG Reader, exact state-account Reader and read-only blob access at the state
+container. No state-RG Reader is required. Its effective actions must be read-only and its
+only permitted storage data action is blob read; a role adding user-delegation-key generation
+or writes is rejected. Use a separately reviewed minimal data-reader custom role if needed.
+V needs no application storage, Service Bus, Key Vault secret, Graph or Terraform write access.
+Strict bootstrap RBAC additionally accepts exactly V's configured built-in Reader grant
+at the application RG. It verifies the principal, scope and
+[Reader role ID](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader);
+the five original D grants and their delegation condition remain mandatory. Unknown grants
+are still rejected. Rotation and secret seeding share the release/compensation concurrency
+group so their shared-vault writes cannot overlap cleanup.
+
+After separately approved SQL enrollment by A, V's exact Entra role must be
+`tirodhan-np-<suffix>-database-verifier`: non-admin service principal, CONNECT on `postgres`
+and `tirodhan`, and permission to execute the documented
+[`pgaadauth_list_principals(boolean)` metadata function](https://learn.microsoft.com/en-us/azure/postgresql/security/security-manage-entra-users).
+It receives no runtime-role membership, schema CREATE or application data grants. Restricted-
+identity Azure acceptance must verify the metadata function is available with those rights;
+if the managed provider refuses it, verification remains blocked. There is no fallback that
+grants `azure_pg_admin` or copies A/D credentials into the job. These enrollment operations
+are not executed by the verification workflow or by implementing/merging this PR.
 
 Secret versions must be enabled/unexpired. Runtime material is validated in memory by actual
 RSA/AES/customer/cursor consumers; developer `.env` or ambient secrets cannot supply missing

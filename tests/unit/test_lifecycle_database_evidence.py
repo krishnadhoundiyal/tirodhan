@@ -1,7 +1,7 @@
 """Actual SQL facts must survive a signed round trip before D admits migration."""
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -13,10 +13,24 @@ from tirodhan.deployment.lifecycle_checks import Checks
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid", [None, "oid", "admin", "elevated", "postgis", "grant"])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        "oid",
+        "admin",
+        "elevated",
+        "postgis",
+        "grant",
+        "schema-usage",
+        "schema-create",
+        "spatial-select",
+    ],
+)
 async def test_signed_database_facts_require_verified_principal_and_every_sql_fact(
     monkeypatch, tmp_path, invalid
 ) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     authorization = auth("database-bootstrap", kind="database")
     target = {
         "host": "synthetic.postgres.database.azure.com",
@@ -46,6 +60,8 @@ async def test_signed_database_facts_require_verified_principal_and_every_sql_fa
     monkeypatch.setattr(bootstrap_database, "database_token", lambda: "synthetic-token")
     monkeypatch.setenv("POSTGRES_ADMIN_NAME", "admin")
     admin, application = AsyncMock(), AsyncMock()
+    for connection in (admin, application):
+        connection.transaction = Mock(return_value=AsyncMock())
     admin.fetch.return_value = [
         {
             "rolename": "runtime",
@@ -55,7 +71,13 @@ async def test_signed_database_facts_require_verified_principal_and_every_sql_fa
         }
     ]
     admin.fetchval.side_effect = [invalid == "elevated", False]
-    application.fetchval.side_effect = [invalid != "postgis", invalid != "grant", True, True, True]
+    application.fetchval.side_effect = [
+        invalid != "postgis",
+        invalid != "grant",
+        invalid != "schema-usage",
+        invalid != "schema-create",
+        invalid != "spatial-select",
+    ]
     connect = AsyncMock(side_effect=[admin, application])
     monkeypatch.setattr(bootstrap_database.asyncpg, "connect", connect)
     if invalid is not None:

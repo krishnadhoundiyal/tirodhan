@@ -25,12 +25,15 @@ REQUIRED: dict[str, frozenset[str]] = {
     "initialize-state-plan": COMMON | {"initialization", "permissions", "vault"},
     "initialize-state-apply": COMMON | {"initialization", "permissions", "vault", "saved_plan"},
     "recover-vault": COMMON | {"recovery_authority", "recovery_target"},
+    "enroll-recovery": COMMON | {"recovery_enrollment_authority"},
     "state-backup": COMMON | {"backend", "permissions", "vault", "legacy_ownership"},
     "transfer-vault": COMMON
     | {"backend", "permissions", "vault", "legacy_ownership", "recoverable_backup", "saved_plan"},
     "foundation-plan": FOUNDATION,
     "foundation-apply": FOUNDATION | {"saved_plan"},
     "database-bootstrap": COMMON | {"database_authority", "foundation"},
+    "database-verify": COMMON
+    | {"database_verification_authority", "verification_request", "foundation"},
     "migration-plan": MIGRATION,
     "migration-apply": MIGRATION | {"saved_plan"},
     "migration-start": MIGRATION | {"migration_job"},
@@ -64,7 +67,9 @@ CHECK_IDS = frozenset().union(*REQUIRED.values())
 IDENTITIES = {
     "bootstrap": "operator",
     "recover-vault": "recovery",
+    "enroll-recovery": "operator",
     "database-bootstrap": "database",
+    "database-verify": "database_verification",
 }
 
 
@@ -124,7 +129,8 @@ class Controller:
             "identity",
             "execution_authority",
             *(["terraform_context"] if "terraform_context" in REQUIRED[operation] else []),
-            *sorted(REQUIRED[operation] - COMMON - {"terraform_context"}),
+            *sorted(REQUIRED[operation] - COMMON - {"terraform_context", "database"}),
+            *(["database"] if "database" in REQUIRED[operation] else []),
         ):
             try:
                 if registry[key]() is not True:
@@ -148,6 +154,9 @@ class Controller:
 def require_provisioning(operation: str, **parameters: Any) -> Grant:
     # Offline release authorization always precedes Azure credentials or observations.
     authorization = require_release_authorization(operation)
+    from tirodhan.deployment.database_verification_request import refresh_database_evidence
+
+    refresh_database_evidence(authorization)
     from tirodhan.deployment.lifecycle_checks import Checks
 
     checks = Checks(authorization, configuration(), parameters)
@@ -171,6 +180,20 @@ def emit_grant(grant: Grant) -> None:
             sort_keys=True,
         )
     )
+
+
+def revalidate_database(grant: Grant) -> None:
+    """After read-only release preparation, recheck expiry at the provider-effect boundary."""
+    if "database" not in REQUIRED[grant.operation]:
+        return
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    current = require_release_authorization(grant.operation)
+    if (
+        current != grant.authorization
+        or Checks(current, configuration(), {}).check_database() is not True
+    ):
+        raise AdmissionDenied("DATABASE_EVIDENCE_NO_LONGER_CURRENT")
 
 
 def main() -> None:

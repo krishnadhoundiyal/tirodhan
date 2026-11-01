@@ -196,21 +196,23 @@ def test_actual_compensation_postconditions(
 
 
 @pytest.mark.parametrize(
-    "classification,serialized",
+    "classification,serialized,operations",
     [
-        ("CLEAN_INITIALIZED", True),
-        ("CLEAN_INITIALIZED", False),
-        ("PARTIAL_OWNED", True),
+        ("CLEAN_INITIALIZED", True, ["prepare-compensation", "compensate-foundation"]),
+        ("CLEAN_INITIALIZED", False, ["prepare-compensation", "compensate-foundation"]),
+        ("PARTIAL_OWNED", True, ["prepare-compensation", "compensate-foundation"]),
+        ("CLEAN_INITIALIZED", True, ["prepare-compensation"]),
+        ("CLEAN_INITIALIZED", True, ["compensate-foundation"]),
     ],
 )
 def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
-    monkeypatch, tmp_path, classification, serialized
+    monkeypatch, tmp_path, classification, serialized, operations
 ) -> None:
     from unittest.mock import Mock
 
     io = MemoryObservations()
     authorization = auth("foundation-apply")
-    authorization.claims["operations"] = ["prepare-compensation", "compensate-foundation"]
+    authorization.claims["operations"] = operations
     checks = Checks(authorization, io.config, {}, io)
     monkeypatch.setattr(lifecycle, "admitted", lambda *a, **k: (checks, io))
     monkeypatch.setattr(lifecycle, "record_baseline", lambda *a: {"classification": classification})
@@ -221,7 +223,7 @@ def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
     monkeypatch.setattr(lifecycle, "compensate", compensate)
     with pytest.raises(AdmissionDenied):
         lifecycle.apply("foundation-apply", tmp_path / "plan")
-    eligible = classification == "CLEAN_INITIALIZED" and serialized
+    eligible = classification == "CLEAN_INITIALIZED" and serialized and len(operations) == 2
     assert prepare.called is eligible and compensate.called is eligible
     assert io.runner.run.call_count == 1
 

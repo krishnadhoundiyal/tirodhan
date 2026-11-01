@@ -71,6 +71,12 @@ def configuration() -> dict[str, Any]:
             "state_resource_group": os.environ["STATE_RESOURCE_GROUP"],
             "deployment_client_id": os.environ["ARM_CLIENT_ID"],
             "recovery_client_id": os.environ.get("AZURE_NONPROD_RECOVERY_CLIENT_ID"),
+            "database_verification_client_id": os.environ.get(
+                "AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID"
+            ),
+            "database_verification_principal_id": os.environ.get(
+                "AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID"
+            ),
         }
     except (ValueError, KeyError, TypeError) as exc:
         raise AdmissionDenied("CONFIGURATION_UNAVAILABLE_OR_INCONSISTENT") from exc
@@ -127,7 +133,8 @@ def validate_authorization(
             or claims.get("configuration_hash") != config_hash
             or not isinstance(claims.get("operations"), list)
             or operation not in claims["operations"]
-            or claims.get("identity_kind") not in {"operator", "deployment", "recovery", "database"}
+            or claims.get("identity_kind")
+            not in {"operator", "deployment", "recovery", "database", "database_verification"}
             or not isinstance(claims.get("sub"), str)
             or not claims["sub"]
             or operation not in REQUIRED

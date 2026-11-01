@@ -17,6 +17,7 @@ BOOTSTRAP_ROLES = (
     "4633458b-17de-408a-b874-0445c86b69e6",
 )
 ADMIN_ROLE = "Role Based Access Control Administrator"
+READER_ROLE_ID = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
 BOOTSTRAP_ROLE_NAMES = (
     "Storage Blob Data Contributor",
     "Storage Blob Delegator",
@@ -90,9 +91,33 @@ def verify_bootstrap_rbac(
     expected_principal_id: str,
     expected_suffix: str,
     recovery_principal_id: str | None = None,
+    verification_principal_id: str | None = None,
 ) -> None:
     """Accept only the five original RG grants to the authenticated deployment SP."""
     names = (*BOOTSTRAP_ROLE_NAMES, f"Tirodhan NONPROD Deployment {expected_suffix}")
+    if not isinstance(assignments, list) or any(not isinstance(row, dict) for row in assignments):
+        raise ValueError("Malformed NONPROD RG role assignment")
+    if verification_principal_id is not None:
+        if not verification_principal_id or verification_principal_id.casefold() in {
+            expected_principal_id.casefold(),
+            str(recovery_principal_id).casefold(),
+        }:
+            raise ValueError("Verifier must be separate from deployment and recovery")
+        matches = [
+            row
+            for row in assignments
+            if str(row.get("principalId", "")).casefold() == verification_principal_id.casefold()
+        ]
+        if len(matches) != 1 or (
+            str(matches[0].get("scope", "")).casefold() != expected_scope.casefold()
+            or matches[0].get("roleDefinitionName") != "Reader"
+            or str(matches[0].get("roleDefinitionId", "")).rsplit("/", 1)[-1].casefold()
+            != READER_ROLE_ID
+            or matches[0].get("principalType") != "ServicePrincipal"
+            or matches[0].get("condition") not in (None, "")
+        ):
+            raise ValueError("Verifier grant must be exactly the configured builtin Reader")
+        assignments = [row for row in assignments if row is not matches[0]]
     if recovery_principal_id is not None:
         if (
             not recovery_principal_id
@@ -150,6 +175,7 @@ def main() -> None:
     verify.add_argument("--expected-principal-id", required=True)
     verify.add_argument("--expected-suffix", required=True)
     verify.add_argument("--recovery-principal-id")
+    verify.add_argument("--verification-principal-id")
     args = parser.parse_args()
     try:
         if args.action == "principal":
@@ -186,6 +212,7 @@ def main() -> None:
                 expected_principal_id=args.expected_principal_id,
                 expected_suffix=args.expected_suffix,
                 recovery_principal_id=args.recovery_principal_id,
+                verification_principal_id=args.verification_principal_id,
             )
             print("PASS: NONPROD bootstrap role assignments retain the required restrictions")
     except subprocess.SubprocessError:

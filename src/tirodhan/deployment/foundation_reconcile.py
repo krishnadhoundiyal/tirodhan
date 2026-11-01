@@ -21,6 +21,9 @@ from tirodhan.deployment.prerequisites import Controller, emit_grant
 
 def admitted(operation: str, **parameters: Any) -> tuple[Checks, Observations]:
     auth = require_release_authorization(operation)
+    from tirodhan.deployment.database_verification_request import refresh_database_evidence
+
+    refresh_database_evidence(auth)
     io = Observations(configuration())
     checks = Checks(auth, io.config, parameters, io)
     emit_grant(Controller(auth, checks).evaluate(operation))
@@ -181,12 +184,18 @@ def transfer_vault(plan: Path, backup_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=["recover-vault", "plan-transfer", "transfer-vault"])
+    parser.add_argument(
+        "operation", choices=["recover-vault", "enroll-recovery", "plan-transfer", "transfer-vault"]
+    )
     parser.add_argument("--plan", type=Path, default=Path("vault-transfer.tfplan"))
     parser.add_argument("--backup", type=Path, default=Path("vault-transfer-backup.json"))
     args = parser.parse_args()
     try:
-        if args.operation == "recover-vault":
+        if args.operation == "enroll-recovery":
+            from tirodhan.deployment.recovery_enrollment import enroll
+
+            enroll()
+        elif args.operation == "recover-vault":
             recover_vault()
         elif args.operation == "plan-transfer":
             plan_transfer(args.plan, args.backup)

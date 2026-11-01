@@ -31,6 +31,7 @@ env:
   STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
   NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
   NONPROD_RECOVERY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_RECOVERY_PRINCIPAL_ID }}
+  NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
   NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
 
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
@@ -408,6 +409,9 @@ jobs:
           recovery_args=()
           if [[ -n "${NONPROD_RECOVERY_PRINCIPAL_ID:-}" ]]; then
             recovery_args+=(--recovery-principal-id "$NONPROD_RECOVERY_PRINCIPAL_ID")
+          fi
+          if [[ -n "${NONPROD_DATABASE_VERIFY_PRINCIPAL_ID:-}" ]]; then
+            recovery_args+=(--verification-principal-id "$NONPROD_DATABASE_VERIFY_PRINCIPAL_ID")
           fi
           az role assignment list \
             --resource-group "$NONPROD_RESOURCE_GROUP" \

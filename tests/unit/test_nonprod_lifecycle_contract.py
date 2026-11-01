@@ -99,7 +99,9 @@ def test_missing_any_required_validator_never_succeeds(operation: str) -> None:
         kind={
             "bootstrap": "operator",
             "recover-vault": "recovery",
+            "enroll-recovery": "operator",
             "database-bootstrap": "database",
+            "database-verify": "database_verification",
         }.get(operation, "deployment"),
     )
     for missing in REQUIRED[operation]:

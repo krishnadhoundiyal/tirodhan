@@ -78,8 +78,13 @@ class Checks:
         expected = {
             "deployment": self.config["deployment_client_id"],
             "recovery": self.config.get("recovery_client_id"),
+            "database_verification": self.config.get("database_verification_client_id"),
         }.get(self.auth.identity_kind)
-        return self.auth.identity_kind not in {"deployment", "recovery"} or (
+        return self.auth.identity_kind not in {
+            "deployment",
+            "recovery",
+            "database_verification",
+        } or (
             bool(expected)
             and str(claims.get("appid") or claims.get("azp")).casefold() == str(expected).casefold()
         )
@@ -120,7 +125,9 @@ class Checks:
         if os.environ.get("GITHUB_ACTIONS") != "true":
             return binding.get("local_execution_authorized") is True
         expected_environment = (
-            "nonprod-recovery"
+            "nonprod-database"
+            if self.auth.operation == "database-verify"
+            else "nonprod-recovery"
             if self.auth.operation == "recover-vault"
             else "nonprod-plan"
             if self.auth.operation.endswith("-plan") or self.auth.operation == "rotate-log-sas"
@@ -149,7 +156,9 @@ class Checks:
             r.get("type") == "required_reviewers" and r.get("reviewers")
             for r in value.get("protection_rules", [])
         )
-        return protected and (expected_environment == "nonprod-plan" or bool(reviewers))
+        return protected and (
+            expected_environment in {"nonprod-plan", "nonprod-database"} or bool(reviewers)
+        )
 
     def permissions(self, scope: str) -> list[dict[str, Any]]:
         from urllib.parse import urlsplit
@@ -237,6 +246,7 @@ class Checks:
             expected_principal_id=self.auth.principal_id,
             expected_suffix=self.tf["suffix"],
             recovery_principal_id=self.binding().get("recovery_principal_id"),
+            verification_principal_id=self.config.get("database_verification_principal_id"),
         )
         return True
 
@@ -446,24 +456,92 @@ class Checks:
             algorithms=["EdDSA"],
             issuer="tirodhan-database-bootstrap",
             audience="tirodhan-nonprod-prerequisites",
-            options={"require": ["exp", "iat", "sub"]},
+            options={"require": ["exp", "iat", "sub", "observed_at"]},
         )
+        expected = {
+            key: True
+            for key in (
+                "principal_oid",
+                "non_admin",
+                "postgis",
+                "connect",
+                "schema_usage",
+                "schema_create",
+                "spatial_reference_select",
+            )
+        }
+        if facts.get("identity_kind") == "database_verification":
+            from tirodhan.deployment.database_evidence import verification_key_is_independent
+
+            if (
+                issuer.get("identity_kind") != "database_verification"
+                or facts.get("sub") != self.config.get("database_verification_principal_id")
+                or not verification_key_is_independent(policy, header["kid"])
+            ):
+                return False
+            expected["verifier_non_admin"] = True
+        elif issuer.get("identity_kind") == "database_verification":
+            return False
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            from tirodhan.deployment.database_verification_request import consumer_context
+
+            if facts.get("identity_kind") != "database_verification" or facts.get(
+                "consumer_context"
+            ) != consumer_context(self.auth):
+                return False
         return (
             facts.get("sub") == issuer["principal_id"]
             and facts.get("configuration_hash") == self.auth.configuration_hash
             and facts.get("contract_hash") == self.auth.contract_hash
             and facts.get("target") == self.database_target()
             and 0 <= time.time() - facts["iat"] <= policy["maximum_evidence_age_seconds"]
-            and facts.get("checks")
-            == {
-                "principal_oid": True,
-                "non_admin": True,
-                "postgis": True,
-                "connect": True,
-                "schema_usage": True,
-                "schema_create": True,
-                "spatial_reference_select": True,
+            and type(facts["observed_at"]) is int
+            and facts["observed_at"] <= facts["iat"]
+            and 0 <= time.time() - facts["observed_at"] <= policy["maximum_evidence_age_seconds"]
+            and isinstance(facts.get("checks"), dict)
+            and set(facts["checks"]) == set(expected)
+            and all(v is True for v in facts["checks"].values())
+        )
+
+    def check_verification_request(self) -> bool:
+        from tirodhan.deployment.database_verification_request import Github, validate_request
+
+        validate_request(self.auth, self.parameters.get("request"), Github())
+        return True
+
+    def check_database_verification_authority(self) -> bool:
+        from tirodhan.deployment.database_evidence import signer
+
+        signer(self.auth)
+        client = self.config.get("database_verification_client_id")
+        principal = self.config.get("database_verification_principal_id")
+        for scope in (self.io.scope, self.io.state_id):
+            for row in self.permissions(scope):
+                if any(
+                    not action.casefold().endswith("/read") for action in row.get("actions", [])
+                ):
+                    return False
+                if any(
+                    action.casefold()
+                    != "microsoft.storage/storageaccounts/blobservices/containers/blobs/read"
+                    for action in row.get("dataActions", [])
+                ):
+                    return False
+        return (
+            bool(client)
+            and bool(principal)
+            and str(client).casefold()
+            not in {
+                str(self.config["deployment_client_id"]).casefold(),
+                str(self.config.get("recovery_client_id")).casefold(),
             }
+            and principal == self.auth.principal_id
+            and str(principal).casefold()
+            not in {
+                str(self.tf["postgres_admin_object_id"]).casefold(),
+                self.database_target()["principal_id"].casefold(),
+            }
+            and self.binding().get("database_verification_authorized") is True
         )
 
     def check_secrets(self) -> bool:
@@ -801,6 +879,31 @@ class Checks:
                 self.io.scope, {"Microsoft.KeyVault/vaults/read", "Microsoft.KeyVault/vaults/write"}
             )
         )
+
+    def check_recovery_enrollment_authority(self) -> bool:
+        from tirodhan.deployment.recovery_enrollment import verify_application
+
+        if (
+            os.environ.get("GITHUB_ACTIONS") == "true"
+            or self.binding().get("recovery_enrollment_authorized") is not True
+            or self.config.get("recovery_client_id") == self.config["deployment_client_id"]
+            or self.tf["resource_group_name"] != f"tirodhan-np-{self.tf['suffix']}"
+        ):
+            return False
+        subscription = "/subscriptions/" + self.tf["subscription_id"]
+        if not all(
+            self.permits(
+                scope,
+                {
+                    "Microsoft.Authorization/roleDefinitions/write",
+                    "Microsoft.Authorization/roleAssignments/write",
+                },
+            )
+            for scope in (subscription, self.io.scope)
+        ):
+            return False
+        verify_application(self)
+        return True
 
     def check_recovery_target(self) -> bool:
         if self.io.arm(self.io.vault_id, "2023-07-01") is not None:

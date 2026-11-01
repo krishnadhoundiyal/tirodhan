@@ -16,9 +16,10 @@ concurrency:
 env:
   NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
   AZURE_NONPROD_RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
   TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
   TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
-  TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE: ${{ secrets.NONPROD_DATABASE_PREREQUISITE_EVIDENCE }}
   GH_TOKEN: ${{ github.token }}
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -102,7 +103,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read
+      actions: write
       packages: read
     outputs:
       ready: ${{ steps.state.outputs.ready }}
@@ -126,6 +127,7 @@ jobs:
             exit 0
           fi
 
+          python -m tirodhan.deployment.prerequisites migration-plan
           set +e
           TF_VAR_deployment_stage=0 terraform plan -input=false -detailed-exitcode -out=/tmp/foundation-readiness.tfplan
           plan_status=$?
@@ -155,7 +157,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read
+      actions: write
       packages: read
     steps:
       - uses: actions/checkout@v4
@@ -182,7 +184,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read
+      actions: write
       packages: read
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +214,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read
+      actions: write
       packages: read
     steps:
       - uses: actions/checkout@v4
@@ -239,7 +241,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: read
+      actions: write
       packages: read
     steps:
       - uses: actions/checkout@v4

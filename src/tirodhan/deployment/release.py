@@ -66,9 +66,9 @@ def require_secrets(available: frozenset[str], required: frozenset[str]) -> None
 
 
 def plan(mode: str, path: str) -> None:
-    from tirodhan.deployment.prerequisites import require_provisioning
+    from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
 
-    require_provisioning(f"{mode}-plan")
+    grant = require_provisioning(f"{mode}-plan")
     assert_no_list_keys()  # Before the provider can refresh storage state.
     state = output_values()
     available = enabled_secret_names(state)
@@ -88,6 +88,7 @@ def plan(mode: str, path: str) -> None:
         if value is not None
     }
     # null default means no established application image at initial stage 0/1.
+    revalidate_database(grant)
     subprocess.run(
         ["terraform", "plan", "-input=false", f"-out={path}"], env=environment, check=True
     )
@@ -101,13 +102,14 @@ def plan(mode: str, path: str) -> None:
 
 
 def run_migration() -> None:
-    from tirodhan.deployment.prerequisites import require_provisioning
+    from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
 
-    require_provisioning("migration-start")
+    grant = require_provisioning("migration-start")
     state = output_values()
     group, job = state["resource_group_name"], state["migration_job_name"]
     if not job:
         raise ReleaseBlocked("Migration job must be applied first")
+    revalidate_database(grant)
     execution = cli_json(["az", "containerapp", "job", "start", "-g", group, "-n", job])
     name = execution["name"]
     deadline = time.monotonic() + 1200
