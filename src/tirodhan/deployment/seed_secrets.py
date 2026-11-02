@@ -25,22 +25,29 @@ LEGACY_SECRET_NAMES = frozenset(
     }
 )
 
+TWOFACTOR_SECRET_NAMES = (LEGACY_SECRET_NAMES - {"kaleyra-api-key"}) | {"twofactor-api-key"}
+
 # Separately seedable optional credentials preserve existing operator secret files.
 CUSTOMER_DATA_SECRET_NAMES = frozenset(
     {"customer-cursor-signing-key", "customer-data-encryption-keys", "customer-data-hmac-key"}
 )
 CUSTOMER_WEB_PUSH_SECRET_NAMES = frozenset({"customer-vapid-private-key-pem"})
 CUSTOMER_SECRET_NAMES = CUSTOMER_DATA_SECRET_NAMES | CUSTOMER_WEB_PUSH_SECRET_NAMES
-SECRET_NAMES = LEGACY_SECRET_NAMES | CUSTOMER_SECRET_NAMES
+SECRET_NAMES = LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES
 
 
 def approved_secret_batch(names: set[str]) -> bool:
     return names in (
         LEGACY_SECRET_NAMES,
+        TWOFACTOR_SECRET_NAMES,
+        {"twofactor-api-key"},
         CUSTOMER_DATA_SECRET_NAMES,
         CUSTOMER_WEB_PUSH_SECRET_NAMES,
         CUSTOMER_SECRET_NAMES,
         LEGACY_SECRET_NAMES | CUSTOMER_DATA_SECRET_NAMES,
+        LEGACY_SECRET_NAMES | CUSTOMER_SECRET_NAMES,
+        TWOFACTOR_SECRET_NAMES | CUSTOMER_DATA_SECRET_NAMES,
+        TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES,
         SECRET_NAMES,
     )
 
@@ -49,7 +56,7 @@ def main() -> None:
     values = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     if not isinstance(values, dict) or not approved_secret_batch(set(values)):
         raise SystemExit(
-            "Supply a complete approved legacy, customer-data, VAPID or combined secret batch"
+            "Supply a complete approved provider, customer-data, VAPID or combined secret batch"
         )
     if any(not isinstance(value, str) or not value.strip() for value in values.values()):
         raise SystemExit("Every secret must be a nonempty string")

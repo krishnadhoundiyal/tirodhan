@@ -90,6 +90,7 @@ variable "runtime_secret_names" {
   type        = map(string)
   default = {
     TIRODHAN_GOOGLE_MAPS_API_KEY              = "google-maps-api-key"
+    TIRODHAN_TWOFACTOR_API_KEY                = "twofactor-api-key"
     TIRODHAN_KALEYRA_API_KEY                  = "kaleyra-api-key"
     TIRODHAN_RAZORPAY_KEY_SECRET              = "razorpay-key-secret"
     TIRODHAN_RAZORPAY_WEBHOOK_SECRET          = "razorpay-webhook-secret"

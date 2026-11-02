@@ -48,9 +48,12 @@ def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str])
     from tirodhan.modules.customer_reads.cursor import CursorCodec
     from tirodhan.modules.customers.address_protection import AesGcmAddressProtector
     from tirodhan.modules.identity.phone_protection import AesGcmPhoneIdentityProtector
+    from tirodhan.modules.identity.runtime import otp_configured
     from tirodhan.modules.identity.tokens import Rs256AccessTokenCodec
 
     settings = proposed_settings(runtime, material)
+    if not otp_configured(settings):
+        raise ValueError("OTP provider is not selected")
     Rs256AccessTokenCodec(
         private_key_pem=material["auth-jwt-private-key-pem"],
         public_key_pem=material["auth-jwt-public-key-pem"],

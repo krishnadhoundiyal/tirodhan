@@ -83,10 +83,30 @@ subscription/tenant/region, stable suffix/resource-group name, Entra PG admin
 object/name/type, GHCR username and approved lifecycle/recovery thresholds. Null
 retention examples are deliberate: they are required business inputs, not defaults.
 `runtime_env` permits only the nonsecret names in `deploy/runtime-env.names`.
-Workload stages require all listed values except optional log level. Lists are
+Workload stages require the values for their enabled features and selected provider. Lists are
 JSON-encoded strings. Choose pool/duration/policy values explicitly; do not copy
 synthetic test values into deployment. Images must be full commit-SHA GHCR tags.
 No secrets belong in `.tfvars`, GitHub variables or Terraform resources/data sources.
+
+The selected NONPROD OTP provider is `TIRODHAN_OTP_PROVIDER=2FACTOR`. Supply
+`TIRODHAN_TWOFACTOR_HTTP_TIMEOUT_SECONDS` and the Key Vault secret
+`twofactor-api-key`; `TIRODHAN_TWOFACTOR_TEMPLATE_NAME` is optional and must name
+an account-approved template when used. Kaleyra credentials/settings are not
+required for this selection. There is no inferred provider or automatic fallback.
+The existing secret seeder accepts a complete 2Factor batch (the legacy batch
+with `twofactor-api-key` replacing `kaleyra-api-key`), combined customer batches,
+or a separate `twofactor-api-key` batch for an existing vault. All seeding still
+requires release authorization and its mandatory prerequisites.
+
+Google Geocoding remains required by the serviceability worker. Its Key Vault
+secret is `google-maps-api-key`, with explicit
+`TIRODHAN_GOOGLE_MAPS_HTTP_TIMEOUT_SECONDS`. Free allowance is conditional on the
+billing account's pricing eligibility and aggregate usage, not guaranteed by an
+API key. Before enabling usage, verify billing, key restrictions, current usage
+and provider quota controls against the approved no-cost constraint. Do not
+remove the prerequisite while the worker consumes it. See
+[Google pricing](https://developers.google.com/maps/billing-and-pricing/pricing)
+and [Geocoding billing and quotas](https://developers.google.com/maps/documentation/geocoding/usage-and-billing).
 
 ## Staged first deployment
 

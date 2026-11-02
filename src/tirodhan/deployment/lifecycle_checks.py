@@ -569,9 +569,15 @@ class Checks:
 
         required = set(MIGRATION_SECRET_NAMES)
         if self.auth.operation.startswith("runtime-"):
+            provider = self.tf.get("runtime_env", {}).get("TIRODHAN_OTP_PROVIDER")
+            if provider == "2FACTOR":
+                required.add("twofactor-api-key")
+            elif provider == "KALEYRA_VERIFY":
+                required.add("kaleyra-api-key")
+            else:
+                raise AdmissionDenied("OTP_PROVIDER_NOT_SELECTED")
             required |= {
                 "google-maps-api-key",
-                "kaleyra-api-key",
                 "razorpay-key-secret",
                 "razorpay-webhook-secret",
                 "auth-jwt-private-key-pem",
