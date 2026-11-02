@@ -149,6 +149,8 @@ def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatc
     from tirodhan.deployment.deployment_admission import digest
 
     config = copy.deepcopy(CONFIG)
+    for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
 
     class Runner:
         def run(self, *args):
@@ -176,3 +178,19 @@ def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatc
     assert request["principal_id"] == OID
     assert request["configuration_hash"] == digest(config)
     assert request["operations"] == sorted(release_capture.expected_bindings("release"))
+
+
+def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
+    from tirodhan.deployment import release_capture
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    with pytest.raises(AdmissionDenied, match="TRUSTED_OPERATOR_HOST"):
+        release_capture.prepare(
+            "release",
+            session=SESSION,
+            expires_at=0,
+            review_pr=123,
+            github=None,
+            runner=None,
+            config={},
+        )
