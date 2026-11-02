@@ -48,6 +48,7 @@ def runtime_checks(material, monkeypatch):
     observations.config["terraform"]["runtime_env"] = {
         "TIRODHAN_OTP_PROVIDER": "2FACTOR",
         "TIRODHAN_TWOFACTOR_HTTP_TIMEOUT_SECONDS": "5",
+        "TIRODHAN_GOOGLE_MAPS_HTTP_TIMEOUT_SECONDS": "5",
         "TIRODHAN_PHONE_ENCRYPTION_ACTIVE_KEY_ID": "test",
         "TIRODHAN_ADDRESS_ENCRYPTION_ACTIVE_KEY_ID": "test",
         "TIRODHAN_CUSTOMER_DATA_ACTIVE_KEY_ID": "test",
@@ -122,6 +123,32 @@ def test_explicit_legacy_selection_does_not_fall_back_to_twofactor(material, mon
     assert "twofactor-api-key" not in checks.required_secret_names()
     assert not checks.check_secrets()
     assert reads == []
+
+
+@pytest.mark.parametrize("key", ["internal whitespace", "x" * 201, ".", ".."])
+def test_malformed_twofactor_key_fails_before_runtime(material, monkeypatch, key):
+    checks, _ = runtime_checks(material | {"twofactor-api-key": key}, monkeypatch)
+    with pytest.raises(OtpProviderConfigurationError):
+        checks.check_secrets()
+
+
+@pytest.mark.parametrize("template", [".", "..", "x" * 201, "line\nbreak"])
+def test_malformed_twofactor_template_fails_before_runtime(material, monkeypatch, template):
+    checks, _ = runtime_checks(material, monkeypatch)
+    checks.tf["runtime_env"]["TIRODHAN_TWOFACTOR_TEMPLATE_NAME"] = template
+    with pytest.raises(OtpProviderConfigurationError):
+        checks.check_secrets()
+
+
+@pytest.mark.parametrize("timeout", [None, "0", "61", "nan"])
+def test_geocoding_timeout_cannot_be_omitted_or_invalid(material, monkeypatch, timeout):
+    checks, _ = runtime_checks(material, monkeypatch)
+    if timeout is None:
+        checks.tf["runtime_env"].pop("TIRODHAN_GOOGLE_MAPS_HTTP_TIMEOUT_SECONDS")
+    else:
+        checks.tf["runtime_env"]["TIRODHAN_GOOGLE_MAPS_HTTP_TIMEOUT_SECONDS"] = timeout
+    with pytest.raises(ValueError):
+        checks.check_secrets()
 
 
 @pytest.mark.parametrize("operation", ["foundation-plan", "migration-plan", "migration-apply"])

@@ -52,15 +52,22 @@ class KaleyraVerifyOtpProvider:
         client: httpx.AsyncClient,
     ) -> None:
         self._domain = validate_api_domain(api_domain)
-        if not all(value.strip() for value in (sid, api_key, flow_id)) or (
-            not math.isfinite(timeout_seconds) or timeout_seconds <= 0
-        ):
-            raise OtpProviderConfigurationError("Kaleyra configuration is invalid")
+        self.validate_configuration(api_domain, sid, api_key, flow_id, timeout_seconds)
         self._sid = quote(sid, safe="")
         self._api_key = api_key
         self._flow_id = flow_id
         self._timeout = httpx.Timeout(timeout_seconds)
         self._client = client
+
+    @staticmethod
+    def validate_configuration(
+        api_domain: str, sid: str, api_key: str, flow_id: str, timeout_seconds: float
+    ) -> None:
+        validate_api_domain(api_domain)
+        if not all(value.strip() for value in (sid, api_key, flow_id)) or (
+            not math.isfinite(timeout_seconds) or timeout_seconds <= 0
+        ):
+            raise OtpProviderConfigurationError("Kaleyra configuration is invalid")
 
     async def start_verification(self, *, normalized_phone: str) -> ProviderOtpChallenge:
         try:

@@ -48,12 +48,13 @@ def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str])
     from tirodhan.modules.customer_reads.cursor import CursorCodec
     from tirodhan.modules.customers.address_protection import AesGcmAddressProtector
     from tirodhan.modules.identity.phone_protection import AesGcmPhoneIdentityProtector
-    from tirodhan.modules.identity.runtime import otp_configured
+    from tirodhan.modules.identity.runtime import validate_otp_settings
     from tirodhan.modules.identity.tokens import Rs256AccessTokenCodec
 
     settings = proposed_settings(runtime, material)
-    if not otp_configured(settings):
-        raise ValueError("OTP provider is not selected")
+    validate_otp_settings(settings)
+    if settings.google_maps_api_key is None or settings.google_maps_http_timeout_seconds is None:
+        raise ValueError("Google Geocoding configuration is incomplete")
     Rs256AccessTokenCodec(
         private_key_pem=material["auth-jwt-private-key-pem"],
         public_key_pem=material["auth-jwt-public-key-pem"],

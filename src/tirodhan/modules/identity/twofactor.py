@@ -29,6 +29,16 @@ class TwoFactorOtpProvider:
         timeout_seconds: float,
         client: httpx.AsyncClient,
     ) -> None:
+        self.validate_configuration(api_key, template_name, timeout_seconds)
+        self._key = quote(api_key, safe="")
+        self._template = quote(template_name, safe="") if template_name is not None else None
+        self._timeout = httpx.Timeout(timeout_seconds)
+        self._client = client
+
+    @staticmethod
+    def validate_configuration(
+        api_key: str, template_name: str | None, timeout_seconds: float
+    ) -> None:
         if (
             not api_key.strip()
             or len(api_key) > 200
@@ -45,10 +55,6 @@ class TwoFactorOtpProvider:
             or any(ord(c) < 32 for c in template_name)
         ):
             raise OtpProviderConfigurationError("2Factor template configuration is invalid")
-        self._key = quote(api_key, safe="")
-        self._template = quote(template_name, safe="") if template_name is not None else None
-        self._timeout = httpx.Timeout(timeout_seconds)
-        self._client = client
 
     async def start_verification(self, *, normalized_phone: str) -> ProviderOtpChallenge:
         if re.fullmatch(r"\+[1-9][0-9]{7,14}", normalized_phone) is None:
