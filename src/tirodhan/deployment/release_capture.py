@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from tirodhan.deployment.database_verification_request import Github
 from tirodhan.deployment.deployment_admission import (
     ROOT,
@@ -46,6 +48,64 @@ class ReadOnlyGithub(Github):
         if threads["pageInfo"]["hasNextPage"]:
             raise AdmissionDenied("REVIEW_THREAD_HISTORY_EXCEEDS_SAFE_CAPTURE_BOUND")
         return [row for row in threads["nodes"] if row["isResolved"] is not True]
+
+    def download_artifact(self, artifact_id: int, *, limit: int = 40 * 1024 * 1024) -> bytes:
+        """Bound binary streaming separately from the existing 1 MiB JSON budget."""
+
+        def remaining() -> float:
+            value = self.deadline - time.monotonic()
+            if value <= 0:
+                raise AdmissionDenied("PLAN_ARTIFACT_DOWNLOAD_DEADLINE_EXCEEDED")
+            return value
+
+        def secure_redirect(response: httpx.Response) -> None:
+            if response.is_redirect:
+                target = response.url.join(response.headers["location"])
+                if target.scheme != "https" or target.username or target.password:
+                    raise AdmissionDenied("PLAN_ARTIFACT_REDIRECT_UNTRUSTED")
+
+        try:
+            token = Runner().run(
+                "gh",
+                "auth",
+                "token",
+                "--hostname",
+                "github.com",
+                timeout=max(1, min(10, int(remaining()))),
+            )
+            if not token:
+                raise AdmissionDenied("PLAN_ARTIFACT_AUTHENTICATION_UNAVAILABLE")
+            with httpx.Client(
+                timeout=min(30, remaining()),
+                follow_redirects=True,
+                max_redirects=5,
+                trust_env=False,
+                event_hooks={"response": [secure_redirect]},
+            ) as client:
+                # httpx strips Authorization when a redirect changes origin. Signed
+                # artifact URLs and credentials never appear in diagnostics.
+                with client.stream(
+                    "GET",
+                    f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip",
+                    headers={
+                        "Authorization": "Bearer " + token,
+                        "Accept": "application/vnd.github+json",
+                    },
+                ) as response:
+                    response.raise_for_status()
+                    if int(response.headers.get("content-length", "0")) > limit:
+                        raise AdmissionDenied("PLAN_ARTIFACT_DOWNLOAD_TOO_LARGE")
+                    content = bytearray()
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        remaining()
+                        if len(content) + len(chunk) > limit:
+                            raise AdmissionDenied("PLAN_ARTIFACT_DOWNLOAD_TOO_LARGE")
+                        content.extend(chunk)
+                    return bytes(content)
+        except AdmissionDenied:
+            raise
+        except Exception:
+            raise AdmissionDenied("PLAN_ARTIFACT_DOWNLOAD_UNAVAILABLE") from None
 
 
 def collect_review(
@@ -127,7 +187,7 @@ def capture_plan_artifact(
         for r in jobs.get("jobs", [])
     ):
         raise AdmissionDenied("PLAN_JOB_NOT_SUCCESSFUL")
-    data = github.command(f"repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip")
+    data = github.download_artifact(artifact_id)
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         if archive.namelist() != [mode + ".tfplan"]:
             raise AdmissionDenied("PLAN_ARTIFACT_CONTENTS_UNEXPECTED")

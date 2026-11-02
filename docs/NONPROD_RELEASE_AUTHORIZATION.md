@@ -24,6 +24,12 @@ and no unresolved threads. Merge/squash commits require full-tree equality with 
 head. Changed trees need another reviewed PR. Arbitrary PASS flags, review URLs and wildcard
 operations do not substitute for these records. Incomplete bounded histories block.
 
+Metadata retains the existing 1 MiB response limit and one bounded GitHub collection budget.
+Artifact binaries use a separate 40 MiB streaming limit; a native plan entry remains limited
+to 32 MiB. Redirects require HTTPS and never forward the API Authorization header to another
+origin. Existing CLI authentication is read internally, never printed. Oversized metadata,
+artifacts or exhausted collection time block with controlled errors, never readiness.
+
 Preparation conservatively uses the existing `maximum_evidence_age_seconds` for capture
 freshness. Long reviews require fresh capture/reconfirmation. The operator explicitly chooses
 expiry. Live deployment prerequisites still run after environment approval and before effects.
@@ -145,18 +151,28 @@ overwrite an existing entry without approved renewal/rotation. Serialize enrollm
 one designated operator: GitHub secret PUT is not an atomic create-only API, so inventory
 alone cannot prevent a second operator racing an overwrite.
 
-These are **mutating commands**, for separately approved execution only (POSIX shell):
+These are **mutating commands**, for separately approved execution only (Bash):
 
-```sh
+```bash
+set +x
+set -euo pipefail
+unset GH_DEBUG
+trap 'unset sql_pem' EXIT
 gh secret set NONPROD_RELEASE_AUTHORIZATION --repo krishnadhoundiyal/tirodhan < "$PRIVATE/release.jwt"
 gh secret set NONPROD_APPLY_AUTHORIZATION --repo krishnadhoundiyal/tirodhan --env nonprod < "$PRIVATE/apply.jwt"
 gh secret set NONPROD_DATABASE_VERIFY_AUTHORIZATION --repo krishnadhoundiyal/tirodhan --env nonprod-database < "$PRIVATE/database.jwt"
-openssl pkey -in "$CUSTODY/database.encrypted.pem" | gh secret set NONPROD_DATABASE_EVIDENCE_PRIVATE_KEY_PEM --repo krishnadhoundiyal/tirodhan --env nonprod-database
+if ! sql_pem=$(openssl pkey -in "$CUSTODY/database.encrypted.pem"); then exit 1; fi
+if [ -z "$sql_pem" ]; then exit 1; fi
+printf '%s\n' "$sql_pem" | gh secret set NONPROD_DATABASE_EVIDENCE_PRIVATE_KEY_PEM --repo krishnadhoundiyal/tirodhan --env nonprod-database
+unset sql_pem
 gh variable set NONPROD_DATABASE_EVIDENCE_KEY_ID --repo krishnadhoundiyal/tirodhan --env nonprod-database --body "$PINNED_V_KEY_ID"
 ```
 
-Use trusted local OpenSSL supporting Ed25519. Its private passphrase prompt decrypts SQL PEM
-only into the pipe to the protected environment, never a plaintext file/deployment job.
+Use trusted local OpenSSL supporting Ed25519. Check decryption success before starting the
+secret write: a direct OpenSSL-to-GitHub pipeline could start an empty write after decryption
+failed. SQL PEM is briefly held in shell memory and fed through stdin to the protected
+environment, never a plaintext file or deployment job. Keep shell tracing disabled and
+clear the variable afterward, including on failure; the EXIT trap handles aborted commands.
 Release private material is never uploaded. In PowerShell pipe `Get-Content -Raw -LiteralPath
 <private-token-file>` directly into the matching `gh secret set`; never evaluate it alone.
 Preserve environment/OIDC/SQL permission boundaries. V's PEM belongs only in

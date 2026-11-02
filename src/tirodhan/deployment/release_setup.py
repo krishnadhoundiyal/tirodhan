@@ -11,6 +11,7 @@ import copy
 import getpass
 import hashlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -327,6 +328,9 @@ def issue(
     bindings, validation = validated_request(
         request, policy, config, code_hash=code_hash, commit=commit, plan=plan
     )
+    private_directory(output.parent)
+    if os.path.lexists(output):
+        raise AdmissionDenied("ISSUANCE_OUTPUT_ALREADY_EXISTS")
     key = load_private(private_key, password)
     kid = key_id(key)
     if policy["authorization_keys"].get(kid) != public_pem(key):
@@ -361,7 +365,6 @@ def issue(
             commit=commit,
             run_id=request["release_session"],
         )
-    private_directory(output.parent)
     journal = private_key.parent / "issuance-journal"
     if not journal.exists():
         try:

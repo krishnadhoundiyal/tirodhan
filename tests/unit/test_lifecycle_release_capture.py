@@ -96,8 +96,8 @@ class ArtifactGithub:
             return self.jobs
         return self.run
 
-    def command(self, path):
-        assert path == "repos/krishnadhoundiyal/tirodhan/actions/artifacts/11/zip"
+    def download_artifact(self, artifact_id):
+        assert artifact_id == 11
         return self.archive
 
 
@@ -194,3 +194,58 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
             runner=None,
             config={},
         )
+
+
+def test_artifact_stream_exceeds_json_limit_without_leaking_auth_on_redirect(monkeypatch):
+    import httpx
+
+    from tirodhan.deployment import release_capture
+
+    payload = b"synthetic-artifact" * 80000
+    observed = []
+
+    def respond(request):
+        observed.append((request.url.host, request.headers.get("authorization")))
+        if request.url.host == "api.github.com":
+            return httpx.Response(302, headers={"location": "https://artifacts.example/archive"})
+        return httpx.Response(200, content=payload)
+
+    original = httpx.Client
+    monkeypatch.setattr(release_capture.Runner, "run", lambda *a, **k: "synthetic-test-token")
+    monkeypatch.setattr(
+        release_capture.httpx,
+        "Client",
+        lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    assert release_capture.ReadOnlyGithub().download_artifact(11) == payload
+    assert observed == [
+        ("api.github.com", "Bearer synthetic-test-token"),
+        ("artifacts.example", None),
+    ]
+
+
+@pytest.mark.parametrize("case", ["oversized", "streamed", "insecure", "failure"])
+def test_artifact_download_is_bounded_and_sanitized(monkeypatch, case):
+    import httpx
+
+    from tirodhan.deployment import release_capture
+
+    def respond(request):
+        if case == "insecure":
+            return httpx.Response(302, headers={"location": "http://untrusted.example/archive"})
+        if case == "failure":
+            raise httpx.ConnectError("must-not-print-token-or-signed-url", request=request)
+        headers = {"content-length": "1000"} if case == "oversized" else {}
+        return httpx.Response(200, headers=headers, stream=httpx.ByteStream(b"x" * 100))
+
+    original = httpx.Client
+    monkeypatch.setattr(release_capture.Runner, "run", lambda *a, **k: "synthetic-test-token")
+    monkeypatch.setattr(
+        release_capture.httpx,
+        "Client",
+        lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    with pytest.raises(AdmissionDenied) as error:
+        release_capture.ReadOnlyGithub().download_artifact(11, limit=10)
+    assert "synthetic-test-token" not in str(error.value)
+    assert "must-not-print" not in str(error.value)

@@ -22,7 +22,7 @@ Prepared on 2 November 2026. This nonsecret inventory is not deployment authorit
 Use `release_setup readiness` and read-only `release_capture inventory` under approved
 operator access. Follow [the custody/issuance runbook](NONPROD_RELEASE_AUTHORIZATION.md).
 
-Local validation: 572 lifecycle/authorization/security/concurrency/teardown tests passed;
+Local validation: 580 lifecycle/authorization/security/concurrency/teardown tests passed;
 four native Terraform fixtures require the pinned CI toolchain. Windows custody testing
 passed 40 tests with disposable synthetic keys. Repository lint/format and type checking
 of 289 source modules passed. Final-head GitHub CI and CodeRabbit review remain required.

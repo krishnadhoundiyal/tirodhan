@@ -274,6 +274,31 @@ def test_issuance_is_claimed_once_under_concurrency(context):
     assert len(list((context[0] / "issuance-journal").glob("*.json"))) == 1
 
 
+def test_existing_output_never_consumes_an_issuance_claim(context):
+    path = context[0] / "release.jwt"
+    custody.private_write(path, b"existing-private-output")
+    with pytest.raises(AdmissionDenied, match="OUTPUT_ALREADY_EXISTS"):
+        sign(context)
+    assert path.read_bytes() == b"existing-private-output"
+    assert not (context[0] / "issuance-journal").exists()
+
+
+def test_crash_after_claim_blocks_automatic_resigning(context, monkeypatch):
+    original = setup.private_write
+
+    def crash(path, value):
+        if path.suffix == ".jwt":
+            raise OSError("synthetic-write-failure")
+        original(path, value)
+
+    monkeypatch.setattr(setup, "private_write", crash)
+    with pytest.raises(OSError):
+        sign(context)
+    monkeypatch.setattr(setup, "private_write", original)
+    with pytest.raises(AdmissionDenied, match="ALREADY_CLAIMED"):
+        sign(context)
+
+
 def apply_request(context, tmp_path):
     _, _, _, request = context
     current = state()
