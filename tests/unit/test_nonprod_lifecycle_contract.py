@@ -199,6 +199,14 @@ def test_real_signature_and_operation_bindings(signed_release: Any) -> None:
         authorize(policy, claims, Ed25519PrivateKey.generate())
 
 
+def test_valid_signature_and_enrolled_key_cannot_bypass_release_hold(signed_release: Any) -> None:
+    policy, claims, key = signed_release
+    assert authorize(policy, claims, key).principal_id == OID
+    policy["release_enabled"] = False
+    with pytest.raises(AdmissionDenied, match="DEPLOYMENT_HOLD"):
+        authorize(policy, claims, key)
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
