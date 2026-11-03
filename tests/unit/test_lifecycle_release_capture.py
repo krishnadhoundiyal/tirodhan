@@ -14,6 +14,8 @@ from tirodhan.deployment.release_capture import capture_plan_artifact, collect_r
 
 @pytest.mark.parametrize("kind", ["enrollment", "recovery"])
 def test_actual_maintenance_capture_uses_real_identity_and_exact_target(monkeypatch, kind):
+    for flag in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(flag, raising=False)
     from lifecycle_fakes import CLIENT, CONFIG, OID, TENANT
     from test_lifecycle_maintenance_authorization import APP, RCLIENT, R, deleted_row
 
@@ -71,6 +73,25 @@ def test_actual_maintenance_capture_uses_real_identity_and_exact_target(monkeypa
         request, policy, config, code_hash=CODE, commit=COMMIT
     )
     assert bindings[next(iter(bindings))]["operation_id"]
+
+
+@pytest.mark.parametrize("flag", ["CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"])
+def test_maintenance_capture_refuses_hosted_runner_before_any_observation(monkeypatch, flag):
+    from tirodhan.deployment.release_capture import prepare
+
+    for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(flag, "true")
+    with pytest.raises(AdmissionDenied, match="AUTHORIZER_REQUIRES_TRUSTED_OPERATOR_HOST"):
+        prepare(
+            "enrollment",
+            session=SESSION,
+            expires_at=int(time.time()) + 60,
+            review_pr=123,
+            github=None,
+            runner=None,
+            config={},
+        )
 
 
 class ReviewGithub:

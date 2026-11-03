@@ -60,7 +60,8 @@ jobs:
           python -m pip install -e .
           python -m tirodhan.deployment.deployment_admission
   reconcile:
-    timeout-minutes: 15
+    # Bound recovery without shortening existing transfer/compensation operations.
+    timeout-minutes: ${{ inputs.operation == 'recover-vault' && 15 || 360 }}
     needs: release-admission
     if: github.ref == 'refs/heads/main'
     environment:

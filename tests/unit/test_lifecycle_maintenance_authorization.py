@@ -212,6 +212,7 @@ def recovery(monkeypatch):
             self.starts = 0
             self.lost = False
             self.accept = True
+            self.deleted = deleted_row()
             self.runner.json = self.json
             self.runner.run = self.run
 
@@ -251,7 +252,7 @@ def recovery(monkeypatch):
             if args[0:2] == ("gh", "api"):
                 return {"branch_policies": [{"name": "main"}]}
             if args[:3] == ("az", "keyvault", "list-deleted"):
-                return [deleted_row()]
+                return [self.deleted]
             raise AssertionError(args)
 
         def run(self, *args, **kwargs):
@@ -329,12 +330,31 @@ def test_unknown_recovery_remains_failure_and_prior_run_cannot_restart(recovery,
 
 def test_changed_deletion_generation_blocks_before_recovery(recovery):
     io, a = recovery
-    a.claims["bindings"]["recover-vault"]["deleted_vault"]["deletion_date"] = (
-        "2026-10-01T00:00:00+00:00"
-    )
+    # The signed original binding stays valid; actual Azure metadata moves to a
+    # different, independently valid deletion generation of the same vault name.
+    io.deleted["properties"]["deletionDate"] = (DELETED_AT + timedelta(days=1)).isoformat()
+    io.deleted["properties"]["scheduledPurgeDate"] = (DELETED_AT + timedelta(days=91)).isoformat()
     with pytest.raises(AdmissionDenied):
         foundation_reconcile.recover_vault()
     assert io.starts == 0
+
+
+def test_process_interruption_after_provider_acceptance_resumes_without_new_start(
+    recovery, monkeypatch
+):
+    io, _ = recovery
+    original = io.runner.run
+
+    def interrupted(*args, **kwargs):
+        original(*args, **kwargs)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(io.runner, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        foundation_reconcile.recover_vault()
+    monkeypatch.setattr(recovery_execution, "may_start", lambda _: False)
+    foundation_reconcile.recover_vault()
+    assert io.starts == 1
 
 
 @pytest.mark.parametrize("wrong", ["identity", "target", "expired"])

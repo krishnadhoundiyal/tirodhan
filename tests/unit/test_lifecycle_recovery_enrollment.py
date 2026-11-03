@@ -212,9 +212,19 @@ def test_conflicting_existing_assignment_is_never_overwritten(enrolled_context):
     assert io.writes == writes and io.grants[target]["principalId"] == V
 
 
-@pytest.mark.parametrize("invalid", ["disabled", "credentials", "multitenant", "verifier-client"])
-def test_unapproved_recovery_identity_writes_nothing(enrolled_context, invalid):
-    io, _ = enrolled_context
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "disabled",
+        "credentials",
+        "multitenant",
+        "verifier-client",
+        "verifier-principal",
+        "database-admin",
+    ],
+)
+def test_unapproved_recovery_identity_writes_nothing(enrolled_context, monkeypatch, invalid):
+    io, authorization = enrolled_context
     original = io.runner.json
 
     def read(*args):
@@ -231,8 +241,19 @@ def test_unapproved_recovery_identity_writes_nothing(enrolled_context, invalid):
     io.runner.json = read
     if invalid == "verifier-client":
         io.config["database_verification_client_id"] = RCLIENT
-    with pytest.raises(AdmissionDenied):
+    if invalid == "verifier-principal":
+        io.config["database_verification_principal_id"] = R
+    if invalid == "database-admin":
+        io.tf["postgres_admin_object_id"] = R
+    authorization = replace(authorization, configuration_hash=digest(io.config))
+    monkeypatch.setattr(
+        foundation_reconcile, "require_release_authorization", lambda _: authorization
+    )
+    with pytest.raises(
+        AdmissionDenied, match="PREREQUISITES_BLOCKED:recovery_enrollment_authority"
+    ) as rejected:
         recovery_enrollment.enroll()
+    assert str(rejected.value.__cause__) == "RECOVERY_ENROLLMENT_IDENTITY_OR_OWNERSHIP_UNVERIFIED"
     assert not io.writes
 
 

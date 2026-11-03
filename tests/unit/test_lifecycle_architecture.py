@@ -145,3 +145,12 @@ def test_architecture_and_teardown_invariants_remain_explicit() -> None:
     assert 'data "azurerm_key_vault" "runtime"' in vault
     providers = Path("infra/terraform/nonprod/providers.tf").read_text()
     assert 'resource_provider_registrations = "none"' in providers
+
+
+def test_recovery_job_timeout_preserves_other_lifecycle_operations() -> None:
+    workflow = yaml.safe_load(Path(".github/workflows/nonprod-reconcile.yml").read_text())
+    # The pre-change GitHub default is 360 minutes. Only the new recovery protocol
+    # has a shorter job budget; native 1,800/1,850-second operations retain theirs.
+    assert workflow["jobs"]["reconcile"]["timeout-minutes"] == (
+        "${{ inputs.operation == 'recover-vault' && 15 || 360 }}"
+    )
