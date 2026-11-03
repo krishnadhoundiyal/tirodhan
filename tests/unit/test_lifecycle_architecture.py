@@ -14,6 +14,7 @@ import yaml
 from tirodhan.deployment.deployment_admission import contract_digest
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.prerequisites import CHECK_IDS, assert_manifest_complete
+from tirodhan.deployment.release_setup import validate_policy_keys
 
 
 def test_all_terraform_configuration_formats_are_bound_to_release_source(tmp_path: Path) -> None:
@@ -37,7 +38,8 @@ def test_all_mandatory_capabilities_have_real_registered_evaluators() -> None:
     assert all(callable(getattr(Checks, "check_" + key, None)) for key in CHECK_IDS)
     policy = json.loads(Path("deploy/nonprod-release-policy.json").read_text())
     assert policy["release_enabled"] is False
-    assert policy["authorization_keys"] == {}
+    # Public-key enrollment is allowed while the independent release hold remains active.
+    validate_policy_keys(policy)
 
 
 def test_workflow_mappings_cannot_silently_overwrite_gates() -> None:
