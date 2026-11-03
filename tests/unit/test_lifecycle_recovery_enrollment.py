@@ -179,6 +179,23 @@ def test_azure_cli_null_permission_metadata_resumes_without_duplicate_grants(
     assert io.writes == after
 
 
+def test_null_permission_metadata_in_role_creation_response_is_verified(enrolled_context):
+    io, _ = enrolled_context
+    original = io.runner.json
+
+    def response(*args):
+        value = original(*args)
+        if args[:4] == ("az", "rest", "--method", "put") and "/roleDefinitions/" in value["id"]:
+            value = copy.deepcopy(value)
+            value["properties"]["permissions"][0].update(condition=None, conditionVersion=None)
+        return value
+
+    io.runner.json = response
+    recovery_enrollment.enroll()
+    assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+    assert sum("/roleDefinitions/" in target for target in io.writes) == 2
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
