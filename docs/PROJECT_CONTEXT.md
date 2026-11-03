@@ -1,5 +1,9 @@
 # Project Context
 
+NONPROD Closure Batch 1 separates signed operator enrollment and exact-vault recovery from
+deployment authority. Deployment remains held; implementation does not close live findings
+or authorize mutation. See [approval and retry protocol](NONPROD_RECOVERY_AUTHORIZATION.md).
+
 The NONPROD lifecycle integration retains PR #84 recovery/ownership/compensation behind
 signed release admission and one complete mandatory prerequisite contract. The policy
 denies provisioning; merge is not deployment authority. Protected teardown remains available.

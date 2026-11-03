@@ -34,3 +34,11 @@ identity and independently pinned attestation key. It observes SQL through read-
 transactions and publishes fresh evidence for an exact active deployment consumer.
 Deployment receives the signed report, never that identity's credentials or signing key.
 Identity, SQL and Azure permission enrollment still require separate authorization.
+
+## Approved recovery authorization isolation — 3 November 2026
+
+Closure Batch 1 separates signed ENROLLMENT (enroll-recovery, operator-local) and RECOVERY
+(recover-vault, protected R) from DEPLOYMENT. Those exact purposes may be independently
+authorized while release_enabled=false; every deployment operation remains held. Every
+mandatory prerequisite remains enforced. Interrupted operations reconcile exact results
+without duplicate grants or broader trust. See [bindings, approvals and resumption](../NONPROD_RECOVERY_AUTHORIZATION.md).

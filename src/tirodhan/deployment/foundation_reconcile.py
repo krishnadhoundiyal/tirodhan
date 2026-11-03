@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ def admitted_with_grant(operation: str, **parameters: Any) -> tuple[Checks, Obse
 
     refresh_database_evidence(auth)
     io = Observations(configuration())
+    if operation == "recover-vault":
+        io.runner.timeout_limit = 30
     checks = Checks(auth, io.config, parameters, io)
     grant = Controller(auth, checks).evaluate(operation)
     emit_grant(grant)
@@ -38,29 +41,60 @@ def admitted(operation: str, **parameters: Any) -> tuple[Checks, Observations]:
     return checks, io
 
 
+def revalidate(checks: Checks) -> None:
+    """Fresh signature/context and live prerequisites immediately before each external write."""
+    if require_release_authorization(checks.auth.operation) != checks.auth:
+        raise AdmissionDenied("LIFECYCLE_AUTHORIZATION_CHANGED")
+    Controller(checks.auth, checks).evaluate(checks.auth.operation)
+
+
 def recover_vault() -> None:
+    from tirodhan.deployment.recovery_execution import may_start
+    from tirodhan.deployment.recovery_target import active_target_state
+
     checks, io = admitted("recover-vault")
-    if checks.check_vault():
+    observed = active_target_state(checks)
+    if observed == "Succeeded":
         print("PERSISTENT_VAULT_READY: verified active vault; no mutation")
         return
-    io.runner.run(
-        "az",
-        "keyvault",
-        "recover",
-        "--subscription",
-        io.tf["subscription_id"],
-        "--name",
-        io.vault_id.rsplit("/", 1)[-1],
-        "--resource-group",
-        io.tf["resource_group_name"],
-        "--location",
-        io.tf["location"],
-        "--output",
-        "none",
-    )
-    # No optimistic success. Recovery postconditions are new actual observations.
-    if not checks.check_vault():
-        raise AdmissionDenied("RECOVERY_POSTCONDITIONS_NOT_SATISFIED")
+    # A pending exact active resource is observation-only. No second recovery command.
+    if observed is None and may_start(checks.auth):
+        revalidate(checks)
+        if active_target_state(checks) is None:
+            try:
+                io.runner.run(
+                    "az",
+                    "keyvault",
+                    "recover",
+                    "--subscription",
+                    io.tf["subscription_id"],
+                    "--name",
+                    io.vault_id.rsplit("/", 1)[-1],
+                    "--resource-group",
+                    io.tf["resource_group_name"],
+                    "--location",
+                    io.tf["location"],
+                    "--no-wait",
+                    "--output",
+                    "none",
+                    timeout=30,
+                )
+            except AdmissionDenied:
+                # The provider may have accepted the request. Never retry the mutation here.
+                pass
+    deadline = time.monotonic() + 300
+    for _ in range(12):
+        if time.monotonic() >= deadline:
+            break
+        if require_release_authorization("recover-vault") != checks.auth:
+            raise AdmissionDenied("RECOVERY_AUTHORIZATION_CHANGED")
+        if active_target_state(checks) == "Succeeded":
+            break
+        time.sleep(5)
+    else:
+        raise AdmissionDenied("RECOVERY_OUTCOME_UNKNOWN_RESUME_SAME_OPERATION")
+    if time.monotonic() >= deadline:
+        raise AdmissionDenied("RECOVERY_OUTCOME_UNKNOWN_RESUME_SAME_OPERATION")
     print("PERSISTENT_VAULT_RECOVERED: reevaluate deployment prerequisites under D")
 
 

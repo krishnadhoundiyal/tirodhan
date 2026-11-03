@@ -32,10 +32,16 @@ def azure_error_code(stderr: str) -> str:
 
 
 class Runner:
+    timeout_limit: int = 180
+
     def run(self, *args: str, timeout: int = 180) -> str:
         try:
             result = subprocess.run(
-                args, check=False, capture_output=True, text=True, timeout=timeout
+                args,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=min(timeout, self.timeout_limit),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ObservationError("OBSERVATION_UNAVAILABLE") from exc

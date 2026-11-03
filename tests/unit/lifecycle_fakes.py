@@ -16,6 +16,8 @@ from tirodhan.deployment.check_nonprod_bootstrap_rbac import (
 from tirodhan.deployment.deployment_admission import (
     Authorization,
     digest,
+    maintenance_target,
+    operation_class,
 )
 from tirodhan.deployment.lifecycle_evidence import (
     BackendState,
@@ -80,6 +82,12 @@ def state(resources: dict[str, str] | None = None, *, serial: int = 0) -> Backen
 
 
 def auth(operation: str, *, kind: str = "deployment", **binding: Any) -> Authorization:
+    if operation_class(operation) != "DEPLOYMENT":
+        binding = {
+            "target": maintenance_target(CONFIG),
+            "recovery_client_id": CONFIG["recovery_client_id"],
+            **binding,
+        }
     return Authorization(
         operation,
         OID,
@@ -88,7 +96,10 @@ def auth(operation: str, *, kind: str = "deployment", **binding: Any) -> Authori
         "code-hash",
         "a" * 40,
         "session",
-        {"bindings": {operation: {"local_execution_authorized": True, **binding}}},
+        {
+            "authorization_class": operation_class(operation),
+            "bindings": {operation: {"local_execution_authorized": True, **binding}},
+        },
     )
 
 

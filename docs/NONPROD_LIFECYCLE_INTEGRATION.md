@@ -5,8 +5,10 @@ Functionality source: PR 84 `24ac70d5ae9dad3084827277e6a31f0272de759d`.
 The approved 1 November 2026 contract supersedes that branch's unguarded recovery,
 state-RG read and imperative state-removal implementation details.
 
-Implementation is **not release authorization**. The committed policy disables release
-and contains no authorization/evidence keys. Caller-provided PASS Booleans do not grant access.
+Implementation is **not release authorization**. The committed policy disables deployment
+and contains enrolled public verification keys. Caller-provided PASS Booleans do not grant access.
+The approved [ENROLLMENT/RECOVERY split](NONPROD_RECOVERY_AUTHORIZATION.md) admits only those
+independently signed maintenance operations while deployment remains held.
 
 ## Review and merge order
 

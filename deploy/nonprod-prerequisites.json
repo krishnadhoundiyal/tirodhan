@@ -219,7 +219,7 @@
       "failure": "BLOCK any missing/changed/inactive consumer or unimplemented request validation"
     },
     "recovery_enrollment_authority": {
-      "authority": "Separately signed operator enrollment, actual RBAC authority and verified ownership of the exact recovery application",
+      "authority": "Signed ENROLLMENT for enroll-recovery only, actual operator RBAC authority and verified ownership of the exact recovery application; deployment remains held independently",
       "identity": "O, separate from R/D",
       "scope": "Exact recovery SP/app, subscription metadata discovery role and app-RG recovery role",
       "allowed_operation": "Enroll narrow deterministic RBAC and protected recovery OIDC only; never create/recover a vault or touch Terraform state",

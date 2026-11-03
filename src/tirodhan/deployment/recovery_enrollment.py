@@ -7,7 +7,7 @@ import uuid
 from typing import Any
 
 from tirodhan.deployment.deployment_admission import AdmissionDenied
-from tirodhan.deployment.foundation_reconcile import admitted
+from tirodhan.deployment.foundation_reconcile import admitted, revalidate
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.lifecycle_evidence import Observations
 
@@ -65,10 +65,21 @@ def verify_application(checks: Checks) -> tuple[str, str]:
     if (
         not client
         or client == checks.config["deployment_client_id"].casefold()
+        or client == str(checks.config.get("database_verification_client_id")).casefold()
+        or principal == str(checks.config.get("database_verification_principal_id")).casefold()
+        or principal == str(checks.tf.get("postgres_admin_object_id")).casefold()
         or str(sp.get("id", "")).casefold() != principal
         or str(sp.get("appId", "")).casefold() != client
         or str(application.get("id", "")).casefold() != app
         or str(application.get("appId", "")).casefold() != client
+        or sp.get("accountEnabled") is not True
+        or sp.get("servicePrincipalType") != "Application"
+        or application.get("signInAudience") != "AzureADMyOrg"
+        or any(
+            not isinstance(row.get(field), list) or row[field]
+            for row in (sp, application)
+            for field in ("passwordCredentials", "keyCredentials")
+        )
         or not any(
             str(row.get("id", "")).casefold() == checks.auth.principal_id.casefold()
             for row in owners
@@ -79,7 +90,8 @@ def verify_application(checks: Checks) -> tuple[str, str]:
     return app, principal
 
 
-def role(io: Observations, name: str, scope: str, actions: list[str]) -> str:
+def role(checks: Checks, name: str, scope: str, actions: list[str]) -> str:
+    io = checks.io
     expected = {
         "roleName": name,
         "type": "CustomRole",
@@ -103,16 +115,22 @@ def role(io: Observations, name: str, scope: str, actions: list[str]) -> str:
         return str(row["id"])
     identifier = str(uuid.uuid5(uuid.NAMESPACE_URL, scope + "/" + name))
     resource_id = f"{scope}/providers/Microsoft.Authorization/roleDefinitions/{identifier}"
-    value = io.runner.json(
-        "az",
-        "rest",
-        "--method",
-        "put",
-        "--url",
-        "https://management.azure.com" + resource_id + "?api-version=2022-04-01",
-        "--body",
-        json.dumps({"properties": expected}),
-    )
+    revalidate(checks)
+    try:
+        value = io.runner.json(
+            "az",
+            "rest",
+            "--method",
+            "put",
+            "--url",
+            "https://management.azure.com" + resource_id + "?api-version=2022-04-01",
+            "--body",
+            json.dumps({"properties": expected}),
+        )
+    except AdmissionDenied:
+        value = io.arm(resource_id, "2022-04-01")
+        if value is None:
+            raise
     properties = value.get("properties", {})
     if (
         properties.get("permissions") != expected["permissions"]
@@ -140,7 +158,7 @@ def enroll() -> None:
         (f"Tirodhan NONPROD Deleted Vault Discovery {io.tf['suffix']}", subscription, DISCOVERY),
         (f"Tirodhan NONPROD Vault Recovery Write {io.tf['suffix']}", io.scope, WRITE),
     ):
-        definition = role(io, name, scope, actions)
+        definition = role(checks, name, scope, actions)
         identifier = str(uuid.uuid5(uuid.NAMESPACE_URL, "/".join([name, scope, principal])))
         target = f"{scope}/providers/Microsoft.Authorization/roleAssignments/{identifier}"
         expected = {
@@ -148,16 +166,24 @@ def enroll() -> None:
             "principalId": principal,
             "principalType": "ServicePrincipal",
         }
-        value = io.runner.json(
-            "az",
-            "rest",
-            "--method",
-            "put",
-            "--url",
-            "https://management.azure.com" + target + "?api-version=2022-04-01",
-            "--body",
-            json.dumps({"properties": expected}),
-        )
+        value = io.arm(target, "2022-04-01")
+        if value is None:
+            revalidate(checks)
+            try:
+                value = io.runner.json(
+                    "az",
+                    "rest",
+                    "--method",
+                    "put",
+                    "--url",
+                    "https://management.azure.com" + target + "?api-version=2022-04-01",
+                    "--body",
+                    json.dumps({"properties": expected}),
+                )
+            except AdmissionDenied:
+                value = io.arm(target, "2022-04-01")
+                if value is None:
+                    raise
         properties = value.get("properties", {})
         if (
             str(value.get("id", "")).casefold() != target.casefold()
@@ -171,6 +197,7 @@ def enroll() -> None:
         ):
             raise AdmissionDenied("RECOVERY_ENROLLMENT_ASSIGNMENT_POSTCONDITION_FAILED")
     if federation(io, app) is None:
+        revalidate(checks)
         try:
             io.runner.run(
                 "az",

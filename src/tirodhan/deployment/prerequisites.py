@@ -13,6 +13,7 @@ from tirodhan.deployment.deployment_admission import (
     AdmissionDenied,
     Authorization,
     configuration,
+    operation_class,
     require_release_authorization,
 )
 
@@ -119,6 +120,10 @@ class Controller:
         expected_identity = IDENTITIES.get(operation, "deployment")
         if self.authorization.identity_kind != expected_identity:
             raise AdmissionDenied("OPERATION_IDENTITY_BOUNDARY")
+        if self.authorization.claims.get("authorization_class", "DEPLOYMENT") != operation_class(
+            operation
+        ):
+            raise AdmissionDenied("OPERATION_CLASS_BOUNDARY")
         try:
             registry: dict[str, Callable[[], bool]] = self.checks.registry()
         except (AttributeError, TypeError) as exc:
@@ -173,6 +178,7 @@ def emit_grant(grant: Grant) -> None:
             {
                 "status": "PREREQUISITES_SATISFIED",
                 "operation": grant.operation,
+                "authorization_class": operation_class(grant.operation),
                 "contract_hash": grant.authorization.contract_hash,
                 "configuration_hash": grant.authorization.configuration_hash,
                 "satisfied_checks": grant.satisfied_checks,

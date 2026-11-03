@@ -39,14 +39,37 @@ class Enrollment(MemoryObservations):
         self.runner.run = self.run
 
     def arm(self, resource_id, version):
-        assert resource_id.endswith("/providers/Microsoft.Authorization/permissions")
-        return {"value": [{"actions": ["*"], "notActions": []}]}
+        if resource_id.endswith("/providers/Microsoft.Authorization/permissions"):
+            return {"value": [{"actions": ["*"], "notActions": []}]}
+        if resource_id in self.grants:
+            return {"id": resource_id, "properties": copy.deepcopy(self.grants[resource_id])}
+        for row in self.roles.values():
+            if row["id"] == resource_id:
+                return {
+                    "id": resource_id,
+                    "name": resource_id.rsplit("/", 1)[-1],
+                    "properties": row,
+                }
+        return None
 
     def json(self, *args):
         if args[:4] == ("az", "ad", "sp", "show"):
-            return {"id": R, "appId": RCLIENT}
+            return {
+                "id": R,
+                "appId": RCLIENT,
+                "accountEnabled": True,
+                "servicePrincipalType": "Application",
+                "passwordCredentials": [],
+                "keyCredentials": [],
+            }
         if args[:4] == ("az", "ad", "app", "show"):
-            return {"id": APP, "appId": RCLIENT}
+            return {
+                "id": APP,
+                "appId": RCLIENT,
+                "signInAudience": "AzureADMyOrg",
+                "passwordCredentials": [],
+                "keyCredentials": [],
+            }
         if args[:5] == ("az", "ad", "app", "owner", "list"):
             return [{"id": OID}] if self.owner else []
         if args[:4] == ("az", "role", "definition", "list"):
@@ -99,6 +122,7 @@ def enrolled_context(monkeypatch):
             kind="operator",
             recovery_enrollment_authorized=True,
             recovery_principal_id=R,
+            recovery_client_id=RCLIENT,
             recovery_app_object_id=APP,
         ),
         configuration_hash=digest(io.config),
@@ -132,6 +156,84 @@ def test_concurrent_enrollment_converges_on_same_grants(enrolled_context):
     assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
     assert io.conflicts == 1
     assert sum("graph.microsoft.com" in target for target in io.writes) == 2
+
+
+@pytest.mark.parametrize("effect", ["roleDefinitions", "roleAssignments"])
+def test_committed_enrollment_write_with_lost_response_is_read_back(enrolled_context, effect):
+    io, _ = enrolled_context
+    original = io.runner.json
+    lost = False
+
+    def response(*args):
+        nonlocal lost
+        value = original(*args)
+        if args[:4] == ("az", "rest", "--method", "put") and effect in str(value) and not lost:
+            lost = True
+            raise ObservationError("RESPONSE_LOST")
+        return value
+
+    io.runner.json = response
+    recovery_enrollment.enroll()
+    writes = list(io.writes)
+    recovery_enrollment.enroll()
+    assert lost and io.writes == writes
+    assert len(io.grants) == 2 and len(io.roles) == 2 and len(io.credentials) == 1
+
+
+def test_expiry_between_enrollment_writes_blocks_and_fresh_authority_resumes(
+    enrolled_context, monkeypatch
+):
+    io, authorization = enrolled_context
+
+    def current(_):
+        if io.writes:
+            raise AdmissionDenied("AUTHORIZATION_EXPIRED")
+        return authorization
+
+    monkeypatch.setattr(foundation_reconcile, "require_release_authorization", current)
+    with pytest.raises(AdmissionDenied, match="EXPIRED"):
+        recovery_enrollment.enroll()
+    assert len(io.roles) == 1 and not io.grants and not io.credentials
+    monkeypatch.setattr(
+        foundation_reconcile, "require_release_authorization", lambda _: authorization
+    )
+    recovery_enrollment.enroll()
+    assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+
+
+def test_conflicting_existing_assignment_is_never_overwritten(enrolled_context):
+    io, _ = enrolled_context
+    recovery_enrollment.enroll()
+    target = next(iter(io.grants))
+    io.grants[target]["principalId"] = V
+    writes = list(io.writes)
+    with pytest.raises(AdmissionDenied, match="ASSIGNMENT_POSTCONDITION_FAILED"):
+        recovery_enrollment.enroll()
+    assert io.writes == writes and io.grants[target]["principalId"] == V
+
+
+@pytest.mark.parametrize("invalid", ["disabled", "credentials", "multitenant", "verifier-client"])
+def test_unapproved_recovery_identity_writes_nothing(enrolled_context, invalid):
+    io, _ = enrolled_context
+    original = io.runner.json
+
+    def read(*args):
+        value = original(*args)
+        if args[:4] == ("az", "ad", "sp", "show"):
+            if invalid == "disabled":
+                value["accountEnabled"] = False
+            if invalid == "credentials":
+                value["passwordCredentials"] = [{"keyId": "unexpected"}]
+        if args[:4] == ("az", "ad", "app", "show") and invalid == "multitenant":
+            value["signInAudience"] = "AzureADMultipleOrgs"
+        return value
+
+    io.runner.json = read
+    if invalid == "verifier-client":
+        io.config["database_verification_client_id"] = RCLIENT
+    with pytest.raises(AdmissionDenied):
+        recovery_enrollment.enroll()
+    assert not io.writes
 
 
 def test_rejected_create_without_confirmed_credential_remains_failure(enrolled_context):
