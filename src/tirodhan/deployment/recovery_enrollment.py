@@ -90,9 +90,25 @@ def verify_application(checks: Checks) -> tuple[str, str]:
     return app, principal
 
 
+def same_permissions(actual: Any, expected: list[dict[str, Any]]) -> bool:
+    """Allow only absent/null SDK condition metadata beside exact approved permissions."""
+    optional = {"condition", "conditionVersion"}
+    if not isinstance(actual, list) or len(actual) != len(expected):
+        return False
+    for row, approved in zip(actual, expected, strict=True):
+        if (
+            not isinstance(row, dict)
+            or set(row) - set(approved) - optional
+            or any(row.get(key) is not None for key in optional)
+            or {key: value for key, value in row.items() if key not in optional} != approved
+        ):
+            return False
+    return True
+
+
 def role(checks: Checks, name: str, scope: str, actions: list[str]) -> str:
     io = checks.io
-    expected = {
+    expected: dict[str, Any] = {
         "roleName": name,
         "type": "CustomRole",
         "description": "Explicit NONPROD recovery enrollment",
@@ -108,9 +124,9 @@ def role(checks: Checks, name: str, scope: str, actions: list[str]) -> str:
         raise AdmissionDenied("RECOVERY_ENROLLMENT_ROLE_AMBIGUOUS")
     if existing:
         row = existing[0]
-        if row.get("permissions") != expected["permissions"] or row.get("assignableScopes") != [
-            scope
-        ]:
+        if not same_permissions(row.get("permissions"), expected["permissions"]) or row.get(
+            "assignableScopes"
+        ) != [scope]:
             raise AdmissionDenied("RECOVERY_ENROLLMENT_ROLE_CHANGE_NOT_AUTHORIZED")
         return str(row["id"])
     identifier = str(uuid.uuid5(uuid.NAMESPACE_URL, scope + "/" + name))
@@ -133,7 +149,7 @@ def role(checks: Checks, name: str, scope: str, actions: list[str]) -> str:
             raise
     properties = value.get("properties", {})
     if (
-        properties.get("permissions") != expected["permissions"]
+        not same_permissions(properties.get("permissions"), expected["permissions"])
         or properties.get("assignableScopes") != [scope]
         or value.get("name") != identifier
         or not isinstance(value.get("id"), str)
