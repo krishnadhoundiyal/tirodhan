@@ -158,6 +158,66 @@ def test_concurrent_enrollment_converges_on_same_grants(enrolled_context):
     assert sum("graph.microsoft.com" in target for target in io.writes) == 2
 
 
+@pytest.mark.parametrize("partial", [False, True])
+def test_azure_cli_null_permission_metadata_resumes_without_duplicate_grants(
+    enrolled_context, partial
+):
+    io, _ = enrolled_context
+    recovery_enrollment.enroll()
+    for row in io.roles.values():
+        row["permissions"][0].update(condition=None, conditionVersion=None)
+    if partial:
+        del io.grants[next(iter(io.grants))]
+        io.credentials.clear()
+    before = list(io.writes)
+    recovery_enrollment.enroll()
+    assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+    assert all("/roleDefinitions/" not in target for target in io.writes[len(before) :])
+    assert len(io.writes) - len(before) == (2 if partial else 0)
+    after = list(io.writes)
+    recovery_enrollment.enroll()
+    assert io.writes == after
+
+
+def test_null_permission_metadata_in_role_creation_response_is_verified(enrolled_context):
+    io, _ = enrolled_context
+    original = io.runner.json
+
+    def response(*args):
+        value = original(*args)
+        if args[:4] == ("az", "rest", "--method", "put") and "/roleDefinitions/" in value["id"]:
+            value = copy.deepcopy(value)
+            value["properties"]["permissions"][0].update(condition=None, conditionVersion=None)
+        return value
+
+    io.runner.json = response
+    recovery_enrollment.enroll()
+    assert len(io.roles) == 2 and len(io.grants) == 2 and len(io.credentials) == 1
+    assert sum("/roleDefinitions/" in target for target in io.writes) == 2
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("condition", "unapproved-condition"),
+        ("conditionVersion", "2.0"),
+        ("unknownPermissionField", None),
+        ("dataActions", ["Microsoft.KeyVault/vaults/secrets/read"]),
+        ("actions", ["*"]),
+    ],
+)
+def test_permission_metadata_never_hides_unapproved_authority(enrolled_context, field, value):
+    io, _ = enrolled_context
+    recovery_enrollment.enroll()
+    for row in io.roles.values():
+        row["permissions"][0].update(condition=None, conditionVersion=None)
+    next(iter(io.roles.values()))["permissions"][0][field] = value
+    before = list(io.writes)
+    with pytest.raises(AdmissionDenied, match="RECOVERY_ENROLLMENT_ROLE_CHANGE_NOT_AUTHORIZED"):
+        recovery_enrollment.enroll()
+    assert io.writes == before
+
+
 @pytest.mark.parametrize("effect", ["roleDefinitions", "roleAssignments"])
 def test_committed_enrollment_write_with_lost_response_is_read_back(enrolled_context, effect):
     io, _ = enrolled_context
