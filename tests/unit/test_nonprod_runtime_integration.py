@@ -57,32 +57,46 @@ def test_keyvault_refs_and_feature_settings_are_allowlisted() -> None:
         "TIRODHAN_CUSTOMER_VAPID_PRIVATE_KEY_PEM": "customer-vapid-private-key-pem",
     }
     assert all(names[key] == value for key, value in refs.items())
+    assert names["TIRODHAN_TWOFACTOR_API_KEY"] == "twofactor-api-key"
     assert set(refs.values()) == seed_secrets.CUSTOMER_SECRET_NAMES
     available = (ROOT / "deploy/runtime-env.names").read_text().splitlines()
     assert "TIRODHAN_CUSTOMER_DATA_ACTIVE_KEY_ID" in available
     assert "TIRODHAN_CUSTOMER_FCM_ENABLED" in available
     assert "TIRODHAN_CUSTOMER_WEB_PUSH_ENABLED" in available
     assert "TIRODHAN_CUSTOMER_CURSOR_SIGNING_KEY" not in available
+    assert "TIRODHAN_TWOFACTOR_API_KEY" not in available
+    assert {
+        "TIRODHAN_OTP_PROVIDER",
+        "TIRODHAN_TWOFACTOR_HTTP_TIMEOUT_SECONDS",
+        "TIRODHAN_TWOFACTOR_TEMPLATE_NAME",
+    }.issubset(available)
 
 
 def test_approved_credential_batches_are_complete() -> None:
     legacy = seed_secrets.LEGACY_SECRET_NAMES
     customer = seed_secrets.CUSTOMER_SECRET_NAMES
     assert legacy.isdisjoint(customer)
-    assert seed_secrets.SECRET_NAMES == legacy | customer
+    current = seed_secrets.TWOFACTOR_SECRET_NAMES
+    assert "kaleyra-api-key" not in current
+    assert "twofactor-api-key" in current
+    assert seed_secrets.SECRET_NAMES == legacy | current | customer
     for batch in (
         legacy,
         seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
         customer,
         legacy | customer,
+        current,
+        current | seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
+        current | customer,
+        {"twofactor-api-key"},
     ):
         assert seed_secrets.approved_secret_batch(set(batch))
     assert not seed_secrets.approved_secret_batch({"customer-data-hmac-key"})
     assert not seed_secrets.approved_secret_batch({"arbitrary-secret"})
 
 
-@pytest.mark.parametrize("kind", ["legacy", "customer", "vapid"])
+@pytest.mark.parametrize("kind", ["legacy", "twofactor", "twofactor-only", "customer", "vapid"])
 def test_secret_seeding_does_not_echo_values(
     kind: str,
     tmp_path: Path,
@@ -91,6 +105,8 @@ def test_secret_seeding_does_not_echo_values(
 ) -> None:
     groups = {
         "legacy": seed_secrets.LEGACY_SECRET_NAMES,
+        "twofactor": seed_secrets.TWOFACTOR_SECRET_NAMES,
+        "twofactor-only": {"twofactor-api-key"},
         "customer": seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         "vapid": seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
     }

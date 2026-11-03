@@ -52,3 +52,30 @@ def otp_provider_from_settings(settings: Settings, client: httpx.AsyncClient) ->
         timeout_seconds=settings.kaleyra_http_timeout_seconds,
         client=client,
     )
+
+
+def validate_otp_settings(settings: Settings) -> None:
+    """Use the constructors' pure validators without allocating an HTTP client."""
+    if not otp_configured(settings):
+        raise OtpProviderConfigurationError("OTP provider is not selected")
+    if settings.otp_provider == "2FACTOR":
+        assert settings.twofactor_api_key is not None
+        assert settings.twofactor_http_timeout_seconds is not None
+        TwoFactorOtpProvider.validate_configuration(
+            settings.twofactor_api_key.get_secret_value(),
+            settings.twofactor_template_name,
+            settings.twofactor_http_timeout_seconds,
+        )
+    else:
+        assert settings.kaleyra_api_domain is not None
+        assert settings.kaleyra_sid is not None
+        assert settings.kaleyra_api_key is not None
+        assert settings.kaleyra_verify_flow_id is not None
+        assert settings.kaleyra_http_timeout_seconds is not None
+        KaleyraVerifyOtpProvider.validate_configuration(
+            settings.kaleyra_api_domain,
+            settings.kaleyra_sid,
+            settings.kaleyra_api_key.get_secret_value(),
+            settings.kaleyra_verify_flow_id,
+            settings.kaleyra_http_timeout_seconds,
+        )

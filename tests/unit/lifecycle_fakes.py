@@ -50,7 +50,7 @@ CONFIG = {
         "resource_group_name": "tirodhan-np-test01",
         "location": "centralindia",
         "suffix": "test01",
-        "runtime_env": {},
+        "runtime_env": {"TIRODHAN_OTP_PROVIDER": "2FACTOR"},
     },
     "state_account": "syntheticstate",
     "state_resource_group": "synthetic-state-rg",

@@ -14,6 +14,6 @@ def test_runtime_secret_names_excludes_operational_secrets() -> None:
 
 
 def test_runtime_secret_names_ignores_unrelated_key_vault_secrets() -> None:
-    available = frozenset({"kaleyra-api-key", "some-other-secret"})
+    available = frozenset({"twofactor-api-key", "some-other-secret"})
 
-    assert runtime_secret_names(available) == frozenset({"kaleyra-api-key"})
+    assert runtime_secret_names(available) == frozenset({"twofactor-api-key"})

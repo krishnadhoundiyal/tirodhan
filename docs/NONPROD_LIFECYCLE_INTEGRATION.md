@@ -44,6 +44,10 @@ Offline admission precedes Azure login. Existing PyJWT/cryptography verifies Ed2
 authorizations against public keys pinned in `deploy/nonprod-release-policy.json`.
 Private authorization keys stay with the approved authorizer, outside Git and Azure jobs.
 
+The [operator custody/issuance tools](NONPROD_RELEASE_AUTHORIZATION.md) generate encrypted
+independent keys, capture read-only evidence, calculate bindings and verify issued JWTs.
+They do not enroll settings or enable release. See [source readiness](NONPROD_RELEASE_READINESS.md).
+
 Required claims: issuer `tirodhan-nonprod-release`, audience
 `tirodhan-nonprod-provisioning`, exp/iat/nbf, subject principal OID, authorization ID (jti),
 repository, commit, release session, configuration/source hashes, operations, identity kind
