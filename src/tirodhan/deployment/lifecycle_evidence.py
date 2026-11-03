@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -36,8 +37,22 @@ class Runner:
 
     def run(self, *args: str, timeout: int = 180) -> str:
         try:
+            executable = shutil.which(args[0]) or args[0]
+            command: tuple[str, ...] = (executable,)
+            if os.name == "nt" and executable.casefold().endswith((".cmd", ".bat")):
+                # Invoke the official MSI's Python entry point directly. Windows
+                # may interpret batch arguments through cmd.exe even with shell=False.
+                launcher = Path(executable)
+                interpreter = launcher.parent.parent / "python.exe"
+                if (
+                    launcher.name.casefold() != "az.cmd"
+                    or launcher.parent.name.casefold() != "wbin"
+                    or not interpreter.is_file()
+                ):
+                    raise ObservationError("UNSUPPORTED_BATCH_LAUNCHER")
+                command = (str(interpreter), "-IBm", "azure.cli")
             result = subprocess.run(
-                args,
+                (*command, *args[1:]),
                 check=False,
                 capture_output=True,
                 text=True,

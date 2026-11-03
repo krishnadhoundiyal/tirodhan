@@ -1,8 +1,12 @@
 """Review regressions at actual observation, workflow and side-effect boundaries."""
 
 import io
+import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -29,6 +33,70 @@ def test_real_runner_recognizes_only_structured_failure_codes(monkeypatch, stder
     )
     with pytest.raises(ObservationError, match="^" + code + "$"):
         Runner().run("az", "rest")
+
+
+def test_runner_resolves_launcher_without_changing_arguments_or_timeout(
+    tmp_path, monkeypatch
+) -> None:
+    from tirodhan.deployment import lifecycle_evidence
+
+    installed = tmp_path / "installed CLI with spaces"
+    (installed / "wbin").mkdir(parents=True)
+    interpreter = installed / "python.exe"
+    interpreter.touch()
+    executable = installed / "wbin" / "az.cmd"
+    monkeypatch.setattr(lifecycle_evidence.shutil, "which", lambda name: str(executable))
+    monkeypatch.setattr(lifecycle_evidence, "os", SimpleNamespace(name="nt"))
+    observed = []
+
+    def run(args, **kwargs):
+        observed.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, '{"id":"verified"}', "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert Runner().json("az", "ad", "sp", "show", "--id", "exact-id") == {"id": "verified"}
+    assert observed[0][0] == (
+        str(interpreter),
+        "-IBm",
+        "azure.cli",
+        "ad",
+        "sp",
+        "show",
+        "--id",
+        "exact-id",
+    )
+    assert observed[0][1]["timeout"] == 180
+    assert not observed[0][1].get("shell", False)
+
+
+@pytest.mark.parametrize("launcher", ["unknown.cmd", "az.bat", "wbin/az.cmd"])
+def test_unverified_batch_installation_never_runs_a_shell(tmp_path, monkeypatch, launcher) -> None:
+    from tirodhan.deployment import lifecycle_evidence
+
+    monkeypatch.setattr(lifecycle_evidence.shutil, "which", lambda name: str(tmp_path / launcher))
+    monkeypatch.setattr(lifecycle_evidence, "os", SimpleNamespace(name="nt"))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unverified batch launcher executed")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    with pytest.raises(ObservationError, match="^UNSUPPORTED_BATCH_LAUNCHER$"):
+        Runner().run("az", "version")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows MSI Azure CLI argument preservation")
+def test_native_windows_azure_cli_preserves_json_and_shell_metacharacters() -> None:
+    launcher = shutil.which("az")
+    if not launcher or not (Path(launcher).parent.parent / "python.exe").is_file():
+        pytest.skip("Official Azure CLI MSI installation is not available")
+    expected = [
+        '{"scope":"exact resource", "value":"read only"}',
+        "https://example.invalid/read?a=1&b=2",
+        "%USERNAME%",
+        "literal&argument",
+    ]
+    query = "`" + json.dumps(expected) + "`"
+    assert Runner().json("az", "version", "--query", query, "-o", "json") == expected
 
 
 @pytest.mark.parametrize(
