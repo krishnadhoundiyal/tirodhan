@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -37,7 +38,7 @@ class Runner:
     def run(self, *args: str, timeout: int = 180) -> str:
         try:
             result = subprocess.run(
-                args,
+                (shutil.which(args[0]) or args[0], *args[1:]),
                 check=False,
                 capture_output=True,
                 text=True,

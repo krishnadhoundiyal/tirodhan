@@ -2,6 +2,7 @@
 
 import io
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,37 @@ def test_real_runner_recognizes_only_structured_failure_codes(monkeypatch, stder
     )
     with pytest.raises(ObservationError, match="^" + code + "$"):
         Runner().run("az", "rest")
+
+
+def test_runner_resolves_launcher_without_changing_arguments_or_timeout(monkeypatch) -> None:
+    from tirodhan.deployment import lifecycle_evidence
+
+    executable = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd"
+    monkeypatch.setattr(lifecycle_evidence.shutil, "which", lambda name: executable)
+    observed = []
+
+    def run(args, **kwargs):
+        observed.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, '{"id":"verified"}', "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert Runner().json("az", "ad", "sp", "show", "--id", "exact-id") == {"id": "verified"}
+    assert observed[0][0] == (executable, "ad", "sp", "show", "--id", "exact-id")
+    assert observed[0][1]["timeout"] == 180
+    assert not observed[0][1].get("shell", False)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows batch-launcher resolution")
+def test_native_windows_path_launcher_is_executable(tmp_path, monkeypatch) -> None:
+    directory = tmp_path / "installed CLI with spaces"
+    directory.mkdir()
+    helper = directory / "observe.py"
+    helper.write_text("import json, sys; print(json.dumps(sys.argv[1:]))\n")
+    (directory / "tirodhan-observation.cmd").write_text(f'@"{sys.executable}" "{helper}" %*\n')
+    monkeypatch.setenv("PATH", str(directory))
+    monkeypatch.setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+    expected = ['{"scope":"exact resource", "value":"read only"}', "exact-id"]
+    assert Runner().json("tirodhan-observation", *expected) == expected
 
 
 @pytest.mark.parametrize(
