@@ -13,7 +13,7 @@ from lifecycle_fakes import OID, MemoryObservations, assignments, auth
 from tirodhan.deployment import foundation_reconcile, recovery_enrollment
 from tirodhan.deployment.check_nonprod_bootstrap_rbac import READER_ROLE_ID, verify_bootstrap_rbac
 from tirodhan.deployment.deployment_admission import AdmissionDenied, digest
-from tirodhan.deployment.lifecycle_evidence import ObservationError
+from tirodhan.deployment.lifecycle_evidence import ObservationError, Observations
 
 RCLIENT = "00000000-0000-0000-0000-000000000021"
 R = "00000000-0000-0000-0000-000000000022"
@@ -178,6 +178,107 @@ def test_committed_enrollment_write_with_lost_response_is_read_back(enrolled_con
     recovery_enrollment.enroll()
     assert lost and io.writes == writes
     assert len(io.grants) == 2 and len(io.roles) == 2 and len(io.credentials) == 1
+
+
+@pytest.fixture
+def azure_assignment_reads(enrolled_context, monkeypatch):
+    """Exercise the real ARM absence classifier instead of the in-memory shortcut."""
+    io, _ = enrolled_context
+    original_arm, original_json = io.arm, io.runner.json
+    observed = {"missing": 0, "error": "RoleAssignmentNotFound"}
+
+    def arm(resource_id, version):
+        if "/roleAssignments/" in resource_id:
+            return Observations.arm(io, resource_id, version)
+        return original_arm(resource_id, version)
+
+    def read(*args):
+        if args[:4] == ("az", "rest", "--method", "get"):
+            target = urlsplit(args[args.index("--url") + 1]).path
+            if "/roleAssignments/" in target:
+                value = original_arm(target, "2022-04-01")
+                if value is None:
+                    observed["missing"] += 1
+                    raise ObservationError(observed["error"])
+                return value
+        return original_json(*args)
+
+    monkeypatch.setattr(io, "arm", arm)
+    monkeypatch.setattr(io.runner, "json", read)
+    return io, observed
+
+
+@pytest.mark.parametrize("lost_response", [False, True])
+def test_azure_missing_assignment_enrolls_and_reconciles_lost_response(
+    azure_assignment_reads, monkeypatch, lost_response
+):
+    io, observed = azure_assignment_reads
+    original = io.runner.json
+    lost = False
+
+    def response(*args):
+        nonlocal lost
+        value = original(*args)
+        if (
+            lost_response
+            and not lost
+            and args[:4] == ("az", "rest", "--method", "put")
+            and "/roleAssignments/" in str(value)
+        ):
+            lost = True
+            raise ObservationError("RESPONSE_LOST")
+        return value
+
+    monkeypatch.setattr(io.runner, "json", response)
+    recovery_enrollment.enroll()
+    writes = list(io.writes)
+    recovery_enrollment.enroll()
+    assert observed["missing"] == 2 and lost is lost_response
+    assert io.writes == writes
+    assert len(io.grants) == 2 and len(io.roles) == 2 and len(io.credentials) == 1
+
+
+@pytest.mark.parametrize("error", ["AuthorizationFailed", "OBSERVATION_UNAVAILABLE", "Unknown"])
+def test_assignment_read_failure_never_authorizes_a_grant(azure_assignment_reads, error):
+    io, observed = azure_assignment_reads
+    observed["error"] = error
+    with pytest.raises(ObservationError, match="^" + error + "$"):
+        recovery_enrollment.enroll()
+    assert not io.grants and not io.credentials
+    assert all("/roleAssignments/" not in target for target in io.writes)
+
+
+def test_unconfirmed_assignment_write_remains_failure_and_can_resume(
+    azure_assignment_reads, monkeypatch
+):
+    io, observed = azure_assignment_reads
+    original = io.runner.json
+
+    def response(*args):
+        if args[:4] == ("az", "rest", "--method", "put"):
+            target = urlsplit(args[args.index("--url") + 1]).path
+            if "/roleAssignments/" in target:
+                raise ObservationError("RESPONSE_LOST")
+        return original(*args)
+
+    monkeypatch.setattr(io.runner, "json", response)
+    with pytest.raises(ObservationError, match="^RESPONSE_LOST$"):
+        recovery_enrollment.enroll()
+    assert observed["missing"] == 2 and not io.grants and not io.credentials
+    monkeypatch.setattr(io.runner, "json", original)
+    recovery_enrollment.enroll()
+    assert len(io.grants) == 2 and len(io.roles) == 2 and len(io.credentials) == 1
+
+
+def test_assignment_absence_code_cannot_classify_a_vault_as_missing(enrolled_context):
+    io, _ = enrolled_context
+
+    def read(*args):
+        raise ObservationError("RoleAssignmentNotFound")
+
+    io.runner.json = read
+    with pytest.raises(ObservationError, match="^RoleAssignmentNotFound$"):
+        Observations.arm(io, io.vault_id, "2023-07-01")
 
 
 def test_expiry_between_enrollment_writes_blocks_and_fresh_authority_resumes(
