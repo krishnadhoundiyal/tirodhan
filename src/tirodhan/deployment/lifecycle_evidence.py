@@ -32,10 +32,18 @@ def azure_error_code(stderr: str) -> str:
 
 
 class Runner:
+    timeout_limit: int | None = None
+
     def run(self, *args: str, timeout: int = 180) -> str:
         try:
             result = subprocess.run(
-                args, check=False, capture_output=True, text=True, timeout=timeout
+                args,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=min(timeout, self.timeout_limit)
+                if self.timeout_limit is not None
+                else timeout,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ObservationError("OBSERVATION_UNAVAILABLE") from exc
@@ -167,6 +175,11 @@ class Observations:
             )
         except ObservationError as exc:
             if str(exc) in {"ResourceNotFound", "ResourceGroupNotFound"}:
+                return None
+            if str(exc) == "RoleAssignmentNotFound" and re.search(
+                r"/providers/microsoft\.authorization/roleassignments/[^/]+$",
+                resource_id.casefold(),
+            ):
                 return None
             raise
         if not isinstance(value, dict):

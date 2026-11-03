@@ -22,9 +22,15 @@ from tirodhan.deployment.deployment_admission import (
     configuration,
     contract_digest,
     digest,
+    maintenance_target,
 )
 from tirodhan.deployment.lifecycle_evidence import Observations, Runner, plan_prior_state
-from tirodhan.deployment.release_custody import operator_only, private_directory, private_write
+from tirodhan.deployment.release_custody import (
+    operator_only,
+    private_directory,
+    private_read,
+    private_write,
+)
 from tirodhan.deployment.release_setup import (
     DESTINATIONS,
     REPOSITORY,
@@ -218,8 +224,11 @@ def prepare(
     plan: Path | None = None,
     artifact_id: int | None = None,
     database_key_id: str | None = None,
+    resume_request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     operator_only()
+    if resume_request is not None and kind != "recovery":
+        raise AdmissionDenied("RESUME_REQUEST_REQUIRES_RECOVERY_PURPOSE")
     # Authorize only the clean checked-out main commit with exact reviewed tree provenance.
     if runner.run("git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"):
         raise AdmissionDenied("AUTHORIZE_ONLY_CLEAN_COMMITTED_SOURCE")
@@ -233,8 +242,14 @@ def prepare(
     bindings = expected_bindings(kind, apply_operation)
     secret, destination, identity, environment = DESTINATIONS[kind]
     client = config[
-        "database_verification_client_id" if kind == "database" else "deployment_client_id"
+        "database_verification_client_id"
+        if kind == "database"
+        else "recovery_client_id"
+        if kind in {"enrollment", "recovery"}
+        else "deployment_client_id"
     ]
+    if not client:
+        raise AdmissionDenied("CONFIGURED_PRINCIPAL_CLIENT_REQUIRED")
     account = runner.json("az", "account", "show", "--output", "json")
     if account.get("tenantId") != config["terraform"]["tenant_id"]:
         raise AdmissionDenied("IDENTITY_LOOKUP_TENANT_MISMATCH")
@@ -251,6 +266,76 @@ def prepare(
         "json",
     )
     principal["tenant_id"] = account["tenantId"]
+    maintenance = None
+    if kind in {"enrollment", "recovery"}:
+        from tirodhan.deployment.recovery_target import deleted_target
+
+        io = Observations(config, runner)
+        maintenance = copy_binding = dict(bindings[next(iter(bindings))])
+        copy_binding.update(
+            target=maintenance_target(config),
+            recovery_client_id=client,
+            recovery_principal_id=principal["id"],
+            operation_created_at=int(time.time()),
+        )
+        if kind == "enrollment":
+            app = runner.json("az", "ad", "app", "show", "--id", client, "--output", "json")
+            if app.get("appId") != client:
+                raise AdmissionDenied("RECOVERY_APPLICATION_LOOKUP_MISMATCH")
+            copy_binding["recovery_app_object_id"] = app["id"]
+            observer = io.identity()
+            principal = {
+                "id": observer["oid"],
+                "appId": observer.get("appid") or observer.get("azp"),
+                "tenant_id": observer["tid"],
+            }
+            owners = runner.json(
+                "az", "ad", "app", "owner", "list", "--id", app["id"], "--output", "json"
+            )
+            if not any(row.get("id") == principal["id"] for row in owners):
+                raise AdmissionDenied("RECOVERY_APPLICATION_OWNER_UNVERIFIED")
+        else:
+            if resume_request is not None:
+                # A renewal keeps the original reviewed target generation; it cannot discover
+                # a new deletion and silently turn an old operation into another recovery.
+                from tirodhan.deployment.release_setup import validated_request
+
+                previous = dict(resume_request)
+                previous["expires_at"] = expires_at
+                previous["captured_at"] = int(time.time())
+                previous["evidence"] = evidence
+                validated_request(
+                    previous,
+                    json.loads((ROOT / "deploy/nonprod-release-policy.json").read_text()),
+                    config,
+                    code_hash=code_hash,
+                    commit=commit,
+                )
+                if (
+                    previous["kind"] != kind
+                    or previous["release_session"] != session
+                    or previous["principal_id"] != principal["id"]
+                ):
+                    raise AdmissionDenied("RECOVERY_RESUME_CONTEXT_CHANGED")
+                copy_binding["deleted_vault"] = previous["maintenance_binding"]["deleted_vault"]
+                copy_binding["operation_created_at"] = previous["maintenance_binding"][
+                    "operation_created_at"
+                ]
+            else:
+                if io.arm(io.vault_id, "2023-07-01") is not None:
+                    raise AdmissionDenied("RECOVERY_TARGET_ALREADY_ACTIVE_USE_ORIGINAL_REQUEST")
+                rows = runner.json(
+                    "az",
+                    "keyvault",
+                    "list-deleted",
+                    "--subscription",
+                    config["terraform"]["subscription_id"],
+                    "--resource-type",
+                    "vault",
+                    "--output",
+                    "json",
+                )
+                copy_binding["deleted_vault"] = deleted_target(rows, config)
     request = {
         "schema_version": 1,
         "kind": kind,
@@ -272,6 +357,8 @@ def prepare(
         "database_key_id": database_key_id,
         "operations": sorted(bindings),
     }
+    if maintenance is not None:
+        request["maintenance_binding"] = maintenance
     if kind == "apply":
         if plan is None or artifact_id is None:
             raise AdmissionDenied("REVIEWED_GITHUB_PLAN_ARTIFACT_REQUIRED")
@@ -361,6 +448,11 @@ def main() -> None:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--artifact-id", type=int)
     parser.add_argument("--database-key-id")
+    parser.add_argument(
+        "--resume-request",
+        type=Path,
+        help="Original private recovery capture; renews the same target generation",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
@@ -386,6 +478,9 @@ def main() -> None:
             plan=args.plan,
             artifact_id=args.artifact_id,
             database_key_id=args.database_key_id,
+            resume_request=json.loads(private_read(args.resume_request))
+            if args.resume_request
+            else None,
         )
         if args.kind == "apply":
             if not sys.stdin.isatty():

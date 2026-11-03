@@ -2,14 +2,17 @@
 
 These utilities complete the existing authorizer role. They add no workflow, Azure
 resource, RBAC grant, alternate admission path or automatic enrollment. The committed
-release policy remains disabled. Never issue credentials for a branch under review.
+deployment policy remains held. Never issue credentials for a branch under review.
+The separately approved [ENROLLMENT/RECOVERY purposes](NONPROD_RECOVERY_AUTHORIZATION.md)
+retain exact-operation prerequisites and do not grant deployment authority.
 
 ## Trust boundaries
 
 `release_capture` runs on an approved operator workstation with authenticated `gh` and
 Azure CLI. It reads evidence without loading signing keys, changing settings or dispatching
 workflows. `release_setup issue` works offline with encrypted local custody and verifies
-generated JWTs through the existing validator. A held policy blocks issuance before unlock.
+generated JWTs through the existing validator. The deployment hold blocks DEPLOYMENT issuance
+before unlock; only explicitly signed ENROLLMENT/RECOVERY purposes are independent of that flag.
 
 GitHub authenticates REST/GraphQL reads but does not sign exported JSON. Offline signing
 therefore relies on the existing trusted authorizer, controlled capture host, protected

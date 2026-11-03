@@ -2,6 +2,7 @@
 
 import copy
 import io
+import time
 import zipfile
 
 import pytest
@@ -9,6 +10,88 @@ from test_lifecycle_release_setup import CODE, COMMIT, SESSION, SOURCE, review_e
 
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.release_capture import capture_plan_artifact, collect_review
+
+
+@pytest.mark.parametrize("kind", ["enrollment", "recovery"])
+def test_actual_maintenance_capture_uses_real_identity_and_exact_target(monkeypatch, kind):
+    for flag in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(flag, raising=False)
+    from lifecycle_fakes import CLIENT, CONFIG, OID, TENANT
+    from test_lifecycle_maintenance_authorization import APP, RCLIENT, R, deleted_row
+
+    from tirodhan.deployment import release_capture, release_setup
+    from tirodhan.deployment.deployment_admission import maintenance_target
+    from tirodhan.deployment.lifecycle_evidence import Observations
+
+    config = copy.deepcopy(CONFIG) | {"recovery_client_id": RCLIENT}
+    monkeypatch.setattr(release_capture, "contract_digest", lambda: CODE)
+    monkeypatch.setattr(
+        Observations, "identity", lambda _: {"oid": OID, "appid": CLIENT, "tid": TENANT}
+    )
+    monkeypatch.setattr(Observations, "arm", lambda *_: None)
+
+    class Runner:
+        def run(self, *args):
+            if "status" in args:
+                return ""
+            return "d" * 40 if "HEAD^{tree}" in args else COMMIT
+
+        def json(self, *args):
+            if args[:3] == ("az", "account", "show"):
+                return {"tenantId": TENANT}
+            if args[:4] == ("az", "ad", "sp", "show"):
+                return {"id": R, "appId": RCLIENT}
+            if args[:4] == ("az", "ad", "app", "show"):
+                return {"id": APP, "appId": RCLIENT}
+            if args[:5] == ("az", "ad", "app", "owner", "list"):
+                return [{"id": OID}]
+            if args[:3] == ("az", "keyvault", "list-deleted"):
+                return [deleted_row()]
+            raise AssertionError(args)
+
+    request = release_capture.prepare(
+        kind,
+        session=SESSION,
+        expires_at=int(time.time()) + 600,
+        review_pr=123,
+        github=ReviewGithub(),
+        runner=Runner(),
+        config=config,
+    )
+    assert request["principal_id"] == (OID if kind == "enrollment" else R)
+    assert request["maintenance_binding"]["target"] == maintenance_target(config)
+    assert request["maintenance_binding"]["recovery_principal_id"] == R
+    policy = {
+        "schema_version": 1,
+        "contract_version": "nonprod-lifecycle-v1",
+        "release_enabled": False,
+        "authorization_keys": {"present": "not-loaded-until-signing"},
+        "maximum_evidence_age_seconds": 300,
+    }
+    monkeypatch.setattr(release_setup, "validate_policy_keys", lambda _: None)
+    bindings, _ = release_setup.validated_request(
+        request, policy, config, code_hash=CODE, commit=COMMIT
+    )
+    assert bindings[next(iter(bindings))]["operation_id"]
+
+
+@pytest.mark.parametrize("flag", ["CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"])
+def test_maintenance_capture_refuses_hosted_runner_before_any_observation(monkeypatch, flag):
+    from tirodhan.deployment.release_capture import prepare
+
+    for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(flag, "true")
+    with pytest.raises(AdmissionDenied, match="AUTHORIZER_REQUIRES_TRUSTED_OPERATOR_HOST"):
+        prepare(
+            "enrollment",
+            session=SESSION,
+            expires_at=int(time.time()) + 60,
+            review_pr=123,
+            github=None,
+            runner=None,
+            config={},
+        )
 
 
 class ReviewGithub:

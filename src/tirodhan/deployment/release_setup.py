@@ -24,10 +24,16 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from tirodhan.deployment.database_evidence import verification_key_is_independent
 from tirodhan.deployment.deployment_admission import (
+    AUDIENCES,
     ROOT,
     AdmissionDenied,
     contract_digest,
     digest,
+    maintenance_binding_keys,
+    maintenance_operation_id,
+    maintenance_target,
+    operation_class,
+    require_operation_policy,
     validate_authorization,
 )
 from tirodhan.deployment.lifecycle_evidence import BackendState, plan_prior_state, state_resources
@@ -52,6 +58,8 @@ DESTINATIONS = {
         "database_verification",
         "nonprod-database",
     ),
+    "enrollment": ("NONPROD_RELEASE_AUTHORIZATION", "operator-local", "operator", "operator-local"),
+    "recovery": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "recovery", "nonprod-recovery"),
 }
 PLAN_OPERATIONS = ["terraform-setup", "foundation-plan", "migration-plan", "runtime-plan"]
 CONSUMER_OPERATIONS = [
@@ -64,6 +72,20 @@ CONSUMER_OPERATIONS = [
 
 
 def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str, Any]:
+    if kind == "enrollment":
+        return {
+            "enroll-recovery": {
+                "local_execution_authorized": True,
+                "recovery_enrollment_authorized": True,
+            }
+        }
+    if kind == "recovery":
+        return {
+            "recover-vault": {
+                "execution_environment": "nonprod-recovery",
+                "recovery_authorized": True,
+            }
+        }
     if kind == "release":
         return {
             operation: {"execution_environment": "nonprod-plan"} for operation in PLAN_OPERATIONS
@@ -247,10 +269,10 @@ def validated_request(
     plan: Path | None = None,
     fresh_capture: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    # Never temporarily flip the hold to manufacture an issuable token.
-    if policy.get("release_enabled") is not True:
-        raise AdmissionDenied("DEPLOYMENT_HOLD: no authorization issued")
     kind = request["kind"]
+    profiles = expected_bindings(kind, request.get("apply_operation"))
+    for operation in profiles:
+        require_operation_policy(policy, operation)
     secret, destination, identity, environment = DESTINATIONS[kind]
     now = int(time.time())
     age = policy["maximum_evidence_age_seconds"]
@@ -276,12 +298,16 @@ def validated_request(
     UUID(request["release_session"])
     UUID(request["principal_id"])
     identity_evidence = request["principal"]
-    client = config[
-        "database_verification_client_id" if kind == "database" else "deployment_client_id"
-    ]
+    client = config.get(
+        "database_verification_client_id"
+        if kind == "database"
+        else "recovery_client_id"
+        if kind == "recovery"
+        else "deployment_client_id"
+    )
     if (
         identity_evidence["id"] != request["principal_id"]
-        or identity_evidence["appId"] != client
+        or (kind != "enrollment" and (not client or identity_evidence["appId"] != client))
         or identity_evidence["tenant_id"] != config["terraform"]["tenant_id"]
         or (
             kind == "database"
@@ -300,6 +326,42 @@ def validated_request(
     bindings = expected_bindings(kind, request.get("apply_operation"))
     if request.get("operations") != sorted(bindings):
         raise AdmissionDenied("ISSUANCE_OPERATIONS_INCONSISTENT")
+    if kind in {"enrollment", "recovery"}:
+        operation = next(iter(bindings))
+        binding = copy.deepcopy(request["maintenance_binding"])
+        if (
+            binding.get("target") != maintenance_target(config)
+            or set(binding) != maintenance_binding_keys(operation)
+            or any(binding.get(k) != v for k, v in bindings[operation].items())
+            or binding.get("recovery_client_id") != config.get("recovery_client_id")
+            or not config.get("recovery_client_id")
+            or type(binding.get("operation_created_at")) is not int
+            or not 0 < binding["operation_created_at"] <= request["captured_at"]
+            or config["recovery_client_id"]
+            in {config["deployment_client_id"], config.get("database_verification_client_id")}
+        ):
+            raise AdmissionDenied("MAINTENANCE_TARGET_OR_PROFILE_INVALID")
+        UUID(binding["recovery_principal_id"])
+        UUID(binding["recovery_client_id"])
+        if kind == "enrollment":
+            UUID(binding["recovery_app_object_id"])
+            if binding["recovery_principal_id"] == request["principal_id"]:
+                raise AdmissionDenied("ENROLLMENT_REQUIRES_SEPARATE_OPERATOR")
+        elif binding["recovery_principal_id"] != request["principal_id"]:
+            raise AdmissionDenied("RECOVERY_PRINCIPAL_MISMATCH")
+        if kind == "recovery":
+            from tirodhan.deployment.recovery_target import timestamp, validate_deleted_context
+
+            validate_deleted_context(binding["deleted_vault"], config)
+            if (
+                request["expires_at"]
+                >= timestamp(binding["deleted_vault"]["scheduled_purge_date"]).timestamp()
+            ):
+                raise AdmissionDenied("RECOVERY_AUTHORIZATION_OUTLIVES_DELETED_TARGET")
+        binding["operation_id"] = maintenance_operation_id(
+            operation, request["principal_id"], request["release_session"], binding
+        )
+        bindings[operation] = binding
     if kind == "apply":
         if plan is None:
             raise AdmissionDenied("REVIEWED_SAVED_PLAN_REQUIRED")
@@ -338,7 +400,8 @@ def issue(
     now = int(time.time())
     claims = {
         "iss": "tirodhan-nonprod-release",
-        "aud": "tirodhan-nonprod-provisioning",
+        "aud": AUDIENCES[operation_class(next(iter(bindings)))],
+        "authorization_class": operation_class(next(iter(bindings))),
         "iat": now,
         "nbf": now,
         "exp": request["expires_at"],

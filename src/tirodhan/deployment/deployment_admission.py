@@ -9,15 +9,78 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import jwt
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_VERSION = "nonprod-lifecycle-v1"
+MAINTENANCE_CLASSES = {"enroll-recovery": "ENROLLMENT", "recover-vault": "RECOVERY"}
+AUDIENCES = {
+    "DEPLOYMENT": "tirodhan-nonprod-provisioning",
+    "ENROLLMENT": "tirodhan-nonprod-enrollment",
+    "RECOVERY": "tirodhan-nonprod-recovery",
+}
 
 
 class AdmissionDenied(RuntimeError):
     """A sanitized, fail-closed admission failure."""
+
+
+def operation_class(operation: str) -> str:
+    return MAINTENANCE_CLASSES.get(operation, "DEPLOYMENT")
+
+
+def require_operation_policy(policy: dict[str, Any], operation: str) -> str:
+    """Only the two explicitly approved purposes are independent of the deployment hold."""
+    purpose = operation_class(operation)
+    if (
+        policy.get("schema_version") != 1
+        or policy.get("contract_version") != CONTRACT_VERSION
+        or not policy.get("authorization_keys")
+        or (purpose == "DEPLOYMENT" and policy.get("release_enabled") is not True)
+    ):
+        raise AdmissionDenied("DEPLOYMENT_HOLD: operation is not authorized")
+    return purpose
+
+
+def maintenance_target(config: dict[str, Any]) -> dict[str, str]:
+    tf = config["terraform"]
+    return {
+        key: tf[key]
+        for key in ("tenant_id", "subscription_id", "resource_group_name", "location", "suffix")
+    } | {
+        "vault_id": f"/subscriptions/{tf['subscription_id']}/resourceGroups/"
+        f"{tf['resource_group_name']}/providers/Microsoft.KeyVault/vaults/td-np-{tf['suffix']}-kv"
+    }
+
+
+def maintenance_operation_id(
+    operation: str, principal: str, session: str, binding: dict[str, Any]
+) -> str:
+    # A token renewal/runner attempt is not another logical operation.
+    return digest(
+        {
+            "class": operation_class(operation),
+            "operation": operation,
+            "principal": principal,
+            "session": session,
+            "binding": {k: v for k, v in binding.items() if k != "operation_id"},
+        }
+    )
+
+
+def maintenance_binding_keys(operation: str) -> set[str]:
+    common = {"target", "recovery_client_id", "recovery_principal_id", "operation_created_at"}
+    if operation == "enroll-recovery":
+        return common | {
+            "local_execution_authorized",
+            "recovery_enrollment_authorized",
+            "recovery_app_object_id",
+        }
+    if operation == "recover-vault":
+        return common | {"execution_environment", "recovery_authorized", "deleted_vault"}
+    raise AdmissionDenied("UNKNOWN_MAINTENANCE_OPERATION")
 
 
 def digest(value: Any) -> str:
@@ -107,13 +170,7 @@ def validate_authorization(
     commit: str,
     run_id: str,
 ) -> Authorization:
-    if (
-        policy.get("schema_version") != 1
-        or policy.get("contract_version") != CONTRACT_VERSION
-        or policy.get("release_enabled") is not True
-        or not policy.get("authorization_keys")
-    ):
-        raise AdmissionDenied("DEPLOYMENT_HOLD: release is not authorized")
+    purpose = require_operation_policy(policy, operation)
     try:
         header = jwt.get_unverified_header(token)
         key = policy["authorization_keys"][header["kid"]]
@@ -121,9 +178,9 @@ def validate_authorization(
             token,
             key,
             algorithms=["EdDSA"],
-            audience="tirodhan-nonprod-provisioning",
+            audience=AUDIENCES[purpose],
             issuer="tirodhan-nonprod-release",
-            options={"require": ["exp", "iat", "nbf", "sub", "jti"]},
+            options={"require": ["exp", "iat", "nbf", "sub", "jti", "authorization_class"]},
         )
         from tirodhan.deployment.prerequisites import IDENTITIES, REQUIRED
 
@@ -136,6 +193,8 @@ def validate_authorization(
             or claims.get("configuration_hash") != config_hash
             or not isinstance(claims.get("operations"), list)
             or operation not in claims["operations"]
+            or any(op not in REQUIRED for op in claims["operations"])
+            or len(set(claims["operations"])) != len(claims["operations"])
             or claims.get("identity_kind")
             not in {"operator", "deployment", "recovery", "database", "database_verification"}
             or not isinstance(claims.get("sub"), str)
@@ -144,11 +203,39 @@ def validate_authorization(
             or claims["identity_kind"] != IDENTITIES.get(operation, "deployment")
             or not isinstance(claims.get("bindings"), dict)
             or not isinstance(claims["bindings"].get(operation), dict)
+            or set(claims["bindings"]) != set(claims["operations"])
             or claims.get("validation", {}).get("ci_commit") != commit
             or claims.get("validation", {}).get("contract_hash") != code_hash
             or not claims.get("validation", {}).get("coderabbit_review")
+            or claims.get("authorization_class") != purpose
+            or any(operation_class(op) != purpose for op in claims["operations"])
         ):
             raise ValueError
+        if purpose != "DEPLOYMENT":
+            binding = claims["bindings"][operation]
+            if (
+                claims["operations"] != [operation]
+                or set(claims["bindings"]) != {operation}
+                or binding.get("operation_id")
+                != maintenance_operation_id(operation, claims["sub"], run_id, binding)
+                or not isinstance(binding.get("target"), dict)
+                or set(binding) != maintenance_binding_keys(operation) | {"operation_id"}
+                or type(binding.get("operation_created_at")) is not int
+                or not 0 < binding["operation_created_at"] <= claims["iat"]
+            ):
+                raise ValueError
+            UUID(claims["sub"])
+            UUID(binding["recovery_principal_id"])
+            UUID(binding["recovery_client_id"])
+            if purpose == "RECOVERY":
+                from tirodhan.deployment.recovery_target import timestamp, validate_deleted_context
+
+                validate_deleted_context(binding["deleted_vault"], {"terraform": binding["target"]})
+                if (
+                    claims["exp"]
+                    >= timestamp(binding["deleted_vault"]["scheduled_purge_date"]).timestamp()
+                ):
+                    raise ValueError
     except (jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError) as exc:
         raise AdmissionDenied("RELEASE_AUTHORIZATION_INVALID") from exc
     return Authorization(
@@ -181,8 +268,8 @@ def require_release_authorization(operation: str | None = None) -> Authorization
     try:
         policy = json.loads((ROOT / "deploy/nonprod-release-policy.json").read_text())
         # Check the hold before configuration, credentials, subprocesses or network access.
-        if policy.get("release_enabled") is not True:
-            raise AdmissionDenied("DEPLOYMENT_HOLD: release is not authorized")
+        requested = operation or os.environ.get("TIRODHAN_NONPROD_OPERATION", "")
+        require_operation_policy(policy, requested)
         if os.environ.get("GITHUB_REF", "refs/heads/main") != "refs/heads/main":
             raise AdmissionDenied("UNTRUSTED_GIT_REF")
         from tirodhan.deployment.lifecycle_checks import Checks
@@ -201,7 +288,7 @@ def require_release_authorization(operation: str | None = None) -> Authorization
         ).stdout.strip()
         authorization = validate_authorization(
             os.environ.get("TIRODHAN_NONPROD_RELEASE_AUTHORIZATION", ""),
-            operation=operation or os.environ.get("TIRODHAN_NONPROD_OPERATION", ""),
+            operation=requested,
             policy=policy,
             config_hash=digest(configuration()),
             code_hash=contract_digest(),
@@ -219,8 +306,13 @@ def require_release_authorization(operation: str | None = None) -> Authorization
 
 def main() -> None:
     try:
-        require_release_authorization()
-        print("RELEASE_AUTHORIZATION_VALID")
+        authorization = require_release_authorization()
+        purpose = operation_class(authorization.operation)
+        print(
+            "RELEASE_AUTHORIZATION_VALID"
+            if purpose == "DEPLOYMENT"
+            else f"{purpose}_AUTHORIZATION_VALID"
+        )
     except AdmissionDenied as exc:
         raise SystemExit(str(exc)) from None
 

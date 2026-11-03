@@ -21,7 +21,14 @@ from tirodhan.deployment.check_nonprod_bootstrap_rbac import (
     verify_recovery_definition,
 )
 from tirodhan.deployment.check_state import populated_key_paths
-from tirodhan.deployment.deployment_admission import ROOT, AdmissionDenied, Authorization, digest
+from tirodhan.deployment.deployment_admission import (
+    ROOT,
+    AdmissionDenied,
+    Authorization,
+    digest,
+    maintenance_target,
+    operation_class,
+)
 from tirodhan.deployment.lifecycle_evidence import (
     BackendState,
     Observations,
@@ -70,6 +77,14 @@ class Checks:
     def check_target(self) -> bool:
         return (
             digest(self.config) == self.auth.configuration_hash
+            and (
+                operation_class(self.auth.operation) == "DEPLOYMENT"
+                or (
+                    self.binding().get("target") == maintenance_target(self.config)
+                    and self.binding().get("recovery_client_id")
+                    == self.config.get("recovery_client_id")
+                )
+            )
             and self.config["state_resource_group"].casefold()
             != self.tf["resource_group_name"].casefold()
             and re.fullmatch(r"[a-z0-9]{4,10}", self.tf["suffix"]) is not None
@@ -963,6 +978,12 @@ class Checks:
             return False
         return (
             self.config.get("recovery_client_id") != self.config["deployment_client_id"]
+            and self.config.get("recovery_client_id")
+            != self.config.get("database_verification_client_id")
+            and self.auth.principal_id == self.binding().get("recovery_principal_id")
+            and os.environ.get("GITHUB_ACTIONS") == "true"
+            and os.environ.get("GITHUB_WORKFLOW_REF")
+            == "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-reconcile.yml@refs/heads/main"
             and self.binding().get("recovery_authorized") is True
             and self.permits(
                 self.io.scope, {"Microsoft.KeyVault/vaults/read", "Microsoft.KeyVault/vaults/write"}
@@ -995,8 +1016,10 @@ class Checks:
         return True
 
     def check_recovery_target(self) -> bool:
+        from tirodhan.deployment.recovery_target import deleted_target, valid_active_target
+
         if self.io.arm(self.io.vault_id, "2023-07-01") is not None:
-            return self.check_vault()
+            return valid_active_target(self)
         rows = self.io.runner.json(
             "az",
             "keyvault",
@@ -1008,16 +1031,7 @@ class Checks:
             "--output",
             "json",
         )
-        matching = [
-            r
-            for r in rows
-            if str(r.get("name", "")).casefold() == self.io.vault_id.rsplit("/", 1)[-1].casefold()
-        ]
-        return len(matching) == 1 and (
-            str(matching[0].get("properties", {}).get("vaultId", "")).casefold()
-            == self.io.vault_id.casefold()
-            and str(matching[0].get("location", "")).casefold() == self.tf["location"].casefold()
-        )
+        return deleted_target(rows, self.config) == self.binding().get("deleted_vault")
 
     def check_legacy_ownership(self) -> bool:
         state = self.backend()

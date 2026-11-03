@@ -154,6 +154,7 @@ def signed_release() -> tuple[dict[str, Any], dict[str, Any], Ed25519PrivateKey]
     }
     claims = {
         "iss": "tirodhan-nonprod-release",
+        "authorization_class": "DEPLOYMENT",
         "aud": "tirodhan-nonprod-provisioning",
         "iat": now,
         "nbf": now,

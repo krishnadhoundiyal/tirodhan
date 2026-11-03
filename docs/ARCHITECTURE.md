@@ -1,5 +1,10 @@
 # Architecture
 
+Signed ENROLLMENT and RECOVERY are exact-operation classes independent of DEPLOYMENT's
+held flag. Operator enrollment and protected R recovery retain mandatory prerequisites;
+unknown outcomes reconcile without privilege broadening. Implementation authorizes no live
+changes. See [the approved boundaries](NONPROD_RECOVERY_AUTHORIZATION.md).
+
 The approved NONPROD lifecycle controller separates observations from authorized bootstrap,
 recovery, snapshot-backed ownership transfer and compensation. Every supported provisioning
 entry point requires signed release authority and its complete operation prerequisite profile.

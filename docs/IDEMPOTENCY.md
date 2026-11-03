@@ -1,5 +1,11 @@
 # Idempotency
 
+NONPROD enrollment/recovery uses stable signed operation IDs and exact target generations.
+Deterministic grants/federation converge through readback and authorization revalidation.
+Trusted workflow history fences recovery starts; reruns observe rather than blindly restart.
+Unknown acceptance requires investigation and fresh approval. See
+[the fault and renewal protocol](NONPROD_RECOVERY_AUTHORIZATION.md).
+
 NONPROD lifecycle operations use signed operation/configuration/source/principal bindings,
 authoritative state lineage/serial/ETag, native locking and saved-plan stale-state rejection.
 Ownership transfer verifies an immutable snapshot and applies only a non-destructive forget;
