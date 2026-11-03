@@ -33,6 +33,25 @@ DELETED_AT = datetime.now(timezone.utc).replace(
 ) - timedelta(days=2)
 
 
+def test_recovery_timeout_cap_does_not_shorten_native_terraform_operations(monkeypatch):
+    from types import SimpleNamespace
+
+    from tirodhan.deployment.lifecycle_evidence import Runner
+
+    observed = []
+
+    def run(*args, **kwargs):
+        observed.append(kwargs["timeout"])
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("tirodhan.deployment.lifecycle_evidence.subprocess.run", run)
+    runner = Runner()
+    runner.run("terraform", "apply", timeout=1800)
+    runner.timeout_limit = 30
+    runner.run("az", "rest", timeout=180)
+    assert observed == [1800, 30]
+
+
 def deleted_row():
     return {
         "name": "td-np-test01-kv",
