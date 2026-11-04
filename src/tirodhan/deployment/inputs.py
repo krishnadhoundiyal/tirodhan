@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from tirodhan.core.config import Settings
+from tirodhan.deployment.runtime_prerequisites import validate_optional_runtime_configuration
 
 
 def main() -> None:
@@ -43,6 +44,7 @@ def main() -> None:
         raise RuntimeError("Runtime inputs must be approved nonsecret setting names")
     os.environ.update(runtime)
     Settings()  # CI has no .env; use the existing runtime validators.
+    validate_optional_runtime_configuration(values)
     Path("nonprod.auto.tfvars.json").write_text(json.dumps(values), encoding="utf-8")
 
 

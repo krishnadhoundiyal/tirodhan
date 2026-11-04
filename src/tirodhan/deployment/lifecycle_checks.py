@@ -380,9 +380,13 @@ class Checks:
         return bool(accepted & names(response))
 
     def check_features(self) -> bool:
-        from tirodhan.deployment.runtime_prerequisites import proposed_settings
+        from tirodhan.deployment.runtime_prerequisites import (
+            proposed_settings,
+            validate_optional_runtime_configuration,
+        )
 
         runtime = self.tf.get("runtime_env", {})
+        validate_optional_runtime_configuration(self.tf)
         # Validators run against the proposed configuration, never ambient developer secrets.
         settings = proposed_settings(runtime)
         if any(

@@ -279,8 +279,23 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
         )
 
 
-@pytest.mark.parametrize("kind", ["bootstrap", "database-bootstrap", "seed-local", "log-scheduled"])
-def test_existing_operator_capture_uses_actual_identity_and_never_mutates(monkeypatch, kind):
+@pytest.mark.parametrize(
+    "kind,failure,code",
+    [
+        *(
+            (kind, None, None)
+            for kind in ("bootstrap", "database-bootstrap", "seed-local", "log-scheduled")
+        ),
+        ("bootstrap", "identity", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
+        ("bootstrap", "tenant", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
+        ("database-bootstrap", "administrator", "DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH"),
+        ("bootstrap", "application", "DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH"),
+        ("bootstrap", "owner", "DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED"),
+    ],
+)
+def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
+    monkeypatch, kind, failure, code
+):
     import time
     from types import SimpleNamespace
 
@@ -290,6 +305,8 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(monkey
 
     config = copy.deepcopy(CONFIG)
     config["terraform"]["postgres_admin_object_id"] = OID
+    if failure == "administrator":
+        config["terraform"]["postgres_admin_object_id"] = "00000000-0000-0000-0000-000000000098"
     for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
         monkeypatch.delenv(name, raising=False)
 
@@ -305,28 +322,44 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(monkey
             if args[:4] == ("az", "ad", "sp", "show"):
                 return {"id": OID, "appId": config["deployment_client_id"]}
             if args[:4] == ("az", "ad", "app", "show"):
-                return {"id": "application-object", "appId": config["deployment_client_id"]}
+                return {
+                    "id": "application-object",
+                    "appId": "wrong-client"
+                    if failure == "application"
+                    else config["deployment_client_id"],
+                }
             assert args[:5] == ("az", "ad", "app", "owner", "list")
-            return [{"id": OID}]
+            return [] if failure == "owner" else [{"id": OID}]
 
     monkeypatch.setattr(
         release_capture,
         "Observations",
         lambda *args: SimpleNamespace(
-            identity=lambda: {"oid": OID, "tid": config["terraform"]["tenant_id"]}
+            identity=lambda: {
+                "oid": None if failure == "identity" else OID,
+                "tid": "wrong-tenant" if failure == "tenant" else config["terraform"]["tenant_id"],
+            }
         ),
     )
     monkeypatch.setattr(release_capture, "contract_digest", lambda: CODE)
-    request = release_capture.prepare(
-        kind,
-        session=SESSION,
-        expires_at=int(time.time()) + 600,
-        review_pr=123,
-        github=ReviewGithub(),
-        runner=Runner(),
-        config=config,
-        secret_names=["twofactor-api-key"] if kind == "seed-local" else None,
-    )
+
+    def capture():
+        return release_capture.prepare(
+            kind,
+            session=SESSION,
+            expires_at=int(time.time()) + 600,
+            review_pr=123,
+            github=ReviewGithub(),
+            runner=Runner(),
+            config=config,
+            secret_names=["twofactor-api-key"] if kind == "seed-local" else None,
+        )
+
+    if failure:
+        with pytest.raises(AdmissionDenied, match=f"^{code}$"):
+            capture()
+        return
+    request = capture()
     assert request["principal_id"] == OID
     assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
     if kind in {"bootstrap", "database-bootstrap"}:

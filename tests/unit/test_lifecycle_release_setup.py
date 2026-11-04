@@ -268,6 +268,31 @@ def test_scheduled_token_is_bound_to_actual_schedule_not_manual_authority(contex
         validate_scheduled_context(granted)
 
 
+@pytest.mark.parametrize("schedule,accepted", [("23 4 */3 * *", True), ("* * * * *", False)])
+def test_recurring_token_only_accepts_the_committed_cron(context, monkeypatch, schedule, accepted):
+    from tirodhan.deployment.deployment_admission import validate_scheduled_context
+
+    operator_request(context, "log-scheduled")
+    token, _ = sign(context)
+    _, policy, config, _ = context
+    granted = validate_authorization(
+        token,
+        operation="rotate-log-sas",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    monkeypatch.setenv("TIRODHAN_SCHEDULE", schedule)
+    if accepted:
+        validate_scheduled_context(granted)
+    else:
+        with pytest.raises(AdmissionDenied, match="SCHEDULED_OPERATION_NOT_AUTHORIZED"):
+            validate_scheduled_context(granted)
+
+
 def test_two_independent_encrypted_keys_with_readback_and_idempotent_setup(context):
     directory, policy, _, _ = context
     release = custody.load_private(directory / "release.encrypted.pem", PASSWORD)

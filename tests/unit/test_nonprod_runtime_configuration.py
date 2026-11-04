@@ -10,6 +10,22 @@ from tirodhan.deployment import inputs
 
 ROOT = Path(__file__).resolve().parents[2]
 
+INVENTORY_RUNTIME = {
+    "TIRODHAN_FINANCIAL_RECONCILIATION_BATCH_SIZE": "10",
+    "TIRODHAN_FINANCIAL_RECONCILIATION_INTERVAL_SECONDS": "60",
+    "TIRODHAN_FINANCIAL_RECONCILIATION_MAX_BACKOFF_SECONDS": "300",
+    "TIRODHAN_FINANCIAL_RECONCILIATION_LEASE_SECONDS": "30",
+    "TIRODHAN_FINANCIAL_UNRESOLVED_THRESHOLD_SECONDS": "3600",
+    "TIRODHAN_COMMAND_IDEMPOTENCY_TTL_SECONDS": "300",
+    "TIRODHAN_PLANNING_LEAD_TIME_MINUTES": "5",
+    "TIRODHAN_FINANCIAL_INVENTORY_START_EPOCH": "1700000000",
+    "TIRODHAN_FINANCIAL_INVENTORY_WINDOW_SECONDS": "3600",
+    "TIRODHAN_FINANCIAL_INVENTORY_OVERLAP_SECONDS": "60",
+    "TIRODHAN_FINANCIAL_INVENTORY_VISIBILITY_LAG_SECONDS": "30",
+    "TIRODHAN_FINANCIAL_INVENTORY_PAGE_BUDGET": "5",
+    "TIRODHAN_RAZORPAY_ACCOUNT_ID": "synthetic-account",
+}
+
 
 @pytest.fixture
 def input_directory(tmp_path, monkeypatch):
@@ -71,3 +87,42 @@ def test_secret_cannot_enter_runtime_configuration(input_directory, monkeypatch)
     with pytest.raises(RuntimeError, match="approved nonsecret setting"):
         inputs.main()
     assert not (input_directory / "nonprod.auto.tfvars.json").exists()
+
+
+@pytest.mark.parametrize("missing", sorted(INVENTORY_RUNTIME))
+def test_inventory_schedule_cannot_admit_an_incomplete_job(input_directory, monkeypatch, missing):
+    runtime = {k: v for k, v in INVENTORY_RUNTIME.items() if k != missing}
+    for name, value in runtime.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv(
+        "NONPROD_TFVARS_JSON",
+        json.dumps({"runtime_env": runtime, "financial_inventory_schedule": "0 * * * *"}),
+    )
+    with pytest.raises(ValueError):
+        inputs.main()
+    assert not (input_directory / "nonprod.auto.tfvars.json").exists()
+
+
+def test_inventory_complete_policy_is_shared_with_worker_and_live_admission(
+    input_directory, monkeypatch
+):
+    from lifecycle_fakes import MemoryObservations, auth
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+    from tirodhan.deployment.runtime_prerequisites import proposed_settings
+    from tirodhan.workers.financial_inventory import configured_policies
+
+    config = {"runtime_env": INVENTORY_RUNTIME, "financial_inventory_schedule": "0 * * * *"}
+    for name, value in INVENTORY_RUNTIME.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("NONPROD_TFVARS_JSON", json.dumps(config))
+    inputs.main()
+    assert (input_directory / "nonprod.auto.tfvars.json").exists()
+    configured_policies(proposed_settings(INVENTORY_RUNTIME))
+    observations = MemoryObservations()
+    observations.config["terraform"].update(config)
+    checks = Checks(auth("runtime-plan"), observations.config, {}, observations)
+    assert checks.check_features()
+    observations.config["terraform"]["runtime_env"] = {}
+    with pytest.raises(ValueError):
+        checks.check_features()

@@ -130,7 +130,9 @@ Checkout configuration uses the existing nonsecret `runtime_env` map with
 `TIRODHAN_RAZORPAY_MERCHANT_DISPLAY_NAME` and
 `TIRODHAN_PAYMENT_CHECKOUT_READINESS_SECONDS` (application bound 1..60 seconds).
 The existing optional Terraform `financial_inventory_schedule` input is accepted unchanged;
-null keeps its job absent. Enabling it still requires its approved configuration and normal
+null keeps its job absent. Non-null requires the worker's complete inventory/reconciliation
+policy and any enabled settlement date/timezone policy in both input and live admission;
+the worker shares that same side-effect-free validator. Enabling it still requires its approved configuration and normal
 signed plan/apply authority. Images, deployment stage and operation keys remain release-owned.
 
 Google Geocoding remains required by the serviceability worker. Its Key Vault

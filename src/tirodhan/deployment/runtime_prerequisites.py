@@ -66,6 +66,13 @@ def proposed_settings(runtime: dict[str, Any], material: dict[str, str] | None =
     return DeploymentSettings(**values)
 
 
+def validate_optional_runtime_configuration(terraform: dict[str, Any]) -> None:
+    if terraform.get("financial_inventory_schedule") is not None:
+        from tirodhan.workers.financial_inventory import configured_policies
+
+        configured_policies(proposed_settings(terraform.get("runtime_env", {})))
+
+
 def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str]) -> None:
     from firebase_admin import credentials  # type: ignore[import-untyped]
 
