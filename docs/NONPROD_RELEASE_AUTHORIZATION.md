@@ -174,6 +174,10 @@ DEPLOYMENT-class and blocked before signing-key unlock while release_enabled=fal
 Use the same explicit session, expiry, reviewed-main provenance and private custody flow.
 Supply --database-key-id for database-bootstrap; V cannot substitute for A. Capture
 reads the actual operator OID/tenant for O/A and verifies deployment-app ownership for O.
+Bootstrap also captures and signs D's actual service-principal object ID, separately from
+the operator identity; live bootstrap verifies that binding again. Local and workflow
+execution authority are exclusive, and workflow admission requires the signed environment
+to match the actual protected job. A local token cannot be promoted into GitHub execution.
 Only the committed rotation cron can be issued for recurring authority. Seed requests
 contain sorted unique approved names, never values; effect admission requires an exact
 name match. Interactive signing displays the operation bindings for digest review.

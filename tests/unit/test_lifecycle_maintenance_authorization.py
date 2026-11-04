@@ -269,6 +269,7 @@ def recovery(monkeypatch):
         auth(
             "recover-vault",
             kind="recovery",
+            execution_environment="nonprod-recovery",
             recovery_authorized=True,
             recovery_principal_id=R,
             recovery_client_id=RCLIENT,

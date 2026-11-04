@@ -147,7 +147,12 @@ class Checks:
     def check_execution_authority(self) -> bool:
         binding = self.binding()
         if os.environ.get("GITHUB_ACTIONS") != "true":
-            return binding.get("local_execution_authorized") is True
+            return (
+                binding.get("local_execution_authorized") is True
+                and "execution_environment" not in binding
+            )
+        if binding.get("local_execution_authorized") is True:
+            return False
         expected_environment = (
             "nonprod-database"
             if self.auth.operation == "database-verify"
@@ -162,6 +167,8 @@ class Checks:
             if setup_environment not in {"nonprod", "nonprod-plan"}:
                 return False
             expected_environment = str(setup_environment)
+        if binding.get("execution_environment") != expected_environment:
+            return False
         if os.environ.get("GITHUB_REPOSITORY") != "krishnadhoundiyal/tirodhan":
             return False
         if os.environ.get("GITHUB_REF") != "refs/heads/main":

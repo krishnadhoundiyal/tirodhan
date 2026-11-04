@@ -305,6 +305,7 @@ def prepare(
         "json",
     )
     principal["tenant_id"] = account["tenantId"]
+    deployment_principal = dict(principal) if kind == "bootstrap" else None
     if kind in {"bootstrap", "database-bootstrap"}:
         observer = Observations(config, runner).identity()
         if observer.get("tid") != config["terraform"]["tenant_id"] or not observer.get("oid"):
@@ -419,6 +420,8 @@ def prepare(
     }
     if maintenance is not None:
         request["maintenance_binding"] = maintenance
+    if deployment_principal is not None:
+        request["deployment_principal"] = deployment_principal
     if secret_names is not None:
         request["secret_names"] = secret_names
     if kind == "apply":

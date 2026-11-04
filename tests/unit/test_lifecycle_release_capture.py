@@ -367,6 +367,9 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
     assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
     if kind in {"bootstrap", "database-bootstrap"}:
         assert request["principal"]["appId"] is None
+    if kind == "bootstrap":
+        assert request["deployment_principal"]["id"] == service_oid
+        assert request["deployment_principal"]["id"] != request["principal_id"]
 
 
 def test_seed_effect_requires_the_exact_signed_name_batch():

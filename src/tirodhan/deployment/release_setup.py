@@ -403,6 +403,24 @@ def validated_request(
     bindings = expected_bindings(kind, request.get("apply_operation"))
     if request.get("operations") != sorted(bindings):
         raise AdmissionDenied("ISSUANCE_OPERATIONS_INCONSISTENT")
+    if kind == "bootstrap":
+        deployment = request.get("deployment_principal")
+        if (
+            not isinstance(deployment, dict)
+            or set(deployment) != {"id", "appId", "tenant_id"}
+            or deployment["appId"] != config["deployment_client_id"]
+            or deployment["tenant_id"] != config["terraform"]["tenant_id"]
+            or not isinstance(deployment["id"], str)
+            or deployment["id"] == request["principal_id"]
+        ):
+            raise AdmissionDenied("BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED")
+        try:
+            UUID(deployment["id"])
+        except ValueError:
+            raise AdmissionDenied("BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED") from None
+        bindings["bootstrap"]["deployment_principal_id"] = deployment["id"]
+    elif request.get("deployment_principal") is not None:
+        raise AdmissionDenied("DEPLOYMENT_PRINCIPAL_BINDING_REQUIRES_BOOTSTRAP")
     if kind in {"seed-local", "seed-workflow"}:
         from tirodhan.deployment.seed_secrets import approved_secret_batch
 

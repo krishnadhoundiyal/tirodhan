@@ -151,6 +151,12 @@ def operator_request(context, kind):
     )
     if kind in {"bootstrap", "database-bootstrap"}:
         request["principal"]["appId"] = None
+    if kind == "bootstrap":
+        request["deployment_principal"] = {
+            "id": "00000000-0000-0000-0000-000000000097",
+            "appId": config["deployment_client_id"],
+            "tenant_id": config["terraform"]["tenant_id"],
+        }
     if kind == "database-bootstrap":
         config["terraform"]["postgres_admin_object_id"] = OID
         request["configuration_hash"] = digest(config)
@@ -212,6 +218,128 @@ def test_preparation_profiles_never_become_held_enrollment_authority(context, mo
     monkeypatch.setattr(setup, "load_private", forbidden)
     with pytest.raises(AdmissionDenied, match="DEPLOYMENT_HOLD"):
         sign(context)
+
+
+@pytest.mark.parametrize("kind", OPERATOR_PURPOSES)
+def test_signed_profile_executes_only_in_its_reviewed_context(context, monkeypatch, kind):
+    from lifecycle_fakes import MemoryObservations
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    operator_request(context, kind)
+    token, _ = sign(context)
+    _, policy, config, request = context
+    operation = request["operations"][0]
+    authorization = validate_authorization(
+        token,
+        operation=operation,
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    observations = MemoryObservations()
+    observations.runner.json = lambda *args: {
+        "deployment_branch_policy": {"protected_branches": True},
+        "protection_rules": [{"type": "required_reviewers", "reviewers": [{"id": 1}]}],
+    }
+    checks = Checks(authorization, config, {}, observations)
+    is_local = setup.DESTINATIONS[kind][3] == "operator-local"
+    monkeypatch.setenv("GITHUB_ACTIONS", "false" if is_local else "true")
+    monkeypatch.setenv("GITHUB_REPOSITORY", setup.REPOSITORY)
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("TIRODHAN_EXECUTION_ENVIRONMENT", setup.DESTINATIONS[kind][3])
+    assert checks.check_execution_authority()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true" if is_local else "false")
+    # The same operation/principal cannot promote local authority into a job,
+    # or export a protected workflow token to a local operator context.
+    assert not checks.check_execution_authority()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("id", "not-a-principal"),
+        ("id", OID),
+        ("appId", VCLIENT),
+        ("tenant_id", VOID),
+    ],
+)
+def test_bootstrap_cannot_rebind_the_observed_deployment_identity(context, field, value):
+    operator_request(context, "bootstrap")
+    context[3]["deployment_principal"][field] = value
+    with pytest.raises(AdmissionDenied, match="BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED"):
+        sign(context)
+
+
+def test_signed_bootstrap_profile_satisfies_the_actual_bootstrap_controller(context, monkeypatch):
+    from lifecycle_fakes import MemoryObservations
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+    from tirodhan.deployment.prerequisites import Controller
+
+    operator_request(context, "bootstrap")
+    _, policy, config, request = context
+    tf = config["terraform"]
+    config["state_account"] = "tdnpstate" + tf["suffix"]
+    config["state_resource_group"] = tf["resource_group_name"] + "-state"
+    request["configuration_hash"] = digest(config)
+    token, _ = sign(context)
+    authorization = validate_authorization(
+        token,
+        operation="bootstrap",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    deployment_oid = request["deployment_principal"]["id"]
+    assert (
+        authorization.claims["bindings"]["bootstrap"]["deployment_principal_id"] == deployment_oid
+    )
+    observations = MemoryObservations()
+    observations.config = copy.deepcopy(config)
+    original_arm = observations.arm
+    observations.arm = lambda resource, version: (
+        {"value": [{"actions": ["*"], "notActions": []}]}
+        if resource.endswith("/permissions")
+        else original_arm(resource, version)
+    )
+    app_oid = "00000000-0000-0000-0000-000000000095"
+
+    def directory(*args):
+        if args[:4] == ("az", "ad", "sp", "show"):
+            return {"id": deployment_oid, "appId": config["deployment_client_id"]}
+        if args[:4] == ("az", "ad", "app", "show"):
+            return {"id": app_oid, "appId": config["deployment_client_id"]}
+        assert args[:4] == ("az", "ad", "app", "owner")
+        return [{"id": OID}]
+
+    observations.runner.json = directory
+    for name, value in {
+        "AZURE_SUBSCRIPTION_ID": tf["subscription_id"],
+        "AZURE_TENANT_ID": tf["tenant_id"],
+        "AZURE_LOCATION": tf["location"],
+        "NONPROD_SUFFIX": tf["suffix"],
+        "OPERATOR_OBJECT_ID": OID,
+        "DEPLOYMENT_OBJECT_ID": deployment_oid,
+        "FEDERATED_APP_OBJECT_ID": app_oid,
+        "DEPLOYMENT_SCOPE": observations.scope,
+    }.items():
+        monkeypatch.setenv(name, value)
+    for name in ("RECOVERY_OBJECT_ID", "RECOVERY_FEDERATED_APP_OBJECT_ID", "KEY_VAULT_URL"):
+        monkeypatch.delenv(name, raising=False)
+    grant = Controller(authorization, Checks(authorization, config, {}, observations)).evaluate(
+        "bootstrap"
+    )
+    assert set(grant.satisfied_checks) == {
+        "target",
+        "identity",
+        "execution_authority",
+        "bootstrap_authority",
+    }
 
 
 @pytest.mark.parametrize(
