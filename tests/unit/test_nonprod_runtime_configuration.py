@@ -130,14 +130,23 @@ def test_inventory_complete_policy_is_shared_with_worker_and_live_admission(
 
 
 @pytest.mark.parametrize("workflow", ["nonprod-destroy.yml", "nonprod-reconcile.yml"])
+@pytest.mark.parametrize(
+    "runtime",
+    [
+        {},
+        {"TIRODHAN_FINANCIAL_INVENTORY_PAGE_BUDGET": "0"},
+        {"TIRODHAN_FINANCIAL_INVENTORY_PAGE_BUDGET": "not-an-integer"},
+        {"TIRODHAN_PAYMENT_CHECKOUT_READINESS_SECONDS": "61"},
+    ],
+)
 def test_broken_optional_policy_cannot_strand_protected_maintenance(
-    input_directory, monkeypatch, workflow
+    input_directory, monkeypatch, workflow, runtime
 ):
     from lifecycle_fakes import MemoryObservations, auth
 
     from tirodhan.deployment.lifecycle_checks import Checks
 
-    proposed = {"runtime_env": {}, "financial_inventory_schedule": "0 * * * *"}
+    proposed = {"runtime_env": runtime, "financial_inventory_schedule": "0 * * * *"}
     monkeypatch.setenv(
         "GITHUB_WORKFLOW_REF",
         f"krishnadhoundiyal/tirodhan/.github/workflows/{workflow}@refs/heads/main",
