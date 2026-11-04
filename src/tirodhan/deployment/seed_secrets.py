@@ -35,11 +35,18 @@ CUSTOMER_WEB_PUSH_SECRET_NAMES = frozenset({"customer-vapid-private-key-pem"})
 CUSTOMER_SECRET_NAMES = CUSTOMER_DATA_SECRET_NAMES | CUSTOMER_WEB_PUSH_SECRET_NAMES
 SECRET_NAMES = LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES
 
+# Application runtime can be enrolled independently of the existing migration
+# credentials and disabled push providers. Keep this an exact complete batch.
+TWOFACTOR_RUNTIME_SECRET_NAMES = (
+    TWOFACTOR_SECRET_NAMES - {"fcm-credentials-json", "ghcr-pull-pat"}
+) | CUSTOMER_DATA_SECRET_NAMES
+
 
 def approved_secret_batch(names: set[str]) -> bool:
     return names in (
         LEGACY_SECRET_NAMES,
         TWOFACTOR_SECRET_NAMES,
+        TWOFACTOR_RUNTIME_SECRET_NAMES,
         {"twofactor-api-key"},
         CUSTOMER_DATA_SECRET_NAMES,
         CUSTOMER_WEB_PUSH_SECRET_NAMES,

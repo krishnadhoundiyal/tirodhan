@@ -87,6 +87,7 @@ def test_approved_credential_batches_are_complete() -> None:
         customer,
         legacy | customer,
         current,
+        seed_secrets.TWOFACTOR_RUNTIME_SECRET_NAMES,
         current | seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         current | customer,
         {"twofactor-api-key"},
@@ -96,7 +97,9 @@ def test_approved_credential_batches_are_complete() -> None:
     assert not seed_secrets.approved_secret_batch({"arbitrary-secret"})
 
 
-@pytest.mark.parametrize("kind", ["legacy", "twofactor", "twofactor-only", "customer", "vapid"])
+@pytest.mark.parametrize(
+    "kind", ["legacy", "twofactor", "twofactor-runtime", "twofactor-only", "customer", "vapid"]
+)
 def test_secret_seeding_does_not_echo_values(
     kind: str,
     tmp_path: Path,
@@ -106,6 +109,7 @@ def test_secret_seeding_does_not_echo_values(
     groups = {
         "legacy": seed_secrets.LEGACY_SECRET_NAMES,
         "twofactor": seed_secrets.TWOFACTOR_SECRET_NAMES,
+        "twofactor-runtime": seed_secrets.TWOFACTOR_RUNTIME_SECRET_NAMES,
         "twofactor-only": {"twofactor-api-key"},
         "customer": seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         "vapid": seed_secrets.CUSTOMER_WEB_PUSH_SECRET_NAMES,
