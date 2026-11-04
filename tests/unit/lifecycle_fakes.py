@@ -98,7 +98,16 @@ def auth(operation: str, *, kind: str = "deployment", **binding: Any) -> Authori
         "session",
         {
             "authorization_class": operation_class(operation),
-            "bindings": {operation: {"local_execution_authorized": True, **binding}},
+            "bindings": {
+                operation: {
+                    **(
+                        {}
+                        if "execution_environment" in binding
+                        else {"local_execution_authorized": True}
+                    ),
+                    **binding,
+                }
+            },
         },
     )
 

@@ -28,13 +28,21 @@ RUNTIME_NAMES = {
 }
 
 
-def test_complete_batch_matches_actual_runtime_admission_requirements():
+def test_core_batch_does_not_replace_rider_or_migration_admission_requirements():
     observations = MemoryObservations()
     checks = Checks(auth("runtime-plan"), observations.config, {}, observations)
-    assert checks.required_secret_names() - MIGRATION_SECRET_NAMES == RUNTIME_NAMES
+    assert checks.required_secret_names() - MIGRATION_SECRET_NAMES == RUNTIME_NAMES | {
+        "fcm-credentials-json"
+    }
     assert seed_secrets.approved_secret_batch(RUNTIME_NAMES)
     assert MIGRATION_SECRET_NAMES == {"ghcr-pull-pat", "fluent-bit-sas"}
     assert RUNTIME_NAMES.isdisjoint(MIGRATION_SECRET_NAMES)
+
+
+def test_rider_certificate_can_be_enrolled_without_replacing_existing_credentials():
+    assert seed_secrets.approved_secret_batch({"fcm-credentials-json"})
+    assert not seed_secrets.approved_secret_batch({"fcm-credentials-json", "ghcr-pull-pat"})
+    assert not seed_secrets.approved_secret_batch({"fcm-credentials-json", "arbitrary-secret"})
 
 
 @pytest.mark.parametrize("missing", sorted(RUNTIME_NAMES))

@@ -12,6 +12,7 @@ from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.release import MIGRATION_SECRET_NAMES
 from tirodhan.modules.identity.ports import OtpProviderConfigurationError
+from tirodhan.modules.payments.ports import PaymentProviderNotConfiguredError
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +41,19 @@ def material():
         "razorpay-webhook-secret": "test-webhook-key",
         "ghcr-pull-pat": "test-pull-key",
         "fluent-bit-sas": "test-log-key",
+        "fcm-credentials-json": json.dumps(
+            {
+                "type": "service_account",
+                "project_id": "test-project",
+                "client_email": "test@example.invalid",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "private_key": key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                ).decode(),
+            }
+        ),
     }
 
 
@@ -55,6 +69,27 @@ def runtime_checks(material, monkeypatch):
         "TIRODHAN_CUSTOMER_CURSOR_TTL_SECONDS": "300",
         "TIRODHAN_AUTH_TOKEN_ISSUER": "test-issuer",
         "TIRODHAN_AUTH_TOKEN_AUDIENCE": "test-audience",
+        "TIRODHAN_FCM_PROJECT_ID": "test-project",
+        "TIRODHAN_DB_POOL_SIZE": "2",
+        "TIRODHAN_DB_MAX_OVERFLOW": "0",
+        "TIRODHAN_DB_POOL_TIMEOUT": "5",
+        "TIRODHAN_SERVICE_BUS_OPERATION_TIMEOUT_SECONDS": "5",
+        "TIRODHAN_SERVICEABILITY_LOCK_RENEWAL_SECONDS": "60",
+        "TIRODHAN_RIDER_NOTIFICATION_LOCK_RENEWAL_SECONDS": "60",
+        "TIRODHAN_REFUND_LOCK_RENEWAL_SECONDS": "60",
+        "TIRODHAN_PLANNING_LOCK_RENEWAL_SECONDS": "60",
+        "TIRODHAN_OUTBOX_PUBLISH_BATCH_SIZE": "10",
+        "TIRODHAN_RIDER_OFFER_LIFETIME_SECONDS": "60",
+        "TIRODHAN_PLANNING_LEAD_TIME_MINUTES": "5",
+        "TIRODHAN_PLANNING_MAX_ATTEMPTS": "3",
+        "TIRODHAN_PLANNING_COMPACTION_DISTANCE_M": "100",
+        "TIRODHAN_PLANNING_MAX_GROUP_REQUESTS": "10",
+        "TIRODHAN_FINANCIAL_WEBHOOK_LOCK_RENEWAL_SECONDS": "60",
+        "TIRODHAN_FINANCIAL_WEBHOOK_SEND_TIMEOUT_SECONDS": "3",
+        "TIRODHAN_RAZORPAY_KEY_ID": "test-payment-id",
+        "TIRODHAN_RAZORPAY_HTTP_TIMEOUT_SECONDS": "5",
+        "TIRODHAN_RAZORPAY_ACCOUNT_ID": "test-account",
+        "TIRODHAN_COMMAND_IDEMPOTENCY_TTL_SECONDS": "300",
     }
     reads = []
 
@@ -63,7 +98,7 @@ def runtime_checks(material, monkeypatch):
             return [{"name": name, "attributes": {"enabled": True}} for name in material]
         name = args[args.index("--name") + 1]
         reads.append(name)
-        return {"value": material[name]}
+        return {"value": material[name], "attributes": {"enabled": True}}
 
     monkeypatch.setattr(observations.runner, "json", vault_read)
     return Checks(auth("runtime-plan"), observations.config, {}, observations), reads
@@ -76,6 +111,70 @@ def test_twofactor_runtime_passes_without_any_kaleyra_credentials(material, monk
     assert "google-maps-api-key" in reads
     assert "kaleyra-api-key" not in reads
     assert capsys.readouterr().out == ""
+
+
+def test_rider_fcm_is_mandatory_even_when_customer_push_is_disabled(material, monkeypatch):
+    without_fcm = {
+        name: value for name, value in material.items() if name != "fcm-credentials-json"
+    }
+    checks, reads = runtime_checks(without_fcm, monkeypatch)
+    checks.tf["runtime_env"]["TIRODHAN_CUSTOMER_FCM_ENABLED"] = "false"
+    assert not checks.check_secrets()
+    assert reads == []
+
+
+@pytest.mark.parametrize("project", [None, "different-project"])
+def test_rider_fcm_project_must_match_actual_certificate(material, monkeypatch, project):
+    checks, _ = runtime_checks(material, monkeypatch)
+    if project is None:
+        checks.tf["runtime_env"].pop("TIRODHAN_FCM_PROJECT_ID")
+    else:
+        checks.tf["runtime_env"]["TIRODHAN_FCM_PROJECT_ID"] = project
+    with pytest.raises(ValueError, match="^Rider FCM certificate"):
+        checks.check_secrets()
+
+
+def test_invalid_rider_fcm_material_is_rejected_without_echoing_it(material, monkeypatch):
+    checks, _ = runtime_checks(
+        material | {"fcm-credentials-json": "do-not-echo-this-value"}, monkeypatch
+    )
+    with pytest.raises(ValueError, match="^Rider FCM certificate") as error:
+        checks.check_secrets()
+    assert "do-not-echo-this-value" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "TIRODHAN_DB_POOL_SIZE",
+        "TIRODHAN_OUTBOX_PUBLISH_BATCH_SIZE",
+        "TIRODHAN_PLANNING_LOCK_RENEWAL_SECONDS",
+        "TIRODHAN_RIDER_OFFER_LIFETIME_SECONDS",
+        "TIRODHAN_PLANNING_MAX_ATTEMPTS",
+        "TIRODHAN_FINANCIAL_WEBHOOK_LOCK_RENEWAL_SECONDS",
+        "TIRODHAN_FINANCIAL_WEBHOOK_SEND_TIMEOUT_SECONDS",
+    ],
+)
+def test_default_workload_startup_inputs_cannot_be_omitted(material, monkeypatch, missing):
+    checks, _ = runtime_checks(material, monkeypatch)
+    checks.tf["runtime_env"].pop(missing)
+    with pytest.raises(ValueError, match="^Default workload startup configuration"):
+        checks.check_secrets()
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "TIRODHAN_RAZORPAY_KEY_ID",
+        "TIRODHAN_RAZORPAY_HTTP_TIMEOUT_SECONDS",
+        "TIRODHAN_RAZORPAY_ACCOUNT_ID",
+    ],
+)
+def test_financial_startup_cannot_pass_with_only_secret_presence(material, monkeypatch, missing):
+    checks, _ = runtime_checks(material, monkeypatch)
+    checks.tf["runtime_env"].pop(missing)
+    with pytest.raises((ValueError, PaymentProviderNotConfiguredError)):
+        checks.check_secrets()
 
 
 @pytest.mark.parametrize("provider", [None, "", "UNAPPROVED"])
@@ -157,3 +256,50 @@ def test_stages_without_application_runtime_do_not_require_otp(operation):
     observations.config["terraform"]["runtime_env"] = {}
     checks = Checks(auth(operation), observations.config, {}, observations)
     assert checks.required_secret_names() == set(MIGRATION_SECRET_NAMES)
+
+
+@pytest.mark.parametrize(
+    "attributes,usable",
+    [
+        ({"enabled": True}, True),
+        ({"enabled": True, "notBefore": 999, "expires": 1001}, True),
+        ({"enabled": True, "notBefore": 1000}, True),
+        ({"enabled": True, "notBefore": 1001}, False),
+        ({"enabled": True, "expires": 1000}, False),
+        ({"enabled": False}, False),
+        ({"enabled": "true"}, False),
+        ({"enabled": True, "expires": float("inf")}, False),
+        ({"enabled": True, "notBefore": float("nan")}, False),
+        ({"enabled": True, "notBefore": True}, False),
+        ({"enabled": True, "notBefore": "1970-01-01T00:16:39Z"}, True),
+        ({"enabled": True, "notBefore": "1970-01-01T00:16:41+00:00"}, False),
+        ({"enabled": True, "expires": "1970-01-01T00:16:41+00:00"}, True),
+        ({"enabled": True, "expires": "1970-01-01T00:16:41"}, False),
+        ({"enabled": True, "expires": "do-not-echo"}, False),
+        (None, False),
+    ],
+)
+def test_metadata_activation_is_required_and_unknown_fails_closed(monkeypatch, attributes, usable):
+    monkeypatch.setattr("tirodhan.deployment.lifecycle_checks.time.time", lambda: 1000)
+    assert Checks.secret_metadata_usable(attributes) is usable
+
+
+@pytest.mark.parametrize("phase", ["list", "show"])
+def test_future_activation_cannot_pass_listing_or_latest_value_read(material, monkeypatch, phase):
+    checks, reads = runtime_checks(material, monkeypatch)
+    previous = checks.io.runner.json
+
+    def read(*args):
+        response = previous(*args)
+        if phase in args:
+            if isinstance(response, list):
+                for row in response:
+                    row["attributes"]["notBefore"] = 10**12
+            else:
+                response["attributes"]["notBefore"] = 10**12
+        return response
+
+    monkeypatch.setattr(checks.io.runner, "json", read)
+    assert not checks.check_secrets()
+    if phase == "list":
+        assert reads == []

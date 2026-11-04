@@ -125,6 +125,302 @@ def sign(context, *, plan=None, output="release.jwt"):
     return token, audit
 
 
+OPERATOR_PURPOSES = (
+    "bootstrap",
+    "database-bootstrap",
+    "seed-local",
+    "seed-workflow",
+    "log-local",
+    "log-manual",
+    "log-scheduled",
+)
+
+
+def operator_request(context, kind):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    _, policy, config, request = context
+    secret, destination, identity, environment = setup.DESTINATIONS[kind]
+    request.update(
+        kind=kind,
+        secret_name=secret,
+        destination=destination,
+        identity_kind=identity,
+        environment=environment,
+        operations=sorted(setup.expected_bindings(kind)),
+    )
+    if kind in {"bootstrap", "database-bootstrap"}:
+        request["principal"]["appId"] = None
+    if kind == "bootstrap":
+        request["deployment_principal"] = {
+            "id": "00000000-0000-0000-0000-000000000097",
+            "appId": config["deployment_client_id"],
+            "tenant_id": config["terraform"]["tenant_id"],
+        }
+    if kind == "database-bootstrap":
+        config["terraform"]["postgres_admin_object_id"] = OID
+        request["configuration_hash"] = digest(config)
+        key = Ed25519PrivateKey.generate()
+        kid = custody.key_id(key)
+        policy["database_evidence_keys"][kid] = {
+            "principal_id": OID,
+            "identity_kind": "database",
+            "public_key": custody.public_pem(key),
+        }
+        request["database_key_id"] = kid
+    if kind.startswith("seed-"):
+        request["secret_names"] = (
+            ["ghcr-pull-pat"] if kind == "seed-workflow" else ["twofactor-api-key"]
+        )
+
+
+@pytest.mark.parametrize("kind", OPERATOR_PURPOSES)
+def test_existing_operator_operation_profiles_have_real_bound_signatures(context, kind):
+    operator_request(context, kind)
+    token, _ = sign(context)
+    _, policy, config, request = context
+    op = request["operations"][0]
+    granted = validate_authorization(
+        token,
+        operation=op,
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    assert granted.identity_kind == setup.DESTINATIONS[kind][2]
+    assert granted.claims["authorization_class"] == "DEPLOYMENT"
+    if kind.startswith("seed-"):
+        assert granted.claims["bindings"][op]["secret_names"] == request["secret_names"]
+    if kind == "log-scheduled":
+        assert granted.claims["bindings"][op]["schedule"] == "23 4 */3 * *"
+    with pytest.raises(AdmissionDenied):
+        validate_authorization(
+            token,
+            operation="recover-vault",
+            policy=policy,
+            config_hash=digest(config),
+            code_hash=CODE,
+            commit=COMMIT,
+            run_id=SESSION,
+        )
+
+
+@pytest.mark.parametrize("kind", OPERATOR_PURPOSES)
+def test_preparation_profiles_never_become_held_enrollment_authority(context, monkeypatch, kind):
+    operator_request(context, kind)
+    context[1]["release_enabled"] = False
+
+    def forbidden(*args):
+        pytest.fail("Signing key unlocked during hold")
+
+    monkeypatch.setattr(setup, "load_private", forbidden)
+    with pytest.raises(AdmissionDenied, match="DEPLOYMENT_HOLD"):
+        sign(context)
+
+
+@pytest.mark.parametrize("kind", OPERATOR_PURPOSES)
+def test_signed_profile_executes_only_in_its_reviewed_context(context, monkeypatch, kind):
+    from lifecycle_fakes import MemoryObservations
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    operator_request(context, kind)
+    token, _ = sign(context)
+    _, policy, config, request = context
+    operation = request["operations"][0]
+    authorization = validate_authorization(
+        token,
+        operation=operation,
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    observations = MemoryObservations()
+    observations.runner.json = lambda *args: {
+        "deployment_branch_policy": {"protected_branches": True},
+        "protection_rules": [{"type": "required_reviewers", "reviewers": [{"id": 1}]}],
+    }
+    checks = Checks(authorization, config, {}, observations)
+    is_local = setup.DESTINATIONS[kind][3] == "operator-local"
+    monkeypatch.setenv("GITHUB_ACTIONS", "false" if is_local else "true")
+    monkeypatch.setenv("GITHUB_REPOSITORY", setup.REPOSITORY)
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("TIRODHAN_EXECUTION_ENVIRONMENT", setup.DESTINATIONS[kind][3])
+    assert checks.check_execution_authority()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true" if is_local else "false")
+    # The same operation/principal cannot promote local authority into a job,
+    # or export a protected workflow token to a local operator context.
+    assert not checks.check_execution_authority()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("id", "not-a-principal"),
+        ("id", OID),
+        ("appId", VCLIENT),
+        ("tenant_id", VOID),
+    ],
+)
+def test_bootstrap_cannot_rebind_the_observed_deployment_identity(context, field, value):
+    operator_request(context, "bootstrap")
+    context[3]["deployment_principal"][field] = value
+    with pytest.raises(AdmissionDenied, match="BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED"):
+        sign(context)
+
+
+def test_signed_bootstrap_profile_satisfies_the_actual_bootstrap_controller(context, monkeypatch):
+    from lifecycle_fakes import MemoryObservations
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+    from tirodhan.deployment.prerequisites import Controller
+
+    operator_request(context, "bootstrap")
+    _, policy, config, request = context
+    tf = config["terraform"]
+    config["state_account"] = "tdnpstate" + tf["suffix"]
+    config["state_resource_group"] = tf["resource_group_name"] + "-state"
+    request["configuration_hash"] = digest(config)
+    token, _ = sign(context)
+    authorization = validate_authorization(
+        token,
+        operation="bootstrap",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    deployment_oid = request["deployment_principal"]["id"]
+    assert (
+        authorization.claims["bindings"]["bootstrap"]["deployment_principal_id"] == deployment_oid
+    )
+    observations = MemoryObservations()
+    observations.config = copy.deepcopy(config)
+    original_arm = observations.arm
+    observations.arm = lambda resource, version: (
+        {"value": [{"actions": ["*"], "notActions": []}]}
+        if resource.endswith("/permissions")
+        else original_arm(resource, version)
+    )
+    app_oid = "00000000-0000-0000-0000-000000000095"
+
+    def directory(*args):
+        if args[:4] == ("az", "ad", "sp", "show"):
+            return {"id": deployment_oid, "appId": config["deployment_client_id"]}
+        if args[:4] == ("az", "ad", "app", "show"):
+            return {"id": app_oid, "appId": config["deployment_client_id"]}
+        assert args[:4] == ("az", "ad", "app", "owner")
+        return [{"id": OID}]
+
+    observations.runner.json = directory
+    for name, value in {
+        "AZURE_SUBSCRIPTION_ID": tf["subscription_id"],
+        "AZURE_TENANT_ID": tf["tenant_id"],
+        "AZURE_LOCATION": tf["location"],
+        "NONPROD_SUFFIX": tf["suffix"],
+        "OPERATOR_OBJECT_ID": OID,
+        "DEPLOYMENT_OBJECT_ID": deployment_oid,
+        "FEDERATED_APP_OBJECT_ID": app_oid,
+        "DEPLOYMENT_SCOPE": observations.scope,
+    }.items():
+        monkeypatch.setenv(name, value)
+    for name in ("RECOVERY_OBJECT_ID", "RECOVERY_FEDERATED_APP_OBJECT_ID", "KEY_VAULT_URL"):
+        monkeypatch.delenv(name, raising=False)
+    grant = Controller(authorization, Checks(authorization, config, {}, observations)).evaluate(
+        "bootstrap"
+    )
+    assert set(grant.satisfied_checks) == {
+        "target",
+        "identity",
+        "execution_authority",
+        "bootstrap_authority",
+    }
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        None,
+        [],
+        ["arbitrary"],
+        ["twofactor-api-key"] * 2,
+        ["twofactor-api-key", "ghcr-pull-pat"],
+        [123],
+    ],
+)
+def test_seed_authorization_cannot_admit_unknown_partial_or_ambiguous_batch(context, names):
+    operator_request(context, "seed-local")
+    context[3]["secret_names"] = names
+    with pytest.raises(AdmissionDenied, match="ISSUANCE_SECRET_BATCH_NOT_SUPPORTED"):
+        sign(context)
+
+
+def test_workflow_seed_is_limited_to_its_actual_ghcr_entrypoint(context):
+    operator_request(context, "seed-workflow")
+    context[3]["secret_names"] = ["twofactor-api-key"]
+    with pytest.raises(AdmissionDenied, match="ISSUANCE_SECRET_BATCH_NOT_SUPPORTED"):
+        sign(context)
+
+
+def test_database_bootstrap_signer_cannot_substitute_verifier_identity(context):
+    operator_request(context, "database-bootstrap")
+    context[3]["principal_id"] = VOID
+    context[3]["principal"]["id"] = VOID
+    with pytest.raises(AdmissionDenied, match="ISSUANCE_PRINCIPAL_NOT_AUTHORIZED"):
+        sign(context)
+
+
+def test_scheduled_token_is_bound_to_actual_schedule_not_manual_authority(context, monkeypatch):
+    from tirodhan.deployment.deployment_admission import validate_scheduled_context
+
+    operator_request(context, "log-manual")
+    token, _ = sign(context)
+    _, policy, config, request = context
+    granted = validate_authorization(
+        token,
+        operation="rotate-log-sas",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    monkeypatch.setenv("TIRODHAN_SCHEDULE", "23 4 */3 * *")
+    with pytest.raises(AdmissionDenied, match="SCHEDULED_OPERATION_NOT_AUTHORIZED"):
+        validate_scheduled_context(granted)
+
+
+@pytest.mark.parametrize("schedule,accepted", [("23 4 */3 * *", True), ("* * * * *", False)])
+def test_recurring_token_only_accepts_the_committed_cron(context, monkeypatch, schedule, accepted):
+    from tirodhan.deployment.deployment_admission import validate_scheduled_context
+
+    operator_request(context, "log-scheduled")
+    token, _ = sign(context)
+    _, policy, config, _ = context
+    granted = validate_authorization(
+        token,
+        operation="rotate-log-sas",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    monkeypatch.setenv("TIRODHAN_SCHEDULE", schedule)
+    if accepted:
+        validate_scheduled_context(granted)
+    else:
+        with pytest.raises(AdmissionDenied, match="SCHEDULED_OPERATION_NOT_AUTHORIZED"):
+            validate_scheduled_context(granted)
+
+
 def test_two_independent_encrypted_keys_with_readback_and_idempotent_setup(context):
     directory, policy, _, _ = context
     release = custody.load_private(directory / "release.encrypted.pem", PASSWORD)

@@ -140,8 +140,44 @@ def collect_review(
         for r in reviews
         if r.get("commit_id") == source and r.get("user", {}).get("login") == "coderabbitai[bot]"
     ]
+    comment: dict[str, Any] | None = None
+    check: dict[str, Any] | None = None
     if not candidates:
-        raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
+        # CodeRabbit emits completed no-comment reviews as a PR conversation
+        # receipt, not a formal /reviews submission. Require both authenticated
+        # bot evidence for this exact head and its own successful App check run.
+        from tirodhan.deployment.coderabbit_evidence import APP_ID, BOT_ID, projected_comment
+
+        comments = github.get(f"issues/{number}/comments?per_page=100")
+        checks = github.get(f"commits/{source}/check-runs?per_page=100")
+        if len(comments) >= 100 or checks.get("total_count", 0) > len(checks.get("check_runs", [])):
+            raise AdmissionDenied("REVIEW_HISTORY_EXCEEDS_SAFE_CAPTURE_BOUND")
+        summaries = [
+            row
+            for row in comments
+            if row.get("user", {}).get("id") == BOT_ID
+            and "<!-- review_stack_entry_start -->" in row.get("body", "")
+        ]
+        app_checks = [
+            row
+            for row in checks.get("check_runs", [])
+            if row.get("app", {}).get("id") == APP_ID
+            and row.get("name") == "CodeRabbit"
+            and row.get("head_sha") == source
+        ]
+        if not summaries or not app_checks:
+            raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
+        observed_check = max(app_checks, key=lambda row: row["id"])
+        check = {
+            **{
+                key: observed_check.get(key)
+                for key in ("id", "head_sha", "name", "status", "conclusion", "completed_at")
+            },
+            "app": {key: observed_check.get("app", {}).get(key) for key in ("id", "slug")},
+        }
+        comment = projected_comment(
+            max(summaries, key=lambda row: row["id"]), check, source, number
+        )
     evidence = {
         "repository": REPOSITORY,
         "target_commit": commit,
@@ -150,9 +186,11 @@ def collect_review(
         "source_tree": source_tree,
         "pull": pull,
         "workflow_runs": runs,
-        "review": max(candidates, key=lambda r: r["id"]),
+        "review": max(candidates, key=lambda r: r["id"]) if candidates else None,
         "unresolved_threads": github.threads(number),
     }
+    if not candidates:
+        evidence.update(review_comment=comment, review_check_run=check)
     validate_evidence(evidence, commit)
     return evidence
 
@@ -225,6 +263,7 @@ def prepare(
     artifact_id: int | None = None,
     database_key_id: str | None = None,
     resume_request: dict[str, Any] | None = None,
+    secret_names: list[str] | None = None,
 ) -> dict[str, Any]:
     operator_only()
     if resume_request is not None and kind != "recovery":
@@ -266,6 +305,28 @@ def prepare(
         "json",
     )
     principal["tenant_id"] = account["tenantId"]
+    deployment_principal = dict(principal) if kind == "bootstrap" else None
+    if kind in {"bootstrap", "database-bootstrap"}:
+        observer = Observations(config, runner).identity()
+        if observer.get("tid") != config["terraform"]["tenant_id"] or not observer.get("oid"):
+            raise AdmissionDenied("OPERATOR_CAPTURE_IDENTITY_UNVERIFIED")
+        principal = {
+            "id": observer["oid"],
+            "appId": observer.get("appid") or observer.get("azp"),
+            "tenant_id": observer["tid"],
+        }
+        if kind == "database-bootstrap":
+            if principal["id"] != config["terraform"]["postgres_admin_object_id"]:
+                raise AdmissionDenied("DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH")
+        else:
+            app = runner.json("az", "ad", "app", "show", "--id", client, "--output", "json")
+            if app.get("appId") != client:
+                raise AdmissionDenied("DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH")
+            owners = runner.json(
+                "az", "ad", "app", "owner", "list", "--id", app["id"], "--output", "json"
+            )
+            if not any(row.get("id") == principal["id"] for row in owners):
+                raise AdmissionDenied("DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED")
     maintenance = None
     if kind in {"enrollment", "recovery"}:
         from tirodhan.deployment.recovery_target import deleted_target
@@ -359,6 +420,10 @@ def prepare(
     }
     if maintenance is not None:
         request["maintenance_binding"] = maintenance
+    if deployment_principal is not None:
+        request["deployment_principal"] = deployment_principal
+    if secret_names is not None:
+        request["secret_names"] = secret_names
     if kind == "apply":
         if plan is None or artifact_id is None:
             raise AdmissionDenied("REVIEWED_GITHUB_PLAN_ARTIFACT_REQUIRED")
@@ -449,6 +514,9 @@ def main() -> None:
     parser.add_argument("--artifact-id", type=int)
     parser.add_argument("--database-key-id")
     parser.add_argument(
+        "--secret-name", action="append", help="Exact approved seed batch names only; never values"
+    )
+    parser.add_argument(
         "--resume-request",
         type=Path,
         help="Original private recovery capture; renews the same target generation",
@@ -481,6 +549,7 @@ def main() -> None:
             resume_request=json.loads(private_read(args.resume_request))
             if args.resume_request
             else None,
+            secret_names=sorted(args.secret_name) if args.secret_name else None,
         )
         if args.kind == "apply":
             if not sys.stdin.isatty():

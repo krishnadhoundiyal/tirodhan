@@ -83,6 +83,17 @@ approved administrator signer/enrollment. Generating two keys does not prove SQL
 
 ## Inventory and readiness
 
+CodeRabbit may complete a no-comment review using its PR conversation summary instead of
+a formal `/reviews` submission. Capture supports that explicit format only when both the
+authenticated CodeRabbit bot ID and its own GitHub App check bind the exact reviewed head.
+The summary must contain one matching assessment-commit marker and the completed
+no-actionable-comments block; the App check must be completed/success. Missing, pending,
+failed, ambiguous, wrong-PR/head/provider or unresolved evidence blocks. A formal
+CHANGES_REQUESTED review cannot fall back to a clean summary. Both required CI workflows,
+merged-main tree provenance and all authorization/hold checks remain mandatory. Collected
+comment excerpts retain a full-body digest and omit scoped share URLs; they are not invented
+formal review submissions or caller PASS flags.
+
 ```text
 python -m tirodhan.deployment.release_capture inventory
 python -m tirodhan.deployment.release_setup readiness
@@ -146,6 +157,31 @@ its actual release session and rechecks remote state/native plan and all prerequ
 Offline signing cannot prove remote state has not changed after capture; live fences remain.
 
 ## Explicit secret enrollment — separate approval required
+
+The existing capture/issue commands also support these exact profiles. All remain
+DEPLOYMENT-class and blocked before signing-key unlock while release_enabled=false:
+
+| Capture kind | Existing operation | Identity / destination |
+|---|---|---|
+| bootstrap | bootstrap with explicit enrollment/discovery bindings | O / operator-local |
+| database-bootstrap | database-bootstrap with independently enrolled A evidence key | Configured A / operator-local |
+| seed-local | seed-secrets, exact --secret-name batch | D / operator-local |
+| seed-workflow | seed-secrets, ghcr-pull-pat only | D / repository NONPROD_RELEASE_AUTHORIZATION |
+| log-local | rotate-log-sas | D / operator-local |
+| log-manual | rotate-log-sas, protected nonprod-plan | D / repository NONPROD_RELEASE_AUTHORIZATION |
+| log-scheduled | rotate-log-sas plus the exact committed workflow cron | D / repository NONPROD_LOG_SAS_AUTHORIZATION |
+
+Use the same explicit session, expiry, reviewed-main provenance and private custody flow.
+Supply --database-key-id for database-bootstrap; V cannot substitute for A. Capture
+reads the actual operator OID/tenant for O/A and verifies deployment-app ownership for O.
+Bootstrap also captures and signs D's actual service-principal object ID, separately from
+the operator identity; live bootstrap verifies that binding again. Local and workflow
+execution authority are exclusive, and workflow admission requires the signed environment
+to match the actual protected job. A local token cannot be promoted into GitHub execution.
+Only the committed rotation cron can be issued for recurring authority. Seed requests
+contain sorted unique approved names, never values; effect admission requires an exact
+name match. Interactive signing displays the operation bindings for digest review.
+These profiles neither authorize held enrollment nor execute any external change.
 
 No setup utility automatically writes settings. After inventory and separate approval,
 use GitHub CLI's supported stdin mechanism in a private terminal. Never use a token in

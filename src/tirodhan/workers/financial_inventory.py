@@ -7,21 +7,21 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from tirodhan.core.config import get_settings
+from tirodhan.core.config import Settings, get_settings
 from tirodhan.core.logging import configure_logging
 from tirodhan.db.session import create_database_engine, create_session_factory
 from tirodhan.db.values import new_uuid7, utc_now
 from tirodhan.modules.payments.inventory import InventoryPolicy, discover_inventory
 from tirodhan.modules.payments.models import FinancialScanCheckpoint
 from tirodhan.modules.payments.ports import PaymentProviderUncertainError
+from tirodhan.modules.payments.reconciliation import ReconciliationPolicy
 from tirodhan.modules.payments.runtime import razorpay_runtime
 from tirodhan.modules.payments.settlement import reconcile_settlement_day
 from tirodhan.workers.financial_reconciliation import configured_policy
 
 
-async def run() -> None:
-    settings = get_settings()
-    configure_logging(settings.log_level, settings.log_file_path)
+def configured_policies(settings: Settings) -> tuple[ReconciliationPolicy, InventoryPolicy]:
+    """Validate the job's complete policy before database or provider operations."""
     policy = configured_policy(settings)
     values = (
         settings.financial_inventory_start_epoch,
@@ -38,6 +38,16 @@ async def run() -> None:
         or settings.financial_settlement_revisit_days is None
     ):
         raise ValueError("Settlement timezone and revisit policy must be explicitly configured")
+    if settings.financial_settlement_start_date is not None:
+        date.fromisoformat(settings.financial_settlement_start_date)
+        ZoneInfo(settings.financial_settlement_timezone or "")
+    return policy, inventory_policy
+
+
+async def run() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_file_path)
+    policy, inventory_policy = configured_policies(settings)
     engine = create_database_engine(settings, use_null_pool=True)
     try:
         async with razorpay_runtime(settings) as provider:

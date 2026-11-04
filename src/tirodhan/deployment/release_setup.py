@@ -12,6 +12,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -60,6 +61,28 @@ DESTINATIONS = {
     ),
     "enrollment": ("NONPROD_RELEASE_AUTHORIZATION", "operator-local", "operator", "operator-local"),
     "recovery": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "recovery", "nonprod-recovery"),
+    "bootstrap": ("NONPROD_RELEASE_AUTHORIZATION", "operator-local", "operator", "operator-local"),
+    "database-bootstrap": (
+        "NONPROD_RELEASE_AUTHORIZATION",
+        "operator-local",
+        "database",
+        "operator-local",
+    ),
+    "seed-local": (
+        "NONPROD_RELEASE_AUTHORIZATION",
+        "operator-local",
+        "deployment",
+        "operator-local",
+    ),
+    "seed-workflow": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod"),
+    "log-local": (
+        "NONPROD_RELEASE_AUTHORIZATION",
+        "operator-local",
+        "deployment",
+        "operator-local",
+    ),
+    "log-manual": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
+    "log-scheduled": ("NONPROD_LOG_SAS_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
 }
 PLAN_OPERATIONS = ["terraform-setup", "foundation-plan", "migration-plan", "runtime-plan"]
 CONSUMER_OPERATIONS = [
@@ -72,6 +95,42 @@ CONSUMER_OPERATIONS = [
 
 
 def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str, Any]:
+    # These enumerate existing admitted operations; none changes its authority class
+    # or makes a DEPLOYMENT operation issuable while the release policy is held.
+    if kind == "bootstrap":
+        return {
+            "bootstrap": {
+                "local_execution_authorized": True,
+                "bootstrap_enrollment_authorized": True,
+                "bootstrap_discovery_authorized": True,
+            }
+        }
+    if kind == "database-bootstrap":
+        return {
+            "database-bootstrap": {
+                "local_execution_authorized": True,
+                "database_bootstrap_authorized": True,
+            }
+        }
+    if kind in {"seed-local", "seed-workflow"}:
+        return {
+            "seed-secrets": {"local_execution_authorized": True}
+            if kind == "seed-local"
+            else {"execution_environment": "nonprod"}
+        }
+    if kind in {"log-local", "log-manual", "log-scheduled"}:
+        binding: dict[str, Any] = (
+            {"local_execution_authorized": True}
+            if kind == "log-local"
+            else {"execution_environment": "nonprod-plan"}
+        )
+        if kind == "log-scheduled":
+            source = (ROOT / ".github/workflows/rotate-log-sas.yml").read_text()
+            schedules = re.findall(r"(?m)^    - cron: '([^']+)'$", source)
+            if len(schedules) != 1:
+                raise AdmissionDenied("ROTATION_SCHEDULE_UNVERIFIED")
+            binding.update(scheduled_execution_authorized=True, schedule=schedules[0])
+        return {"rotate-log-sas": binding}
     if kind == "enrollment":
         return {
             "enroll-recovery": {
@@ -204,7 +263,17 @@ def validate_evidence(evidence: dict[str, Any], commit: str) -> dict[str, Any]:
         ):
             raise AdmissionDenied("CI_EVIDENCE_INVALID")
     review = evidence["review"]
-    if (
+    if evidence.get("unresolved_threads") != []:
+        raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
+    if review is None:
+        from tirodhan.deployment.coderabbit_evidence import comment_review_url
+
+        comment = evidence.get("review_comment")
+        check = evidence.get("review_check_run")
+        if not isinstance(comment, dict) or not isinstance(check, dict):
+            raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
+        review_url = comment_review_url(comment, check, source, pull["number"])
+    elif not isinstance(review, dict) or (
         review.get("commit_id") != source
         or review.get("user", {}).get("login") != "coderabbitai[bot]"
         or review.get("user", {}).get("id") != 136622811
@@ -214,11 +283,12 @@ def validate_evidence(evidence: dict[str, Any], commit: str) -> dict[str, Any]:
         or evidence.get("unresolved_threads") != []
     ):
         raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
+    else:
+        review_url = f"https://github.com/{REPOSITORY}/pull/{pull['number']}#pullrequestreview-{review['id']}"
     return {
         "ci_commit": commit,
         "contract_hash": evidence["contract_hash"],
-        "coderabbit_review": f"https://github.com/{REPOSITORY}/pull/{pull['number']}"
-        f"#pullrequestreview-{review['id']}",
+        "coderabbit_review": review_url,
         "ci_run_ids": [r["id"] for r in runs],
         "reviewed_source_commit": source,
         "reviewed_tree": evidence["source_tree"],
@@ -307,16 +377,23 @@ def validated_request(
     )
     if (
         identity_evidence["id"] != request["principal_id"]
-        or (kind != "enrollment" and (not client or identity_evidence["appId"] != client))
+        or (
+            kind not in {"enrollment", "bootstrap", "database-bootstrap"}
+            and (not client or identity_evidence["appId"] != client)
+        )
         or identity_evidence["tenant_id"] != config["terraform"]["tenant_id"]
         or (
             kind == "database"
             and request["principal_id"] != config["database_verification_principal_id"]
         )
+        or (
+            kind == "database-bootstrap"
+            and request["principal_id"] != config["terraform"]["postgres_admin_object_id"]
+        )
     ):
         raise AdmissionDenied("ISSUANCE_PRINCIPAL_NOT_AUTHORIZED")
     validate_policy_keys(policy)
-    if kind == "database":
+    if kind in {"database", "database-bootstrap"}:
         row = policy["database_evidence_keys"].get(request["database_key_id"], {})
         if (
             row.get("principal_id") != request["principal_id"]
@@ -326,6 +403,40 @@ def validated_request(
     bindings = expected_bindings(kind, request.get("apply_operation"))
     if request.get("operations") != sorted(bindings):
         raise AdmissionDenied("ISSUANCE_OPERATIONS_INCONSISTENT")
+    if kind == "bootstrap":
+        deployment = request.get("deployment_principal")
+        if (
+            not isinstance(deployment, dict)
+            or set(deployment) != {"id", "appId", "tenant_id"}
+            or deployment["appId"] != config["deployment_client_id"]
+            or deployment["tenant_id"] != config["terraform"]["tenant_id"]
+            or not isinstance(deployment["id"], str)
+            or deployment["id"] == request["principal_id"]
+        ):
+            raise AdmissionDenied("BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED")
+        try:
+            UUID(deployment["id"])
+        except ValueError:
+            raise AdmissionDenied("BOOTSTRAP_DEPLOYMENT_PRINCIPAL_UNVERIFIED") from None
+        bindings["bootstrap"]["deployment_principal_id"] = deployment["id"]
+    elif request.get("deployment_principal") is not None:
+        raise AdmissionDenied("DEPLOYMENT_PRINCIPAL_BINDING_REQUIRES_BOOTSTRAP")
+    if kind in {"seed-local", "seed-workflow"}:
+        from tirodhan.deployment.seed_secrets import approved_secret_batch
+
+        names = request.get("secret_names")
+        if (
+            not isinstance(names, list)
+            or not names
+            or any(not isinstance(name, str) for name in names)
+            or names != sorted(set(names))
+            or not (approved_secret_batch(set(names)) or names == ["ghcr-pull-pat"])
+            or (kind == "seed-workflow" and names != ["ghcr-pull-pat"])
+        ):
+            raise AdmissionDenied("ISSUANCE_SECRET_BATCH_NOT_SUPPORTED")
+        bindings["seed-secrets"]["secret_names"] = names
+    elif request.get("secret_names") is not None:
+        raise AdmissionDenied("SECRET_BATCH_REQUIRES_SEED_PURPOSE")
     if kind in {"enrollment", "recovery"}:
         operation = next(iter(bindings))
         binding = copy.deepcopy(request["maintenance_binding"])
@@ -622,6 +733,14 @@ def main() -> None:
                         "contract_hash": contract_digest(),
                         "release_session": request["release_session"],
                         "operations": request["operations"],
+                        "operation_bindings": validated_request(
+                            request,
+                            policy,
+                            config,
+                            code_hash=contract_digest(),
+                            commit=commit,
+                            plan=args.plan,
+                        )[0],
                         "expires_at": request["expires_at"],
                     },
                     indent=2,

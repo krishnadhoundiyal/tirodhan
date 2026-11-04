@@ -279,6 +279,119 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
         )
 
 
+@pytest.mark.parametrize(
+    "kind,failure,code",
+    [
+        *(
+            (kind, None, None)
+            for kind in ("bootstrap", "database-bootstrap", "seed-local", "log-scheduled")
+        ),
+        ("bootstrap", "identity", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
+        ("bootstrap", "tenant", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
+        ("database-bootstrap", "administrator", "DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH"),
+        ("bootstrap", "application", "DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH"),
+        ("bootstrap", "owner", "DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED"),
+    ],
+)
+def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
+    monkeypatch, kind, failure, code
+):
+    import time
+    from types import SimpleNamespace
+
+    from lifecycle_fakes import CONFIG, OID
+
+    from tirodhan.deployment import release_capture
+
+    config = copy.deepcopy(CONFIG)
+    config["terraform"]["postgres_admin_object_id"] = OID
+    service_oid = "00000000-0000-0000-0000-000000000097"
+    if failure == "administrator":
+        config["terraform"]["postgres_admin_object_id"] = "00000000-0000-0000-0000-000000000098"
+    for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
+
+    class Runner:
+        def run(self, *args):
+            if "status" in args:
+                return ""
+            return "d" * 40 if "HEAD^{tree}" in args else COMMIT
+
+        def json(self, *args):
+            if "account" in args:
+                return {"tenantId": config["terraform"]["tenant_id"]}
+            if args[:4] == ("az", "ad", "sp", "show"):
+                return {"id": service_oid, "appId": config["deployment_client_id"]}
+            if args[:4] == ("az", "ad", "app", "show"):
+                return {
+                    "id": "application-object",
+                    "appId": "wrong-client"
+                    if failure == "application"
+                    else config["deployment_client_id"],
+                }
+            assert args[:5] == ("az", "ad", "app", "owner", "list")
+            return [] if failure == "owner" else [{"id": OID}]
+
+    monkeypatch.setattr(
+        release_capture,
+        "Observations",
+        lambda *args: SimpleNamespace(
+            identity=lambda: {
+                "oid": None if failure == "identity" else OID,
+                "tid": "wrong-tenant" if failure == "tenant" else config["terraform"]["tenant_id"],
+            }
+        ),
+    )
+    monkeypatch.setattr(release_capture, "contract_digest", lambda: CODE)
+
+    def capture():
+        return release_capture.prepare(
+            kind,
+            session=SESSION,
+            expires_at=int(time.time()) + 600,
+            review_pr=123,
+            github=ReviewGithub(),
+            runner=Runner(),
+            config=config,
+            secret_names=["twofactor-api-key"] if kind == "seed-local" else None,
+        )
+
+    if failure:
+        with pytest.raises(AdmissionDenied, match=f"^{code}$"):
+            capture()
+        return
+    request = capture()
+    assert request["principal_id"] == (
+        OID if kind in {"bootstrap", "database-bootstrap"} else service_oid
+    )
+    assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
+    if kind in {"bootstrap", "database-bootstrap"}:
+        assert request["principal"]["appId"] is None
+    if kind == "bootstrap":
+        assert request["deployment_principal"]["id"] == service_oid
+        assert request["deployment_principal"]["id"] != request["principal_id"]
+
+
+def test_seed_effect_requires_the_exact_signed_name_batch():
+    from lifecycle_fakes import MemoryObservations, auth
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    observations = MemoryObservations()
+
+    def check(names):
+        return Checks(
+            auth("seed-secrets", secret_names=names),
+            observations.config,
+            {"batch": {"twofactor-api-key": "synthetic"}},
+            observations,
+        ).check_secret_batch()
+
+    assert check(["twofactor-api-key"])
+    assert not check(["ghcr-pull-pat"])
+    assert not check(None)
+
+
 def test_artifact_stream_exceeds_json_limit_without_leaking_auth_on_redirect(monkeypatch):
     import httpx
 
