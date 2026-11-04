@@ -44,7 +44,15 @@ def main() -> None:
         raise RuntimeError("Runtime inputs must be approved nonsecret setting names")
     os.environ.update(runtime)
     Settings()  # CI has no .env; use the existing runtime validators.
-    validate_optional_runtime_configuration(values)
+    # Cleanup/recovery must be able to materialize the same authoritative inputs
+    # even when an optional workload is misconfigured. This grants no operation:
+    # signed live plan/apply admission independently validates workload policies.
+    maintenance_workflows = {
+        "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-destroy.yml@refs/heads/main",
+        "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-reconcile.yml@refs/heads/main",
+    }
+    if os.environ.get("GITHUB_WORKFLOW_REF") not in maintenance_workflows:
+        validate_optional_runtime_configuration(values)
     Path("nonprod.auto.tfvars.json").write_text(json.dumps(values), encoding="utf-8")
 
 

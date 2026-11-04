@@ -29,6 +29,7 @@ INVENTORY_RUNTIME = {
 
 @pytest.fixture
 def input_directory(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_WORKFLOW_REF", raising=False)
     stack = tmp_path / "infra/terraform/nonprod"
     stack.mkdir(parents=True)
     deploy = tmp_path / "deploy"
@@ -126,3 +127,48 @@ def test_inventory_complete_policy_is_shared_with_worker_and_live_admission(
     observations.config["terraform"]["runtime_env"] = {}
     with pytest.raises(ValueError):
         checks.check_features()
+
+
+@pytest.mark.parametrize("workflow", ["nonprod-destroy.yml", "nonprod-reconcile.yml"])
+def test_broken_optional_policy_cannot_strand_protected_maintenance(
+    input_directory, monkeypatch, workflow
+):
+    from lifecycle_fakes import MemoryObservations, auth
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    proposed = {"runtime_env": {}, "financial_inventory_schedule": "0 * * * *"}
+    monkeypatch.setenv(
+        "GITHUB_WORKFLOW_REF",
+        f"krishnadhoundiyal/tirodhan/.github/workflows/{workflow}@refs/heads/main",
+    )
+    monkeypatch.setenv("NONPROD_TFVARS_JSON", json.dumps(proposed))
+    inputs.main()
+    assert json.loads((input_directory / "nonprod.auto.tfvars.json").read_text()) == proposed
+    observations = MemoryObservations()
+    observations.config["terraform"].update(proposed)
+    with pytest.raises(ValueError):
+        Checks(auth("runtime-apply"), observations.config, {}, observations).check_features()
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        "nonprod-foundation.yml",
+        "nonprod-deploy.yml",
+        "unknown.yml",
+        "nonprod-destroy.yml@refs/heads/untrusted",
+    ],
+)
+def test_other_contexts_never_skip_workload_policy(input_directory, monkeypatch, workflow):
+    monkeypatch.setenv(
+        "GITHUB_WORKFLOW_REF",
+        f"krishnadhoundiyal/tirodhan/.github/workflows/{workflow}@refs/heads/main",
+    )
+    monkeypatch.setenv(
+        "NONPROD_TFVARS_JSON",
+        json.dumps({"runtime_env": {}, "financial_inventory_schedule": "0 * * * *"}),
+    )
+    with pytest.raises(ValueError):
+        inputs.main()
+    assert not (input_directory / "nonprod.auto.tfvars.json").exists()

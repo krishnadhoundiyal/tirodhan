@@ -305,6 +305,7 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
 
     config = copy.deepcopy(CONFIG)
     config["terraform"]["postgres_admin_object_id"] = OID
+    service_oid = "00000000-0000-0000-0000-000000000097"
     if failure == "administrator":
         config["terraform"]["postgres_admin_object_id"] = "00000000-0000-0000-0000-000000000098"
     for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
@@ -320,7 +321,7 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
             if "account" in args:
                 return {"tenantId": config["terraform"]["tenant_id"]}
             if args[:4] == ("az", "ad", "sp", "show"):
-                return {"id": OID, "appId": config["deployment_client_id"]}
+                return {"id": service_oid, "appId": config["deployment_client_id"]}
             if args[:4] == ("az", "ad", "app", "show"):
                 return {
                     "id": "application-object",
@@ -360,7 +361,9 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
             capture()
         return
     request = capture()
-    assert request["principal_id"] == OID
+    assert request["principal_id"] == (
+        OID if kind in {"bootstrap", "database-bootstrap"} else service_oid
+    )
     assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
     if kind in {"bootstrap", "database-bootstrap"}:
         assert request["principal"]["appId"] is None
