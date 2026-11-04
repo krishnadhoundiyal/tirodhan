@@ -98,6 +98,16 @@ with `twofactor-api-key` replacing `kaleyra-api-key`), combined customer batches
 or a separate `twofactor-api-key` batch for an existing vault. All seeding still
 requires release authorization and its mandatory prerequisites.
 
+For an existing vault with migration credentials already enrolled, the exact 12-name
+`TWOFACTOR_RUNTIME_SECRET_NAMES` batch enrolls the complete application runtime without
+re-seeding `ghcr-pull-pat` or requiring `fcm-credentials-json` for disabled push. It contains
+the 2Factor, Google and Razorpay credentials, application RSA pair, phone/address/customer
+protection keys and customer cursor key. Missing mandatory names or extra names are rejected;
+existing complete legacy/provider/customer batches remain supported. Migration still requires
+its own GHCR/log-SAS credentials, and enabled feature gates are unchanged. This batch does not
+authorize a write: `seed-secrets` remains subject to signed DEPLOYMENT authority, the release
+hold and all operation prerequisites. No actual enrollment is established by source changes.
+
 Google Geocoding remains required by the serviceability worker. Its Key Vault
 secret is `google-maps-api-key`, with explicit
 `TIRODHAN_GOOGLE_MAPS_HTTP_TIMEOUT_SECONDS`. Free allowance is conditional on the
