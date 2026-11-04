@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -603,6 +604,8 @@ class Checks:
                 "customer-cursor-signing-key",
                 "customer-data-encryption-keys",
                 "customer-data-hmac-key",
+                # The default rider worker uses FCM independently of customer push.
+                "fcm-credentials-json",
             }
             if self.tf.get("customer_notifications_schedule") is not None:
                 required |= {
@@ -624,14 +627,7 @@ class Checks:
             "--output",
             "json",
         )
-        usable = {
-            r["name"]
-            for r in rows
-            if r.get("attributes", {}).get("enabled") is True
-            and (
-                r["attributes"].get("expires") is None or self.unexpired(r["attributes"]["expires"])
-            )
-        }
+        usable = {r["name"] for r in rows if self.secret_metadata_usable(r.get("attributes"))}
         if not required.issubset(usable):
             return False
         if self.auth.operation.startswith("runtime-"):
@@ -651,21 +647,46 @@ class Checks:
                     "--output",
                     "json",
                 )
-                if not isinstance(value.get("value"), str) or not value["value"].strip():
+                if (
+                    not self.secret_metadata_usable(value.get("attributes"))
+                    or not isinstance(value.get("value"), str)
+                    or not value["value"].strip()
+                ):
                     return False
                 material[name] = value["value"]
             validate_runtime_material(self.tf.get("runtime_env", {}), material)
         return True
 
     @staticmethod
-    def unexpired(value: Any) -> bool:
-        from datetime import datetime, timezone
+    def secret_metadata_usable(attributes: Any) -> bool:
+        from datetime import datetime
 
-        if isinstance(value, (int, float)):
-            return value > time.time()
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")) > datetime.now(
-            timezone.utc
-        )
+        if not isinstance(attributes, dict) or attributes.get("enabled") is not True:
+            return False
+        now = time.time()
+        try:
+            for name in ("notBefore", "expires"):
+                value = attributes.get(name)
+                if value is None:
+                    continue
+                if type(value) in (int, float):
+                    instant = float(value)
+                elif isinstance(value, str):
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    if parsed.utcoffset() is None:
+                        return False
+                    instant = parsed.timestamp()
+                else:
+                    return False
+                if not math.isfinite(instant):
+                    return False
+                if (name == "notBefore" and instant > now) or (
+                    name == "expires" and instant <= now
+                ):
+                    return False
+        except (ValueError, OverflowError, OSError):
+            return False
+        return True
 
     def check_images(self) -> bool:
         for key in ("APPLICATION_IMAGE", "FLUENT_BIT_IMAGE"):
@@ -1076,6 +1097,7 @@ class Checks:
         batch = self.parameters.get("batch")
         return (
             isinstance(batch, dict)
+            and self.binding().get("secret_names") == sorted(batch)
             and (approved_secret_batch(set(batch)) or set(batch) == {"ghcr-pull-pat"})
             and all(isinstance(v, str) and bool(v.strip()) for v in batch.values())
         )

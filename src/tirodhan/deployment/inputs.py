@@ -29,6 +29,7 @@ def main() -> None:
         "media_delete_after_days",
         "logs_delete_after_days",
         "job_schedules",
+        "financial_inventory_schedule",
         "customer_notifications_schedule",
         "routing_availability_schedule",
     }

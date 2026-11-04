@@ -36,7 +36,7 @@ CUSTOMER_SECRET_NAMES = CUSTOMER_DATA_SECRET_NAMES | CUSTOMER_WEB_PUSH_SECRET_NA
 SECRET_NAMES = LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES
 
 # Application runtime can be enrolled independently of the existing migration
-# credentials and disabled push providers. Keep this an exact complete batch.
+# credentials and separately enrolled rider push. Keep this an exact complete batch.
 TWOFACTOR_RUNTIME_SECRET_NAMES = (
     TWOFACTOR_SECRET_NAMES - {"fcm-credentials-json", "ghcr-pull-pat"}
 ) | CUSTOMER_DATA_SECRET_NAMES
@@ -48,6 +48,7 @@ def approved_secret_batch(names: set[str]) -> bool:
         TWOFACTOR_SECRET_NAMES,
         TWOFACTOR_RUNTIME_SECRET_NAMES,
         {"twofactor-api-key"},
+        {"fcm-credentials-json"},
         CUSTOMER_DATA_SECRET_NAMES,
         CUSTOMER_WEB_PUSH_SECRET_NAMES,
         CUSTOMER_SECRET_NAMES,

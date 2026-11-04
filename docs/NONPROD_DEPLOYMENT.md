@@ -99,14 +99,39 @@ or a separate `twofactor-api-key` batch for an existing vault. All seeding still
 requires release authorization and its mandatory prerequisites.
 
 For an existing vault with migration credentials already enrolled, the exact 12-name
-`TWOFACTOR_RUNTIME_SECRET_NAMES` batch enrolls the complete application runtime without
-re-seeding `ghcr-pull-pat` or requiring `fcm-credentials-json` for disabled push. It contains
+`TWOFACTOR_RUNTIME_SECRET_NAMES` batch enrolls the 12 core application credentials without
+re-seeding `ghcr-pull-pat` or the separately enrolled rider FCM certificate. It contains
 the 2Factor, Google and Razorpay credentials, application RSA pair, phone/address/customer
 protection keys and customer cursor key. Missing mandatory names or extra names are rejected;
 existing complete legacy/provider/customer batches remain supported. Migration still requires
 its own GHCR/log-SAS credentials, and enabled feature gates are unchanged. This batch does not
 authorize a write: `seed-secrets` remains subject to signed DEPLOYMENT authority, the release
 hold and all operation prerequisites. No actual enrollment is established by source changes.
+
+The default rider-notification worker separately requires `fcm-credentials-json` and
+`TIRODHAN_FCM_PROJECT_ID`, even while customer FCM remains disabled. Runtime admission checks
+the actual service-account certificate and matching project locally; no notification is sent.
+The FCM certificate has its own exact single-secret seed batch; it never requires replacing
+the existing GHCR PAT or other application credentials. Secret enrollment retains signed
+admission, complete prerequisites and the deployment hold.
+
+The default pooled API/workers and planning/outbox jobs also require their explicit startup
+pool, batch, timeout, renewal and planning settings. Missing values block runtime admission;
+no synthetic runtime defaults are supplied. The core secret batch is not proof of full
+workload readiness.
+
+Default financial workloads also require the stable Razorpay account ID, provider Key ID,
+provider HTTP timeout and bounded webhook-send timeout. Metadata checks reject disabled,
+expired, not-yet-active or malformed secret attributes and recheck attributes on the
+actual latest-version value read. Local checks establish configuration/cryptographic
+consistency, not provider acceptance or end-to-end delivery.
+
+Checkout configuration uses the existing nonsecret `runtime_env` map with
+`TIRODHAN_RAZORPAY_MERCHANT_DISPLAY_NAME` and
+`TIRODHAN_PAYMENT_CHECKOUT_READINESS_SECONDS` (application bound 1..60 seconds).
+The existing optional Terraform `financial_inventory_schedule` input is accepted unchanged;
+null keeps its job absent. Enabling it still requires its approved configuration and normal
+signed plan/apply authority. Images, deployment stage and operation keys remain release-owned.
 
 Google Geocoding remains required by the serviceability worker. Its Key Vault
 secret is `google-maps-api-key`, with explicit

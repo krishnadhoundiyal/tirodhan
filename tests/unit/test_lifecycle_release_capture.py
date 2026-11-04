@@ -279,6 +279,80 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
         )
 
 
+@pytest.mark.parametrize("kind", ["bootstrap", "database-bootstrap", "seed-local", "log-scheduled"])
+def test_existing_operator_capture_uses_actual_identity_and_never_mutates(monkeypatch, kind):
+    import time
+    from types import SimpleNamespace
+
+    from lifecycle_fakes import CONFIG, OID
+
+    from tirodhan.deployment import release_capture
+
+    config = copy.deepcopy(CONFIG)
+    config["terraform"]["postgres_admin_object_id"] = OID
+    for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
+        monkeypatch.delenv(name, raising=False)
+
+    class Runner:
+        def run(self, *args):
+            if "status" in args:
+                return ""
+            return "d" * 40 if "HEAD^{tree}" in args else COMMIT
+
+        def json(self, *args):
+            if "account" in args:
+                return {"tenantId": config["terraform"]["tenant_id"]}
+            if args[:4] == ("az", "ad", "sp", "show"):
+                return {"id": OID, "appId": config["deployment_client_id"]}
+            if args[:4] == ("az", "ad", "app", "show"):
+                return {"id": "application-object", "appId": config["deployment_client_id"]}
+            assert args[:5] == ("az", "ad", "app", "owner", "list")
+            return [{"id": OID}]
+
+    monkeypatch.setattr(
+        release_capture,
+        "Observations",
+        lambda *args: SimpleNamespace(
+            identity=lambda: {"oid": OID, "tid": config["terraform"]["tenant_id"]}
+        ),
+    )
+    monkeypatch.setattr(release_capture, "contract_digest", lambda: CODE)
+    request = release_capture.prepare(
+        kind,
+        session=SESSION,
+        expires_at=int(time.time()) + 600,
+        review_pr=123,
+        github=ReviewGithub(),
+        runner=Runner(),
+        config=config,
+        secret_names=["twofactor-api-key"] if kind == "seed-local" else None,
+    )
+    assert request["principal_id"] == OID
+    assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
+    if kind in {"bootstrap", "database-bootstrap"}:
+        assert request["principal"]["appId"] is None
+
+
+def test_seed_effect_requires_the_exact_signed_name_batch():
+    from lifecycle_fakes import MemoryObservations, auth
+
+    from tirodhan.deployment.lifecycle_checks import Checks
+
+    observations = MemoryObservations()
+
+    def check(names):
+        return Checks(
+            auth("seed-secrets", secret_names=names),
+            observations.config,
+            {"batch": {"twofactor-api-key": "synthetic"}},
+            observations,
+        ).check_secret_batch()
+
+    assert check(["twofactor-api-key"])
+    assert not check(["ghcr-pull-pat"])
+    assert not check(None)
+
+
 def test_artifact_stream_exceeds_json_limit_without_leaking_auth_on_redirect(monkeypatch):
     import httpx
 

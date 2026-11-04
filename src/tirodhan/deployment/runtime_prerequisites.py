@@ -9,6 +9,29 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 from tirodhan.core.config import Settings
 
+# These are explicit startup requirements of the default pooled API/workers and
+# planning/outbox jobs. Azure-derived namespaces, queues and identities are owned
+# by the foundation and Terraform plan, not operator-supplied runtime_env values.
+DEPLOYED_STARTUP_SETTINGS = (
+    "db_pool_size",
+    "db_max_overflow",
+    "db_pool_timeout",
+    "service_bus_operation_timeout_seconds",
+    "serviceability_lock_renewal_seconds",
+    "rider_notification_lock_renewal_seconds",
+    "refund_lock_renewal_seconds",
+    "planning_lock_renewal_seconds",
+    "outbox_publish_batch_size",
+    "rider_offer_lifetime_seconds",
+    "planning_lead_time_minutes",
+    "planning_max_attempts",
+    "planning_compaction_distance_m",
+    "planning_max_group_requests",
+    "financial_webhook_lock_renewal_seconds",
+    "financial_webhook_send_timeout_seconds",
+    "command_idempotency_ttl_seconds",
+)
+
 
 class DeploymentSettings(Settings):
     @classmethod
@@ -44,12 +67,15 @@ def proposed_settings(runtime: dict[str, Any], material: dict[str, str] | None =
 
 
 def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str]) -> None:
+    from firebase_admin import credentials  # type: ignore[import-untyped]
+
     from tirodhan.modules.customer_account.protection import CustomerDataProtection
     from tirodhan.modules.customer_reads.cursor import CursorCodec
     from tirodhan.modules.customers.address_protection import AesGcmAddressProtector
     from tirodhan.modules.identity.phone_protection import AesGcmPhoneIdentityProtector
     from tirodhan.modules.identity.runtime import validate_otp_settings
     from tirodhan.modules.identity.tokens import Rs256AccessTokenCodec
+    from tirodhan.modules.payments.razorpay import razorpay_configured
 
     settings = proposed_settings(runtime, material)
     validate_otp_settings(settings)
@@ -74,3 +100,19 @@ def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str])
     CursorCodec(material["customer-cursor-signing-key"].encode())
     if settings.customer_cursor_ttl_seconds is None:
         raise ValueError("Customer cursor expiry policy is unavailable")
+    if any(getattr(settings, field) is None for field in DEPLOYED_STARTUP_SETTINGS):
+        raise ValueError("Default workload startup configuration is incomplete")
+    if not razorpay_configured(settings) or not (settings.razorpay_account_id or "").strip():
+        raise ValueError("Default financial workload configuration is incomplete")
+    # Rider notifications are a default workload even when customer FCM is disabled.
+    # Parse the actual service-account certificate locally; never send a notification.
+    try:
+        if not settings.fcm_project_id or not settings.fcm_project_id.strip():
+            raise ValueError
+        certificate = credentials.Certificate(json.loads(material["fcm-credentials-json"]))
+        if certificate.project_id != settings.fcm_project_id:
+            raise ValueError
+    except Exception:
+        raise ValueError(
+            "Rider FCM certificate and project configuration are unavailable or invalid"
+        ) from None
