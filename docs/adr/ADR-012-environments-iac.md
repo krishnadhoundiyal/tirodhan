@@ -42,3 +42,14 @@ Closure Batch 1 separates signed ENROLLMENT (enroll-recovery, operator-local) an
 authorized while release_enabled=false; every deployment operation remains held. Every
 mandatory prerequisite remains enforced. Interrupted operations reconcile exact results
 without duplicate grants or broader trust. See [bindings, approvals and resumption](../NONPROD_RECOVERY_AUTHORIZATION.md).
+
+## Approved single-owner NONPROD approval — 5 November 2026
+
+The sole authorized owner, `krishnadhoundiyal` (GitHub user ID `46423210`), is the
+sole required reviewer of `nonprod`. Prevent self-review is disabled so that this
+owner can manually approve their own run. Administrator bypass remains disabled;
+main-only execution, signed operation authorization, every mandatory prerequisite
+and the deployment hold remain enforced. An independent human reviewer is not a
+NONPROD deployment prerequisite. This changes no O/D/R/A/V workload identity,
+permission or signing-key separation and grants no other account access. See
+[the exact environment policy](../NONPROD_DEPLOYMENT.md#github-delivery-and-rollback).

@@ -21,6 +21,8 @@ CODE = "c" * 64
 SESSION = "00000000-0000-0000-0000-000000000099"
 VCLIENT = "00000000-0000-0000-0000-000000000088"
 VOID = "00000000-0000-0000-0000-000000000077"
+RCLIENT = "00000000-0000-0000-0000-000000000021"
+ROID = "00000000-0000-0000-0000-000000000022"
 REPO = {"full_name": setup.REPOSITORY}
 PASSWORD = b"synthetic-test-passphrase-only"
 
@@ -77,6 +79,8 @@ def context(tmp_path, monkeypatch):
         **public,
     }
     config = copy.deepcopy(CONFIG) | {
+        "recovery_client_id": RCLIENT,
+        "recovery_principal_id": ROID,
         "database_verification_client_id": VCLIENT,
         "database_verification_principal_id": VOID,
     }
@@ -92,6 +96,11 @@ def context(tmp_path, monkeypatch):
         "principal": {
             "id": OID,
             "appId": config["deployment_client_id"],
+            "tenant_id": config["terraform"]["tenant_id"],
+        },
+        "recovery_principal": {
+            "id": ROID,
+            "appId": RCLIENT,
             "tenant_id": config["terraform"]["tenant_id"],
         },
         "commit": COMMIT,
@@ -151,6 +160,7 @@ def operator_request(context, kind):
     )
     if kind in {"bootstrap", "database-bootstrap"}:
         request["principal"]["appId"] = None
+        request.pop("recovery_principal", None)
     if kind == "bootstrap":
         request["deployment_principal"] = {
             "id": "00000000-0000-0000-0000-000000000097",
@@ -242,7 +252,14 @@ def test_signed_profile_executes_only_in_its_reviewed_context(context, monkeypat
     observations = MemoryObservations()
     observations.runner.json = lambda *args: {
         "deployment_branch_policy": {"protected_branches": True},
-        "protection_rules": [{"type": "required_reviewers", "reviewers": [{"id": 1}]}],
+        "can_admins_bypass": False,
+        "protection_rules": [
+            {
+                "type": "required_reviewers",
+                "prevent_self_review": False,
+                "reviewers": [{"type": "User", "reviewer": {"id": 46423210}}],
+            }
+        ],
     }
     checks = Checks(authorization, config, {}, observations)
     is_local = setup.DESTINATIONS[kind][3] == "operator-local"
@@ -438,6 +455,7 @@ def test_two_independent_encrypted_keys_with_readback_and_idempotent_setup(conte
 def test_real_signature_and_exact_destination_without_secret_output(context, kind, capsys):
     directory, policy, config, request = context
     if kind == "database":
+        request.pop("recovery_principal", None)
         request.update(
             kind=kind,
             secret_name="NONPROD_DATABASE_VERIFY_AUTHORIZATION",

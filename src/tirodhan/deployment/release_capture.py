@@ -33,6 +33,7 @@ from tirodhan.deployment.release_custody import (
 )
 from tirodhan.deployment.release_setup import (
     DESTINATIONS,
+    RECOVERY_BOUND_OPERATIONS,
     REPOSITORY,
     expected_bindings,
     validate_evidence,
@@ -305,6 +306,27 @@ def prepare(
         "json",
     )
     principal["tenant_id"] = account["tenantId"]
+    recovery_principal = None
+    if bindings.keys() & RECOVERY_BOUND_OPERATIONS and config.get("recovery_client_id"):
+        recovery_principal = runner.json(
+            "az",
+            "ad",
+            "sp",
+            "show",
+            "--id",
+            config["recovery_client_id"],
+            "--query",
+            "{id:id,appId:appId}",
+            "--output",
+            "json",
+        )
+        if (
+            not config.get("recovery_principal_id")
+            or recovery_principal.get("appId") != config["recovery_client_id"]
+            or recovery_principal.get("id") != config["recovery_principal_id"]
+        ):
+            raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED")
+        recovery_principal["tenant_id"] = account["tenantId"]
     deployment_principal = dict(principal) if kind == "bootstrap" else None
     if kind in {"bootstrap", "database-bootstrap"}:
         observer = Observations(config, runner).identity()
@@ -422,6 +444,8 @@ def prepare(
         request["maintenance_binding"] = maintenance
     if deployment_principal is not None:
         request["deployment_principal"] = deployment_principal
+    if recovery_principal is not None:
+        request["recovery_principal"] = recovery_principal
     if secret_names is not None:
         request["secret_names"] = secret_names
     if kind == "apply":

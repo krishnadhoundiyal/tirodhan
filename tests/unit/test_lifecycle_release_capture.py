@@ -232,6 +232,7 @@ def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatc
     from tirodhan.deployment.deployment_admission import digest
 
     config = copy.deepcopy(CONFIG)
+    config["recovery_client_id"] = None
     for name in ("CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"):
         monkeypatch.delenv(name, raising=False)
 
@@ -284,13 +285,21 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
     [
         *(
             (kind, None, None)
-            for kind in ("bootstrap", "database-bootstrap", "seed-local", "log-scheduled")
+            for kind in (
+                "bootstrap",
+                "database-bootstrap",
+                "release",
+                "seed-local",
+                "log-scheduled",
+            )
         ),
         ("bootstrap", "identity", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
         ("bootstrap", "tenant", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
         ("database-bootstrap", "administrator", "DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH"),
         ("bootstrap", "application", "DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH"),
         ("bootstrap", "owner", "DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED"),
+        ("seed-local", "recovery-pin", "RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"),
+        ("seed-local", "recovery-pin-missing", "RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"),
     ],
 )
 def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
@@ -300,10 +309,17 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
     from types import SimpleNamespace
 
     from lifecycle_fakes import CONFIG, OID
+    from test_lifecycle_release_setup import RCLIENT, ROID
 
     from tirodhan.deployment import release_capture
 
     config = copy.deepcopy(CONFIG)
+    config["recovery_client_id"] = RCLIENT
+    config["recovery_principal_id"] = ROID
+    if failure == "recovery-pin":
+        config["recovery_principal_id"] = "00000000-0000-0000-0000-000000000066"
+    elif failure == "recovery-pin-missing":
+        config.pop("recovery_principal_id")
     config["terraform"]["postgres_admin_object_id"] = OID
     service_oid = "00000000-0000-0000-0000-000000000097"
     if failure == "administrator":
@@ -321,6 +337,8 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
             if "account" in args:
                 return {"tenantId": config["terraform"]["tenant_id"]}
             if args[:4] == ("az", "ad", "sp", "show"):
+                if args[5] == RCLIENT:
+                    return {"id": ROID, "appId": RCLIENT}
                 return {"id": service_oid, "appId": config["deployment_client_id"]}
             if args[:4] == ("az", "ad", "app", "show"):
                 return {
@@ -370,6 +388,12 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
     if kind == "bootstrap":
         assert request["deployment_principal"]["id"] == service_oid
         assert request["deployment_principal"]["id"] != request["principal_id"]
+    if kind in {"release", "seed-local", "log-scheduled"}:
+        assert request["recovery_principal"] == {
+            "id": ROID,
+            "appId": RCLIENT,
+            "tenant_id": config["terraform"]["tenant_id"],
+        }
 
 
 def test_seed_effect_requires_the_exact_signed_name_batch():

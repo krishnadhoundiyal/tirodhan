@@ -193,19 +193,31 @@ PROD defaults. Restore/PITR drills remain required operational work.
 
 ## GitHub delivery and rollback
 
-Create `nonprod-plan` and `nonprod` environments restricted to **main**. Set
-required reviewers and prevent self-approval on `nonprod`; without repository
+Create `nonprod-plan` and `nonprod` environments restricted to **main**. Under the
+owner-approved single-owner model (5 November 2026), `nonprod` requires only
+`krishnadhoundiyal` (immutable GitHub user ID `46423210`). Set
+`prevent_self_review=false` and `can_admins_bypass=false`. The owner must manually
+approve through **Review deployments**, including runs they initiated; allowing
+self-review does not automatically approve a job. Do not add another reviewer.
+Admission verifies this exact policy and the main execution context. Without repository
 environment protection, YAML alone cannot enforce human approval. Both migration
 and runtime applies use that environment. Automatic rotation uses main-restricted
 `nonprod-plan` so recurring refresh does not wait for deployment approval.
 
 Repository variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_NONPROD_RECOVERY_CLIENT_ID`, `AZURE_NONPROD_RECOVERY_PRINCIPAL_ID`,
 `AZURE_SUBSCRIPTION_ID`, `NONPROD_RESOURCE_GROUP`, `NONPROD_STATE_ACCOUNT`,
 `NONPROD_STATE_RESOURCE_GROUP`, `NONPROD_LOG_ACCOUNT_NAME`,
 `NONPROD_KEY_VAULT_URL`, and `NONPROD_TFVARS_JSON` (nonsecret Terraform input object,
 excluding stage/images). Federation must match the application/service principal.
 Package pushing uses the job's ephemeral `GITHUB_TOKEN`; runtime pulling uses
 Key Vault `ghcr-pull-pat`, scoped to `read:packages`. No Azure client password.
+The recovery principal variable is the **service-principal object ID**, enrolled
+only after an authorized tenant/client/object-ID readback. Offline issuance pins the
+captured R identity to that authoritative configuration, following the existing V
+principal-pinning model. Every signed workflow carries the same nonsecret variable;
+missing or mismatched pins block the applicable deployment operation. This does not
+grant R any permission or change its existing federation.
 
 PR CI runs the full PostGIS suite, Ruff, mypy, Terraform fmt/init/validate without
 Azure privileges. Cloud plans run only from protected main with environment-bound

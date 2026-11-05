@@ -191,7 +191,7 @@
       "failure": "BLOCK absent authority, unknown state or conflicting inventory"
     },
     "execution_authority": {
-      "authority": "actual GitHub protected environment/main policy or explicit signed local execution authorization",
+      "authority": "actual GitHub protected environment/main policy; nonprod requires sole owner 46423210, manual approval, self-review allowed, administrator bypass denied; or explicit signed local execution authorization",
       "identity": "G/O/D/R/A according to operation",
       "scope": "repository/environment/operation-bound authorization",
       "allowed_operation": "verify protection and explicit execution authorization; never create trust",

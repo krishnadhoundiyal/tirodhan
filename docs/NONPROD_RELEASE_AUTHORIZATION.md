@@ -178,6 +178,20 @@ Bootstrap also captures and signs D's actual service-principal object ID, separa
 the operator identity; live bootstrap verifies that binding again. Local and workflow
 execution authority are exclusive, and workflow admission requires the signed environment
 to match the actual protected job. A local token cannot be promoted into GitHub execution.
+For `nonprod`, admission verifies the sole existing owner (GitHub user ID `46423210`)
+as required reviewer, self-review allowed and administrator bypass disabled. The owner
+still manually approves every protected job; this approval neither enables release nor
+substitutes for the signed operation, exact execution context or prerequisites. Independent
+workload/signing identities and CodeRabbit source review are unchanged.
+When R is configured, deployment purposes that verify bootstrap permissions also capture
+R's actual service-principal object ID from its configured client ID in the same tenant.
+An authorized enrollment readback pins that relationship separately in
+`AZURE_NONPROD_RECOVERY_PRINCIPAL_ID`; both capture and offline issuance require an
+exact match to this configuration, and live grant verification checks the same pin.
+Issuance binds that distinct identity to every applicable operation; missing, malformed,
+foreign or shared identities block signing. The live grant/role-definition check remains
+unchanged. This recognizes F03's already enrolled restricted grant and authorizes no new
+recovery operation or permission change. An unconfigured R cannot acquire a grant binding.
 Only the committed rotation cron can be issued for recurring authority. Seed requests
 contain sorted unique approved names, never values; effect admission requires an exact
 name match. Interactive signing displays the operation bindings for digest review.

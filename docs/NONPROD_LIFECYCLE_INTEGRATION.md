@@ -80,7 +80,11 @@ configuration. Extra automatic variable files and ambient `TF_VAR_*` inputs are 
 the release-owned deployment stage is the explicit exception, still checked against the
 saved plan's operation profile. Both HCL and JSON Terraform configuration enter the source hash.
 
-Actual trusted-main/environment protection is checked. Local execution requires an explicit
+Actual trusted-main/environment protection is checked. The `nonprod` manual gate requires
+only the existing owner (GitHub user ID `46423210`), allows self-review and denies administrator
+bypass, as explicitly approved on 5 November 2026. No independent human reviewer is required.
+This does not change protected recovery, verifier or plan environments, signed authority,
+RBAC separation or the deployment hold. Local execution requires an explicit
 signed local-execution binding. Repository CI and required review remain independent gates;
 the authorizer must verify their evidence before issuing a release authorization.
 
@@ -108,6 +112,11 @@ vault metadata discovery is separate. Role definitions are checked, not just dis
 All five original direct D grants and their delegation condition remain mandatory. Only an
 explicitly configured/verified R grant is additionally permitted. Unknown grants are not filtered.
 No live RBAC has been modified.
+
+Deployment capture/issuance includes the configured R's observed principal in each signed
+operation that checks bootstrap permissions. This preserves the explicitly verified existing
+R exception rather than omitting it from plan/apply, seed or log authorizations. It changes
+no F03 enrollment, role definition, grant, recovery authority or deployment-hold behavior.
 
 If a vault is already soft-deleted before R was enrolled, O can use the separately signed
 `foundation_reconcile enroll-recovery` operation. It requires `recovery_enrollment_authorized`,
