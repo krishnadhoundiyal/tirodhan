@@ -1,5 +1,11 @@
 # Architecture
 
+NONPROD's required human deployment approval belongs to the sole existing owner
+(GitHub ID `46423210`), with self-review allowed and administrator bypass disabled.
+This approved single-owner model preserves main-only execution, signed admission,
+the deployment hold and the separate O/D/R/A/V identities. See
+[the approved decision](adr/ADR-012-environments-iac.md#approved-single-owner-nonprod-approval--5-november-2026).
+
 Signed ENROLLMENT and RECOVERY are exact-operation classes independent of DEPLOYMENT's
 held flag. Operator enrollment and protected R recovery retain mandatory prerequisites;
 unknown outcomes reconcile without privilege broadening. Implementation authorizes no live

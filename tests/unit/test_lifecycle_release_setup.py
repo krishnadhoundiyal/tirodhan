@@ -242,7 +242,14 @@ def test_signed_profile_executes_only_in_its_reviewed_context(context, monkeypat
     observations = MemoryObservations()
     observations.runner.json = lambda *args: {
         "deployment_branch_policy": {"protected_branches": True},
-        "protection_rules": [{"type": "required_reviewers", "reviewers": [{"id": 1}]}],
+        "can_admins_bypass": False,
+        "protection_rules": [
+            {
+                "type": "required_reviewers",
+                "prevent_self_review": False,
+                "reviewers": [{"type": "User", "reviewer": {"id": 46423210}}],
+            }
+        ],
     }
     checks = Checks(authorization, config, {}, observations)
     is_local = setup.DESTINATIONS[kind][3] == "operator-local"

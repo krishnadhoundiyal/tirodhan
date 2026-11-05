@@ -1,5 +1,11 @@
 # Project Context
 
+NONPROD deployment approval follows the explicitly approved single-owner model:
+the existing owner alone must manually approve `nonprod`, including owner-started
+runs. Self-review is allowed; administrator bypass, non-main execution and unsigned
+operations remain denied. The deployment hold remains active. See
+[the approved decision](adr/ADR-012-environments-iac.md#approved-single-owner-nonprod-approval--5-november-2026).
+
 NONPROD Closure Batch 1 separates signed operator enrollment and exact-vault recovery from
 deployment authority. Deployment remains held; implementation does not close live findings
 or authorize mutation. See [approval and retry protocol](NONPROD_RECOVERY_AUTHORIZATION.md).

@@ -80,7 +80,11 @@ configuration. Extra automatic variable files and ambient `TF_VAR_*` inputs are 
 the release-owned deployment stage is the explicit exception, still checked against the
 saved plan's operation profile. Both HCL and JSON Terraform configuration enter the source hash.
 
-Actual trusted-main/environment protection is checked. Local execution requires an explicit
+Actual trusted-main/environment protection is checked. The `nonprod` manual gate requires
+only the existing owner (GitHub user ID `46423210`), allows self-review and denies administrator
+bypass, as explicitly approved on 5 November 2026. No independent human reviewer is required.
+This does not change protected recovery, verifier or plan environments, signed authority,
+RBAC separation or the deployment hold. Local execution requires an explicit
 signed local-execution binding. Repository CI and required review remain independent gates;
 the authorizer must verify their evidence before issuing a release authorization.
 

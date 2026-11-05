@@ -45,6 +45,35 @@ from tirodhan.deployment.migration_evidence import (
 )
 from tirodhan.deployment.prerequisites import CHECK_IDS
 
+# Approved sole NONPROD owner; immutable GitHub user ID, not a mutable login.
+NONPROD_OWNER_REVIEWER_ID = 46423210
+
+
+def nonprod_owner_approval(value: dict[str, Any]) -> bool:
+    """Require the approved manual gate, including when its owner initiated the run."""
+    rules = value.get("protection_rules")
+    if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+        return False
+    required = [rule for rule in rules if rule.get("type") == "required_reviewers"]
+    if len(required) != 1 or value.get("can_admins_bypass") is not False:
+        return False
+    rule = required[0]
+    reviewers = rule.get("reviewers")
+    if (
+        rule.get("prevent_self_review") is not False
+        or not isinstance(reviewers, list)
+        or len(reviewers) != 1
+        or not isinstance(reviewers[0], dict)
+    ):
+        return False
+    reviewer = reviewers[0]
+    identity = reviewer.get("reviewer")
+    return (
+        reviewer.get("type") == "User"
+        and isinstance(identity, dict)
+        and identity.get("id") == NONPROD_OWNER_REVIEWER_ID
+    )
+
 
 class Checks:
     def __init__(
@@ -188,6 +217,8 @@ class Checks:
             )
             patterns = branches.get("branch_policies", [])
             protected = bool(patterns) and all(r.get("name") == "main" for r in patterns)
+        if expected_environment == "nonprod":
+            return protected and nonprod_owner_approval(value)
         reviewers = any(
             r.get("type") == "required_reviewers" and r.get("reviewers")
             for r in value.get("protection_rules", [])
