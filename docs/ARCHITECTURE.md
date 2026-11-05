@@ -3,7 +3,9 @@
 NONPROD's required human deployment approval belongs to the sole existing owner
 (GitHub ID `46423210`), with self-review allowed and administrator bypass disabled.
 This approved single-owner model preserves main-only execution, signed admission,
-the deployment hold and the separate O/D/R/A/V identities. See
+the release-policy gate and the separate O/D/R/A/V identities. The owner authorized the
+infrastructure cycle; exact-plan approval is still required before Terraform apply and
+application activation remains outside scope. See [current release scope](NONPROD_FOUNDATION_RELEASE.md) and
 [the approved decision](adr/ADR-012-environments-iac.md#approved-single-owner-nonprod-approval--5-november-2026).
 
 Signed ENROLLMENT and RECOVERY are exact-operation classes independent of DEPLOYMENT's
@@ -14,7 +16,7 @@ changes. See [the approved boundaries](NONPROD_RECOVERY_AUTHORIZATION.md).
 The approved NONPROD lifecycle controller separates observations from authorized bootstrap,
 recovery, snapshot-backed ownership transfer and compensation. Every supported provisioning
 entry point requires signed release authority and its complete operation prerequisite profile.
-The policy remains held. Persistent Key Vault ownership moves to bootstrap through a reviewed
+Policy enablement alone grants no operation authority. Persistent Key Vault ownership moves to bootstrap through a reviewed
 non-destructive Terraform removal plan. Destruction recovery never removes state directly.
 See [identity/scope mapping and invariants](NONPROD_LIFECYCLE_INTEGRATION.md).
 The separately approved SQL verifier uses its own protected OIDC identity and attestation
