@@ -785,6 +785,7 @@ class Checks:
         )
 
     def check_saved_plan(self) -> bool:
+        """Verify the exact authorized plan against current state and operation boundaries."""
         path = self.parameters.get("plan")
         if not isinstance(path, Path) or not path.is_file():
             return False

@@ -100,6 +100,7 @@ def test_saved_plan_binds_images_to_release_and_preserved_runtime(
 
 
 def plan_case(monkeypatch, tmp_path, operation, *, current_stage=4):
+    """Bind a synthetic saved plan to its matching state, operation and release images."""
     monkeypatch.setenv("APPLICATION_IMAGE", APP)
     monkeypatch.setenv("FLUENT_BIT_IMAGE", SIDECAR)
     io = MemoryObservations()
@@ -173,6 +174,7 @@ def test_runtime_apply_rejects_missing_or_unapproved_material_bindings(
 def test_saved_plan_requires_exact_operation_stage(
     monkeypatch, tmp_path, operation, current_stage, expected_stage, representation
 ):
+    """Admit only the operation's exact stage without coercing other scalar types."""
     io, checks = plan_case(monkeypatch, tmp_path, operation, current_stage=current_stage)
     values = {
         "number": expected_stage,
@@ -187,6 +189,7 @@ def test_saved_plan_requires_exact_operation_stage(
 
 @pytest.mark.parametrize("stage", [None, "", "00", "0.0", "+0", " 0", "0 ", "0e0", [], {}])
 def test_saved_plan_rejects_noncanonical_foundation_stage(monkeypatch, tmp_path, stage):
+    """Reject missing, malformed and alternative numeric spellings before apply."""
     io, checks = plan_case(monkeypatch, tmp_path, "foundation-apply", current_stage=0)
     io.runner.plan["variables"]["deployment_stage"]["value"] = stage
     assert not checks.check_saved_plan()
@@ -222,6 +225,7 @@ def test_real_environment_stage_plan_is_admitted_without_apply(tmp_path):
     environment["TF_VAR_deployment_stage"] = "0"
 
     def run(*arguments):
+        """Run local Terraform inspection/planning only in the synthetic fixture."""
         result = subprocess.run(
             [binary, *arguments],
             cwd=tmp_path,
