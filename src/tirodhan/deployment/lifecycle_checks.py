@@ -785,6 +785,7 @@ class Checks:
         )
 
     def check_saved_plan(self) -> bool:
+        """Verify the exact authorized plan against current state and operation boundaries."""
         path = self.parameters.get("plan")
         if not isinstance(path, Path) or not path.is_file():
             return False
@@ -932,7 +933,14 @@ class Checks:
                 else 4
             )
         )
-        return bool(variables.get("deployment_stage", {}).get("value") == expected_stage)
+        # Terraform retains TF_VAR_* values as strings in the saved plan's input
+        # metadata, even for a declared number. Accept only the exact canonical
+        # stage representation; bools, floats and permissive numeric coercion fail.
+        stage = variables.get("deployment_stage", {}).get("value")
+        return bool(
+            (type(stage) is int and stage == expected_stage)
+            or (type(stage) is str and stage == str(expected_stage))
+        )
 
     def check_bootstrap_authority(self) -> bool:
         aliases = {
