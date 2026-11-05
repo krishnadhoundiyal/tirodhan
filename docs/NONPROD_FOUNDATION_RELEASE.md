@@ -81,7 +81,7 @@ identity/scope bindings were independently verified; they must be preserved.
 
 Microsoft's response suggests another zone, SKU or region. Its example
 `az postgres flexible-server update` requires an existing server and is not an
-execution path for this absent, Terraform-owned target. The source now selects
+execution path for this absent, Terraform-owned target. PR #110 selected
 initial zone `2` for a bounded creation retry in **Central India**, retaining
 **B_Standard_B1ms, PostgreSQL 17, 32 GiB, seven-day backup, no HA and no geo backup**.
 The existing placement-drift lifecycle remains: the preference affects initial
@@ -105,3 +105,27 @@ apply token cannot be reused against serial 43. Full native apply and exact live
 foundation verification remain required before reporting foundation readiness.
 
 Reference: [Microsoft's PostgreSQL capacity guidance](https://learn.microsoft.com/en-us/azure/postgresql/troubleshoot/how-to-resolve-capacity-errors).
+
+### Owner-requested zone-1 retry
+
+Zone-2 run `42043233166`, attempt 1, passed all 13 apply prerequisites but Azure
+again returned `ResourceOperationFailure` / `SkuNotAvailable` (correlation
+`004ae5ad-c378-d0c6-3e1f-0b0c9cd133c9`). Azure removed the failed server;
+an exact ARM read confirmed `ResourceNotFound`. All 27 original instances,
+identity/scope bindings, vault protections and backend safeguards were verified
+preserved. Native Terraform advanced the existing lineage to serial 44. The
+failed-run apply token was retired. No application was activated.
+
+The owner explicitly requested a further initial-creation attempt in zone `1`.
+That is now the committed placement preference; the exact-SKU zone/status
+admission, cost settings and existing placement lifecycle remain enforced.
+This is one owner-selected attempt, not automatic zone cycling. The catalog
+advertises zone 1, but actual capacity remains unproven. The workflow/jobs,
+SKU, region, authentication, storage, backups and identity permissions are unchanged.
+
+Use the existing protected source-review and signed planning/apply cycle.
+Reconcile actual serial-44 state first, preserve all 27 existing instance IDs
+and require a fresh incremental plan with only the five PostgreSQL creates.
+Fresh source/state-bound authority and exact-plan owner approval remain mandatory.
+The zone-2 plan and token cannot be reused. A further allocation failure must
+remain failure and be reconciled without an automatic fallback or cleanup.

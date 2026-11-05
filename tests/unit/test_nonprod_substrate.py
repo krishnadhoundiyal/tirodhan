@@ -164,7 +164,7 @@ def test_database_exception_is_nonprod_with_no_password() -> None:
     """Preserve the explicit NONPROD placement, cost and Entra-only database policy."""
     db = resource("database.tf", "azurerm_postgresql_flexible_server", "database")
     assert db["sku_name"] == "B_Standard_B1ms"
-    assert db["zone"] == "2"
+    assert db["zone"] == "1"
     assert db["storage_mb"] == 32768
     assert db["backup_retention_days"] == 7
     assert db["geo_redundant_backup_enabled"] is False
