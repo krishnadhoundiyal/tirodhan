@@ -183,6 +183,12 @@ as required reviewer, self-review allowed and administrator bypass disabled. The
 still manually approves every protected job; this approval neither enables release nor
 substitutes for the signed operation, exact execution context or prerequisites. Independent
 workload/signing identities and CodeRabbit source review are unchanged.
+When R is configured, deployment purposes that verify bootstrap permissions also capture
+R's actual service-principal object ID from its configured client ID in the same tenant.
+Issuance binds that distinct identity to every applicable operation; missing, malformed,
+foreign or shared identities block signing. The live grant/role-definition check remains
+unchanged. This recognizes F03's already enrolled restricted grant and authorizes no new
+recovery operation or permission change. An unconfigured R cannot acquire a grant binding.
 Only the committed rotation cron can be issued for recurring authority. Seed requests
 contain sorted unique approved names, never values; effect admission requires an exact
 name match. Interactive signing displays the operation bindings for digest review.

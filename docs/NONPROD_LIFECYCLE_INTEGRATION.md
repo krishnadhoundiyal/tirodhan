@@ -113,6 +113,11 @@ All five original direct D grants and their delegation condition remain mandator
 explicitly configured/verified R grant is additionally permitted. Unknown grants are not filtered.
 No live RBAC has been modified.
 
+Deployment capture/issuance includes the configured R's observed principal in each signed
+operation that checks bootstrap permissions. This preserves the explicitly verified existing
+R exception rather than omitting it from plan/apply, seed or log authorizations. It changes
+no F03 enrollment, role definition, grant, recovery authority or deployment-hold behavior.
+
 If a vault is already soft-deleted before R was enrolled, O can use the separately signed
 `foundation_reconcile enroll-recovery` operation. It requires `recovery_enrollment_authorized`,
 the exact `recovery_principal_id` and `recovery_app_object_id`, actual role-definition and

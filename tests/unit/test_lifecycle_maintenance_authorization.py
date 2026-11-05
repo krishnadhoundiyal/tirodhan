@@ -69,6 +69,7 @@ def deleted_row():
 
 def maintenance_context(context, kind):
     _, policy, config, request = context
+    request.pop("recovery_principal", None)
     policy["release_enabled"] = False
     config["recovery_client_id"] = RCLIENT
     _, destination, identity, environment = release_setup.DESTINATIONS[kind]

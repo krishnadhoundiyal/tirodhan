@@ -21,6 +21,8 @@ CODE = "c" * 64
 SESSION = "00000000-0000-0000-0000-000000000099"
 VCLIENT = "00000000-0000-0000-0000-000000000088"
 VOID = "00000000-0000-0000-0000-000000000077"
+RCLIENT = "00000000-0000-0000-0000-000000000021"
+ROID = "00000000-0000-0000-0000-000000000022"
 REPO = {"full_name": setup.REPOSITORY}
 PASSWORD = b"synthetic-test-passphrase-only"
 
@@ -77,6 +79,7 @@ def context(tmp_path, monkeypatch):
         **public,
     }
     config = copy.deepcopy(CONFIG) | {
+        "recovery_client_id": RCLIENT,
         "database_verification_client_id": VCLIENT,
         "database_verification_principal_id": VOID,
     }
@@ -92,6 +95,11 @@ def context(tmp_path, monkeypatch):
         "principal": {
             "id": OID,
             "appId": config["deployment_client_id"],
+            "tenant_id": config["terraform"]["tenant_id"],
+        },
+        "recovery_principal": {
+            "id": ROID,
+            "appId": RCLIENT,
             "tenant_id": config["terraform"]["tenant_id"],
         },
         "commit": COMMIT,
@@ -151,6 +159,7 @@ def operator_request(context, kind):
     )
     if kind in {"bootstrap", "database-bootstrap"}:
         request["principal"]["appId"] = None
+        request.pop("recovery_principal", None)
     if kind == "bootstrap":
         request["deployment_principal"] = {
             "id": "00000000-0000-0000-0000-000000000097",
@@ -445,6 +454,7 @@ def test_two_independent_encrypted_keys_with_readback_and_idempotent_setup(conte
 def test_real_signature_and_exact_destination_without_secret_output(context, kind, capsys):
     directory, policy, config, request = context
     if kind == "database":
+        request.pop("recovery_principal", None)
         request.update(
             kind=kind,
             secret_name="NONPROD_DATABASE_VERIFY_AUTHORIZATION",

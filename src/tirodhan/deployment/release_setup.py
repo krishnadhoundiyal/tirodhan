@@ -38,6 +38,7 @@ from tirodhan.deployment.deployment_admission import (
     validate_authorization,
 )
 from tirodhan.deployment.lifecycle_evidence import BackendState, plan_prior_state, state_resources
+from tirodhan.deployment.prerequisites import REQUIRED
 from tirodhan.deployment.release_custody import (
     generate_pair,
     key_id,
@@ -92,6 +93,9 @@ CONSUMER_OPERATIONS = [
     "runtime-plan",
     "runtime-apply",
 ]
+RECOVERY_BOUND_OPERATIONS = frozenset(
+    op for op, checks in REQUIRED.items() if "permissions" in checks
+)
 
 
 def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str, Any]:
@@ -421,6 +425,36 @@ def validated_request(
         bindings["bootstrap"]["deployment_principal_id"] = deployment["id"]
     elif request.get("deployment_principal") is not None:
         raise AdmissionDenied("DEPLOYMENT_PRINCIPAL_BINDING_REQUIRES_BOOTSTRAP")
+    recovery_operations = bindings.keys() & RECOVERY_BOUND_OPERATIONS
+    recovery = request.get("recovery_principal")
+    if recovery_operations and config.get("recovery_client_id"):
+        if (
+            not isinstance(recovery, dict)
+            or set(recovery) != {"id", "appId", "tenant_id"}
+            or recovery["appId"] != config["recovery_client_id"]
+            or recovery["tenant_id"] != config["terraform"]["tenant_id"]
+            or not isinstance(recovery["id"], str)
+            or recovery["id"].casefold()
+            in {
+                request["principal_id"].casefold(),
+                str(config.get("database_verification_principal_id")).casefold(),
+            }
+            or str(recovery["appId"]).casefold()
+            in {
+                config["deployment_client_id"].casefold(),
+                str(config.get("database_verification_client_id")).casefold(),
+            }
+        ):
+            raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED")
+        try:
+            UUID(recovery["id"])
+            UUID(recovery["appId"])
+        except ValueError:
+            raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED") from None
+        for operation in recovery_operations:
+            bindings[operation]["recovery_principal_id"] = recovery["id"]
+    elif recovery is not None:
+        raise AdmissionDenied("RECOVERY_GRANT_BINDING_NOT_APPLICABLE")
     if kind in {"seed-local", "seed-workflow"}:
         from tirodhan.deployment.seed_secrets import approved_secret_batch
 
