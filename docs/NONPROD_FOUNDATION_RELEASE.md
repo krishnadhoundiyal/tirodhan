@@ -68,3 +68,40 @@ capture fresh planning authority and generate a new plan; the earlier run is evi
 of the defect, not approval to apply its superseded artifact. Exact-plan owner approval
 and the protected manual gate remain required. No apply authority was issued for the
 first plan.
+
+## PostgreSQL initial-placement retry
+
+Owner-approved apply run `42026962491`, attempt 2, passed signed admission and
+created 27 of the 32 stage-zero instances. PostgreSQL creation returned
+`ResourceOperationFailure` / `SkuNotAvailable` (correlation
+`d3889777-de1f-b541-379b-db0d7b7dee9a`). Its server is absent from live Azure and
+state; the five PostgreSQL instances remain missing. The preserved state lineage
+advanced through native Terraform to serial 43. The other 27 instances and their
+identity/scope bindings were independently verified; they must be preserved.
+
+Microsoft's response suggests another zone, SKU or region. Its example
+`az postgres flexible-server update` requires an existing server and is not an
+execution path for this absent, Terraform-owned target. The source now selects
+initial zone `2` for a bounded creation retry in **Central India**, retaining
+**B_Standard_B1ms, PostgreSQL 17, 32 GiB, seven-day backup, no HA and no geo backup**.
+The existing placement-drift lifecycle remains: the preference affects initial
+creation and does not force existing servers to move. No SKU/region fallback,
+new workflow, identity, grant, GitHub variable or application activation is added.
+
+Both capability API generations and the actual CLI catalog advertised B1ms in
+zones 1/2/3 after the allocation failure. Admission now requires the selected
+zone on the exact SKU record; another SKU's zones, missing/malformed zone support,
+restrictions and disabled/unknown status cannot satisfy that check. This is
+advertised support, **not a capacity reservation or successful-allocation proof**.
+Microsoft has not confirmed actual zone-2 capacity. A further provider failure
+remains failure; never rotate through zones/SKUs or destroy partial state automatically.
+
+After required source review/CI, capture fresh authority for the reviewed main and
+generate an incremental plan from actual partial state. Verify that the 27 committed
+instances remain unchanged and that only the missing PostgreSQL instances are created.
+Obtain owner approval of the exact new plan before signing/enrolling apply authority
+and entering the existing human gate. The former 32-create artifact and its retired
+apply token cannot be reused against serial 43. Full native apply and exact live
+foundation verification remain required before reporting foundation readiness.
+
+Reference: [Microsoft's PostgreSQL capacity guidance](https://learn.microsoft.com/en-us/azure/postgresql/troubleshoot/how-to-resolve-capacity-errors).

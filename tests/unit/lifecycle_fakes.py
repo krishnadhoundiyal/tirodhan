@@ -148,7 +148,7 @@ class MemoryRunner:
         if args[:4] == ("az", "role", "assignment", "list"):
             return assignments()
         if args[:4] == ("az", "postgres", "flexible-server", "list-skus"):
-            return [{"name": "Standard_B1ms"}]
+            return [{"name": "Standard_B1ms", "supportedZones": ["1", "2", "3"]}]
         if args == ("terraform", "version", "-json"):
             return {
                 "terraform_version": "1.13.5",

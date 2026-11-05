@@ -385,11 +385,16 @@ class Checks:
         return True
 
     def check_postgres_sku(self) -> bool:
+        """Verify advertised support for the source-selected SKU and initial zone."""
         # Ported from PR #84: committed Terraform is the SKU authority, never a fallback SKU.
         source = (ROOT / "infra/terraform/nonprod/database.tf").read_text()
         matches = re.findall(r'^\s*sku_name\s*=\s*"([^"]+)"', source, flags=re.MULTILINE)
         if len(matches) != 1:
             return False
+        zones = re.findall(r'^\s*zone\s*=\s*"([1-9][0-9]*)"', source, flags=re.MULTILINE)
+        if len(zones) != 1:
+            return False
+        requested_zone = zones[0]
         requested = matches[0].casefold()
         accepted = {requested, requested.split("_", 1)[-1]}
         response = self.io.runner.json(
@@ -405,19 +410,30 @@ class Checks:
             "json",
         )
 
-        def names(value: Any) -> set[str]:
+        def advertised_placement(value: Any) -> bool:
+            """Require the selected zone on the matching unrestricted SKU record."""
             if isinstance(value, list):
-                return set().union(*(names(v) for v in value))
+                return any(advertised_placement(v) for v in value)
             if isinstance(value, dict):
+                if value.get("restricted") not in (None, "Disabled"):
+                    return False
                 found = {
                     str(v).casefold()
                     for k, v in value.items()
                     if k in {"name", "skuName", "sku_name"} and isinstance(v, str)
                 }
-                return found | set().union(*(names(v) for v in value.values()))
-            return set()
+                if accepted & found:
+                    supported = value.get("supportedZones")
+                    return (
+                        value.get("status") in (None, "Available", "Enabled")
+                        and isinstance(supported, list)
+                        and all(isinstance(zone, str) for zone in supported)
+                        and requested_zone in supported
+                    )
+                return any(advertised_placement(v) for v in value.values())
+            return False
 
-        return bool(accepted & names(response))
+        return advertised_placement(response)
 
     def check_features(self) -> bool:
         from tirodhan.deployment.runtime_prerequisites import (
