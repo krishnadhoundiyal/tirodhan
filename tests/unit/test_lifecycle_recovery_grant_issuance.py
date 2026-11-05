@@ -82,12 +82,19 @@ def test_issued_deployment_authority_accepts_exact_existing_d_v_r_grants(context
         r_role["principalId"] = OID
         with pytest.raises(ValueError, match="Recovery bootstrap grant"):
             checks.check_permissions()
+        # Even a matching grant cannot replace the independently configured R identity.
+        foreign = "00000000-0000-0000-0000-000000000066"
+        granted.claims["bindings"][op]["recovery_principal_id"] = foreign
+        r_role["principalId"] = foreign
+        with pytest.raises(AdmissionDenied, match="RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"):
+            checks.check_permissions()
 
 
 @pytest.mark.parametrize(
     "field,value",
     [
         ("id", "not-a-principal"),
+        ("id", "00000000-0000-0000-0000-000000000066"),
         ("id", OID),
         ("id", VOID),
         ("appId", "wrong-client"),
@@ -102,6 +109,13 @@ def test_issuance_rejects_missing_mismatched_or_shared_recovery_identity(context
 
 def test_configured_recovery_cannot_be_omitted_from_deployment_issuance(context):
     context[3].pop("recovery_principal")
+    with pytest.raises(AdmissionDenied, match="RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"):
+        sign(context)
+
+
+def test_recovery_client_alone_cannot_substitute_for_authoritatively_pinned_principal(context):
+    context[2].pop("recovery_principal_id")
+    context[3]["configuration_hash"] = digest(context[2])
     with pytest.raises(AdmissionDenied, match="RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"):
         sign(context)
 
@@ -143,3 +157,24 @@ def test_hold_blocks_recovery_grant_binding_before_private_key_unlock(context, m
     monkeypatch.setattr(setup, "load_private", forbidden)
     with pytest.raises(AdmissionDenied, match="DEPLOYMENT_HOLD"):
         sign(context)
+
+
+def test_all_signed_workflows_share_authoritative_recovery_identity_configuration():
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[2] / ".github/workflows"
+    for name in (
+        "nonprod-deploy",
+        "nonprod-foundation",
+        "nonprod-database-verify",
+        "nonprod-reconcile",
+        "rotate-log-sas",
+        "seed-ghcr-pull-pat",
+    ):
+        env = yaml.safe_load((root / f"{name}.yml").read_text())["env"]
+        assert (
+            env["AZURE_NONPROD_RECOVERY_PRINCIPAL_ID"]
+            == "${{ vars.AZURE_NONPROD_RECOVERY_PRINCIPAL_ID }}"
+        )

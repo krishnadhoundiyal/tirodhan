@@ -320,7 +320,11 @@ def prepare(
             "--output",
             "json",
         )
-        if recovery_principal.get("appId") != config["recovery_client_id"]:
+        if (
+            not config.get("recovery_principal_id")
+            or recovery_principal.get("appId") != config["recovery_client_id"]
+            or recovery_principal.get("id") != config["recovery_principal_id"]
+        ):
             raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED")
         recovery_principal["tenant_id"] = account["tenantId"]
     deployment_principal = dict(principal) if kind == "bootstrap" else None

@@ -185,6 +185,9 @@ substitutes for the signed operation, exact execution context or prerequisites. 
 workload/signing identities and CodeRabbit source review are unchanged.
 When R is configured, deployment purposes that verify bootstrap permissions also capture
 R's actual service-principal object ID from its configured client ID in the same tenant.
+An authorized enrollment readback pins that relationship separately in
+`AZURE_NONPROD_RECOVERY_PRINCIPAL_ID`; both capture and offline issuance require an
+exact match to this configuration, and live grant verification checks the same pin.
 Issuance binds that distinct identity to every applicable operation; missing, malformed,
 foreign or shared identities block signing. The live grant/role-definition check remains
 unchanged. This recognizes F03's already enrolled restricted grant and authorizes no new

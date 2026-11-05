@@ -294,6 +294,8 @@ class Checks:
             "json",
         )
         if self.binding().get("recovery_principal_id"):
+            if self.binding()["recovery_principal_id"] != self.config.get("recovery_principal_id"):
+                raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED")
             definitions = self.io.runner.json(
                 "az",
                 "role",

@@ -298,6 +298,8 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
         ("database-bootstrap", "administrator", "DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH"),
         ("bootstrap", "application", "DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH"),
         ("bootstrap", "owner", "DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED"),
+        ("seed-local", "recovery-pin", "RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"),
+        ("seed-local", "recovery-pin-missing", "RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"),
     ],
 )
 def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
@@ -313,6 +315,11 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
 
     config = copy.deepcopy(CONFIG)
     config["recovery_client_id"] = RCLIENT
+    config["recovery_principal_id"] = ROID
+    if failure == "recovery-pin":
+        config["recovery_principal_id"] = "00000000-0000-0000-0000-000000000066"
+    elif failure == "recovery-pin-missing":
+        config.pop("recovery_principal_id")
     config["terraform"]["postgres_admin_object_id"] = OID
     service_oid = "00000000-0000-0000-0000-000000000097"
     if failure == "administrator":

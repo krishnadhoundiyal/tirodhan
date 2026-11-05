@@ -80,6 +80,7 @@ def context(tmp_path, monkeypatch):
     }
     config = copy.deepcopy(CONFIG) | {
         "recovery_client_id": RCLIENT,
+        "recovery_principal_id": ROID,
         "database_verification_client_id": VCLIENT,
         "database_verification_principal_id": VOID,
     }

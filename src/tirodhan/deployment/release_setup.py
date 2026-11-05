@@ -434,6 +434,7 @@ def validated_request(
             or recovery["appId"] != config["recovery_client_id"]
             or recovery["tenant_id"] != config["terraform"]["tenant_id"]
             or not isinstance(recovery["id"], str)
+            or recovery["id"] != config.get("recovery_principal_id")
             or recovery["id"].casefold()
             in {
                 request["principal_id"].casefold(),
