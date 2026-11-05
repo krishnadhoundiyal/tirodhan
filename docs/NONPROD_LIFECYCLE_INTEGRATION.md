@@ -11,18 +11,20 @@ hold for the infrastructure-provisioning cycle on 5 November 2026; see
 permits individually signed operations and contains enrolled public verification keys.
 Caller-provided PASS Booleans do not grant access.
 The approved [ENROLLMENT/RECOVERY split](NONPROD_RECOVERY_AUTHORIZATION.md) admits only those
-independently signed maintenance operations while deployment remains held.
+independently signed maintenance operations even when `release_enabled=false`.
 
-## Review and merge order
+## Historical integration rollout
 
-1. Hold PR 96 established the integration boundary before PR 97; release enablement now
-   follows explicit owner approval.
-2. Review the integration against current main. Require final tests and CodeRabbit review.
-3. Merge PR 97 only after separate explicit approval. Neither merge releases provisioning.
-4. Separately approve and enroll authorization/evidence public keys and identity permissions.
-   No bootstrap, recovery, ownership transfer, state initialization or deployment is
-   authorized by preparing this source change.
-5. Authorize the exact reviewed release/configuration/operation before Azure acceptance.
+1. Hold PR 96 established the boundary before integration PR 97 was reviewed and merged.
+2. Subsequent reviewed changes installed authorization tools and enrolled the public keys
+   and distinct identities. Stored configuration does not prove current secret validity,
+   effective permissions or operation readiness.
+3. F02/F03 execution and closure were recorded separately. Their accepted evidence remains
+   preserved; every new operation still evaluates the applicable live prerequisites.
+
+Current execution follows the owner's [approved infrastructure cycle](NONPROD_FOUNDATION_RELEASE.md):
+reviewed main, fresh signed bootstrap/planning, actual postconditions, and separate exact-plan
+approval before apply. Source implementation and merge alone grant no operation authority.
 
 Protected destroy remains independent of release admission, so integration cannot strand
 existing resources. There is no new paid service or production activation.
@@ -105,7 +107,7 @@ the authorizer must verify their evidence before issuing a release authorization
 - V: separately approved verifier service principal, distinct from D/R/A/runtime. Protected
   `nonprod-database` OIDC and its own pinned attestation key; no enrollment/grants in its job.
 
-Source-only enrollment changes require separate approval: D gets a custom subscription
+The approved signed O bootstrap enrolls D's custom subscription
 metadata role with only `Microsoft.Resources/subscriptions/providers/read` and
 `Microsoft.DBforPostgreSQL/locations/capabilities/read`, with no RG Reader, writes or data
 actions. O also needs signed `bootstrap_discovery_authorized`. These are the documented
@@ -115,7 +117,8 @@ R's RG role allows vaults/read, vaults/write and its own permissions/read; subsc
 vault metadata discovery is separate. Role definitions are checked, not just display names.
 All five original direct D grants and their delegation condition remain mandatory. Only an
 explicitly configured/verified R grant is additionally permitted. Unknown grants are not filtered.
-No live RBAC has been modified.
+The source-only integration did not itself modify live RBAC. Operational enrollment and
+its actual postconditions are recorded separately; existing grants are verified on each run.
 
 Deployment capture/issuance includes the configured R's observed principal in each signed
 operation that checks bootstrap permissions. This preserves the explicitly verified existing
@@ -270,7 +273,13 @@ files exist only in V's private temporary directory and are removed on exit; onl
 is uploaded. D validates the signature and fresh ARM target after download. Approval that
 outlasts the caller budget fails closed and requires a new consumer job attempt.
 
-### Separate verifier enrollment (not performed by this implementation)
+### Separate verifier enrollment and live acceptance
+
+V's client/principal configuration, immutable OIDC trust and public verification key have
+been enrolled through separate authorized operations. The private-key secret's presence
+does not establish its current usability, fresh authorization or SQL acceptance. Verify
+actual identity permissions and obtain fresh exact-consumer evidence at the applicable
+post-foundation stage. The following defines the required configuration and boundaries.
 
 Configure nonsecret `AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID` and
 `AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID` consistently in trusted workflow configuration.
@@ -282,7 +291,9 @@ for that environment only. Store `NONPROD_DATABASE_VERIFY_AUTHORIZATION` and
 `NONPROD_DATABASE_EVIDENCE_PRIVATE_KEY_PEM` only in that protected environment; set its
 `NONPROD_DATABASE_EVIDENCE_KEY_ID`. Public policy entries require `identity_kind:
 database_verification`, the exact V principal and a public key whose underlying key material
-differs from every release or other attester key. The policy remains disabled and empty here.
+differs from every release or other attester key. The public policy registries are populated;
+release enablement follows the [current owner-approved scope](NONPROD_FOUNDATION_RELEASE.md).
+Registry presence never substitutes for live identity, permission or SQL verification.
 
 V needs app-RG Reader, exact state-account Reader and read-only blob access at the state
 container. No state-RG Reader is required. Its effective actions must be read-only and its
