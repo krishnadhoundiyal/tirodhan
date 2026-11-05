@@ -5,14 +5,18 @@ Functionality source: PR 84 `24ac70d5ae9dad3084827277e6a31f0272de759d`.
 The approved 1 November 2026 contract supersedes that branch's unguarded recovery,
 state-RG read and imperative state-removal implementation details.
 
-Implementation is **not release authorization**. The committed policy disables deployment
-and contains enrolled public verification keys. Caller-provided PASS Booleans do not grant access.
+Implementation is **not release authorization**. The owner approved lifting the release
+hold for the infrastructure-provisioning cycle on 5 November 2026; see
+[current scope and apply boundary](NONPROD_FOUNDATION_RELEASE.md). The committed policy
+permits individually signed operations and contains enrolled public verification keys.
+Caller-provided PASS Booleans do not grant access.
 The approved [ENROLLMENT/RECOVERY split](NONPROD_RECOVERY_AUTHORIZATION.md) admits only those
 independently signed maintenance operations while deployment remains held.
 
 ## Review and merge order
 
-1. Hold PR 96 has merged into main; PR 97 now targets main. The hold remains active.
+1. Hold PR 96 established the integration boundary before PR 97; release enablement now
+   follows explicit owner approval.
 2. Review the integration against current main. Require final tests and CodeRabbit review.
 3. Merge PR 97 only after separate explicit approval. Neither merge releases provisioning.
 4. Separately approve and enroll authorization/evidence public keys and identity permissions.

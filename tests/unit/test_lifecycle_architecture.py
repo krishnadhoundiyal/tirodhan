@@ -37,8 +37,8 @@ def test_all_mandatory_capabilities_have_real_registered_evaluators() -> None:
     assert_manifest_complete()
     assert all(callable(getattr(Checks, "check_" + key, None)) for key in CHECK_IDS)
     policy = json.loads(Path("deploy/nonprod-release-policy.json").read_text())
-    assert policy["release_enabled"] is False
-    # Public-key enrollment is allowed while the independent release hold remains active.
+    assert type(policy["release_enabled"]) is bool
+    # The owner controls policy enablement; signatures and every prerequisite remain mandatory.
     validate_policy_keys(policy)
 
 

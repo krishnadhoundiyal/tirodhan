@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_version": "nonprod-lifecycle-v1",
-  "release_enabled": false,
+  "release_enabled": true,
   "authorization_keys": {
     "ed25519-2c40395ec859152fffe102630048033cf6e82dc9ccd95117ced2d9fcff1b30f7": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXAgx9SzjPlUf1dJTb/tAvCNz6iMQpBsMTrKYpmil7WA=\n-----END PUBLIC KEY-----\n"
   },

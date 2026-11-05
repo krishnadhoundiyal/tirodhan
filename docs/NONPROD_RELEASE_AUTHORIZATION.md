@@ -2,7 +2,10 @@
 
 These utilities complete the existing authorizer role. They add no workflow, Azure
 resource, RBAC grant, alternate admission path or automatic enrollment. The committed
-deployment policy remains held. Never issue credentials for a branch under review.
+deployment policy now permits individually signed operations under the owner's
+5 November 2026 infrastructure-cycle approval. Exact-plan approval remains mandatory
+before apply; application activation is outside that approval. See
+[the current execution scope](NONPROD_FOUNDATION_RELEASE.md). Never issue credentials for a branch under review.
 The separately approved [ENROLLMENT/RECOVERY purposes](NONPROD_RECOVERY_AUTHORIZATION.md)
 retain exact-operation prerequisites and do not grant deployment authority.
 

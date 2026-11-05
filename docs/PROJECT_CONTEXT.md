@@ -3,16 +3,21 @@
 NONPROD deployment approval follows the explicitly approved single-owner model:
 the existing owner alone must manually approve `nonprod`, including owner-started
 runs. Self-review is allowed; administrator bypass, non-main execution and unsigned
-operations remain denied. The deployment hold remains active. See
+operations remain denied. The owner subsequently authorized lifting the hold for the
+infrastructure-provisioning cycle; signed bootstrap/planning precede separate exact-plan
+approval for Terraform apply. Application activation remains outside that approval. See
+[the current release scope](NONPROD_FOUNDATION_RELEASE.md) and
 [the approved decision](adr/ADR-012-environments-iac.md#approved-single-owner-nonprod-approval--5-november-2026).
 
 NONPROD Closure Batch 1 separates signed operator enrollment and exact-vault recovery from
-deployment authority. Deployment remains held; implementation does not close live findings
-or authorize mutation. See [approval and retry protocol](NONPROD_RECOVERY_AUTHORIZATION.md).
+deployment authority. Deployment requires its signed operation authority; implementation
+does not close live findings or authorize mutation. See
+[approval and retry protocol](NONPROD_RECOVERY_AUTHORIZATION.md).
 
 The NONPROD lifecycle integration retains PR #84 recovery/ownership/compensation behind
 signed release admission and one complete mandatory prerequisite contract. The policy
-denies provisioning; merge is not deployment authority. Protected teardown remains available.
+alone does not authorize provisioning; merge is not deployment authority. Protected teardown
+remains available.
 See [contract and review order](NONPROD_LIFECYCLE_INTEGRATION.md).
 Fresh SQL prerequisite evidence is requested after each deployment job's approval from
 the separately protected verifier workload; no static five-minute report is reused.

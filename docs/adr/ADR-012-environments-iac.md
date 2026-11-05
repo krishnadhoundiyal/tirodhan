@@ -53,3 +53,12 @@ and the deployment hold remain enforced. An independent human reviewer is not a
 NONPROD deployment prerequisite. This changes no O/D/R/A/V workload identity,
 permission or signing-key separation and grants no other account access. See
 [the exact environment policy](../NONPROD_DEPLOYMENT.md#github-delivery-and-rollback).
+
+## Authorized infrastructure-release cycle — 5 November 2026
+
+The owner explicitly authorized lifting the release hold to begin NONPROD infrastructure
+provisioning, while retaining approval of the exact saved Terraform plan before apply.
+Enablement permits signature validation; every operation still needs its signed authority
+and complete mandatory prerequisites. No automatic apply or application activation is
+authorized. Use the [existing bootstrap/plan/apply cycle](../NONPROD_FOUNDATION_RELEASE.md)
+without changing identity boundaries, Terraform ownership, providers or security controls.

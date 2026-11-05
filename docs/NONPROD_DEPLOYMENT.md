@@ -1,6 +1,11 @@
 # Azure NONPROD deployment substrate
 
-Current lifecycle integration is **held**, without authorization/evidence keys enrolled.
+The owner authorized lifting the NONPROD release hold on 5 November 2026 for the
+infrastructure-provisioning cycle. The committed policy enables individually signed
+operations using the enrolled public keys. Bootstrap and planning precede review of
+the exact saved plan; Terraform apply still requires the owner's separate plan approval,
+plan/state-bound signed authority and the existing manual environment gate. Application
+activation is outside this authorization. See [the current execution scope](NONPROD_FOUNDATION_RELEASE.md).
 Before provisioning, use the [release contract and identity-specific prerequisites](NONPROD_LIFECYCLE_INTEGRATION.md).
 The vault is bootstrap-owned rather than created/destroyed by the application stack.
 No integration merge authorizes Azure provisioning, recovery, RBAC or state mutation.
