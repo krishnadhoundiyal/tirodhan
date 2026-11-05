@@ -23,21 +23,22 @@ def catalog(skus):
     ("skus", "expected"),
     [
         ([{"name": "Standard_B1ms", "supportedZones": ["1", "2", "3"]}], True),
-        ([{"name": "Standard_B1ms", "supportedZones": ["1", "3"]}], False),
-        ([{"name": "Standard_B2s", "supportedZones": ["2"]}], False),
+        ([{"name": "Standard_B1ms", "supportedZones": ["1"]}], True),
+        ([{"name": "Standard_B1ms", "supportedZones": ["2", "3"]}], False),
+        ([{"name": "Standard_B2s", "supportedZones": ["1"]}], False),
         (
             [
-                {"name": "Standard_B1ms", "supportedZones": ["1"]},
-                {"name": "Standard_B2s", "supportedZones": ["2"]},
+                {"name": "Standard_B1ms", "supportedZones": ["2"]},
+                {"name": "Standard_B2s", "supportedZones": ["1"]},
             ],
             False,
         ),
         ([{"name": "Standard_B1ms", "supportedZones": "123"}], False),
-        ([{"name": "Standard_B1ms", "supportedZones": [2]}], False),
+        ([{"name": "Standard_B1ms", "supportedZones": [1]}], False),
         ([{"name": "Standard_B1ms"}], False),
-        ([{"name": "Standard_B1ms", "supportedZones": ["2"], "status": "Disabled"}], False),
-        ([{"name": "Standard_B1ms", "supportedZones": ["2"], "status": "Unknown"}], False),
-        ([{"name": "Standard_B1ms", "supportedZones": ["2"], "status": []}], False),
+        ([{"name": "Standard_B1ms", "supportedZones": ["1"], "status": "Disabled"}], False),
+        ([{"name": "Standard_B1ms", "supportedZones": ["1"], "status": "Unknown"}], False),
+        ([{"name": "Standard_B1ms", "supportedZones": ["1"], "status": []}], False),
         ([], False),
     ],
 )
@@ -72,7 +73,7 @@ def test_admission_requires_selected_zone_on_exact_sku(monkeypatch, skus, expect
 def test_restricted_capability_branch_cannot_admit_placement(monkeypatch):
     """An advertised name/zone does not override an explicit subscription restriction."""
     io = MemoryObservations()
-    response = catalog([{"name": "Standard_B1ms", "supportedZones": ["2"]}])
+    response = catalog([{"name": "Standard_B1ms", "supportedZones": ["1"]}])
     response[0]["restricted"] = "Enabled"
     monkeypatch.setattr(io.runner, "json", lambda *args: response)
     assert not Checks(auth("foundation-plan"), io.config, {}, io).check_postgres_sku()
@@ -83,7 +84,7 @@ def test_restricted_capability_branch_cannot_admit_placement(monkeypatch):
 def test_parent_status_cannot_be_overridden_by_advertised_sku(monkeypatch, level, status):
     """Reject unusable location/edition evidence before trusting a nested SKU's zones."""
     io = MemoryObservations()
-    response = catalog([{"name": "Standard_B1ms", "supportedZones": ["2"]}])
+    response = catalog([{"name": "Standard_B1ms", "supportedZones": ["1"]}])
     parent = response[0] if level == "location" else response[0]["supportedServerEditions"][0]
     parent["status"] = status
     monkeypatch.setattr(io.runner, "json", lambda *args: response)
