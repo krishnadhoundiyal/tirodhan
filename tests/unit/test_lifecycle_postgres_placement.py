@@ -78,6 +78,18 @@ def test_restricted_capability_branch_cannot_admit_placement(monkeypatch):
     assert not Checks(auth("foundation-plan"), io.config, {}, io).check_postgres_sku()
 
 
+@pytest.mark.parametrize("level", ["location", "edition"])
+@pytest.mark.parametrize("status", ["Disabled", "Unknown"])
+def test_parent_status_cannot_be_overridden_by_advertised_sku(monkeypatch, level, status):
+    """Reject unusable location/edition evidence before trusting a nested SKU's zones."""
+    io = MemoryObservations()
+    response = catalog([{"name": "Standard_B1ms", "supportedZones": ["2"]}])
+    parent = response[0] if level == "location" else response[0]["supportedServerEditions"][0]
+    parent["status"] = status
+    monkeypatch.setattr(io.runner, "json", lambda *args: response)
+    assert not Checks(auth("foundation-plan"), io.config, {}, io).check_postgres_sku()
+
+
 @pytest.mark.parametrize(("advertised_zone", "expected"), [("3", True), ("2", False)])
 def test_zone_authority_is_committed_terraform(monkeypatch, tmp_path, advertised_zone, expected):
     """Bind the check to source-selected placement instead of a hard-coded retry zone."""

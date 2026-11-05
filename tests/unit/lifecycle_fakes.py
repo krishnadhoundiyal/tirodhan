@@ -144,6 +144,7 @@ class MemoryRunner:
         }
 
     def json(self, *args: str) -> Any:
+        """Route synthetic read-only observations and record every requested command."""
         self.commands.append(args)
         if args[:4] == ("az", "role", "assignment", "list"):
             return assignments()

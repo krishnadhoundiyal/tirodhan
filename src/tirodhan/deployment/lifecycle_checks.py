@@ -415,7 +415,11 @@ class Checks:
             if isinstance(value, list):
                 return any(advertised_placement(v) for v in value)
             if isinstance(value, dict):
-                if value.get("restricted") not in (None, "Disabled"):
+                if value.get("restricted") not in (None, "Disabled") or value.get("status") not in (
+                    None,
+                    "Available",
+                    "Enabled",
+                ):
                     return False
                 found = {
                     str(v).casefold()
@@ -425,8 +429,7 @@ class Checks:
                 if accepted & found:
                     supported = value.get("supportedZones")
                     return (
-                        value.get("status") in (None, "Available", "Enabled")
-                        and isinstance(supported, list)
+                        isinstance(supported, list)
                         and all(isinstance(zone, str) for zone in supported)
                         and requested_zone in supported
                     )
