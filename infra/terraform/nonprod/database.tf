@@ -4,6 +4,7 @@ resource "azurerm_postgresql_flexible_server" "database" {
   location                      = var.location
   version                       = var.postgres_version
   sku_name                      = "B_Standard_B1ms"
+  zone                          = "2"
   storage_mb                    = 32768
   backup_retention_days         = 7
   geo_redundant_backup_enabled  = false
@@ -14,9 +15,9 @@ resource "azurerm_postgresql_flexible_server" "database" {
     tenant_id                     = var.tenant_id
   }
 
-  # NONPROD deliberately uses a burstable SKU without HA. When zone is omitted,
-  # Azure assigns one automatically; ignore that service-owned placement so
-  # subsequent applies do not try to move/unset the primary zone.
+  # Retry initial creation in an advertised zone after an unplaced allocation
+  # failed. Keep B1ms/no HA; catalog support does not guarantee live capacity.
+  # Preserve service-owned placement after creation, including existing servers.
   lifecycle {
     ignore_changes = [zone]
   }
