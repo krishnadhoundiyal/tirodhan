@@ -47,3 +47,24 @@ Main pushes still require valid current-source signed authority before Azure log
 short-lived planning credentials only for the reviewed current commit and approved context;
 never reuse a token after a source/configuration change. A failed admission is expected when
 that authority is absent. Teardown remains independently available through its existing gates.
+
+## Saved-plan stage representation
+
+The first authorized foundation planning run, `42019881023`, completed successfully
+on reviewed main `de7f0d6d121f3b43d8c5d145918dae5bff6226a1`. Inspection found that
+Terraform 1.13.5 retains `TF_VAR_deployment_stage=0` as string `"0"` in saved-plan
+input metadata, while its evaluated number output is `0`. A direct integer-only
+comparison would reject that plan before apply.
+
+Saved-plan admission accepts the exact integer or canonical decimal-string stage
+required by the operation. Wrong stages, booleans, floats and alternative numeric
+spellings fail closed. Signature, saved-plan hash, current backend fingerprint,
+lineage/serial, images, scope and destructive-action checks remain mandatory.
+Native local Terraform regression verification plans synthetic resources without
+Azure access or apply and verifies that the local state is unchanged.
+
+The correction changes the signed source contract. After protected review and merge,
+capture fresh planning authority and generate a new plan; the earlier run is evidence
+of the defect, not approval to apply its superseded artifact. Exact-plan owner approval
+and the protected manual gate remain required. No apply authority was issued for the
+first plan.
