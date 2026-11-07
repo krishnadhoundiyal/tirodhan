@@ -4,7 +4,7 @@ resource "azurerm_postgresql_flexible_server" "database" {
   location                      = var.location
   version                       = var.postgres_version
   sku_name                      = "B_Standard_B1ms"
-  zone                          = "1"
+  zone                          = "3"
   storage_mb                    = 32768
   backup_retention_days         = 7
   geo_redundant_backup_enabled  = false
@@ -15,7 +15,7 @@ resource "azurerm_postgresql_flexible_server" "database" {
     tenant_id                     = var.tenant_id
   }
 
-  # Owner-approved zone-1 retry after unplaced and zone-2 allocation failures.
+  # Owner-approved zone-3 retry after automatic, zone-1 and zone-2 allocation failures.
   # Keep B1ms/no HA; catalog support does not guarantee live capacity.
   # Preserve service-owned placement after creation, including existing servers.
   lifecycle {

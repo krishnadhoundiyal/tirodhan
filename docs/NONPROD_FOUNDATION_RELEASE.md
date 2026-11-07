@@ -117,7 +117,7 @@ preserved. Native Terraform advanced the existing lineage to serial 44. The
 failed-run apply token was retired. No application was activated.
 
 The owner explicitly requested a further initial-creation attempt in zone `1`.
-That is now the committed placement preference; the exact-SKU zone/status
+That was the committed placement preference. The exact-SKU zone/status
 admission, cost settings and existing placement lifecycle remain enforced.
 This is one owner-selected attempt, not automatic zone cycling. The catalog
 advertises zone 1, but actual capacity remains unproven. The workflow/jobs,
@@ -129,3 +129,18 @@ and require a fresh incremental plan with only the five PostgreSQL creates.
 Fresh source/state-bound authority and exact-plan owner approval remain mandatory.
 The zone-2 plan and token cannot be reused. A further allocation failure must
 remain failure and be reconciled without an automatic fallback or cleanup.
+
+### Owner-requested zone-3 retry
+
+The 7 November zone-1 apply in run `42344775597` passed all 13 prerequisites.
+Azure returned `SkuNotAvailable` during PostgreSQL creation (correlation
+`cbe5d607-3845-612b-4739-d748b956811c`). The server was absent after the
+failure, the 27 existing instances were verified, and the apply token was retired.
+Native Terraform advanced the preserved state lineage to serial 46.
+
+The owner selected zone `3` for one B1ms creation attempt in Central India.
+Azure lists the exact SKU in that zone and accepted a validate-only request.
+Allocation remains unproven. Use the existing protected review and signed
+planning and apply cycle. Reconcile current state and require a fresh plan with
+only the five missing PostgreSQL instances. Preserve all existing instances.
+Exact-plan approval and the protected GitHub approval are mandatory.
