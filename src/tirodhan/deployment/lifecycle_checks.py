@@ -1164,13 +1164,16 @@ class Checks:
 
         signer(self.auth)  # Signing must be available before any SQL grant is attempted.
         target = self.database_target()
-        administrator = self.io.arm(
-            target["server_id"] + "/administrators/activeDirectory", "2024-08-01"
-        )
+        object_id = self.tf["postgres_admin_object_id"]
+        administrator_id = f"{target['server_id']}/administrators/{object_id}"
+        administrator = self.io.arm(administrator_id, "2024-08-01")
+        properties = (administrator or {}).get("properties", {})
         return (
             administrator is not None
-            and administrator.get("properties", {}).get("objectId")
-            == self.tf["postgres_admin_object_id"]
+            and str(administrator.get("id", "")).casefold() == administrator_id.casefold()
+            and properties.get("objectId") == object_id
+            and properties.get("tenantId") == self.tf["tenant_id"]
+            and properties.get("principalType") == self.tf["postgres_admin_type"]
             and self.binding().get("database_bootstrap_authorized") is True
         )
 
