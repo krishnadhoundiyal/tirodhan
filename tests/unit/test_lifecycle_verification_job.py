@@ -373,16 +373,16 @@ async def test_verifier_uses_only_readonly_sql_and_requires_actual_facts(
         connection.transaction = Mock(return_value=AsyncMock())
     postgres.fetch.return_value = [
         {
-            "rolename": "runtime",
-            "objectId": "runtime-oid",
-            "principalType": "service",
-            "isAdmin": 0,
+            "rolname": "runtime",
+            "objectid": "runtime-oid",
+            "principaltype": "service",
+            "isadmin": 0,
         },
         {
-            "rolename": VROLE,
-            "objectId": "wrong" if invalid == "verifier-oid" else VOID,
-            "principalType": "service",
-            "isAdmin": 1 if invalid == "verifier-admin" else 0,
+            "rolname": VROLE,
+            "objectid": "wrong" if invalid == "verifier-oid" else VOID,
+            "principaltype": "service",
+            "isadmin": 1 if invalid == "verifier-admin" else 0,
         },
     ]
 

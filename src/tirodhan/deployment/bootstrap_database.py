@@ -6,6 +6,7 @@ import asyncio
 import os
 import ssl
 import time
+from collections.abc import Iterable
 from typing import Any
 
 import asyncpg
@@ -39,6 +40,14 @@ def database_token() -> str:
         return str(credential.get_token("https://ossrdbms-aad.database.windows.net/.default").token)
 
 
+def _entra_principal(principals: Iterable[asyncpg.Record], role: str) -> dict[str, Any]:
+    # Azure can return the PostgreSQL catalog spelling or the documented spelling.
+    for principal in principals:
+        if principal.get("rolname", principal.get("rolename")) == role:
+            return dict(principal)
+    return {}
+
+
 async def bootstrap(*, verify_only: bool = False) -> None:
     target, authorization = await asyncio.to_thread(authorized_target)
     if verify_only:
@@ -63,12 +72,12 @@ async def bootstrap(*, verify_only: bool = False) -> None:
             )
         else:
             principals = await connection.fetch("SELECT * FROM pgaadauth_list_principals(false)")
-            if not any(
-                str(row.get("rolename")) == role
-                and str(row.get("objectId", row.get("objectid"))).casefold() == oid.casefold()
-                and row.get("principalType", row.get("principaltype")) == "service"
-                and row.get("isAdmin", row.get("isadmin")) == 0
-                for row in principals
+            principal = _entra_principal(principals, role)
+            if not (
+                str(principal.get("objectId", principal.get("objectid"))).casefold()
+                == oid.casefold()
+                and principal.get("principalType", principal.get("principaltype")) == "service"
+                and principal.get("isAdmin", principal.get("isadmin")) == 0
             ):
                 raise RuntimeError("Existing DB role is not the expected Entra principal")
         quoted_role = '"' + role.replace('"', '""') + '"'
@@ -118,9 +127,7 @@ async def write_verified_evidence(
             principals = await connection.fetch("SELECT * FROM pgaadauth_list_principals(false)")
             verifier_ok = True
             if authorization.identity_kind == "database_verification":
-                verifier = next(
-                    (dict(r) for r in principals if r.get("rolename") == database_user), {}
-                )
+                verifier = _entra_principal(principals, database_user or "")
                 verifier_ok = (
                     await connection.fetchval("SELECT current_user") == database_user
                     and str(verifier.get("objectId", verifier.get("objectid"))).casefold()
@@ -143,9 +150,7 @@ async def write_verified_evidence(
                     )
                     is True
                 )
-            principal: dict[str, Any] = dict(
-                next((row for row in principals if row.get("rolename") == target["role"]), {})
-            )
+            principal = _entra_principal(principals, target["role"])
             role_flags = await connection.fetchval(
                 "SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication "
                 "OR rolbypassrls "
