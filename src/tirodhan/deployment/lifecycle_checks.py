@@ -488,7 +488,13 @@ class Checks:
             return False
         for address in sorted(required):
             resource_id = resources[address]
-            live = self.io.runner.json("az", "resource", "show", "--ids", resource_id, "-o", "json")
+            if address.startswith("azurerm_role_assignment."):
+                # Generic discovery can select the wrong API for scoped extension resources.
+                live = self.io.arm(resource_id, "2022-04-01")
+            else:
+                live = self.io.runner.json(
+                    "az", "resource", "show", "--ids", resource_id, "-o", "json"
+                )
             if (
                 not isinstance(live, dict)
                 or str(live.get("id", "")).casefold() != resource_id.casefold()
