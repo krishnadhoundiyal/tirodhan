@@ -316,6 +316,12 @@ identity Azure acceptance must verify the metadata function is available with th
 if the managed provider refuses it, verification remains blocked. There is no fallback that
 grants `azure_pg_admin` or copies A/D credentials into the job. These enrollment operations
 are not executed by the verification workflow or by implementing/merging this PR.
+The operator captures and signs the separate `enroll-database-verifier` purpose, then runs
+`python -m tirodhan.deployment.bootstrap_database --enroll-verifier` locally as A. The signed
+binding includes V's configured client ID, principal object ID, tenant and SQL role. Stage-zero
+admission rechecks that identity and verifies the existing foundation. SQL enrollment serializes
+on the role name, verifies the exact non-admin mapping before commit and grants `CONNECT` only
+where needed. Missing metadata access or unexpected privileges abort the transaction.
 
 Secret versions must be enabled/unexpired. Runtime material is validated in memory by actual
 RSA/AES/customer/cursor consumers; developer `.env` or ambient secrets cannot supply missing

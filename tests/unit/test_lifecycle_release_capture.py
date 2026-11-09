@@ -288,6 +288,7 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
             for kind in (
                 "bootstrap",
                 "database-bootstrap",
+                "enroll-database-verifier",
                 "release",
                 "seed-local",
                 "log-scheduled",
@@ -296,6 +297,7 @@ def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
         ("bootstrap", "identity", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
         ("bootstrap", "tenant", "OPERATOR_CAPTURE_IDENTITY_UNVERIFIED"),
         ("database-bootstrap", "administrator", "DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH"),
+        ("enroll-database-verifier", "verifier", "DATABASE_VERIFIER_ENROLLMENT_TARGET_INVALID"),
         ("bootstrap", "application", "DEPLOYMENT_APPLICATION_LOOKUP_MISMATCH"),
         ("bootstrap", "owner", "DEPLOYMENT_APPLICATION_OWNER_UNVERIFIED"),
         ("seed-local", "recovery-pin", "RECOVERY_GRANT_PRINCIPAL_UNVERIFIED"),
@@ -309,13 +311,15 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
     from types import SimpleNamespace
 
     from lifecycle_fakes import CONFIG, OID
-    from test_lifecycle_release_setup import RCLIENT, ROID
+    from test_lifecycle_release_setup import RCLIENT, ROID, VCLIENT, VOID
 
     from tirodhan.deployment import release_capture
 
     config = copy.deepcopy(CONFIG)
     config["recovery_client_id"] = RCLIENT
     config["recovery_principal_id"] = ROID
+    config["database_verification_client_id"] = VCLIENT
+    config["database_verification_principal_id"] = VOID
     if failure == "recovery-pin":
         config["recovery_principal_id"] = "00000000-0000-0000-0000-000000000066"
     elif failure == "recovery-pin-missing":
@@ -339,6 +343,8 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
             if args[:4] == ("az", "ad", "sp", "show"):
                 if args[5] == RCLIENT:
                     return {"id": ROID, "appId": RCLIENT}
+                if args[5] == VCLIENT:
+                    return {"id": VOID, "appId": VCLIENT, "accountEnabled": failure != "verifier"}
                 return {"id": service_oid, "appId": config["deployment_client_id"]}
             if args[:4] == ("az", "ad", "app", "show"):
                 return {
@@ -380,11 +386,13 @@ def test_existing_operator_capture_uses_actual_identity_and_never_mutates(
         return
     request = capture()
     assert request["principal_id"] == (
-        OID if kind in {"bootstrap", "database-bootstrap"} else service_oid
+        OID if kind in release_capture.DATABASE_ADMIN_PURPOSES | {"bootstrap"} else service_oid
     )
     assert request["identity_kind"] == release_capture.DESTINATIONS[kind][2]
-    if kind in {"bootstrap", "database-bootstrap"}:
+    if kind in release_capture.DATABASE_ADMIN_PURPOSES | {"bootstrap"}:
         assert request["principal"]["appId"] is None
+    if kind == "enroll-database-verifier":
+        assert request["verifier_principal"]["principal_id"] == VOID
     if kind == "bootstrap":
         assert request["deployment_principal"]["id"] == service_oid
         assert request["deployment_principal"]["id"] != request["principal_id"]

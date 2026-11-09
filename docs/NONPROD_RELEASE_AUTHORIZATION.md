@@ -168,6 +168,7 @@ DEPLOYMENT-class and blocked before signing-key unlock while release_enabled=fal
 |---|---|---|
 | bootstrap | bootstrap with explicit enrollment/discovery bindings | O / operator-local |
 | database-bootstrap | database-bootstrap with independently enrolled A evidence key | Configured A / operator-local |
+| enroll-database-verifier | Exact stage-zero SQL verifier enrollment with independently enrolled A evidence key | Configured A / operator-local |
 | seed-local | seed-secrets, exact --secret-name batch | D / operator-local |
 | seed-workflow | seed-secrets, ghcr-pull-pat only | D / repository NONPROD_RELEASE_AUTHORIZATION |
 | log-local | rotate-log-sas | D / operator-local |
@@ -175,7 +176,7 @@ DEPLOYMENT-class and blocked before signing-key unlock while release_enabled=fal
 | log-scheduled | rotate-log-sas plus the exact committed workflow cron | D / repository NONPROD_LOG_SAS_AUTHORIZATION |
 
 Use the same explicit session, expiry, reviewed-main provenance and private custody flow.
-Supply --database-key-id for database-bootstrap; V cannot substitute for A. Capture
+Supply `--database-key-id` for `database-bootstrap` and `enroll-database-verifier`. V cannot substitute for A. Capture
 reads the actual operator OID/tenant for O/A and verifies deployment-app ownership for O.
 Bootstrap also captures and signs D's actual service-principal object ID, separately from
 the operator identity; live bootstrap verifies that binding again. Local and workflow

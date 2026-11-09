@@ -37,6 +37,7 @@ REQUIRED: dict[str, frozenset[str]] = {
     "foundation-plan": FOUNDATION,
     "foundation-apply": FOUNDATION | {"saved_plan"},
     "database-bootstrap": COMMON | {"database_authority", "foundation"},
+    "enroll-database-verifier": COMMON | {"database_authority", "foundation"},
     "database-verify": (DEPLOYMENT - {"permissions"})
     | {"database_verification_authority", "verification_request", "foundation"},
     "migration-plan": MIGRATION,
@@ -72,6 +73,7 @@ IDENTITIES = {
     "recover-vault": "recovery",
     "enroll-recovery": "operator",
     "database-bootstrap": "database",
+    "enroll-database-verifier": "database",
     "database-verify": "database_verification",
 }
 

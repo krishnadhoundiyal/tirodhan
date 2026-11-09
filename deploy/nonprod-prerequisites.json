@@ -32,8 +32,8 @@
     "database_authority": {
       "authority": "configured PostgreSQL Entra administrator and SQL identity",
       "identity": "A",
-      "scope": "exact server/admin role",
-      "allowed_operation": "verify configured admin identity and target before bootstrap SQL",
+      "scope": "exact server and administrator role, and separately signed verifier identity for stage-zero enrollment",
+      "allowed_operation": "verify configured administrator and target before bootstrap SQL or verifier enrollment",
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "features": {
@@ -341,6 +341,13 @@
       "vault"
     ],
     "database-bootstrap": [
+      "database_authority",
+      "execution_authority",
+      "foundation",
+      "identity",
+      "target"
+    ],
+    "enroll-database-verifier": [
       "database_authority",
       "execution_authority",
       "foundation",

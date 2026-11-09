@@ -83,6 +83,29 @@ def maintenance_binding_keys(operation: str) -> set[str]:
     raise AdmissionDenied("UNKNOWN_MAINTENANCE_OPERATION")
 
 
+def database_verifier_enrollment_target(config: dict[str, Any]) -> dict[str, str]:
+    client = config.get("database_verification_client_id")
+    principal = config.get("database_verification_principal_id")
+    tf = config["terraform"]
+    try:
+        if (
+            not isinstance(client, str)
+            or not isinstance(principal, str)
+            or UUID(principal) == UUID(tf["postgres_admin_object_id"])
+            or UUID(client) == UUID(config["deployment_client_id"])
+            or client == config.get("recovery_client_id")
+        ):
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as exc:
+        raise AdmissionDenied("DATABASE_VERIFIER_ENROLLMENT_TARGET_INVALID") from exc
+    return {
+        "client_id": client,
+        "principal_id": principal,
+        "role": f"tirodhan-np-{tf['suffix']}-database-verifier",
+        "tenant_id": tf["tenant_id"],
+    }
+
+
 def digest(value: Any) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
