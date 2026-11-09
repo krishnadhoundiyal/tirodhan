@@ -161,8 +161,12 @@ and [Geocoding billing and quotas](https://developers.google.com/maps/documentat
    UAMI-backed SQL principal. Set `POSTGRES_HOST`, `POSTGRES_ADMIN_NAME`,
    `RUNTIME_DATABASE_ROLE`, `RUNTIME_PRINCIPAL_ID` from Terraform outputs, then
    run `python -m tirodhan.deployment.bootstrap_database` from the repository root.
-   If connecting outside Azure, provide `postgres_bootstrap_ipv4` temporarily;
-   remove it through Terraform afterward. Re-running checks the principal's OID.
+   If connecting outside Azure, use `postgres_bootstrap_ipv4` for the operator's single
+   egress IPv4 in an approved stage-zero foundation plan. After SQL bootstrap and verifier
+   enrollment, clear the input and approve a new stage-zero plan whose sole resource change
+   deletes `temporary-bootstrap`. Apply verifies the deletion in Terraform state and Azure
+   and confirms Azure still lists `nonprod-azure-origin`. Re-running SQL bootstrap checks the
+   principal's OID.
    Grants are database CONNECT, public schema USAGE/CREATE and spatial-reference
    SELECT; the UAMI owns its migration-created tables. Admin pre-creates PostGIS.
    TLS certificates are verified, Entra tokens are obtained per connection, and

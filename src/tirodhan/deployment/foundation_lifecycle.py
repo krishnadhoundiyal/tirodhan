@@ -16,6 +16,7 @@ from tirodhan.deployment.deployment_admission import (
     configuration,
     require_release_authorization,
 )
+from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.foundation_reconcile import admitted, admitted_with_grant
 from tirodhan.deployment.lifecycle_checks import Checks, automatic_compensation_context
 from tirodhan.deployment.lifecycle_evidence import Observations, classify_state
@@ -70,6 +71,8 @@ def baseline_blob_args(io: Observations, name: str) -> tuple[str, ...]:
 
 def record_baseline(checks: Checks, plan: Path) -> dict[str, Any]:
     state = checks.io.backend()
+    if state.fingerprint != checks.binding().get("state_fingerprint"):
+        raise AdmissionDenied("BASELINE_CHANGED_AFTER_AUTHORIZATION")
     inventory = checks.io.inventory()
     classification = classify_state(
         state, inventory, app_scope=checks.io.scope, retained={checks.io.vault_id}
@@ -93,8 +96,13 @@ def record_baseline(checks: Checks, plan: Path) -> dict[str, Any]:
             and row.get("change", {}).get("actions") == ["create"]
         ),
     }
-    if state.fingerprint != checks.binding().get("state_fingerprint"):
-        raise AdmissionDenied("BASELINE_CHANGED_AFTER_AUTHORIZATION")
+    if any(
+        row.get("mode", "managed") == "managed"
+        and row.get("address") == BOOTSTRAP_FIREWALL_ADDRESS
+        and row.get("change", {}).get("actions") == ["delete"]
+        for row in approved_plan.get("resource_changes", [])
+    ):
+        value["removed_bootstrap_firewall_id"] = state.resources[BOOTSTRAP_FIREWALL_ADDRESS]
     if classification != "CLEAN_INITIALIZED":
         return value  # Owned partial resumes are explicitly ineligible for compensation.
     name = baseline_name(checks.auth.run_id, str(value["original_plan_sha256"]))
@@ -154,6 +162,34 @@ def apply(operation: str, plan: Path) -> None:
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
+        if baseline and (removed_rule := baseline.get("removed_bootstrap_firewall_id")):
+            resources = checks.foundation_ids()
+            preserved_ids = sorted(
+                value.casefold()
+                for value in baseline["managed_ids"]
+                if value.casefold() != removed_rule.casefold()
+            )
+            collection = removed_rule.rsplit("/", 1)[0]
+            rules = io.arm(collection, "2024-08-01") or {}
+            rows = rules.get("value")
+            if (
+                BOOTSTRAP_FIREWALL_ADDRESS in resources
+                or sorted(value.casefold() for value in resources.values()) != preserved_ids
+                or rules.get("nextLink")
+                or not isinstance(rows, list)
+                or any(
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("id"), str)
+                    or not row["id"]
+                    or row["id"].casefold() == removed_rule.casefold()
+                    for row in rows
+                )
+                or not any(
+                    row["id"].casefold() == f"{collection}/nonprod-azure-origin".casefold()
+                    for row in rows
+                )
+            ):
+                raise AdmissionDenied("BOOTSTRAP_FIREWALL_REMOVAL_UNVERIFIED")
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
     except AdmissionDenied:

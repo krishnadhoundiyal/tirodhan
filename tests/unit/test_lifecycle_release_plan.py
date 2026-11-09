@@ -8,9 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from lifecycle_fakes import CONFIG, MemoryObservations, auth, write_plan
+from lifecycle_fakes import CONFIG, SCOPE, MemoryObservations, auth, state, write_plan
 
 from tirodhan.deployment import deployment_admission, prerequisites, release
+from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.migration_start import expected_job_id, operation_key
 
@@ -193,6 +194,76 @@ def test_saved_plan_rejects_noncanonical_foundation_stage(monkeypatch, tmp_path,
     io, checks = plan_case(monkeypatch, tmp_path, "foundation-apply", current_stage=0)
     io.runner.plan["variables"]["deployment_stage"]["value"] = stage
     assert not checks.check_saved_plan()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        "different-rule",
+        "different-server",
+        "replacement",
+        "extra-update",
+        "move",
+        "enabled-input",
+        "later-stage",
+        "migration",
+        "stale-state",
+    ],
+)
+def test_saved_plan_only_allows_exact_stage_zero_bootstrap_firewall_removal(
+    monkeypatch, tmp_path, invalid
+):
+    operation = "migration-apply" if invalid == "migration" else "foundation-apply"
+    io, checks = plan_case(monkeypatch, tmp_path, operation, current_stage=0)
+    server = f"{SCOPE}/providers/Microsoft.DBforPostgreSQL/flexibleServers/test-pg"
+    rule_id = f"{server}/firewallRules/temporary-bootstrap"
+    outputs = io.current.document["outputs"]
+    io.current = state(
+        {
+            "azurerm_postgresql_flexible_server.database": server,
+            BOOTSTRAP_FIREWALL_ADDRESS: rule_id,
+        }
+    )
+    outputs["deployment_stage"]["value"] = 1 if invalid == "later-stage" else 0
+    io.current.document["outputs"] = outputs
+    path = checks.parameters["plan"]
+    write_plan(path, io.current)
+    checks.auth = auth(
+        operation,
+        plan_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        state_fingerprint=io.current.fingerprint,
+    )
+    io.runner.plan["variables"]["deployment_stage"]["value"] = 1 if invalid == "migration" else 0
+    io.runner.plan["variables"]["postgres_bootstrap_ipv4"] = {
+        "value": "192.0.2.1" if invalid == "enabled-input" else None,
+    }
+    change = {"actions": ["delete"], "before": {"id": rule_id}, "after": None}
+    row = {
+        "address": BOOTSTRAP_FIREWALL_ADDRESS,
+        "type": "azurerm_postgresql_flexible_server_firewall_rule",
+        "change": change,
+    }
+    io.runner.plan["resource_changes"] = [row]
+    if invalid == "different-rule":
+        change["before"]["id"] = f"{server}/firewallRules/nonprod-azure-origin"
+    elif invalid == "different-server":
+        change["before"]["id"] = rule_id.replace("test-pg", "other-pg")
+    elif invalid == "replacement":
+        change["actions"] = ["delete", "create"]
+    elif invalid in {"extra-update", "move"}:
+        extra = {
+            "address": "azurerm_postgresql_flexible_server.database",
+            "type": "azurerm_postgresql_flexible_server",
+            "change": {"actions": ["update" if invalid == "extra-update" else "no-op"]},
+        }
+        if invalid == "move":
+            extra["previous_address"] = "azurerm_postgresql_flexible_server.old"
+        io.runner.plan["resource_changes"].append(extra)
+    elif invalid == "stale-state":
+        io.current = state(io.current.resources, serial=1)
+
+    assert checks.check_saved_plan() is (invalid is None)
 
 
 def test_real_environment_stage_plan_is_admitted_without_apply(tmp_path):

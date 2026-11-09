@@ -20,6 +20,7 @@ from lifecycle_fakes import (
 from tirodhan.deployment import foundation_lifecycle as lifecycle
 from tirodhan.deployment import prerequisites
 from tirodhan.deployment.deployment_admission import AdmissionDenied
+from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_checks import Checks
 from tirodhan.deployment.prerequisites import Controller, Grant
 
@@ -232,6 +233,57 @@ def test_apply_routes_cleanup_only_from_serialized_eligible_first_attempt(
     eligible = classification == "CLEAN_INITIALIZED" and serialized and len(operations) == 2
     assert prepare.called is eligible and compensate.called is eligible
     assert io.runner.run.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "unverified", [None, "state", "preservation", "azure", "paging", "missing-origin"]
+)
+def test_foundation_firewall_cleanup_requires_state_and_azure_absence(
+    monkeypatch, tmp_path, unverified
+):
+    io = MemoryObservations()
+    server_address = "azurerm_postgresql_flexible_server.database"
+    server = f"{SCOPE}/providers/Microsoft.DBforPostgreSQL/flexibleServers/test-pg"
+    collection = f"{server}/firewallRules"
+    rule = f"{collection}/temporary-bootstrap"
+    io.current = state({server_address: server, BOOTSTRAP_FIREWALL_ADDRESS: rule})
+    io.active = {VAULT, server, rule}
+    io.runner.plan["resource_changes"] = [
+        {"address": BOOTSTRAP_FIREWALL_ADDRESS, "change": {"actions": ["delete"]}}
+    ]
+    authorization = auth("foundation-apply", state_fingerprint=io.current.fingerprint)
+    checks = Checks(authorization, io.config, {}, io)
+    grant = Grant(authorization, "foundation-apply", io.current.fingerprint, (), {})
+    monkeypatch.setattr(lifecycle, "admitted_with_grant", lambda *a, **k: (checks, io, grant))
+    monkeypatch.setattr(lifecycle, "revalidate_database", lambda _: None)
+    monkeypatch.setattr(checks, "check_foundation", lambda: True)
+    plan = tmp_path / "reviewed.tfplan"
+    write_plan(plan, io.current)
+
+    def apply_plan(*args, timeout):
+        assert args == ("terraform", "apply", "-input=false", str(plan))
+        assert timeout == 1800
+        if unverified != "state":
+            io.current = state(
+                {} if unverified == "preservation" else {server_address: server}, serial=1
+            )
+
+    def live_rules(resource_id, version):
+        assert (resource_id, version) == (collection, "2024-08-01")
+        rows = (
+            [] if unverified == "missing-origin" else [{"id": f"{collection}/nonprod-azure-origin"}]
+        )
+        if unverified == "azure":
+            rows.append({"id": rule})
+        return {"value": rows, **({"nextLink": "next"} if unverified == "paging" else {})}
+
+    monkeypatch.setattr(io.runner, "run", apply_plan)
+    monkeypatch.setattr(io, "arm", live_rules)
+    if unverified is None:
+        lifecycle.apply("foundation-apply", plan)
+    else:
+        with pytest.raises(AdmissionDenied, match="BOOTSTRAP_FIREWALL_REMOVAL_UNVERIFIED"):
+            lifecycle.apply("foundation-apply", plan)
 
 
 @pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply"])

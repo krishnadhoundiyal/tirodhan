@@ -8,6 +8,8 @@ from typing import Any
 
 from tirodhan.deployment.deployment_admission import ROOT, AdmissionDenied
 
+BOOTSTRAP_FIREWALL_ADDRESS = "azurerm_postgresql_flexible_server_firewall_rule.bootstrap[0]"
+
 
 def required_addresses(configuration: dict[str, Any]) -> set[str]:
     inventory = json.loads((ROOT / "deploy/nonprod-foundation-inventory.json").read_text())
