@@ -6,11 +6,51 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from lifecycle_fakes import MemoryObservations, auth
+from lifecycle_fakes import SCOPE, TENANT, MemoryObservations, auth
 
 from tirodhan.deployment import bootstrap_database, database_evidence, lifecycle_checks
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_checks import Checks
+
+
+@pytest.mark.parametrize(
+    "invalid", [None, "missing", "id", "objectId", "tenantId", "principalType"]
+)
+def test_database_bootstrap_checks_exact_live_entra_administrator(monkeypatch, invalid):
+    authorization = auth("database-bootstrap", kind="database", database_bootstrap_authorized=True)
+    server_id = f"{SCOPE}/providers/Microsoft.DBforPostgreSQL/flexibleServers/pg"
+    administrator_id = f"{server_id}/administrators/{authorization.principal_id}"
+    properties = {
+        "objectId": authorization.principal_id,
+        "tenantId": TENANT,
+        "principalType": "User",
+    }
+    administrator = {"id": administrator_id, "properties": properties}
+    if invalid == "id":
+        administrator["id"] += "-other"
+    elif invalid is not None and invalid != "missing":
+        properties[invalid] = "other"
+    io = Mock()
+    io.arm.return_value = None if invalid == "missing" else administrator
+    checks = Checks(
+        authorization,
+        {
+            "terraform": {
+                "postgres_admin_object_id": authorization.principal_id,
+                "postgres_admin_type": "User",
+                "tenant_id": TENANT,
+            }
+        },
+        {},
+        io,
+    )
+    monkeypatch.setattr(checks, "database_target", lambda: {"server_id": server_id})
+    signer = Mock()
+    monkeypatch.setattr(database_evidence, "signer", signer)
+
+    assert checks.check_database_authority() is (invalid is None)
+    signer.assert_called_once_with(authorization)
+    io.arm.assert_called_once_with(administrator_id, "2024-08-01")
 
 
 @pytest.mark.parametrize(
