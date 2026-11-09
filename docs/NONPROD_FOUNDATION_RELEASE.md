@@ -144,3 +144,25 @@ Allocation remains unproven. Use the existing protected review and signed
 planning and apply cycle. Reconcile current state and require a fresh plan with
 only the five missing PostgreSQL instances. Preserve all existing instances.
 Exact-plan approval and the protected GitHub approval are mandatory.
+
+### Approved PostgreSQL-only placement in India South Central
+
+The zone-3 attempt in run `42351121930` failed at Azure allocation with
+`SkuNotAvailable` (correlation `b0a784d7-b05d-c4d9-1039-c6a25247ad8c`).
+Azure removed the failed server. All 27 existing resource IDs were verified
+and the backend preserved its lineage at serial 47.
+
+The owner approved India South Central zone 3 for the five PostgreSQL
+resources, including cross-region database traffic and its transfer charges.
+Keep B1ms, PostgreSQL 17, 32 GiB Premium SSD, Entra-only authentication,
+seven-day backups, and disabled HA and geo backup. The database uses the
+new `-pg-isc` name in the same resource group and backend. The rest of the
+foundation stays in Central India. The SKU gate reads the database location
+from committed Terraform and checks the selected SKU and zone there.
+
+Require a fresh foundation plan with only the five PostgreSQL creates and no
+updates, deletes or replacements. Verify the 27 existing IDs before and after
+apply. Signed authority and exact-plan human approval remain mandatory.
+After apply, verify the actual server region, SKU and zone. Before application
+activation, verify TLS and Entra connectivity and measure representative SQL
+latency from Central India through the existing protected verification path.

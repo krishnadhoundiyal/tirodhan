@@ -163,6 +163,8 @@ def test_job_sidecar_has_explicit_startup_tolerance(name: str, startup_seconds: 
 def test_database_exception_is_nonprod_with_no_password() -> None:
     """Preserve the explicit NONPROD placement, cost and Entra-only database policy."""
     db = resource("database.tf", "azurerm_postgresql_flexible_server", "database")
+    assert db["name"] == "${local.prefix}-pg-isc"
+    assert db["location"] == "indiasouthcentral"
     assert db["sku_name"] == "B_Standard_B1ms"
     assert db["zone"] == "3"
     assert db["storage_mb"] == 32768
@@ -177,6 +179,7 @@ def test_database_exception_is_nonprod_with_no_password() -> None:
     environment = resource(
         "container_apps_environment.tf", "azurerm_container_app_environment", "nonprod"
     )
+    assert environment["location"] == "${var.location}"
     assert environment["workload_profile"] == [
         {"name": "Consumption", "workload_profile_type": "Consumption"}
     ]
