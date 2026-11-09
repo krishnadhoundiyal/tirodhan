@@ -10,6 +10,11 @@
       "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAVvG03eMCXEdivECiwa8JhpZByWQlvVyDMnHWz3HjitU=\n-----END PUBLIC KEY-----\n",
       "principal_id": "73d14d83-1951-4731-bbd4-98e660ca89e3",
       "identity_kind": "database_verification"
+    },
+    "ed25519-06d110673485c2b82b555b4663fdb8197f23e37830f66c37e8bdc88296270e2f": {
+      "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEABxBAeDHD5dCw5wzZoKkx7fEF50DY7l2HZ9olsTuFWA8=\n-----END PUBLIC KEY-----\n",
+      "principal_id": "7efc010b-4010-44ca-89a2-598987636f6f",
+      "identity_kind": "database"
     }
   },
   "maximum_evidence_age_seconds": 300
