@@ -1,7 +1,7 @@
 resource "azurerm_postgresql_flexible_server" "database" {
-  name                          = "${local.prefix}-pg"
+  name                          = "${local.prefix}-pg-isc"
   resource_group_name           = data.azurerm_resource_group.nonprod.name
-  location                      = var.location
+  location                      = "indiasouthcentral"
   version                       = var.postgres_version
   sku_name                      = "B_Standard_B1ms"
   zone                          = "3"
@@ -15,7 +15,7 @@ resource "azurerm_postgresql_flexible_server" "database" {
     tenant_id                     = var.tenant_id
   }
 
-  # Owner-approved zone-3 retry after automatic, zone-1 and zone-2 allocation failures.
+  # Owner-approved database placement after Central India B1ms allocation failures.
   # Keep B1ms/no HA; catalog support does not guarantee live capacity.
   # Preserve service-owned placement after creation, including existing servers.
   lifecycle {

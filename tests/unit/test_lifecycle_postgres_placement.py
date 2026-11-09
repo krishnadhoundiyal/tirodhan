@@ -61,7 +61,7 @@ def test_admission_requires_selected_zone_on_exact_sku(monkeypatch, skus, expect
             "flexible-server",
             "list-skus",
             "--location",
-            "centralindia",
+            "indiasouthcentral",
             "--subscription",
             io.tf["subscription_id"],
             "--output",
@@ -96,7 +96,9 @@ def test_zone_authority_is_committed_terraform(monkeypatch, tmp_path, advertised
     """Bind the check to source-selected placement instead of a hard-coded retry zone."""
     directory = tmp_path / "infra/terraform/nonprod"
     directory.mkdir(parents=True)
-    (directory / "database.tf").write_text('sku_name = "B_Standard_B1ms"\nzone = "2"\n')
+    (directory / "database.tf").write_text(
+        'location = "indiasouthcentral"\nsku_name = "B_Standard_B1ms"\nzone = "2"\n'
+    )
     monkeypatch.setattr(lifecycle_checks, "ROOT", tmp_path)
     io = MemoryObservations()
     response = catalog([{"name": "Standard_B1ms", "supportedZones": [advertised_zone]}])
@@ -109,7 +111,26 @@ def test_missing_or_ambiguous_zone_blocks_before_provider_read(monkeypatch, tmp_
     """Omitted or unimplemented initial-placement authority cannot satisfy the gate."""
     directory = tmp_path / "infra/terraform/nonprod"
     directory.mkdir(parents=True)
-    (directory / "database.tf").write_text('sku_name = "B_Standard_B1ms"\n' + placement)
+    (directory / "database.tf").write_text(
+        'location = "indiasouthcentral"\nsku_name = "B_Standard_B1ms"\n' + placement
+    )
+    monkeypatch.setattr(lifecycle_checks, "ROOT", tmp_path)
+    io = MemoryObservations()
+    assert not Checks(auth("foundation-plan"), io.config, {}, io).check_postgres_sku()
+    assert not io.runner.commands
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["", "location = var.location", 'location = "indiasouthcentral"\nlocation = var.location'],
+)
+def test_missing_or_ambiguous_database_location_blocks_before_provider_read(
+    monkeypatch, tmp_path, location
+):
+    """The foundation region cannot substitute for unverified database placement."""
+    directory = tmp_path / "infra/terraform/nonprod"
+    directory.mkdir(parents=True)
+    (directory / "database.tf").write_text('sku_name = "B_Standard_B1ms"\nzone = "3"\n' + location)
     monkeypatch.setattr(lifecycle_checks, "ROOT", tmp_path)
     io = MemoryObservations()
     assert not Checks(auth("foundation-plan"), io.config, {}, io).check_postgres_sku()

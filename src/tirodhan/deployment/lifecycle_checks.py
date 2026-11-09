@@ -385,9 +385,15 @@ class Checks:
         return True
 
     def check_postgres_sku(self) -> bool:
-        """Verify advertised support for the source-selected SKU and initial zone."""
-        # Ported from PR #84: committed Terraform is the SKU authority, never a fallback SKU.
+        """Verify advertised support for the source-selected database placement."""
+        # The database has its own region. Read the committed Terraform placement.
         source = (ROOT / "infra/terraform/nonprod/database.tf").read_text()
+        locations = re.findall(r"^[ \t]*location[ \t]*=[ \t]*(.*)$", source, flags=re.MULTILINE)
+        if len(locations) != 1:
+            return False
+        location = re.fullmatch(r'"([a-z][a-z0-9]*)"', locations[0].strip())
+        if location is None:
+            return False
         matches = re.findall(r'^\s*sku_name\s*=\s*"([^"]+)"', source, flags=re.MULTILINE)
         if len(matches) != 1:
             return False
@@ -403,7 +409,7 @@ class Checks:
             "flexible-server",
             "list-skus",
             "--location",
-            self.tf["location"],
+            location[1],
             "--subscription",
             self.tf["subscription_id"],
             "--output",
