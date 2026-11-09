@@ -160,10 +160,10 @@ async def test_signed_database_facts_require_verified_principal_and_every_sql_fa
         connection.transaction = Mock(return_value=AsyncMock())
     admin.fetch.return_value = [
         {
-            "rolename": "runtime",
-            "objectId": "wrong" if invalid == "oid" else "runtime-oid",
-            "principalType": "service",
-            "isAdmin": 1 if invalid == "admin" else 0,
+            "rolname": "runtime",
+            "objectid": "wrong" if invalid == "oid" else "runtime-oid",
+            "principaltype": "service",
+            "isadmin": 1 if invalid == "admin" else 0,
         }
     ]
     admin.fetchval.side_effect = [invalid == "elevated", False]

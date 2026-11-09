@@ -38,9 +38,11 @@ def authorized_sql_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("role_column", ["rolename", "rolname"])
 async def test_database_bootstrap_is_rerunnable_and_grants_only_schema_privileges(
     monkeypatch: pytest.MonkeyPatch,
     existing: bool,
+    role_column: str,
 ) -> None:
     for key, value in {
         "RUNTIME_DATABASE_ROLE": "synthetic-runtime",
@@ -53,7 +55,7 @@ async def test_database_bootstrap_is_rerunnable_and_grants_only_schema_privilege
     admin.fetchval.return_value = 1 if existing else None
     admin.fetch.return_value = [
         {
-            "rolename": "synthetic-runtime",
+            role_column: "synthetic-runtime",
             "objectId": "oid",
             "principalType": "service",
             "isAdmin": 0,
@@ -80,7 +82,9 @@ async def test_database_bootstrap_is_rerunnable_and_grants_only_schema_privilege
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field,value", [("objectId", "different-oid"), ("isAdmin", 1)])
+@pytest.mark.parametrize(
+    "field,value", [("rolname", "different-role"), ("objectid", "different-oid"), ("isadmin", 1)]
+)
 async def test_bootstrap_rejects_wrong_or_privileged_existing_principal(
     monkeypatch: pytest.MonkeyPatch,
     field: str,
@@ -96,10 +100,10 @@ async def test_bootstrap_rejects_wrong_or_privileged_existing_principal(
     connection = AsyncMock()
     connection.fetchval.return_value = 1
     principal = {
-        "rolename": "synthetic-runtime",
-        "objectId": "oid",
-        "principalType": "service",
-        "isAdmin": 0,
+        "rolname": "synthetic-runtime",
+        "objectid": "oid",
+        "principaltype": "service",
+        "isadmin": 0,
     }
     principal[field] = value
     connection.fetch.return_value = [principal]
