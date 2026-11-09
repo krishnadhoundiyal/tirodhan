@@ -57,6 +57,56 @@ def test_every_foundation_binding_is_mandatory_before_database_bootstrap() -> No
         assert io.runner.commands == []
 
 
+@pytest.mark.parametrize("assignment_exists", [True, False])
+def test_foundation_reads_scoped_role_assignments_through_authorization_api(
+    monkeypatch, assignment_exists: bool
+) -> None:
+    io = MemoryObservations()
+    resources = {}
+    roles = set()
+    for address in required_addresses(io.config["terraform"]):
+        if address.startswith("azurerm_role_assignment."):
+            resource_id = (
+                io.scope + "/providers/Microsoft.ServiceBus/namespaces/test/queues/planning"
+                "/providers/Microsoft.Authorization/roleAssignments/" + address
+            )
+            roles.add(resource_id)
+        else:
+            resource_id = io.scope + "/providers/Synthetic/" + address
+        resources[address] = resource_id
+    io.current = state(resources)
+    checked_roles = set()
+
+    def generic_read(*args):
+        assert args[:4] == ("az", "resource", "show", "--ids")
+        assert args[4] not in roles
+        return {"id": args[4]}
+
+    def arm(resource_id, version):
+        if resource_id in roles:
+            assert version == "2022-04-01"
+            checked_roles.add(resource_id)
+            return {"id": resource_id} if assignment_exists else None
+        return {
+            "id": resource_id,
+            "properties": {
+                "principalId": "principal",
+                "clientId": "client",
+                "state": "Ready",
+                "fullyQualifiedDomainName": "test.postgres.database.azure.com",
+                "authConfig": {"passwordAuth": "Disabled"},
+                "status": "Active",
+                "provisioningState": "Succeeded",
+            },
+        }
+
+    monkeypatch.setattr(io.runner, "json", generic_read)
+    monkeypatch.setattr(io, "arm", arm)
+    checks = Checks(auth("database-bootstrap", kind="database"), io.config, {}, io)
+    assert checks.check_foundation() is assignment_exists
+    assert checked_roles == roles if assignment_exists else len(checked_roles) == 1
+
+
 def test_inventory_refuses_unreviewed_terraform_drift(monkeypatch, tmp_path) -> None:
     from tirodhan.deployment import foundation_inventory
 

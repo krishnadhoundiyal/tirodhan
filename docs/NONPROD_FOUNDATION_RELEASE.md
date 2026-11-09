@@ -166,3 +166,13 @@ apply. Signed authority and exact-plan human approval remain mandatory.
 After apply, verify the actual server region, SKU and zone. Before application
 activation, verify TLS and Entra connectivity and measure representative SQL
 latency from Central India through the existing protected verification path.
+
+The approved second attempt of run `42620542877` created all five PostgreSQL
+resources. Azure reported the server Ready in India South Central zone 3, and
+Terraform recorded all 32 instances at stage 0 and serial 50. Independent reads
+verified the 27 original IDs, their RBAC bindings and the preserved backend.
+The job reported failure during verification. The generic resource lookup
+returned `NoRegisteredProviderFound` when reproduced against an existing
+Service Bus queue role assignment. Verify scoped role assignment IDs with the
+Microsoft.Authorization API. Reconcile the existing foundation before continuing
+to SQL bootstrap. The completed apply token was retired.
