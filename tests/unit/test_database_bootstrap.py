@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -117,7 +119,8 @@ async def test_bootstrap_rejects_wrong_or_privileged_existing_principal(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "scenario", ["create", "replay", "wrong-principal", "missing-metadata", "unsafe", "denied"]
+    "scenario",
+    ["create", "replay", "wrong-principal", "missing-metadata", "unsafe", "denied", "concurrent"],
 )
 async def test_verifier_enrollment_uses_exact_signed_role_and_no_extra_grants(
     monkeypatch, scenario
@@ -172,6 +175,51 @@ async def test_verifier_enrollment_uses_exact_signed_role_and_no_extra_grants(
             "isadmin": 0,
         }
     ]
+    if scenario == "concurrent":
+        lock = asyncio.Lock()
+        created = False
+        attempts = 0
+
+        def new_admin():
+            conn = AsyncMock()
+
+            @asynccontextmanager
+            async def transaction():
+                try:
+                    yield
+                finally:
+                    lock.release()
+
+            async def execute(query, *_):
+                nonlocal created, attempts
+                if "pg_advisory_xact_lock" in query:
+                    await lock.acquire()
+                    await asyncio.sleep(0)
+                else:
+                    assert lock.locked() and "pgaadauth_create_principal_with_oid" in query
+                    attempts += 1
+                    assert not created
+                    created = True
+
+            async def fetchval(query, *_):
+                assert lock.locked()
+                if query.startswith("SELECT 1 FROM pg_roles"):
+                    return created
+                return "'CREATE'" not in query
+
+            conn.transaction = transaction
+            conn.execute = execute
+            conn.fetchval = fetchval
+            conn.fetch.return_value = admin.fetch.return_value
+            return conn
+
+        async def connect_for_enrollment(*, database, **_):
+            return application if database == "tirodhan" else new_admin()
+
+        monkeypatch.setattr(module.asyncpg, "connect", connect_for_enrollment)
+        await asyncio.gather(module.enroll_verifier(), module.enroll_verifier())
+        assert attempts == 1
+        return
     connect = AsyncMock(side_effect=[application, admin])
     monkeypatch.setattr(module.asyncpg, "connect", connect)
     if scenario == "denied":

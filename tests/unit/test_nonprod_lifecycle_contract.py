@@ -101,6 +101,7 @@ def test_missing_any_required_validator_never_succeeds(operation: str) -> None:
             "recover-vault": "recovery",
             "enroll-recovery": "operator",
             "database-bootstrap": "database",
+            "enroll-database-verifier": "database",
             "database-verify": "database_verification",
         }.get(operation, "deployment"),
     )
