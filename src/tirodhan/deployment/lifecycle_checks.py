@@ -30,6 +30,7 @@ from tirodhan.deployment.deployment_admission import (
     maintenance_target,
     operation_class,
 )
+from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_evidence import (
     BackendState,
     Observations,
@@ -932,7 +933,15 @@ class Checks:
         for row in plan.get("resource_changes", []):
             if row.get("mode", "managed") != "managed":
                 continue
-            if "delete" in row.get("change", {}).get("actions", []):
+            if "delete" in row.get("change", {}).get("actions", []) and not (
+                len(changes) == 1
+                and self._is_bootstrap_firewall_cleanup(row, current, variables)
+                and not any(
+                    "previous_address" in change or "deposed" in change
+                    for change in plan.get("resource_changes", [])
+                    if change.get("mode", "managed") == "managed"
+                )
+            ):
                 return False
             if row.get("type") in {"azurerm_resource_group", "azurerm_key_vault"}:
                 return False
@@ -971,6 +980,30 @@ class Checks:
         return bool(
             (type(stage) is int and stage == expected_stage)
             or (type(stage) is str and stage == str(expected_stage))
+        )
+
+    def _is_bootstrap_firewall_cleanup(
+        self, row: dict[str, Any], current: BackendState, variables: dict[str, Any]
+    ) -> bool:
+        change = row["change"]
+        server = current.resources.get("azurerm_postgresql_flexible_server.database")
+        rule = current.resources.get(BOOTSTRAP_FIREWALL_ADDRESS)
+        stage = (current.document or {}).get("outputs", {}).get("deployment_stage", {}).get("value")
+        return (
+            self.auth.operation == "foundation-apply"
+            and current.kind == "INITIALIZED"
+            and type(stage) is int
+            and stage == 0
+            and self.tf.get("postgres_bootstrap_ipv4") is None
+            and variables.get("postgres_bootstrap_ipv4", {}).get("value") is None
+            and row.get("address") == BOOTSTRAP_FIREWALL_ADDRESS
+            and row.get("type") == "azurerm_postgresql_flexible_server_firewall_rule"
+            and change["actions"] == ["delete"]
+            and change.get("after") is None
+            and server is not None
+            and rule is not None
+            and rule.casefold() == f"{server}/firewallRules/temporary-bootstrap".casefold()
+            and (change.get("before") or {}).get("id", "").casefold() == rule.casefold()
         )
 
     def check_bootstrap_authority(self) -> bool:
