@@ -21,6 +21,7 @@ from tirodhan.deployment.deployment_admission import (
     AdmissionDenied,
     configuration,
     contract_digest,
+    database_verifier_enrollment_target,
     digest,
     maintenance_target,
 )
@@ -32,6 +33,7 @@ from tirodhan.deployment.release_custody import (
     private_write,
 )
 from tirodhan.deployment.release_setup import (
+    DATABASE_ADMIN_PURPOSES,
     DESTINATIONS,
     RECOVERY_BOUND_OPERATIONS,
     REPOSITORY,
@@ -328,7 +330,8 @@ def prepare(
             raise AdmissionDenied("RECOVERY_GRANT_PRINCIPAL_UNVERIFIED")
         recovery_principal["tenant_id"] = account["tenantId"]
     deployment_principal = dict(principal) if kind == "bootstrap" else None
-    if kind in {"bootstrap", "database-bootstrap"}:
+    verifier_principal = None
+    if kind in DATABASE_ADMIN_PURPOSES | {"bootstrap"}:
         observer = Observations(config, runner).identity()
         if observer.get("tid") != config["terraform"]["tenant_id"] or not observer.get("oid"):
             raise AdmissionDenied("OPERATOR_CAPTURE_IDENTITY_UNVERIFIED")
@@ -337,9 +340,21 @@ def prepare(
             "appId": observer.get("appid") or observer.get("azp"),
             "tenant_id": observer["tid"],
         }
-        if kind == "database-bootstrap":
+        if kind in DATABASE_ADMIN_PURPOSES:
             if principal["id"] != config["terraform"]["postgres_admin_object_id"]:
                 raise AdmissionDenied("DATABASE_ADMINISTRATOR_IDENTITY_MISMATCH")
+            if kind == "enroll-database-verifier":
+                target = database_verifier_enrollment_target(config)
+                service = runner.json(
+                    "az", "ad", "sp", "show", "--id", target["client_id"], "--output", "json"
+                )
+                if (
+                    service.get("appId") != target["client_id"]
+                    or service.get("id") != target["principal_id"]
+                    or service.get("accountEnabled") is not True
+                ):
+                    raise AdmissionDenied("DATABASE_VERIFIER_ENROLLMENT_TARGET_INVALID")
+                verifier_principal = target
         else:
             app = runner.json("az", "ad", "app", "show", "--id", client, "--output", "json")
             if app.get("appId") != client:
@@ -444,6 +459,8 @@ def prepare(
         request["maintenance_binding"] = maintenance
     if deployment_principal is not None:
         request["deployment_principal"] = deployment_principal
+    if verifier_principal is not None:
+        request["verifier_principal"] = verifier_principal
     if recovery_principal is not None:
         request["recovery_principal"] = recovery_principal
     if secret_names is not None:

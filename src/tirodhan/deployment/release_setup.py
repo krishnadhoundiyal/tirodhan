@@ -29,6 +29,7 @@ from tirodhan.deployment.deployment_admission import (
     ROOT,
     AdmissionDenied,
     contract_digest,
+    database_verifier_enrollment_target,
     digest,
     maintenance_binding_keys,
     maintenance_operation_id,
@@ -69,6 +70,12 @@ DESTINATIONS = {
         "database",
         "operator-local",
     ),
+    "enroll-database-verifier": (
+        "NONPROD_RELEASE_AUTHORIZATION",
+        "operator-local",
+        "database",
+        "operator-local",
+    ),
     "seed-local": (
         "NONPROD_RELEASE_AUTHORIZATION",
         "operator-local",
@@ -86,6 +93,7 @@ DESTINATIONS = {
     "log-scheduled": ("NONPROD_LOG_SAS_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
 }
 PLAN_OPERATIONS = ["terraform-setup", "foundation-plan", "migration-plan", "runtime-plan"]
+DATABASE_ADMIN_PURPOSES = {"database-bootstrap", "enroll-database-verifier"}
 CONSUMER_OPERATIONS = [
     "migration-plan",
     "migration-apply",
@@ -116,6 +124,8 @@ def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str
                 "database_bootstrap_authorized": True,
             }
         }
+    if kind == "enroll-database-verifier":
+        return {kind: {"local_execution_authorized": True}}
     if kind in {"seed-local", "seed-workflow"}:
         return {
             "seed-secrets": {"local_execution_authorized": True}
@@ -382,7 +392,7 @@ def validated_request(
     if (
         identity_evidence["id"] != request["principal_id"]
         or (
-            kind not in {"enrollment", "bootstrap", "database-bootstrap"}
+            kind not in DATABASE_ADMIN_PURPOSES | {"enrollment", "bootstrap"}
             and (not client or identity_evidence["appId"] != client)
         )
         or identity_evidence["tenant_id"] != config["terraform"]["tenant_id"]
@@ -391,13 +401,13 @@ def validated_request(
             and request["principal_id"] != config["database_verification_principal_id"]
         )
         or (
-            kind == "database-bootstrap"
+            kind in DATABASE_ADMIN_PURPOSES
             and request["principal_id"] != config["terraform"]["postgres_admin_object_id"]
         )
     ):
         raise AdmissionDenied("ISSUANCE_PRINCIPAL_NOT_AUTHORIZED")
     validate_policy_keys(policy)
-    if kind in {"database", "database-bootstrap"}:
+    if kind in DATABASE_ADMIN_PURPOSES | {"database"}:
         row = policy["database_evidence_keys"].get(request["database_key_id"], {})
         if (
             row.get("principal_id") != request["principal_id"]
@@ -407,6 +417,11 @@ def validated_request(
     bindings = expected_bindings(kind, request.get("apply_operation"))
     if request.get("operations") != sorted(bindings):
         raise AdmissionDenied("ISSUANCE_OPERATIONS_INCONSISTENT")
+    if kind == "enroll-database-verifier":
+        target = database_verifier_enrollment_target(config)
+        if request.get("verifier_principal") != target:
+            raise AdmissionDenied("DATABASE_VERIFIER_ENROLLMENT_TARGET_INVALID")
+        bindings[kind]["verifier_principal"] = target
     if kind == "bootstrap":
         deployment = request.get("deployment_principal")
         if (

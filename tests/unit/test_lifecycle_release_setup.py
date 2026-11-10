@@ -137,6 +137,7 @@ def sign(context, *, plan=None, output="release.jwt"):
 OPERATOR_PURPOSES = (
     "bootstrap",
     "database-bootstrap",
+    "enroll-database-verifier",
     "seed-local",
     "seed-workflow",
     "log-local",
@@ -158,7 +159,7 @@ def operator_request(context, kind):
         environment=environment,
         operations=sorted(setup.expected_bindings(kind)),
     )
-    if kind in {"bootstrap", "database-bootstrap"}:
+    if kind in setup.DATABASE_ADMIN_PURPOSES | {"bootstrap"}:
         request["principal"]["appId"] = None
         request.pop("recovery_principal", None)
     if kind == "bootstrap":
@@ -167,7 +168,7 @@ def operator_request(context, kind):
             "appId": config["deployment_client_id"],
             "tenant_id": config["terraform"]["tenant_id"],
         }
-    if kind == "database-bootstrap":
+    if kind in setup.DATABASE_ADMIN_PURPOSES:
         config["terraform"]["postgres_admin_object_id"] = OID
         request["configuration_hash"] = digest(config)
         key = Ed25519PrivateKey.generate()
@@ -178,6 +179,8 @@ def operator_request(context, kind):
             "public_key": custody.public_pem(key),
         }
         request["database_key_id"] = kid
+    if kind == "enroll-database-verifier":
+        request["verifier_principal"] = setup.database_verifier_enrollment_target(config)
     if kind.startswith("seed-"):
         request["secret_names"] = (
             ["ghcr-pull-pat"] if kind == "seed-workflow" else ["twofactor-api-key"]
@@ -205,6 +208,9 @@ def test_existing_operator_operation_profiles_have_real_bound_signatures(context
         assert granted.claims["bindings"][op]["secret_names"] == request["secret_names"]
     if kind == "log-scheduled":
         assert granted.claims["bindings"][op]["schedule"] == "23 4 */3 * *"
+    if kind == "enroll-database-verifier":
+        assert granted.claims["operations"] == [kind]
+        assert granted.claims["bindings"][op]["verifier_principal"] == request["verifier_principal"]
     with pytest.raises(AdmissionDenied):
         validate_authorization(
             token,
@@ -389,6 +395,25 @@ def test_database_bootstrap_signer_cannot_substitute_verifier_identity(context):
     context[3]["principal_id"] = VOID
     context[3]["principal"]["id"] = VOID
     with pytest.raises(AdmissionDenied, match="ISSUANCE_PRINCIPAL_NOT_AUTHORIZED"):
+        sign(context)
+
+
+def test_verifier_enrollment_rejects_substitution_and_bootstrap_authority(context):
+    operator_request(context, "enroll-database-verifier")
+    _, policy, config, request = context
+    token, _ = sign(context)
+    with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+        validate_authorization(
+            token,
+            operation="database-bootstrap",
+            policy=policy,
+            config_hash=digest(config),
+            code_hash=CODE,
+            commit=COMMIT,
+            run_id=SESSION,
+        )
+    request["verifier_principal"]["role"] = "runtime"
+    with pytest.raises(AdmissionDenied, match="DATABASE_VERIFIER_ENROLLMENT_TARGET_INVALID"):
         sign(context)
 
 

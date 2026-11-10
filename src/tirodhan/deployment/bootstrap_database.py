@@ -101,6 +101,119 @@ async def bootstrap(*, verify_only: bool = False) -> None:
     print("PostGIS and UAMI schema privileges verified; no runtime administrator role")
 
 
+async def enroll_verifier() -> None:
+    from tirodhan.deployment.deployment_admission import configuration
+    from tirodhan.deployment.lifecycle_checks import Checks
+    from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
+
+    grant = await asyncio.to_thread(require_provisioning, "enroll-database-verifier")
+    config = configuration()
+    checks = Checks(grant.authorization, config, {})
+    target = await asyncio.to_thread(checks.database_target)
+    verifier = checks.binding()["verifier_principal"]
+    role = verifier["role"]
+    token = await asyncio.to_thread(database_token)
+    options = {
+        "host": target["host"],
+        "user": config["terraform"]["postgres_admin_name"],
+        "password": token,
+        "ssl": ssl.create_default_context(),
+        "timeout": 30,
+        "command_timeout": 30,
+    }
+    application = await asyncpg.connect(database=target["database"], **options)
+    try:
+        async with application.transaction(readonly=True):
+            safe = await application.fetchval(
+                """SELECT NOT EXISTS (
+                    SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname !~ '^(pg_|information_schema$)'
+                      AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+                      AND NOT EXISTS (SELECT FROM pg_depend d
+                                      WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid
+                                        AND d.refclassid = 'pg_extension'::regclass
+                                        AND d.deptype = 'e')
+                ) AND NOT EXISTS (
+                    SELECT FROM pg_namespace n
+                    WHERE n.nspname !~ '^(pg_|information_schema$)' AND (
+                        EXISTS (SELECT FROM aclexplode(
+                                    coalesce(n.nspacl, acldefault('n', n.nspowner))) a
+                                WHERE a.grantee = 0 AND a.privilege_type = 'CREATE')
+                        OR EXISTS (SELECT FROM pg_roles r WHERE r.rolname = $1
+                                   AND has_schema_privilege(r.oid, n.oid, 'CREATE'))
+                    )
+                )""",
+                role,
+            )
+            if safe is not True:
+                raise RuntimeError("Verifier enrollment requires a safe pre-migration database")
+    finally:
+        await application.close()
+
+    connection = await asyncpg.connect(database="postgres", **options)
+    try:
+        async with connection.transaction():
+            await connection.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", role)
+            await asyncio.to_thread(revalidate_database, grant)
+            if not await connection.fetchval("SELECT 1 FROM pg_roles WHERE rolname=$1", role):
+                await connection.execute(
+                    "SELECT pg_catalog.pgaadauth_create_principal_with_oid"
+                    "($1, $2, 'service', false, false)",
+                    role,
+                    verifier["principal_id"],
+                )
+            principal = _entra_principal(
+                await connection.fetch("SELECT * FROM pg_catalog.pgaadauth_list_principals(false)"),
+                role,
+            )
+            if not (
+                principal.get("objectId", principal.get("objectid")) == verifier["principal_id"]
+                and principal.get("tenantId", principal.get("tenantid")) == verifier["tenant_id"]
+                and principal.get("principalType", principal.get("principaltype")) == "service"
+                and principal.get("isAdmin", principal.get("isadmin")) == 0
+                and await connection.fetchval(
+                    "SELECT rolcanlogin AND NOT (rolsuper OR rolcreaterole OR rolcreatedb "
+                    "OR rolreplication OR rolbypassrls) AND NOT EXISTS "
+                    "(SELECT FROM pg_auth_members WHERE member = pg_roles.oid) "
+                    "FROM pg_roles WHERE rolname=$1",
+                    role,
+                )
+                is True
+                and await connection.fetchval(
+                    "SELECT has_function_privilege($1, "
+                    "'pg_catalog.pgaadauth_list_principals(boolean)', 'EXECUTE')",
+                    role,
+                )
+                is True
+            ):
+                raise RuntimeError("Verifier principal or metadata privileges failed verification")
+            quoted_role = '"' + role.replace('"', '""') + '"'
+            for database in ("postgres", "tirodhan"):
+                if (
+                    await connection.fetchval(
+                        "SELECT has_database_privilege($1, $2, 'CREATE')", role, database
+                    )
+                    is not False
+                ):
+                    raise RuntimeError("Verifier has unexpected database CREATE privilege")
+                if not await connection.fetchval(
+                    "SELECT has_database_privilege($1, $2, 'CONNECT')", role, database
+                ):
+                    await connection.execute(
+                        f"GRANT CONNECT ON DATABASE {database} TO {quoted_role}"
+                    )
+                if (
+                    await connection.fetchval(
+                        "SELECT has_database_privilege($1, $2, 'CONNECT')", role, database
+                    )
+                    is not True
+                ):
+                    raise RuntimeError("Verifier database CONNECT failed verification")
+    finally:
+        await connection.close()
+    print("DATABASE_VERIFIER_SQL_ENROLLMENT_VERIFIED")
+
+
 async def write_verified_evidence(
     target: dict[str, str],
     authorization: Authorization,
@@ -242,16 +355,25 @@ async def write_verified_evidence(
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
 
     from tirodhan.deployment.deployment_admission import (
         AdmissionDenied,
         require_release_authorization,
     )
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--verify-only", action="store_true")
+    mode.add_argument("--enroll-verifier", action="store_true")
+    args = parser.parse_args()
     try:
-        require_release_authorization("database-bootstrap")
-        asyncio.run(bootstrap(verify_only="--verify-only" in sys.argv))
+        if args.enroll_verifier:
+            require_release_authorization("enroll-database-verifier")
+            asyncio.run(enroll_verifier())
+        else:
+            require_release_authorization("database-bootstrap")
+            asyncio.run(bootstrap(verify_only=args.verify_only))
     except AdmissionDenied as exc:
         raise SystemExit(str(exc)) from None
     except Exception:

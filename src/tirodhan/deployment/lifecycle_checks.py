@@ -26,6 +26,7 @@ from tirodhan.deployment.deployment_admission import (
     ROOT,
     AdmissionDenied,
     Authorization,
+    database_verifier_enrollment_target,
     digest,
     maintenance_target,
     operation_class,
@@ -1201,13 +1202,33 @@ class Checks:
         administrator_id = f"{target['server_id']}/administrators/{object_id}"
         administrator = self.io.arm(administrator_id, "2024-08-01")
         properties = (administrator or {}).get("properties", {})
-        return (
+        if not (
             administrator is not None
             and str(administrator.get("id", "")).casefold() == administrator_id.casefold()
             and properties.get("objectId") == object_id
             and properties.get("tenantId") == self.tf["tenant_id"]
             and properties.get("principalType") == self.tf["postgres_admin_type"]
-            and self.binding().get("database_bootstrap_authorized") is True
+        ):
+            return False
+        if self.auth.operation == "database-bootstrap":
+            return self.binding().get("database_bootstrap_authorized") is True
+        verifier = database_verifier_enrollment_target(self.config)
+        stage = (self.backend().document or {}).get("outputs", {}).get("deployment_stage", {})
+        if not (
+            self.auth.operation == "enroll-database-verifier"
+            and self.auth.claims.get("operations") == ["enroll-database-verifier"]
+            and self.binding().get("verifier_principal") == verifier
+            and type(stage.get("value")) is int
+            and stage["value"] == 0
+        ):
+            return False
+        service = self.io.runner.json(
+            "az", "ad", "sp", "show", "--id", verifier["client_id"], "--output", "json"
+        )
+        return (
+            service.get("appId") == verifier["client_id"]
+            and service.get("id") == verifier["principal_id"]
+            and service.get("accountEnabled") is True
         )
 
     def check_secret_batch(self) -> bool:
