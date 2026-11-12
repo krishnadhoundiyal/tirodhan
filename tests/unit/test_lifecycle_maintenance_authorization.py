@@ -281,6 +281,7 @@ def recovery(monkeypatch):
         configuration_hash=digest(io.config),
     )
     for key, value in {
+        "DEPLOYMENT_SCOPE": io.scope,
         "GITHUB_ACTIONS": "true",
         "GITHUB_REPOSITORY": "krishnadhoundiyal/tirodhan",
         "GITHUB_REF": "refs/heads/main",
@@ -373,6 +374,14 @@ def test_recovery_rejects_identity_target_or_expired_authority(recovery, monkeyp
 
         monkeypatch.setattr(foundation_reconcile, "require_release_authorization", expired)
     with pytest.raises(AdmissionDenied):
+        foundation_reconcile.recover_vault()
+    assert io.starts == 0
+
+
+def test_recovery_rejects_mismatched_deployment_scope(recovery, monkeypatch):
+    io, _ = recovery
+    monkeypatch.setenv("DEPLOYMENT_SCOPE", io.scope + "-other")
+    with pytest.raises(AdmissionDenied, match="PREREQUISITES_BLOCKED:target"):
         foundation_reconcile.recover_vault()
     assert io.starts == 0
 
