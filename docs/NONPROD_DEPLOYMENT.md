@@ -186,8 +186,13 @@ and [Geocoding billing and quotas](https://developers.google.com/maps/documentat
    Do not commit this file or log values. Then set `LOG_ACCOUNT_NAME` and run
    `python -m tirodhan.deployment.rotate_log_sas` for the initial log SAS version.
 4. Configure GitHub variables and protected environments below. Publish private
-   GHCR images from reviewed main. Set/verify both packages' **private** visibility
-   and repository package-access permission; GitHub defaults are not the authority.
+   GHCR images from reviewed main to `krishnadhoundiyal/tirodhan-nonprod` and
+   `krishnadhoundiyal/tirodhan-nonprod-log-sidecar`. The build rejects anonymous
+   package access before publishing. Release admission requires anonymous access
+   denial and authenticated inspection of both exact commit-tagged manifests.
+   For first publication, GitHub creates personal GHCR packages private by default.
+   Verify both package visibility settings and repository package-access permission
+   after publication. The legacy public packages are outside this release path.
 5. The workflow plans/applies migration stage 1 and starts the manual Alembic Job.
    Its successful execution (including sidecar termination) gates runtime planning.
    Existing stages/images are preserved during migrations on subsequent releases.
