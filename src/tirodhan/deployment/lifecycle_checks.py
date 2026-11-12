@@ -45,6 +45,7 @@ from tirodhan.deployment.migration_evidence import (
     migration_template,
     successful_execution,
 )
+from tirodhan.deployment.nonprod_images import private_release_images
 from tirodhan.deployment.prerequisites import CHECK_IDS
 
 # Approved sole NONPROD owner; immutable GitHub user ID, not a mutable login.
@@ -766,15 +767,10 @@ class Checks:
         return True
 
     def check_images(self) -> bool:
-        for key in ("APPLICATION_IMAGE", "FLUENT_BIT_IMAGE"):
-            image = os.environ.get(key, "")
-            if not re.fullmatch(
-                r"ghcr\.io/krishnadhoundiyal/[a-z0-9-]+:" + self.auth.commit, image
-            ):
-                return False
-            # Registry access is proven, rather than merely validating the tag syntax.
+        images = private_release_images(self.auth.commit)
+        for image in images:
             self.io.runner.run("docker", "manifest", "inspect", image)
-        return True
+        return bool(images)
 
     def job(self) -> dict[str, Any]:
         from tirodhan.deployment.migration_start import expected_job_id
