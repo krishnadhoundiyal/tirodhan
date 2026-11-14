@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.deployment_admission import AdmissionDenied
-from tirodhan.deployment.lifecycle_evidence import BackendState, Observations, plan_prior_state
+from tirodhan.deployment.lifecycle_evidence import (
+    BackendState,
+    ObservationError,
+    Observations,
+    plan_prior_state,
+)
 from tirodhan.deployment.release import MIGRATION_SECRET_NAMES, RUNTIME_SECRET_NAMES
 
 if TYPE_CHECKING:
@@ -23,6 +28,10 @@ WORKFLOW_REF = "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-apim.yml@re
 # AzureRM 5.8.0 allows three hours for APIM creation. Leave time for Terraform
 # to persist state and release the backend lease before the runner stops it.
 APIM_APPLY_TIMEOUT_SECONDS = 190 * 60
+
+
+class ApimPlanBlocked(AdmissionDenied):
+    """A locally generated APIM diagnostic safe for the workflow log."""
 
 
 def gateway_id(io: Observations) -> str:
@@ -104,23 +113,25 @@ def validate_apim_plan(
         variables["deployment_stage"] = 4
     managed = [row for row in plan["resource_changes"] if row["mode"] == "managed"]
     changes = [row for row in managed if row["change"]["actions"] != ["no-op"]]
+    if any(variables.get(name) != value for name, value in (terraform | inputs).items()):
+        raise ApimPlanBlocked("APIM_PLAN_INPUT_MISMATCH")
+    if plan.get("complete") is not True or plan.get("errored") is not False:
+        raise ApimPlanBlocked("APIM_PLAN_INCOMPLETE")
+    if plan.get("resource_drift"):
+        raise ApimPlanBlocked("APIM_PLAN_RESOURCE_DRIFT")
+    if populated_key_paths(plan):
+        raise ApimPlanBlocked("APIM_PLAN_SECRET_HYGIENE_FAILED")
     if (
-        any(variables.get(name) != value for name, value in (terraform | inputs).items())
-        or plan.get("complete") is not True
-        or plan.get("errored") is not False
-        or plan.get("applyable") is not True
-        or any(
-            plan.get(field)
-            for field in ("resource_drift", "deferred_changes", "action_invocations")
-        )
-        or populated_key_paths(plan)
+        plan.get("applyable") is not True
+        or plan.get("deferred_changes")
+        or plan.get("action_invocations")
         or any(
             "previous_address" in row or "deposed" in row or row["change"].get("importing")
             for row in managed
         )
         or len(changes) != 1
     ):
-        raise AdmissionDenied("APIM_PLAN_NOT_ADDITIVE")
+        raise ApimPlanBlocked("APIM_PLAN_NOT_ADDITIVE")
     gateway = changes[0]
     change = gateway["change"]
     outputs = plan.get("output_changes", {})
@@ -138,14 +149,40 @@ def validate_apim_plan(
         or change["actions"] != ["create"]
         or change["before"] is not None
         or any(change["after"].get(key) != value for key, value in expected.items())
-        or outputs.get("apim_gateway_url", {}).get("actions") != ["create"]
-        or any(
-            row["actions"] != ["no-op"]
-            for name, row in outputs.items()
-            if name != "apim_gateway_url"
-        )
     ):
-        raise AdmissionDenied("APIM_PLAN_NOT_ADDITIVE")
+        raise ApimPlanBlocked("APIM_PLAN_GATEWAY_MISMATCH")
+    if outputs.get("apim_gateway_url", {}).get("actions") != ["create"] or any(
+        row["actions"] != ["no-op"] for name, row in outputs.items() if name != "apim_gateway_url"
+    ):
+        raise ApimPlanBlocked("APIM_PLAN_OUTPUT_MISMATCH")
+
+
+def terraform_plan_failure(output: str) -> str:
+    """Return a fixed status label without forwarding provider diagnostics."""
+    labels: set[str] = set()
+    for line in output.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(record, dict) or record.get("type") != "diagnostic":
+            continue
+        diagnostic = record.get("diagnostic")
+        if not isinstance(diagnostic, dict) or diagnostic.get("severity") != "error":
+            continue
+        summary = diagnostic.get("summary")
+        detail = diagnostic.get("detail")
+        if summary == "Error acquiring the state lock":
+            labels.add("STATE_LOCK")
+        elif summary in ("Invalid value for input variable", "Invalid function argument"):
+            labels.add("INVALID_INPUT")
+        elif isinstance(detail, str) and re.search(
+            r"\b(?:AuthorizationFailed|ForbiddenByRbac)\b", detail
+        ):
+            labels.add("AZURE_PERMISSION")
+        else:
+            labels.add("OTHER")
+    return "APIM_TERRAFORM_PLAN_FAILED" + (":" + ",".join(sorted(labels)) if labels else "")
 
 
 def plan_gateway(path: Path) -> None:
@@ -162,15 +199,29 @@ def plan_gateway(path: Path) -> None:
     revalidate_database(grant)
     try:
         subprocess.run(
-            ["terraform", "plan", "-input=false", f"-out={path}", *arguments],
+            ["terraform", "plan", "-input=false", f"-out={path}", "-json", *arguments],
             check=True,
             capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=1800,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise AdmissionDenied("APIM_TERRAFORM_PLAN_FAILED") from exc
-    after = io.backend()
-    prior = plan_prior_state(path)
+    except subprocess.TimeoutExpired:
+        raise ApimPlanBlocked("APIM_TERRAFORM_PLAN_TIMED_OUT") from None
+    except subprocess.CalledProcessError as exc:
+        raise ApimPlanBlocked(terraform_plan_failure(exc.stdout or "")) from None
+    except OSError:
+        raise ApimPlanBlocked("APIM_TERRAFORM_PLAN_UNAVAILABLE") from None
+    try:
+        after = io.backend()
+    except ObservationError:
+        raise ApimPlanBlocked("APIM_POST_PLAN_BACKEND_UNAVAILABLE") from None
+    try:
+        prior = plan_prior_state(path)
+        shown = io.runner.json("terraform", "show", "-json", str(path))
+    except ObservationError:
+        raise ApimPlanBlocked("APIM_SAVED_PLAN_UNAVAILABLE") from None
     # Native Azure backend lock/unlock writes blob metadata, changing its ETag
     # even when the state contents are untouched. Keep the lock and compare
     # state contents here. Apply binds the post-plan ETag separately.
@@ -179,8 +230,11 @@ def plan_gateway(path: Path) -> None:
         or after.document != before.document
         or any(prior.get(key) != (before.document or {}).get(key) for key in ("lineage", "serial"))
     ):
-        raise AdmissionDenied("APIM_BACKEND_CHANGED_DURING_PLAN")
-    validate_apim_plan(io.runner.json("terraform", "show", "-json", str(path)), before, checks.tf)
+        raise ApimPlanBlocked("APIM_BACKEND_CHANGED_DURING_PLAN")
+    try:
+        validate_apim_plan(shown, before, checks.tf)
+    except (KeyError, TypeError, ValueError):
+        raise ApimPlanBlocked("APIM_SAVED_PLAN_FORMAT_INVALID") from None
     print("APIM_PLAN_VERIFIED: one Consumption gateway create")
 
 
