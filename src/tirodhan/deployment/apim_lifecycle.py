@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 ADDRESS = "azurerm_api_management.nonprod[0]"
 API_VERSION = "2024-05-01"
 WORKFLOW_REF = "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-apim.yml@refs/heads/main"
+# AzureRM 5.8.0 allows three hours for APIM creation. Leave time for Terraform
+# to persist state and release the backend lease before the runner stops it.
+APIM_APPLY_TIMEOUT_SECONDS = 190 * 60
 
 
 def gateway_id(io: Observations) -> str:

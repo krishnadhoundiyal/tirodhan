@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from tirodhan.deployment.apim_lifecycle import API_VERSION as APIM_API_VERSION
-from tirodhan.deployment.apim_lifecycle import gateway_id, plan_gateway, verify_gateway
+from tirodhan.deployment.apim_lifecycle import (
+    APIM_APPLY_TIMEOUT_SECONDS,
+    gateway_id,
+    plan_gateway,
+    verify_gateway,
+)
 from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
 from tirodhan.deployment.deployment_admission import (
     AdmissionDenied,
@@ -157,9 +162,6 @@ def apply(operation: str, plan: Path) -> None:
     baseline: dict[str, Any] | None = None
     if operation == "foundation-apply":
         baseline = record_baseline(checks, plan)
-    # Fail closed on stale authorization before entering compensation handling:
-    # rejected admission must never be mistaken for a failed Terraform apply.
-    revalidate_database(grant)
     apim_before = None
     if operation == "apim-apply":
         apim_before = io.backend()
@@ -167,8 +169,12 @@ def apply(operation: str, plan: Path) -> None:
             raise AdmissionDenied("APIM_BACKEND_CHANGED_BEFORE_APPLY")
         if io.arm(gateway_id(io), APIM_API_VERSION) is not None:
             raise AdmissionDenied("APIM_GATEWAY_APPEARED_BEFORE_APPLY")
+    # Fail closed on stale authorization before entering compensation handling:
+    # rejected admission must never be mistaken for a failed Terraform apply.
+    revalidate_database(grant)
+    apply_timeout = APIM_APPLY_TIMEOUT_SECONDS if apim_before is not None else 1800
     try:
-        io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
+        io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=apply_timeout)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
         if baseline and (removed_rule := baseline.get("removed_bootstrap_firewall_id")):

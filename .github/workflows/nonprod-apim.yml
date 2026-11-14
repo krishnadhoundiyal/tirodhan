@@ -18,7 +18,6 @@ env:
   AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID }}
   AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
   TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
-  TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
   GH_TOKEN: ${{ github.token }}
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -31,6 +30,7 @@ env:
   DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
 jobs:
   release-admission:
+    if: github.ref == 'refs/heads/main'
     env:
       TIRODHAN_NONPROD_OPERATION: apim-plan
     runs-on: ubuntu-latest
@@ -39,14 +39,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: |
-          python -m pip install -e .
-          python -m tirodhan.deployment.deployment_admission
+      - run: python -m pip install -e .
+      - env:
+          TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+        run: python -m tirodhan.deployment.deployment_admission
   apim-plan:
     if: github.ref == 'refs/heads/main'
     needs: release-admission
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
     environment: nonprod-plan
     runs-on: ubuntu-latest
     permissions:
@@ -72,6 +74,7 @@ jobs:
       TIRODHAN_NONPROD_OPERATION: apim-apply
     environment: nonprod
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     permissions:
       contents: read
       id-token: write

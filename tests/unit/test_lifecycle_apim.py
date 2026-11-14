@@ -12,6 +12,7 @@ from tirodhan.deployment import apim_lifecycle as apim
 from tirodhan.deployment import foundation_lifecycle
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_checks import Checks
+from tirodhan.deployment.lifecycle_evidence import ObservationError
 from tirodhan.deployment.release_setup import expected_bindings
 
 TF = CONFIG["terraform"] | {"apim_publisher_email": "publisher@example.com"}
@@ -155,6 +156,35 @@ def test_apply_stops_before_terraform_if_live_context_changes(baseline, monkeypa
     assert not io.runner.commands
 
 
+def test_interrupted_apply_allows_provider_timeout_and_never_compensates(baseline, monkeypatch):
+    io = MemoryObservations()
+    io.tf = TF
+    io.current = baseline
+    checks = Checks(
+        auth("apim-apply", state_fingerprint=baseline.fingerprint),
+        CONFIG | {"terraform": TF},
+        {},
+        io,
+    )
+    monkeypatch.setattr(
+        foundation_lifecycle, "admitted_with_grant", lambda *_, **__: (checks, io, None)
+    )
+    monkeypatch.setattr(foundation_lifecycle, "revalidate_database", lambda _: None)
+    commands = []
+
+    def terraform(*args, timeout):
+        commands.append((args, timeout))
+        raise ObservationError("OBSERVATION_UNAVAILABLE")
+
+    monkeypatch.setattr(io.runner, "run", terraform)
+    with pytest.raises(ObservationError, match="OBSERVATION_UNAVAILABLE"):
+        foundation_lifecycle.apply("apim-apply", Path("apim.tfplan"))
+    assert commands == [
+        (("terraform", "apply", "-input=false", "apim.tfplan"), apim.APIM_APPLY_TIMEOUT_SECONDS)
+    ]
+    assert commands[0][1] > 3 * 60 * 60
+
+
 def test_plan_is_saved_only_after_reading_the_deployed_inputs(
     baseline, plan, tmp_path, monkeypatch
 ):
@@ -220,9 +250,18 @@ def test_gateway_workflow_and_signing_are_isolated():
     assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}
     jobs = workflow["jobs"]
     assert set(jobs) == {"release-admission", "apim-plan", "apim-apply"}
+    assert all(job["if"] == "github.ref == 'refs/heads/main'" for job in jobs.values())
+    token = "TIRODHAN_NONPROD_RELEASE_AUTHORIZATION"
+    admission = jobs["release-admission"]
+    assert token not in workflow["env"]
+    assert token not in admission["env"]
+    assert [step["run"] for step in admission["steps"] if token in step.get("env", {})] == [
+        "python -m tirodhan.deployment.deployment_admission"
+    ]
     assert jobs["apim-plan"]["needs"] == "release-admission"
     assert jobs["apim-apply"]["needs"] == "apim-plan"
     assert jobs["apim-apply"]["environment"] == "nonprod"
+    assert jobs["apim-apply"]["timeout-minutes"] * 60 > apim.APIM_APPLY_TIMEOUT_SECONDS
     assert set(expected_bindings("apim-release")) == {"terraform-setup", "apim-plan"}
     assert set(expected_bindings("apply", "apim-apply")) == {"terraform-setup", "apim-apply"}
     assert "apim-plan" not in expected_bindings("release")
