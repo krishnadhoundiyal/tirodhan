@@ -1,6 +1,8 @@
 """An additive gateway cannot reconcile or migrate the deployed application."""
 
 import hashlib
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -185,8 +187,9 @@ def test_interrupted_apply_allows_provider_timeout_and_never_compensates(baselin
     assert commands[0][1] > 3 * 60 * 60
 
 
-def test_plan_is_saved_only_after_reading_the_deployed_inputs(
-    baseline, plan, tmp_path, monkeypatch
+@pytest.mark.parametrize("state_change", ["lease_metadata", "state_content", "saved_plan_serial"])
+def test_plan_tolerates_only_the_backend_lease_metadata_change(
+    baseline, plan, tmp_path, monkeypatch, state_change
 ):
     from tirodhan.deployment import foundation_reconcile, prerequisites
 
@@ -203,11 +206,25 @@ def test_plan_is_saved_only_after_reading_the_deployed_inputs(
         assert "-var=application_image=app" in args
         assert "-var=deployment_stage=4" in args
         assert all(not arg.startswith("-target=") for arg in args)
-        write_plan(path, baseline)
+        assert "-lock=false" not in args
+        after = deepcopy(baseline.document)
+        if state_change == "state_content":
+            after["outputs"]["application_image"]["value"] = "changed"
+        io.current = replace(baseline, document=after, etag="etag-after-native-unlock")
+        saved = baseline
+        if state_change == "saved_plan_serial":
+            prior = deepcopy(baseline.document)
+            prior["serial"] += 1
+            saved = replace(baseline, document=prior)
+        write_plan(path, saved)
 
     monkeypatch.setattr(apim.subprocess, "run", terraform)
-    apim.plan_gateway(path)
-    assert path.is_file()
+    if state_change == "lease_metadata":
+        apim.plan_gateway(path)
+        assert path.is_file()
+    else:
+        with pytest.raises(AdmissionDenied, match="APIM_BACKEND_CHANGED_DURING_PLAN"):
+            apim.plan_gateway(path)
 
 
 def test_gate_requires_exact_workflow_and_absent_gateway(baseline, monkeypatch):

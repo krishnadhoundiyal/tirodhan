@@ -171,8 +171,13 @@ def plan_gateway(path: Path) -> None:
         raise AdmissionDenied("APIM_TERRAFORM_PLAN_FAILED") from exc
     after = io.backend()
     prior = plan_prior_state(path)
-    if before.fingerprint != after.fingerprint or any(
-        prior.get(key) != (before.document or {}).get(key) for key in ("lineage", "serial")
+    # Native Azure backend lock/unlock writes blob metadata, changing its ETag
+    # even when the state contents are untouched. Keep the lock and compare
+    # state contents here. Apply binds the post-plan ETag separately.
+    if (
+        after.kind != before.kind
+        or after.document != before.document
+        or any(prior.get(key) != (before.document or {}).get(key) for key in ("lineage", "serial"))
     ):
         raise AdmissionDenied("APIM_BACKEND_CHANGED_DURING_PLAN")
     validate_apim_plan(io.runner.json("terraform", "show", "-json", str(path)), before, checks.tf)
