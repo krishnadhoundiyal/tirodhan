@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from tirodhan.deployment.apim_lifecycle import API_VERSION as APIM_API_VERSION
+from tirodhan.deployment.apim_lifecycle import gateway_id, plan_gateway, verify_gateway
 from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
 from tirodhan.deployment.deployment_admission import (
     AdmissionDenied,
@@ -149,7 +151,7 @@ def read_baseline(io: Observations, run_id: str, plan_hash: str) -> dict[str, An
 
 
 def apply(operation: str, plan: Path) -> None:
-    if operation not in {"foundation-apply", "migration-apply", "runtime-apply"}:
+    if operation not in {"foundation-apply", "migration-apply", "runtime-apply", "apim-apply"}:
         raise AdmissionDenied("UNKNOWN_DEPLOYMENT_APPLY_OPERATION")
     checks, io, grant = admitted_with_grant(operation, plan=plan)
     baseline: dict[str, Any] | None = None
@@ -158,6 +160,13 @@ def apply(operation: str, plan: Path) -> None:
     # Fail closed on stale authorization before entering compensation handling:
     # rejected admission must never be mistaken for a failed Terraform apply.
     revalidate_database(grant)
+    apim_before = None
+    if operation == "apim-apply":
+        apim_before = io.backend()
+        if apim_before.fingerprint != checks.binding().get("state_fingerprint"):
+            raise AdmissionDenied("APIM_BACKEND_CHANGED_BEFORE_APPLY")
+        if io.arm(gateway_id(io), APIM_API_VERSION) is not None:
+            raise AdmissionDenied("APIM_GATEWAY_APPEARED_BEFORE_APPLY")
     try:
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=1800)
         if operation == "foundation-apply" and not checks.check_foundation():
@@ -192,6 +201,8 @@ def apply(operation: str, plan: Path) -> None:
                 raise AdmissionDenied("BOOTSTRAP_FIREWALL_REMOVAL_UNVERIFIED")
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
+        if apim_before is not None:
+            verify_gateway(io, apim_before)
         if operation == "runtime-apply" and checks.tf.get("apim_publisher_email") is not None:
             name = f"{checks.tf['resource_group_name']}-apim"
             resource_id = io.scope + f"/providers/Microsoft.ApiManagement/service/{name}"
@@ -324,6 +335,8 @@ def main() -> None:
             "foundation-apply",
             "migration-apply",
             "runtime-apply",
+            "apim-plan",
+            "apim-apply",
             "initialize-state-plan",
             "initialize-state-apply",
             "compensate-foundation",
@@ -340,13 +353,15 @@ def main() -> None:
         elif args.operation == "foundation-plan":
             _, io = admitted(args.operation)
             io.runner.run("terraform", "plan", "-input=false", f"-out={args.plan}", timeout=1800)
+        elif args.operation == "apim-plan":
+            plan_gateway(args.plan)
         elif args.operation == "prepare-compensation":
             prepare_compensation(args.plan)
         elif args.operation == "compensate-foundation":
             compensate(args.plan)
         else:
             apply(args.operation, args.plan)
-    except (AdmissionDenied, ValueError, OSError, KeyError):
+    except (AdmissionDenied, ValueError, OSError, KeyError, TypeError):
         raise SystemExit("LIFECYCLE_BLOCKED: deployment or cleanup is not verified") from None
 
 

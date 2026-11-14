@@ -37,7 +37,9 @@ This is repository-admin configuration, not Azure Terraform work.
 ## NONPROD API Management
 
 The stage-4 runtime plan can add the Terraform-managed Consumption gateway in the
-existing application resource group. Set the approved publisher contact as
+existing application resource group. For an already deployed stage-4 stack, the
+manually dispatched NONPROD API Management workflow can add just the gateway.
+Set the approved publisher contact as
 `apim_publisher_email` in the signed `NONPROD_TFVARS_JSON` input and keep it set
 while the gateway is managed. The publisher contact is a nonsecret input and may be
 visible in protected plan artifacts and Azure configuration.
@@ -47,6 +49,16 @@ deployment and discovery roles. The discovery role can read deleted-instance and
 operation status metadata. The deployment role can manage the gateway resource
 and remove the sample APIs and products created by Azure. Keep the existing state
 scope, Terraform plan approval and protected apply gates.
+
+For the gateway-only workflow, capture `apim-release` planning authority with the
+standard reviewed-main signing utility. The workflow uses the existing backend
+and deployment identity, reads workload inputs from the established state, and
+blocks on any change other than creation of the exact Consumption gateway and its
+output. Use `--apply-operation apim-apply` to capture the exact saved
+`apim-plan` artifact for owner review and signing. Protected apply checks the
+plan and its live state binding again, then verifies the Azure service and
+preservation of existing resource IDs and Terraform outputs. If the apply outcome
+is uncertain, inspect Azure and Terraform state before preparing another plan.
 
 The `apim_gateway_url` output identifies the gateway provisioned without
 application routes. Review the runtime plan against the existing resources and

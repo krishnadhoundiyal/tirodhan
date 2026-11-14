@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
   "checks": {
+    "apim_baseline": {
+      "authority": "Stage-4 Terraform state, exact live APIM resource and committed gateway configuration",
+      "identity": "D",
+      "scope": "Existing NONPROD application group and exact APIM Consumption gateway",
+      "allowed_operation": "Verify installed stage and workload inputs, and confirm absence of an active gateway before an additive gateway-only plan/apply",
+      "failure": "BLOCK; missing, unknown, denied or conflicting evidence never passes"
+    },
     "backend": {
       "authority": "backend.tf, protected state account/RG variables",
       "identity": "D",
@@ -446,6 +453,35 @@
       "permissions",
       "saved_plan",
       "secrets",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "apim-plan": [
+      "apim_baseline",
+      "backend",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "ownership",
+      "permissions",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "apim-apply": [
+      "apim_baseline",
+      "backend",
+      "execution_authority",
+      "features",
+      "foundation",
+      "identity",
+      "ownership",
+      "permissions",
+      "saved_plan",
       "state",
       "target",
       "terraform_context",

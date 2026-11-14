@@ -496,6 +496,11 @@ class Checks:
         )
         return self.io.arm(deleted, "2024-05-01") is None
 
+    def check_apim_baseline(self) -> bool:
+        from tirodhan.deployment.apim_lifecycle import check_baseline
+
+        return check_baseline(self)
+
     def foundation_ids(self) -> dict[str, str]:
         state = self.io.backend()
         if state.kind != "INITIALIZED":
@@ -875,6 +880,11 @@ class Checks:
             return False
         if populated_key_paths(plan):
             return False
+        if self.auth.operation == "apim-apply":
+            from tirodhan.deployment.apim_lifecycle import validate_apim_plan
+
+            validate_apim_plan(plan, current, self.tf)
+            return True
         changes = [
             r
             for r in plan.get("resource_changes", [])

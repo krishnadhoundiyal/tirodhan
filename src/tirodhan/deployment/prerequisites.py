@@ -45,6 +45,8 @@ REQUIRED: dict[str, frozenset[str]] = {
     "migration-start": MIGRATION | {"migration_job"},
     "runtime-plan": MIGRATION | {"migration"},
     "runtime-apply": MIGRATION | {"migration", "saved_plan"},
+    "apim-plan": DEPLOYMENT | {"foundation", "features", "apim_baseline"},
+    "apim-apply": DEPLOYMENT | {"foundation", "features", "apim_baseline", "saved_plan"},
     "seed-secrets": COMMON | {"permissions", "vault", "secret_batch"},
     "rotate-log-sas": COMMON | {"permissions", "vault", "log_storage"},
     "compensate-foundation": DEPLOYMENT | {"clean_baseline", "saved_plan"},
@@ -61,6 +63,8 @@ TERRAFORM_OPERATIONS = frozenset(
         "migration-start",
         "runtime-plan",
         "runtime-apply",
+        "apim-plan",
+        "apim-apply",
         "prepare-compensation",
         "compensate-foundation",
     }

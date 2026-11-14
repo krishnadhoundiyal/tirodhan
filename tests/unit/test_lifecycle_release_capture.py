@@ -147,17 +147,17 @@ def test_collector_rejects_bad_ci_or_review(failure):
 
 
 class ArtifactGithub:
-    def __init__(self, plan):
+    def __init__(self, plan, mode="migration"):
         self.artifact = {
             "expired": False,
-            "name": "migration-plan",
+            "name": f"{mode}-plan",
             "workflow_run": {"id": 10, "head_sha": COMMIT},
         }
         self.run = {
             "head_sha": COMMIT,
             "head_branch": "main",
             "run_attempt": 1,
-            "path": ".github/workflows/nonprod-deploy.yml",
+            "path": f".github/workflows/nonprod-{'apim' if mode == 'apim' else 'deploy'}.yml",
             "event": "workflow_dispatch",
             "repository": {"full_name": "krishnadhoundiyal/tirodhan"},
             "head_repository": {"full_name": "krishnadhoundiyal/tirodhan"},
@@ -165,11 +165,11 @@ class ArtifactGithub:
         }
         self.jobs = {
             "total_count": 1,
-            "jobs": [{"name": "migration-plan", "conclusion": "success"}],
+            "jobs": [{"name": f"{mode}-plan", "conclusion": "success"}],
         }
         data = io.BytesIO()
         with zipfile.ZipFile(data, "w") as archive:
-            archive.writestr("migration.tfplan", plan.read_bytes())
+            archive.writestr(f"{mode}.tfplan", plan.read_bytes())
         self.archive = data.getvalue()
 
     def get(self, path):
@@ -185,13 +185,14 @@ class ArtifactGithub:
 
 
 @pytest.mark.parametrize("status", ["in_progress", "waiting"])
-def test_exact_plan_artifact_can_be_reviewed_while_apply_waits(tmp_path, status):
-    plan = tmp_path / "migration.tfplan"
+@pytest.mark.parametrize("mode", ["migration", "apim"])
+def test_exact_plan_artifact_can_be_reviewed_while_apply_waits(tmp_path, status, mode):
+    plan = tmp_path / f"{mode}.tfplan"
     plan.write_bytes(b"synthetic native plan bytes")
-    github = ArtifactGithub(plan)
+    github = ArtifactGithub(plan, mode)
     github.run["status"] = status
     result = capture_plan_artifact(
-        github, 11, plan, "migration-apply", commit=COMMIT, session=SESSION
+        github, 11, plan, f"{mode}-apply", commit=COMMIT, session=SESSION
     )
     assert result["artifact_id"] == 11
 
