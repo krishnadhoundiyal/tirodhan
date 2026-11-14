@@ -44,7 +44,33 @@ def retention_required(io: Observations) -> bool:
     return False
 
 
+def verify_gateway_removed(io: Observations) -> None:
+    if io.tf.get("apim_publisher_email") is None:
+        return
+    name = f"{io.tf['resource_group_name']}-apim"
+    gateway = io.scope + f"/providers/Microsoft.ApiManagement/service/{name}"
+    if io.arm(gateway, "2024-05-01") is not None:
+        raise AdmissionDenied("NONPROD_APIM_STILL_ACTIVE")
+    # Soft-deleted services are absent from the resource group inventory.
+    # Report the exact reservation so a clean redeploy cannot reuse it silently.
+    location = io.tf["location"]
+    deleted = (
+        f"/subscriptions/{io.tf['subscription_id']}/providers/Microsoft.ApiManagement/"
+        f"locations/{location}/deletedservices/{name}"
+    )
+    if io.arm(deleted, "2024-05-01") is not None:
+        print("NONPROD_APIM_INACTIVE_NAME_RESERVED")
+    else:
+        print("NONPROD_APIM_ABSENT")
+
+
 def main() -> None:
+    if sys.argv[1:] == ["--verify-apim"]:
+        try:
+            verify_gateway_removed(Observations(configuration()))
+        except (AdmissionDenied, OSError, ValueError, KeyError):
+            raise SystemExit("APIM_REMOVAL_NOT_VERIFIED") from None
+        return
     record = "--record-required" in sys.argv[1:]
     enforce = "--verify-expectation" in sys.argv[1:]
     lines = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]

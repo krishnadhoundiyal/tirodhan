@@ -191,6 +191,12 @@ class Observations:
         except ObservationError as exc:
             if str(exc) in {"ResourceNotFound", "ResourceGroupNotFound"}:
                 return None
+            if str(exc) == "ServiceNotFound" and re.fullmatch(
+                r"/subscriptions/[^/]+/providers/microsoft\.apimanagement/"
+                r"locations/[^/]+/deletedservices/[^/]+",
+                resource_id.casefold(),
+            ):
+                return None
             if str(exc) == "RoleAssignmentNotFound" and re.search(
                 r"/providers/microsoft\.authorization/roleassignments/[^/]+$",
                 resource_id.casefold(),

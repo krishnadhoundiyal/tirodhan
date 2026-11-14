@@ -10,6 +10,7 @@ from lifecycle_fakes import MemoryObservations, auth, state
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.foundation_inventory import required_addresses
 from tirodhan.deployment.lifecycle_checks import Checks
+from tirodhan.deployment.lifecycle_evidence import ObservationError, Observations
 
 
 def test_reviewed_inventory_covers_all_nonworkload_terraform_resources() -> None:
@@ -21,7 +22,14 @@ def test_reviewed_inventory_covers_all_nonworkload_terraform_resources() -> None
                 if kind in {"azurerm_container_app", "azurerm_container_app_job"}:
                     continue
                 for name, block in names.items():
-                    actual[kind + "." + name] = block
+                    address = kind + "." + name
+                    if address == "azurerm_api_management.nonprod":
+                        assert block["count"] == (
+                            "${var.deployment_stage >= 4 && "
+                            "var.apim_publisher_email != null ? 1 : 0}"
+                        )
+                        continue
+                    actual[address] = block
     assert set(actual) == set(manifest["resources"])
     queues = {"serviceability", "rider", "refund", "planning", "financial_webhook"}
     locals_ = hcl2.load(Path("infra/terraform/nonprod/locals.tf").open())["locals"][0]
@@ -123,3 +131,71 @@ def test_optional_firewall_is_required_exactly_when_configured() -> None:
     address = "azurerm_postgresql_flexible_server_firewall_rule.bootstrap[0]"
     assert address not in required_addresses({})
     assert address in required_addresses({"postgres_bootstrap_ipv4": "192.0.2.1"})
+
+
+@pytest.mark.parametrize(
+    "registered,allowed,deleted,result",
+    [
+        (True, True, None, True),
+        (False, True, None, False),
+        (True, False, None, False),
+        (True, True, {"id": "soft-deleted-instance"}, False),
+    ],
+)
+def test_apim_preflight_requires_registration_write_access_and_no_tombstone(
+    monkeypatch, registered, allowed, deleted, result
+) -> None:
+    io = MemoryObservations()
+    io.config["terraform"].update(
+        apim_publisher_email="publisher@example.invalid", location="centralindia"
+    )
+    checks = Checks(auth("runtime-plan"), io.config, {}, io)
+    monkeypatch.setattr(checks, "check_providers", lambda: registered)
+    monkeypatch.setattr(checks, "permits", lambda scope, actions: allowed and scope == io.scope)
+
+    def deleted_lookup(resource_id, version):
+        assert resource_id.endswith(
+            "/locations/centralindia/deletedservices/tirodhan-np-test01-apim"
+        )
+        assert version == "2024-05-01"
+        return deleted
+
+    monkeypatch.setattr(io, "arm", deleted_lookup)
+    assert checks.check_apim_preflight() is result
+
+
+@pytest.mark.parametrize("azure_error", ["ServiceNotFound", "AuthorizationFailed"])
+def test_apim_preflight_classifies_deleted_service_errors_through_arm(monkeypatch, azure_error):
+    config = MemoryObservations().config
+    config["terraform"]["apim_publisher_email"] = "publisher@example.invalid"
+    io = Observations(config)
+    checks = Checks(auth("runtime-plan"), config, {}, io)
+    monkeypatch.setattr(checks, "check_providers", lambda: True)
+    monkeypatch.setattr(checks, "permits", lambda scope, actions: True)
+
+    def read(*args):
+        assert args[:4] == ("az", "rest", "--method", "get")
+        assert args[5].endswith(
+            "/providers/Microsoft.ApiManagement/locations/centralindia/"
+            "deletedservices/tirodhan-np-test01-apim?api-version=2024-05-01"
+        )
+        raise ObservationError(azure_error)
+
+    monkeypatch.setattr(io.runner, "json", read)
+    if azure_error == "ServiceNotFound":
+        assert checks.check_apim_preflight()
+    else:
+        with pytest.raises(ObservationError, match="^AuthorizationFailed$"):
+            checks.check_apim_preflight()
+
+
+def test_deleted_service_error_does_not_hide_active_gateway_read_failure(monkeypatch):
+    io = Observations(MemoryObservations().config)
+
+    def read(*args):
+        raise ObservationError("ServiceNotFound")
+
+    monkeypatch.setattr(io.runner, "json", read)
+    active = f"{io.scope}/providers/Microsoft.ApiManagement/service/tirodhan-np-test01-apim"
+    with pytest.raises(ObservationError, match="^ServiceNotFound$"):
+        io.arm(active, "2024-05-01")

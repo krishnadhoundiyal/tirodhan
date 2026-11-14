@@ -4,7 +4,9 @@
   "Description": "Read-only provider registration and PostgreSQL capability metadata; no RG Reader or writes.",
   "Actions": [
     "Microsoft.Resources/subscriptions/providers/read",
-    "Microsoft.DBforPostgreSQL/locations/capabilities/read"
+    "Microsoft.DBforPostgreSQL/locations/capabilities/read",
+    "Microsoft.ApiManagement/locations/deletedservices/read",
+    "Microsoft.ApiManagement/locations/operationsStatuses/read"
   ],
   "NotActions": [],
   "DataActions": [],

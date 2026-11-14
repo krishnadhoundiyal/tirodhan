@@ -192,6 +192,21 @@ def apply(operation: str, plan: Path) -> None:
                 raise AdmissionDenied("BOOTSTRAP_FIREWALL_REMOVAL_UNVERIFIED")
         if operation == "migration-apply" and not checks.check_migration_job():
             raise AdmissionDenied("MIGRATION_JOB_POSTCONDITIONS_FAILED")
+        if operation == "runtime-apply" and checks.tf.get("apim_publisher_email") is not None:
+            name = f"{checks.tf['resource_group_name']}-apim"
+            resource_id = io.scope + f"/providers/Microsoft.ApiManagement/service/{name}"
+            live = io.arm(resource_id, "2024-05-01")
+            sku = (live or {}).get("sku", {})
+            if (
+                io.backend().resources.get("azurerm_api_management.nonprod[0]", "").casefold()
+                != resource_id.casefold()
+                or not live
+                or str(live.get("id", "")).casefold() != resource_id.casefold()
+                or sku.get("name") != "Consumption"
+                or sku.get("capacity") != 0
+                or live.get("properties", {}).get("provisioningState") != "Succeeded"
+            ):
+                raise AdmissionDenied("APIM_POSTCONDITIONS_FAILED")
     except AdmissionDenied:
         allowed = checks.auth.claims.get("operations", [])
         if (

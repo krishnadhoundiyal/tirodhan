@@ -33,6 +33,32 @@ administrator has verified:
 
 This is repository-admin configuration, not Azure Terraform work.
 
+
+## NONPROD API Management
+
+The stage-4 runtime plan can add the Terraform-managed Consumption gateway in the
+existing application resource group. Set the approved publisher contact as
+`apim_publisher_email` in the signed `NONPROD_TFVARS_JSON` input and keep it set
+while the gateway is managed. The publisher contact is a nonsecret input and may be
+visible in protected plan artifacts and Azure configuration.
+
+Use signed bootstrap to register Microsoft.ApiManagement and update the existing
+deployment and discovery roles. The discovery role can read deleted-instance and
+operation status metadata. The deployment role can manage the gateway resource
+and remove the sample APIs and products created by Azure. Keep the existing state
+scope, Terraform plan approval and protected apply gates.
+
+The `apim_gateway_url` output identifies the gateway provisioned without
+application routes. Review the runtime plan against the existing resources and
+stop if changes extend beyond the approved release.
+
+Protected teardown verifies the exact active gateway is absent and reports any
+soft-deleted name reservation. Azure retains a soft-deleted gateway for up to 48
+hours. The preflight blocks a redeploy while the name is reserved. Immediate name
+reuse requires a separately authorized purge of the exact APIM tombstone. The
+provider is configured to avoid automatic recovery or purge and to preserve Key
+Vault soft-delete protection.
+
 ## Inputs and one-time bootstrap
 
 Use Terraform **1.13.5**, AzureRM **5.8.0** and the committed provider lockfile.

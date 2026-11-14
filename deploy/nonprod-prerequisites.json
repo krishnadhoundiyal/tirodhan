@@ -40,7 +40,7 @@
       "authority": "runtime validators, enabled flags, optional schedules, integration release gates",
       "identity": "D",
       "scope": "enabled workload definitions",
-      "allowed_operation": "validate all enabled capability prerequisites; fail unsupported activation",
+      "allowed_operation": "validate all enabled capability prerequisites and, when configured, APIM registration, scoped permissions and exact deleted-instance inventory; fail unsupported activation",
       "failure": "BLOCK; missing, unknown, denied or unimplemented never passes"
     },
     "foundation": {

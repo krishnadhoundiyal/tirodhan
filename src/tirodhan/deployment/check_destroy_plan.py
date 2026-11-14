@@ -10,6 +10,7 @@ from typing import Any
 
 ALLOWED_DESTROY_TYPES = frozenset(
     {
+        "azurerm_api_management",
         "azurerm_container_app",
         "azurerm_container_app_environment",
         "azurerm_container_app_job",
@@ -101,6 +102,14 @@ def validate_destroy_plan(
                 "Refusing destroy outside expected subscription/resource group: "
                 f"{address} ({resource_id})"
             )
+
+        if resource_type == "azurerm_api_management" and (
+            normalized_id
+            != f"{expected_scope}/providers/microsoft.apimanagement/service/"
+            f"{expected_resource_group.lower()}-apim"
+            or address != "azurerm_api_management.nonprod[0]"
+        ):
+            raise RuntimeError("Refusing destroy outside the approved NONPROD APIM instance")
 
         delete_count += 1
 

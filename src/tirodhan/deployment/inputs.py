@@ -16,6 +16,7 @@ def main() -> None:
         "subscription_id",
         "tenant_id",
         "location",
+        "apim_publisher_email",
         "resource_group_name",
         "suffix",
         "postgres_admin_object_id",
