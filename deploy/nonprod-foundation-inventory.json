@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "sources": {
+    "api_management.tf": "cecfcfc284aa44040f87514d9c100a69c13241a4402de8717a6e07a57126e46f",
     "backend.tf": "88ea13915879a17ebbe199d591fd565024f344112dc3d2a11e52f84567704cbd",
     "container_apps.tf": "1150dfc445b625b989ef4af7810d4459d33fa673337568f93912158be4775ef4",
     "container_apps_environment.tf": "32c69d5086f808b4e511ae2789a6223b613d74eb9210aa7b59f7f13033900a5d",
@@ -9,14 +10,14 @@
     "jobs.tf": "f31e85bb80890785b5a545d20c089fcb97ba8dae01e43823c7c220d710165d58",
     "key_vault.tf": "2cd574d04e80c8bc0ae0c1fa1e138b2b38ede82517542ae563245ace88ba081d",
     "locals.tf": "50f1b7197f3fa35009e94d0e60d495eb8dbce03f1cf2cfe8c81f00aadf42804d",
-    "outputs.tf": "d1e4f05509a6f9904e80285eec269a85071500f8dd094af4181b3ba25a37860e",
+    "outputs.tf": "4760c19fe24e02a942b590e552ae3027c8580e57f8160716b559fd2a4d47b3ff",
     "ownership_transfer.tf": "fce3b9a241d0844c694fecaa0bff70d0a5ffba9893eef8ae4059105a793776b1",
-    "providers.tf": "09849449d495ed171a5d0db2f4401d131ef4c0be6ef41550e80b4133c2749bff",
+    "providers.tf": "2da3f6401630577530daaaf29617bbf30c285712d68fde7effcc34a4d7690405",
     "rbac.tf": "fe0a32ca325184c58e195703f381af5d701ed1f5c58d411f12eb4753bbb37b4b",
     "resource_group.tf": "049a57dbe50d8c36826a9d917aad06dd4c42f20606ad215a1cbc41c92496991d",
     "service_bus.tf": "39a98f93bcf9ca7099f73e19355328d1f9b336cc44ee0099d37295a08d609c4a",
     "storage.tf": "4823e4ea033815f0a2de76275ad70d5e0c8b1f25bf283db8846cd0054dc36a45",
-    "variables.tf": "cdcbd5686f23354dfc9fa00a8385c470caeaa324a7e44893fef0d22f043f9623",
+    "variables.tf": "9de6bb4f2bc16594e7a97f2cbe2f6441606a86a9fd8f8ccef581cf1e5f6afe4b",
     "versions.tf": "9170ce69e8f34ec24a8b6d7d8e1e24c74550cf318de66838b4abeb265416bda3"
   },
   "resources": {

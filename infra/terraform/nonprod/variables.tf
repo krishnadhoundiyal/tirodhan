@@ -9,6 +9,16 @@ variable "suffix" {
     error_message = "Use one stable lowercase alphanumeric NONPROD suffix (4-10 characters)."
   }
 }
+variable "apim_publisher_email" {
+  description = "Approved NONPROD APIM publisher contact. Keep set while the stage-4 gateway is managed."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.apim_publisher_email == null ? true : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.apim_publisher_email))
+    error_message = "Use an approved publisher email address without spaces."
+  }
+}
 variable "postgres_admin_object_id" { type = string }
 variable "postgres_admin_name" { type = string }
 variable "postgres_admin_type" {

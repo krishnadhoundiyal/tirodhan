@@ -3,8 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
+from lifecycle_fakes import MemoryObservations
 
 from tirodhan.deployment.check_destroy_plan import validate_destroy_plan
+from tirodhan.deployment.deployment_admission import AdmissionDenied
+from tirodhan.deployment.destroy_preservation import verify_gateway_removed
+from tirodhan.deployment.lifecycle_evidence import ObservationError
 
 SUBSCRIPTION_ID = "362d539c-c919-481e-97f5-1a9cda362747"
 RESOURCE_GROUP = "tirodhan-np-tdnp01"
@@ -46,6 +50,22 @@ def _validate(plan: dict, *, allow_empty: bool = False, require_empty: bool = Fa
 
 def test_destroy_guard_accepts_known_managed_delete() -> None:
     assert _validate(_plan()) == 1
+
+
+@pytest.mark.parametrize("name", ["tirodhan-np-tdnp01-apim", "unrelated-apim"])
+def test_destroy_guard_only_accepts_exact_nonprod_gateway(name: str) -> None:
+    plan = _plan("azurerm_api_management")
+    row = plan["resource_changes"][0]
+    row["address"] = "azurerm_api_management.nonprod[0]"
+    row["change"]["before"]["id"] = (
+        f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}"
+        f"/providers/Microsoft.ApiManagement/service/{name}"
+    )
+    if name == "tirodhan-np-tdnp01-apim":
+        assert _validate(plan) == 1
+    else:
+        with pytest.raises(RuntimeError, match="approved NONPROD APIM instance"):
+            _validate(plan)
 
 
 def test_destroy_guard_accepts_case_insensitive_azure_scope() -> None:
@@ -181,3 +201,39 @@ def test_post_failure_convergence_rejects_new_resource_creation() -> None:
 
     with pytest.raises(RuntimeError, match="non-destroy managed action"):
         _validate(plan, require_empty=True)
+
+
+@pytest.mark.parametrize("active,deleted", [(True, False), (False, True), (False, False)])
+def test_gateway_teardown_distinguishes_active_absent_and_reserved(
+    monkeypatch, capsys, active: bool, deleted: bool
+) -> None:
+    io = MemoryObservations()
+    io.tf["apim_publisher_email"] = "publisher@example.invalid"
+
+    def arm(resource_id: str, version: str) -> dict[str, str] | None:
+        assert version == "2024-05-01"
+        assert resource_id.endswith("/tirodhan-np-test01-apim")
+        present = active if resource_id.startswith(io.scope + "/") else deleted
+        return {"id": resource_id} if present else None
+
+    monkeypatch.setattr(io, "arm", arm)
+    if active:
+        with pytest.raises(AdmissionDenied, match="NONPROD_APIM_STILL_ACTIVE"):
+            verify_gateway_removed(io)
+    else:
+        verify_gateway_removed(io)
+        output = capsys.readouterr().out
+        result = "NONPROD_APIM_INACTIVE_NAME_RESERVED" if deleted else "NONPROD_APIM_ABSENT"
+        assert output.strip() == result
+
+
+def test_gateway_teardown_cannot_treat_denied_read_as_absence(monkeypatch) -> None:
+    io = MemoryObservations()
+    io.tf["apim_publisher_email"] = "publisher@example.invalid"
+
+    def deny(*args):
+        raise ObservationError("AuthorizationFailed")
+
+    monkeypatch.setattr(io, "arm", deny)
+    with pytest.raises(AdmissionDenied, match="AuthorizationFailed"):
+        verify_gateway_removed(io)
