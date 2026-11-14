@@ -638,18 +638,18 @@ def test_crash_after_claim_blocks_automatic_resigning(context, monkeypatch):
         sign(context)
 
 
-def apply_request(context, tmp_path):
+def apply_request(context, tmp_path, operation="runtime-apply"):
     _, _, _, request = context
     current = state()
-    plan = tmp_path / "runtime.tfplan"
+    plan = tmp_path / f"{operation.removesuffix('-apply')}.tfplan"
     write_plan(plan, current)
     request.update(
         kind="apply",
         secret_name="NONPROD_APPLY_AUTHORIZATION",
         destination="nonprod",
         environment="nonprod",
-        apply_operation="runtime-apply",
-        operations=sorted(setup.expected_bindings("apply", "runtime-apply")),
+        apply_operation=operation,
+        operations=sorted(setup.expected_bindings("apply", operation)),
         state={"kind": current.kind, "etag": current.etag, "document": current.document},
     )
     import hashlib
@@ -665,15 +665,38 @@ def apply_request(context, tmp_path):
     return plan
 
 
-def test_apply_binds_exact_saved_plan_and_authoritative_state(context, tmp_path):
-    plan = apply_request(context, tmp_path)
+@pytest.mark.parametrize("operation", ["runtime-apply", "apim-apply"])
+def test_apply_binds_exact_saved_plan_and_authoritative_state(context, tmp_path, operation):
+    plan = apply_request(context, tmp_path, operation)
     token, _ = sign(context, plan=plan)
     claims = jwt.decode(token, options={"verify_signature": False})
-    binding = claims["bindings"]["runtime-apply"]
+    binding = claims["bindings"][operation]
     assert binding["state_lineage"] == "lineage"
     assert binding["state_serial"] == 0
     assert binding["state_etag"] == "etag-0"
-    assert not any(op.endswith("-plan") for op in claims["operations"])
+    assert binding["state_fingerprint"] == context[3]["plan_review"]["state_fingerprint"]
+    assert binding["plan_sha256"] == context[3]["plan_review"]["plan_sha256"]
+    assert binding["execution_environment"] == "nonprod"
+    assert set(claims["operations"]) == {"terraform-setup", operation}
+
+
+def test_apim_planning_signature_cannot_authorize_apply_or_application_release(context):
+    operator_request(context, "apim-release")
+    token, _ = sign(context)
+    _, policy, config, _ = context
+    evidence = {
+        "policy": policy,
+        "config_hash": digest(config),
+        "code_hash": CODE,
+        "commit": COMMIT,
+        "run_id": SESSION,
+    }
+    granted = validate_authorization(token, operation="apim-plan", **evidence)
+    assert set(granted.claims["operations"]) == {"terraform-setup", "apim-plan"}
+    assert granted.claims["bindings"]["apim-plan"]["execution_environment"] == "nonprod-plan"
+    for operation in ("apim-apply", "foundation-plan", "migration-plan", "runtime-plan"):
+        with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+            validate_authorization(token, operation=operation, **evidence)
 
 
 @pytest.mark.parametrize("changed", ["plan", "lineage", "serial", "etag", "unreviewed", "missing"])
