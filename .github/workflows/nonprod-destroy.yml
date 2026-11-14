@@ -62,33 +62,6 @@ jobs:
         with:
           mode: destroy
 
-      - name: Configure destroy-only Key Vault behaviour
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("infra/terraform/nonprod/providers.tf")
-          text = path.read_text(encoding="utf-8")
-
-          old = """  features {}"""
-          new = """  features {
-              key_vault {
-                purge_soft_delete_on_destroy = false
-              }
-            }"""
-
-          if old not in text:
-              raise SystemExit(
-                  "Expected AzureRM features block not found; refusing destroy."
-              )
-
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-
-          cd infra/terraform/nonprod
-          terraform validate
-
       - name: Guard current NONPROD configuration
         working-directory: infra/terraform/nonprod
         run: |
@@ -178,33 +151,6 @@ jobs:
       - uses: ./.github/actions/nonprod-setup
         with:
           mode: destroy
-
-      - name: Configure destroy-only Key Vault behaviour
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("infra/terraform/nonprod/providers.tf")
-          text = path.read_text(encoding="utf-8")
-
-          old = """  features {}"""
-          new = """  features {
-              key_vault {
-                purge_soft_delete_on_destroy = false
-              }
-            }"""
-
-          if old not in text:
-              raise SystemExit(
-                  "Expected AzureRM features block not found; refusing destroy."
-              )
-
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-
-          cd infra/terraform/nonprod
-          terraform validate
 
       - uses: actions/download-artifact@v4
         with:
@@ -403,6 +349,8 @@ jobs:
             echo "$remaining_azure_resources" >&2
             exit 1
           fi
+
+          python -m tirodhan.deployment.destroy_preservation --verify-apim </dev/null
 
           # The OIDC client ID is an app ID, not the role-assignment object ID.
           # Read the object ID from Azure CLI's token for this logged-in identity,

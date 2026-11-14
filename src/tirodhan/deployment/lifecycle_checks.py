@@ -372,14 +372,17 @@ class Checks:
         return True
 
     def check_providers(self) -> bool:
-        for namespace in (
+        namespaces = [
             "Microsoft.App",
             "Microsoft.Storage",
             "Microsoft.KeyVault",
             "Microsoft.ServiceBus",
             "Microsoft.ManagedIdentity",
             "Microsoft.DBforPostgreSQL",
-        ):
+        ]
+        if self.tf.get("apim_publisher_email") is not None:
+            namespaces.append("Microsoft.ApiManagement")
+        for namespace in namespaces:
             item = self.io.arm(
                 f"/subscriptions/{self.tf['subscription_id']}/providers/{namespace}", "2021-04-01"
             )
@@ -469,7 +472,29 @@ class Checks:
         ):
             # These capabilities retain documented external/native/client acceptance gates.
             return False
-        return self.tf.get("routing_availability_schedule") is None
+        if self.tf.get("routing_availability_schedule") is not None:
+            return False
+        return self.tf.get("apim_publisher_email") is None or self.check_apim_preflight()
+
+    def check_apim_preflight(self) -> bool:
+        subscription = f"/subscriptions/{self.tf['subscription_id']}"
+        if not self.check_providers() or not self.permits(
+            self.io.scope,
+            {
+                "Microsoft.ApiManagement/service/write",
+                "Microsoft.ApiManagement/service/delete",
+                "Microsoft.ApiManagement/service/apis/delete",
+                "Microsoft.ApiManagement/service/products/delete",
+            },
+        ):
+            return False
+        location = self.tf["location"]
+        name = f"{self.tf['resource_group_name']}-apim"
+        deleted = (
+            f"{subscription}/providers/Microsoft.ApiManagement/"
+            f"locations/{location}/deletedservices/{name}"
+        )
+        return self.io.arm(deleted, "2024-05-01") is None
 
     def foundation_ids(self) -> dict[str, str]:
         state = self.io.backend()

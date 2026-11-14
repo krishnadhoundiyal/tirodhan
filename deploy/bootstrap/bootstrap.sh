@@ -39,6 +39,10 @@ vault="td-np-$NONPROD_SUFFIX-kv"
 for provider in Microsoft.App Microsoft.Storage Microsoft.KeyVault Microsoft.ServiceBus Microsoft.ManagedIdentity Microsoft.DBforPostgreSQL; do
   az provider register --namespace "$provider" --wait --output none
 done
+apim_configured="$(jq -r '(.apim_publisher_email // "") != ""' <<<"${NONPROD_TFVARS_JSON:?}")"
+if [[ "$apim_configured" == true ]]; then
+  az provider register --namespace Microsoft.ApiManagement --wait --output none
+fi
 az group create -n "$rg" -l "$AZURE_LOCATION" --output none
 az group create -n "$state_rg" -l "$AZURE_LOCATION" --output none
 az storage account create -n "$state_account" -g "$state_rg" -l "$AZURE_LOCATION" \
