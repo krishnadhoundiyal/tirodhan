@@ -54,6 +54,7 @@ from tirodhan.deployment.release_custody import (
 REPOSITORY = "krishnadhoundiyal/tirodhan"
 DESTINATIONS = {
     "release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
+    "apim-release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
     "apply": ("NONPROD_APPLY_AUTHORIZATION", "nonprod", "deployment", "nonprod"),
     "database": (
         "NONPROD_DATABASE_VERIFY_AUTHORIZATION",
@@ -93,6 +94,7 @@ DESTINATIONS = {
     "log-scheduled": ("NONPROD_LOG_SAS_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
 }
 PLAN_OPERATIONS = ["terraform-setup", "foundation-plan", "migration-plan", "runtime-plan"]
+APPLY_OPERATIONS = ("foundation-apply", "migration-apply", "runtime-apply", "apim-apply")
 DATABASE_ADMIN_PURPOSES = {"database-bootstrap", "enroll-database-verifier"}
 CONSUMER_OPERATIONS = [
     "migration-plan",
@@ -163,6 +165,11 @@ def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str
         return {
             operation: {"execution_environment": "nonprod-plan"} for operation in PLAN_OPERATIONS
         }
+    if kind == "apim-release":
+        return {
+            operation: {"execution_environment": "nonprod-plan"}
+            for operation in ("terraform-setup", "apim-plan")
+        }
     if kind == "database":
         return {
             "database-verify": {
@@ -171,11 +178,7 @@ def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str
                 "consumer_operations": CONSUMER_OPERATIONS,
             }
         }
-    if kind != "apply" or apply_operation not in {
-        "foundation-apply",
-        "migration-apply",
-        "runtime-apply",
-    }:
+    if kind != "apply" or apply_operation is None or apply_operation not in APPLY_OPERATIONS:
         raise AdmissionDenied("ISSUANCE_OPERATION_NOT_SUPPORTED")
     result: dict[str, Any] = {
         "terraform-setup": {"execution_environment": "nonprod"},

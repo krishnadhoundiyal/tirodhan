@@ -64,6 +64,8 @@ def test_workflow_mappings_cannot_silently_overwrite_gates() -> None:
         "foundation-apply",
         "migration-apply",
         "runtime-apply",
+        "apim-plan",
+        "apim-apply",
         "initialize-state-plan",
         "initialize-state-apply",
         "prepare-compensation",

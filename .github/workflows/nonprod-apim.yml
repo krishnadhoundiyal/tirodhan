@@ -1,0 +1,99 @@
+name: NONPROD API Management
+on:
+  workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: Explicit signed APIM release session ID
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: nonprod-release
+  cancel-in-progress: false
+env:
+  NONPROD_RESOURCE_GROUP: ${{ vars.NONPROD_RESOURCE_GROUP }}
+  AZURE_NONPROD_RECOVERY_CLIENT_ID: ${{ vars.AZURE_NONPROD_RECOVERY_CLIENT_ID }}
+  AZURE_NONPROD_RECOVERY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_RECOVERY_PRINCIPAL_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_CLIENT_ID }}
+  AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID: ${{ vars.AZURE_NONPROD_DATABASE_VERIFY_PRINCIPAL_ID }}
+  TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
+  GH_TOKEN: ${{ github.token }}
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: 'true'
+  ARM_USE_AZUREAD: 'true'
+  STATE_ACCOUNT_NAME: ${{ vars.NONPROD_STATE_ACCOUNT }}
+  STATE_RESOURCE_GROUP: ${{ vars.NONPROD_STATE_RESOURCE_GROUP }}
+  NONPROD_TFVARS_JSON: ${{ vars.NONPROD_TFVARS_JSON }}
+  DEPLOYMENT_SCOPE: /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.NONPROD_RESOURCE_GROUP }}
+jobs:
+  release-admission:
+    if: github.ref == 'refs/heads/main'
+    env:
+      TIRODHAN_NONPROD_OPERATION: apim-plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - env:
+          TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+        run: python -m tirodhan.deployment.deployment_admission
+  apim-plan:
+    if: github.ref == 'refs/heads/main'
+    needs: release-admission
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
+    environment: nonprod-plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nonprod-setup
+      - working-directory: infra/terraform/nonprod
+        run: python -m tirodhan.deployment.foundation_lifecycle apim-plan --plan apim.tfplan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apim-plan
+          path: infra/terraform/nonprod/apim.tfplan
+          retention-days: 1
+          if-no-files-found: error
+  apim-apply:
+    if: github.ref == 'refs/heads/main'
+    needs: apim-plan
+    env:
+      TIRODHAN_EXECUTION_ENVIRONMENT: nonprod
+      TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
+      TIRODHAN_NONPROD_OPERATION: apim-apply
+    environment: nonprod
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify signed apply authority before Azure authentication
+        run: |
+          python -m pip install -e .
+          python -m tirodhan.deployment.deployment_admission
+      - uses: ./.github/actions/nonprod-setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: apim-plan
+          path: infra/terraform/nonprod
+      - working-directory: infra/terraform/nonprod
+        run: |
+          set -euo pipefail
+          python -m tirodhan.deployment.foundation_lifecycle apim-apply --plan apim.tfplan
+          terraform show -json | python -m tirodhan.deployment.check_state

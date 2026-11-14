@@ -33,6 +33,7 @@ from tirodhan.deployment.release_custody import (
     private_write,
 )
 from tirodhan.deployment.release_setup import (
+    APPLY_OPERATIONS,
     DATABASE_ADMIN_PURPOSES,
     DESTINATIONS,
     RECOVERY_BOUND_OPERATIONS,
@@ -212,7 +213,8 @@ def capture_plan_artifact(
     artifact = github.get(f"actions/artifacts/{artifact_id}")
     run_id = artifact["workflow_run"]["id"]
     run = github.get(f"actions/runs/{run_id}")
-    workflow = f".github/workflows/nonprod-{'foundation' if mode == 'foundation' else 'deploy'}.yml"
+    workflow_name = mode if mode in {"foundation", "apim"} else "deploy"
+    workflow = f".github/workflows/nonprod-{workflow_name}.yml"
     if (
         artifact.get("expired") is not False
         or artifact.get("name") != mode + "-plan"
@@ -495,6 +497,10 @@ def prepare(
             for name, value in config["terraform"].items()
         ):
             raise AdmissionDenied("PLAN_CONFIGURATION_OR_SECRET_HYGIENE_INVALID")
+        if apply_operation == "apim-apply":
+            from tirodhan.deployment.apim_lifecycle import validate_apim_plan
+
+            validate_apim_plan(shown, state, config["terraform"])
         request["state"] = {"kind": state.kind, "etag": state.etag, "document": state.document}
         request["plan_review"] = {
             "plan_sha256": hashlib.sha256(plan.read_bytes()).hexdigest(),
@@ -548,9 +554,7 @@ def main() -> None:
     parser.add_argument("--session")
     parser.add_argument("--expires-at", help="Explicit ISO-8601 expiry including timezone")
     parser.add_argument("--review-pr", type=int)
-    parser.add_argument(
-        "--apply-operation", choices=["foundation-apply", "migration-apply", "runtime-apply"]
-    )
+    parser.add_argument("--apply-operation", choices=APPLY_OPERATIONS)
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--artifact-id", type=int)
     parser.add_argument("--database-key-id")

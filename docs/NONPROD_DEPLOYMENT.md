@@ -37,7 +37,9 @@ This is repository-admin configuration, not Azure Terraform work.
 ## NONPROD API Management
 
 The stage-4 runtime plan can add the Terraform-managed Consumption gateway in the
-existing application resource group. Set the approved publisher contact as
+existing application resource group. For an already deployed stage-4 stack, the
+manually dispatched NONPROD API Management workflow can add just the gateway.
+Set the approved publisher contact as
 `apim_publisher_email` in the signed `NONPROD_TFVARS_JSON` input and keep it set
 while the gateway is managed. The publisher contact is a nonsecret input and may be
 visible in protected plan artifacts and Azure configuration.
@@ -47,6 +49,18 @@ deployment and discovery roles. The discovery role can read deleted-instance and
 operation status metadata. The deployment role can manage the gateway resource
 and remove the sample APIs and products created by Azure. Keep the existing state
 scope, Terraform plan approval and protected apply gates.
+
+For the gateway-only workflow, capture `apim-release` planning authority with the
+standard reviewed-main signing utility. The workflow uses the existing backend
+and deployment identity, reads workload inputs from the established state, and
+blocks on any change other than creation of the exact Consumption gateway and its
+output. Use `--apply-operation apim-apply` to capture the exact saved
+`apim-plan` artifact for owner review and signing. Protected apply checks the
+plan and its live state binding again, then verifies the Azure service and
+preservation of existing resource IDs and Terraform outputs. The APIM-only apply
+process allows 190 minutes for Terraform, including the AzureRM provider's
+three-hour create timeout and time to persist state and release the lease.
+The GitHub apply job allows 240 minutes, including setup and verification.
 
 The `apim_gateway_url` output identifies the gateway provisioned without
 application routes. Review the runtime plan against the existing resources and
@@ -58,6 +72,35 @@ hours. The preflight blocks a redeploy while the name is reserved. Immediate nam
 reuse requires a separately authorized purge of the exact APIM tombstone. The
 provider is configured to avoid automatic recovery or purge and to preserve Key
 Vault soft-delete protection.
+
+### Recover an interrupted gateway apply
+
+Keep the existing application stack online. Use the failed run, its approved
+plan and the pre-apply state binding to identify the exact Azure APIM service ID
+and Terraform address `azurerm_api_management.nonprod[0]`. Inspect the backend
+through the existing Entra account-scoped read and inspect Azure Resource Manager
+and the Activity Log for that exact service. Match the Azure write to the approved
+attempt's principal and timing. Record the error, available correlation ID, live
+provisioning state, and state lineage and serial. Continue only when Azure's
+outcome and ownership are known. An in-progress write requires observation until
+it settles. An unreadable resource or a lost response is insufficient evidence
+to retry creation.
+
+| Verified outcome | Next action |
+| --- | --- |
+| The gateway is absent in Azure and state, the original Azure operation is terminal, and the name is not soft-deleted | Generate a fresh gateway-only plan from current state and obtain exact-plan approval again. |
+| The exact gateway succeeded and is already managed at the correct address | Verify the Consumption SKU, live gateway URL, Terraform output and preservation of the existing resource IDs and outputs against the approved baseline. Record postcondition evidence separately from the original run result. |
+| The exact gateway succeeded in Azure but is absent from state | Prepare a separately reviewed configuration-driven Terraform import using the verified Azure resource ID and the existing APIM address. Review the full saved plan against current state. Require exactly one import and the expected gateway URL output, with zero Azure resource creates, updates or deletes. |
+| The gateway failed, has conflicting ownership, or is missing from Azure while state still owns it | Stop and prepare a separately approved, gateway-only reconciliation for the verified condition. If removal is needed, obtain exact-resource approval and verify the resulting soft-delete reservation before planning a recreate. |
+
+The normal APIM workflow accepts only a create plan. If import is needed,
+submit a reviewed change for that one gateway and give the import its own signed
+plan and apply authorization, exact saved-plan hash, live backend binding and
+protected `nonprod` approval. Use the normal backend lock and verify the resulting
+Terraform binding, original resource IDs and outputs, live gateway ID and URL,
+and sample API/product inventory before routing traffic. Any cleanup of Azure
+sample resources left by an interrupted create needs its own reviewed change.
+Direct state editing and full-stack teardown are outside this recovery procedure.
 
 ## Inputs and one-time bootstrap
 
