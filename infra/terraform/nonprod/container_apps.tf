@@ -44,6 +44,9 @@ resource "azurerm_container_app" "api" {
       image  = var.application_image
       cpu    = 0.5
       memory = "1Gi"
+      # Match the provider refresh representation of the image defaults.
+      args    = []
+      command = []
       dynamic "env" {
         for_each = merge(local.common_env, local.financial_webhook_env, {
           TIRODHAN_FINANCIAL_WEBHOOK_SENDER_IDENTITY_CLIENT_ID = azurerm_user_assigned_identity.financial_webhook_sender.client_id
@@ -82,11 +85,12 @@ resource "azurerm_container_app" "api" {
       }
     }
     container {
-      name   = "fluent-bit"
-      image  = var.fluent_bit_image
-      cpu    = 0.25
-      memory = "0.5Gi"
-      args   = ["service"]
+      name    = "fluent-bit"
+      image   = var.fluent_bit_image
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      args    = ["service"]
+      command = []
       volume_mounts {
         name = "logs"
         path = local.shared_dir
@@ -186,11 +190,12 @@ resource "azurerm_container_app" "worker" {
       }
     }
     container {
-      name   = "fluent-bit"
-      image  = var.fluent_bit_image
-      cpu    = 0.25
-      memory = "0.5Gi"
-      args   = ["service"]
+      name    = "fluent-bit"
+      image   = var.fluent_bit_image
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      args    = ["service"]
+      command = []
       volume_mounts {
         name = "logs"
         path = local.shared_dir

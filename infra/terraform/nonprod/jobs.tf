@@ -167,11 +167,12 @@ resource "azurerm_container_app_job" "scheduled" {
       }
     }
     container {
-      name   = "fluent-bit"
-      image  = var.fluent_bit_image
-      cpu    = 0.25
-      memory = "0.5Gi"
-      args   = ["job"]
+      name    = "fluent-bit"
+      image   = var.fluent_bit_image
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      args    = ["job"]
+      command = []
       volume_mounts {
         name = "logs"
         path = local.shared_dir
