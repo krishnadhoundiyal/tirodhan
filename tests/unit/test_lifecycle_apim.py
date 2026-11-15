@@ -268,6 +268,45 @@ def test_plan_tolerates_only_the_backend_lease_metadata_change(
             apim.plan_gateway(path)
 
 
+def test_plan_reports_only_static_drift_details_when_blocked(
+    baseline, plan, tmp_path, monkeypatch, capsys
+):
+    from tirodhan.deployment import foundation_reconcile, prerequisites
+
+    io = MemoryObservations()
+    private_address = 'azurerm_container_app.api["private-index"]'
+    io.current = replace(
+        baseline,
+        resources=baseline.resources
+        | {private_address: baseline.resources["azurerm_container_app.api[0]"]},
+    )
+    plan["resource_drift"] = [
+        {
+            "address": private_address,
+            "change": {
+                "actions": ["update"],
+                "before": {"tags": {"private-map-key": "private-value"}, "private-field": "a"},
+                "after": {"tags": {}, "private-field": "b"},
+            },
+        },
+        {"address": "private-unknown-address"},
+    ]
+    io.runner.plan = plan
+    checks = SimpleNamespace(backend=io.backend, tf=TF)
+    monkeypatch.setattr(foundation_reconcile, "admitted_with_grant", lambda _: (checks, io, None))
+    monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
+    path = tmp_path / "apim.tfplan"
+    monkeypatch.setattr(
+        apim.subprocess, "run", lambda *_args, **_kwargs: write_plan(path, baseline)
+    )
+    with pytest.raises(AdmissionDenied, match="^APIM_PLAN_RESOURCE_DRIFT$"):
+        apim.plan_gateway(path)
+    assert capsys.readouterr().out == (
+        "APIM_PLAN_DRIFT_DETAIL entries=2 unlisted=1 omitted_blocks=0 "
+        "blocks=azurerm_container_app.api(tags)\n"
+    )
+
+
 def test_gate_requires_exact_workflow_and_absent_gateway(baseline, monkeypatch):
     io = MemoryObservations()
     io.current = baseline
