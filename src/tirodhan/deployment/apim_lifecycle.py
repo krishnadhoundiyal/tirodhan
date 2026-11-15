@@ -157,6 +157,49 @@ def validate_apim_plan(
         raise ApimPlanBlocked("APIM_PLAN_OUTPUT_MISMATCH")
 
 
+def drift_summary(drift: Any, state: BackendState) -> str:
+    """Report existing Terraform block labels and static schema fields only."""
+    if not isinstance(drift, list):
+        return "APIM_PLAN_DRIFT_DETAIL_UNAVAILABLE"
+
+    blocks: dict[str, set[str]] = {}
+    unmatched = 0
+    for row in drift:
+        address = row.get("address") if isinstance(row, dict) else None
+        if not isinstance(address, str) or address not in state.resources:
+            unmatched += 1
+            continue
+        # for_each keys are values. Never copy them into a public workflow log.
+        label = address.split("[", 1)[0]
+        if not re.fullmatch(r"azurerm_[a-z0-9_]+\.[a-zA-Z0-9_]+", label):
+            unmatched += 1
+            continue
+        fields = blocks.setdefault(label, set())
+        change = row.get("change")
+        if isinstance(change, dict):
+            before, after = change.get("before"), change.get("after")
+            if isinstance(before, dict) and isinstance(after, dict):
+                # Terraform show encodes resource objects using the provider schema.
+                # Only root field names are static. Nested keys can be user input.
+                fields.update(
+                    key
+                    for key in before.keys() | after.keys()
+                    if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key)
+                    and before.get(key) != after.get(key)
+                )
+
+    details = []
+    for label, fields in sorted(blocks.items())[:12]:
+        shown = ",".join(sorted(fields)[:12])
+        if len(fields) > 12:
+            shown += ",more"
+        details.append(f"{label}({shown})" if shown else label)
+    return (
+        f"APIM_PLAN_DRIFT_DETAIL entries={len(drift)} unlisted={unmatched} "
+        f"omitted_blocks={max(0, len(blocks) - 12)} blocks={';'.join(details)}"
+    )
+
+
 def terraform_plan_failure(output: str) -> str:
     """Return a fixed status label without forwarding provider diagnostics."""
     labels: set[str] = set()
@@ -235,6 +278,10 @@ def plan_gateway(path: Path) -> None:
         raise ApimPlanBlocked("APIM_BACKEND_CHANGED_DURING_PLAN")
     try:
         validate_apim_plan(shown, before, checks.tf)
+    except ApimPlanBlocked as exc:
+        if str(exc) == "APIM_PLAN_RESOURCE_DRIFT":
+            print(drift_summary(shown.get("resource_drift"), before), flush=True)
+        raise
     except (KeyError, TypeError, ValueError):
         raise ApimPlanBlocked("APIM_SAVED_PLAN_FORMAT_INVALID") from None
     print("APIM_PLAN_VERIFIED: one Consumption gateway create")
