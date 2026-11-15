@@ -107,8 +107,10 @@ def test_rejects_incomplete_drifted_or_unrelated_plan(baseline, plan, field, val
         apim.validate_apim_plan(plan, baseline, TF)
 
 
+@pytest.mark.parametrize("field", ["summary", "detail"])
+@pytest.mark.parametrize("provider_code", ["AuthorizationFailed", "ForbiddenByRbac"])
 def test_terraform_diagnostics_are_classified_without_exposing_payload(
-    baseline, tmp_path, monkeypatch, capsys
+    baseline, tmp_path, monkeypatch, capsys, field, provider_code
 ):
     from tirodhan.deployment import foundation_reconcile, prerequisites
 
@@ -123,8 +125,10 @@ def test_terraform_diagnostics_are_classified_without_exposing_payload(
             "type": "diagnostic",
             "diagnostic": {
                 "severity": "error",
-                "summary": "Read failed",
-                "detail": "AuthorizationFailed: private-value",
+                "summary": f"{provider_code}: private-value"
+                if field == "summary"
+                else "Read failed",
+                "detail": f"{provider_code}: private-value" if field == "detail" else "",
             },
         }
     )

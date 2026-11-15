@@ -176,8 +176,10 @@ def terraform_plan_failure(output: str) -> str:
             labels.add("STATE_LOCK")
         elif summary in ("Invalid value for input variable", "Invalid function argument"):
             labels.add("INVALID_INPUT")
-        elif isinstance(detail, str) and re.search(
-            r"\b(?:AuthorizationFailed|ForbiddenByRbac)\b", detail
+        elif any(
+            isinstance(message, str)
+            and re.search(r"\b(?:AuthorizationFailed|ForbiddenByRbac)\b", message)
+            for message in (summary, detail)
         ):
             labels.add("AZURE_PERMISSION")
         else:
