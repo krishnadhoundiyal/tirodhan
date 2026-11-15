@@ -1,6 +1,9 @@
 """An additive gateway cannot reconcile or migrate the deployed application."""
 
 import hashlib
+import json
+import subprocess
+import sys
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -89,19 +92,57 @@ def plan(baseline):
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("field", "value", "code"),
     [
-        ("complete", False),
-        ("resource_drift", [{}]),
-        ("deferred_changes", [{}]),
-        ("action_invocations", [{}]),
-        ("output_changes", {"api_url": {"actions": ["update"]}}),
+        ("complete", False, "APIM_PLAN_INCOMPLETE"),
+        ("resource_drift", [{}], "APIM_PLAN_RESOURCE_DRIFT"),
+        ("deferred_changes", [{}], "APIM_PLAN_NOT_ADDITIVE"),
+        ("action_invocations", [{}], "APIM_PLAN_NOT_ADDITIVE"),
+        ("output_changes", {"api_url": {"actions": ["update"]}}, "APIM_PLAN_OUTPUT_MISMATCH"),
     ],
 )
-def test_rejects_incomplete_drifted_or_unrelated_plan(baseline, plan, field, value):
+def test_rejects_incomplete_drifted_or_unrelated_plan(baseline, plan, field, value, code):
     plan[field] = value
-    with pytest.raises(AdmissionDenied, match="APIM_PLAN_NOT_ADDITIVE"):
+    with pytest.raises(AdmissionDenied, match=code):
         apim.validate_apim_plan(plan, baseline, TF)
+
+
+@pytest.mark.parametrize("field", ["summary", "detail"])
+@pytest.mark.parametrize("provider_code", ["AuthorizationFailed", "ForbiddenByRbac"])
+def test_terraform_diagnostics_are_classified_without_exposing_payload(
+    baseline, tmp_path, monkeypatch, capsys, field, provider_code
+):
+    from tirodhan.deployment import foundation_reconcile, prerequisites
+
+    checks = SimpleNamespace(backend=lambda: baseline)
+    monkeypatch.setattr(foundation_reconcile, "admitted_with_grant", lambda _: (checks, None, None))
+    monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
+    monkeypatch.setattr(
+        sys, "argv", ["foundation_lifecycle", "apim-plan", "--plan", str(tmp_path / "apim.tfplan")]
+    )
+    diagnostic = json.dumps(
+        {
+            "type": "diagnostic",
+            "diagnostic": {
+                "severity": "error",
+                "summary": f"{provider_code}: private-value"
+                if field == "summary"
+                else "Read failed",
+                "detail": f"{provider_code}: private-value" if field == "detail" else "",
+            },
+        }
+    )
+
+    def terraform(args, **options):
+        assert "-json" in args
+        assert options["capture_output"] is True
+        raise subprocess.CalledProcessError(1, args, output=diagnostic, stderr="private-stderr")
+
+    monkeypatch.setattr(apim.subprocess, "run", terraform)
+    with pytest.raises(SystemExit) as error:
+        foundation_lifecycle.main()
+    assert str(error.value) == "LIFECYCLE_BLOCKED: APIM_TERRAFORM_PLAN_FAILED:AZURE_PERMISSION"
+    assert capsys.readouterr() == ("", "")
 
 
 @pytest.mark.parametrize("actions", [["update"], ["delete"], ["delete", "create"], ["create"]])
