@@ -107,6 +107,107 @@ def test_rejects_incomplete_drifted_or_unrelated_plan(baseline, plan, field, val
         apim.validate_apim_plan(plan, baseline, TF)
 
 
+@pytest.fixture(
+    params=[
+        "azurerm_container_app.api[0]",
+        'azurerm_container_app.worker["planning"]',
+        'azurerm_container_app_job.scheduled["outbox"]',
+    ]
+)
+def plan_with_command_refresh(request, baseline, plan):
+    address = request.param
+    kind = address.split(".", 1)[0]
+    resource_id = baseline.resources.setdefault(address, SCOPE + "/providers/Microsoft.App/example")
+    api = address == "azurerm_container_app.api[0]"
+    before = {
+        "id": resource_id,
+        "template": [
+            {
+                "container": [
+                    {
+                        "name": "application",
+                        "image": "app",
+                        "command": None if api else ["python"],
+                        "args": None if api else ["-m", "worker"],
+                    },
+                    {
+                        "name": "fluent-bit",
+                        "image": "sidecar",
+                        "command": None,
+                        "args": ["service"],
+                    },
+                ]
+            }
+        ],
+    }
+    after = deepcopy(before)
+    application, sidecar = after["template"][0]["container"]
+    sidecar["command"] = []
+    if api:
+        application.update(args=[], command=[])
+    identity = {
+        "address": address,
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/azurerm",
+        "type": kind,
+    }
+    drift = identity | {
+        "change": {
+            "actions": ["update"],
+            "before": before,
+            "after": after,
+            "after_unknown": {},
+        },
+    }
+    plan["resource_drift"] = [drift]
+    planned = identity | {"change": {"actions": ["no-op"], "before": after, "after": after}}
+    plan["resource_changes"].append(planned)
+    return plan, drift, planned
+
+
+def test_azure_command_refresh_allows_only_gateway_create(baseline, plan_with_command_refresh):
+    plan, _, _ = plan_with_command_refresh
+    expected = deepcopy(plan)
+    apim.validate_apim_plan(plan, baseline, TF)
+    assert plan == expected
+
+
+@pytest.mark.parametrize(
+    "deviation",
+    ["command", "image", "volume", "reverse", "unknown", "resource", "move", "delete"],
+)
+def test_command_refresh_does_not_mask_other_drift(baseline, plan_with_command_refresh, deviation):
+    plan, drift, _ = plan_with_command_refresh
+    change = drift["change"]
+    template = change["after"]["template"][0]
+    sidecar = template["container"][1]
+    if deviation == "command":
+        sidecar["command"] = ["different"]
+    elif deviation == "image":
+        sidecar["image"] = "different"
+    elif deviation == "volume":
+        template["volume"] = [{"name": "other"}]
+    elif deviation == "reverse":
+        change["before"], change["after"] = change["after"], change["before"]
+    elif deviation == "unknown":
+        change["after_unknown"] = {"template": True}
+    elif deviation == "resource":
+        change["before"]["id"] = "unrelated"
+    elif deviation == "move":
+        drift["previous_address"] = "unrelated"
+    else:
+        change["actions"] = ["delete"]
+    with pytest.raises(AdmissionDenied, match="^APIM_PLAN_RESOURCE_DRIFT$"):
+        apim.validate_apim_plan(plan, baseline, TF)
+
+
+def test_command_refresh_does_not_authorize_workload_update(baseline, plan_with_command_refresh):
+    plan, _, planned = plan_with_command_refresh
+    planned["change"]["actions"] = ["update"]
+    with pytest.raises(AdmissionDenied, match="^APIM_PLAN_NOT_ADDITIVE$"):
+        apim.validate_apim_plan(plan, baseline, TF)
+
+
 @pytest.mark.parametrize("field", ["summary", "detail"])
 @pytest.mark.parametrize("provider_code", ["AuthorizationFailed", "ForbiddenByRbac"])
 def test_terraform_diagnostics_are_classified_without_exposing_payload(

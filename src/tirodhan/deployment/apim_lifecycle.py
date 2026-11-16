@@ -103,10 +103,77 @@ def check_baseline(checks: Checks) -> bool:
     )
 
 
+def empty_container_command_refresh(row: dict[str, Any], state: BackendState) -> bool:
+    """Recognize AzureRM 5.8.0's serialization of omitted command lists."""
+    address = row.get("address")
+    if (
+        not isinstance(address, str)
+        or address not in state.resources
+        or row.get("mode") != "managed"
+        or row.get("provider_name") != "registry.terraform.io/hashicorp/azurerm"
+        or "previous_address" in row
+        or "deposed" in row
+    ):
+        return False
+
+    block = address.split("[", 1)[0]
+    if (
+        block
+        not in (
+            "azurerm_container_app.api",
+            "azurerm_container_app.worker",
+            "azurerm_container_app_job.scheduled",
+        )
+        or row.get("type") != block.split(".", 1)[0]
+    ):
+        return False
+
+    change = row.get("change")
+    if (
+        not isinstance(change, dict)
+        or change.get("actions") != ["update"]
+        or change.get("after_unknown") != {}
+        or change.get("importing")
+        or change.get("replace_paths")
+    ):
+        return False
+    before, after = change.get("before"), change.get("after")
+    if (
+        not isinstance(before, dict)
+        or not isinstance(after, dict)
+        or before.get("id") != state.resources[address]
+    ):
+        return False
+
+    template = before.get("template")
+    if not isinstance(template, list) or len(template) != 1 or not isinstance(template[0], dict):
+        return False
+    containers = template[0].get("container")
+    if (
+        not isinstance(containers, list)
+        or len(containers) != 2
+        or any(not isinstance(container, dict) for container in containers)
+        or [container.get("name") for container in containers] != ["application", "fluent-bit"]
+    ):
+        return False
+
+    application, sidecar = (dict(container) for container in containers)
+    if "command" in sidecar and sidecar["command"] is None:
+        sidecar["command"] = []
+    if address == "azurerm_container_app.api[0]":
+        for field in ("args", "command"):
+            if field in application and application[field] is None:
+                application[field] = []
+    expected = before | {"template": [template[0] | {"container": [application, sidecar]}]}
+    return expected != before and json.dumps(expected, sort_keys=True) == json.dumps(
+        after, sort_keys=True
+    )
+
+
 def validate_apim_plan(
     plan: dict[str, Any], state: BackendState, terraform: dict[str, Any]
 ) -> None:
-    """Reject drift, imports, moves, replacements and every unrelated planned change."""
+    """Reject material drift and every planned action except the gateway create."""
     inputs = deployed_inputs(state)
     variables = {name: item["value"] for name, item in plan["variables"].items()}
     if variables.get("deployment_stage") == "4":
@@ -117,7 +184,11 @@ def validate_apim_plan(
         raise ApimPlanBlocked("APIM_PLAN_INPUT_MISMATCH")
     if plan.get("complete") is not True or plan.get("errored") is not False:
         raise ApimPlanBlocked("APIM_PLAN_INCOMPLETE")
-    if plan.get("resource_drift"):
+    drift = plan.get("resource_drift", [])
+    if not isinstance(drift, list) or any(
+        not isinstance(row, dict) or not empty_container_command_refresh(row, state)
+        for row in drift
+    ):
         raise ApimPlanBlocked("APIM_PLAN_RESOURCE_DRIFT")
     if populated_key_paths(plan):
         raise ApimPlanBlocked("APIM_PLAN_SECRET_HYGIENE_FAILED")
