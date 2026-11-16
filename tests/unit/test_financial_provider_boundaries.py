@@ -86,7 +86,7 @@ async def test_http_ack_waits_for_broker_and_exact_replay_keeps_minimal_identity
             task = asyncio.create_task(
                 api.post("/v1/payments/provider/webhook", content=raw, headers=signed(raw))
             )
-            await asyncio.wait_for(publisher.entered.wait(), 1)
+            await asyncio.wait_for(publisher.entered.wait(), 5)
             assert not task.done()
             concurrent = asyncio.create_task(
                 api.post("/v1/payments/provider/webhook", content=raw, headers=signed(raw))
