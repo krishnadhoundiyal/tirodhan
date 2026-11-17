@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
@@ -194,6 +194,8 @@ def create_app(
     application.state.settings = application_settings
 
     if application_settings.cors_allowed_origins:
+        if "*" in application_settings.cors_allowed_origins:
+            raise ValueError("CORS wildcard '*' is forbidden when credentials are enabled")
         application.add_middleware(
             CORSMiddleware,
             allow_origins=application_settings.cors_allowed_origins,

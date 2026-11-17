@@ -86,3 +86,16 @@ async def test_gateway_secret_middleware_allows_when_unconfigured() -> None:
         resp = await client.get("/v1/test")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
+
+
+def test_create_app_rejects_wildcard_cors_origin() -> None:
+    from tirodhan.main import create_app
+
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url="postgresql+asyncpg://user:password@localhost/test",
+        cors_allowed_origins=["*"],
+    )
+    with pytest.raises(ValueError, match=r"CORS wildcard '\*' is forbidden"):
+        create_app(settings)

@@ -270,8 +270,12 @@ async def post_refresh(
     settings = cast(Settings, request.app.state.settings)
     access_ttl = _access_token_ttl(request)
     raw_refresh_credential: str | None = None
-    if body is not None and body.refresh_token is not None:
-        raw_refresh_credential = body.refresh_token.get_secret_value()
+    if (
+        body is not None
+        and body.refresh_token is not None
+        and body.refresh_token.get_secret_value().strip()
+    ):
+        raw_refresh_credential = body.refresh_token.get_secret_value().strip()
     else:
         raw_refresh_credential = request.cookies.get(_cookie_name(settings))
 
@@ -311,8 +315,12 @@ async def post_logout(
 ) -> Response:
     settings = cast(Settings, request.app.state.settings)
     raw_refresh_credential: str | None = None
-    if body is not None and body.refresh_token is not None:
-        raw_refresh_credential = body.refresh_token.get_secret_value()
+    if (
+        body is not None
+        and body.refresh_token is not None
+        and body.refresh_token.get_secret_value().strip()
+    ):
+        raw_refresh_credential = body.refresh_token.get_secret_value().strip()
     else:
         raw_refresh_credential = request.cookies.get(_cookie_name(settings))
 

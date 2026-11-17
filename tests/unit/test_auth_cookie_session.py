@@ -184,3 +184,35 @@ async def test_post_logout_route_revokes_and_deletes_cookie_with_root_path() -> 
         assert "__Host-tirodhan_refresh" in set_cookie
         assert "path=/" in set_cookie.lower()
         assert "max-age=0" in set_cookie.lower() or "expires=" in set_cookie.lower()
+
+
+@pytest.mark.asyncio
+async def test_empty_body_token_does_not_shadow_cookie_on_logout() -> None:
+    settings = make_test_settings(secure=True)
+    app = FastAPI()
+    app.state.settings = settings
+    scope = {
+        "type": "http",
+        "app": app,
+        "headers": [(b"cookie", b"__Host-tirodhan_refresh=cookie_token_to_logout")],
+    }
+    request = Request(scope)
+    response = Response()
+
+    with patch(
+        "tirodhan.api.routes.auth.logout_refresh_session",
+        new=AsyncMock(),
+    ) as mock_logout:
+        # Client passes an empty body token {"refresh_token": ""}
+        body = LogoutRequest(refresh_token=SecretStr(""))
+        res = await post_logout(
+            request=request,
+            response=response,
+            session_factory=AsyncMock(),
+            body=body,
+        )
+
+        assert res.status_code == 204
+        # Proves database session revocation was invoked with the cookie token
+        mock_logout.assert_awaited_once()
+        assert mock_logout.await_args.kwargs["raw_refresh_credential"] == "cookie_token_to_logout"
