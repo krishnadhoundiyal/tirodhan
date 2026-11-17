@@ -136,6 +136,12 @@ class Settings(BaseSettings):
     media_video_allowed_content_types: list[str] | None = None
     media_video_max_size_bytes: int | None = None
 
+    gateway_secret: SecretStr | None = None
+    cors_allowed_origins: list[str] = []
+    auth_cookie_name: str = "__Host-tirodhan_refresh"
+    auth_cookie_secure: bool = True
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="TIRODHAN_",
