@@ -79,7 +79,10 @@ class GatewaySecretMiddleware:
         if scope["type"] == "http" and self.settings.gateway_secret is not None:
             method = scope.get("method", "")
             path = scope.get("path", "")
-            if method != "OPTIONS" and path not in ("/health", "/ready"):
+            if (
+                method != "OPTIONS"
+                and path not in ("/health", "/ready", "/v1/payments/provider/webhook")
+            ):
                 headers = dict(scope.get("headers", []))
                 header_bytes = headers.get(b"x-gateway-secret", b"")
                 expected_bytes = self.settings.gateway_secret.get_secret_value().encode("utf-8")
@@ -193,6 +196,8 @@ def create_app(
     )
     application.state.settings = application_settings
 
+    application.add_middleware(GatewaySecretMiddleware, settings=application_settings)
+
     if application_settings.cors_allowed_origins:
         if "*" in application_settings.cors_allowed_origins:
             raise ValueError("CORS wildcard '*' is forbidden when credentials are enabled")
@@ -214,8 +219,6 @@ def create_app(
             ],
             max_age=86400,
         )
-
-    application.add_middleware(GatewaySecretMiddleware, settings=application_settings)
 
     @application.exception_handler(RequestValidationError)
     async def private_validation_error(request: Request, error: RequestValidationError) -> Response:

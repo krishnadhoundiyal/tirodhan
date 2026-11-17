@@ -54,9 +54,16 @@ async def test_gateway_secret_middleware_blocks_unauthorized_direct_access() -> 
         assert response_ok.status_code == 200
         assert response_ok.json() == {"data": "manager_data"}
 
-        # 4. Probes (/health and /ready) are exempt without gateway header
+        # 4. Probes (/health and /ready) and provider webhook are exempt without gateway header
         assert (await client.get("/health")).status_code == 200
         assert (await client.get("/ready")).status_code == 200
+
+    @app.post("/v1/payments/provider/webhook")
+    async def webhook():
+        return {"received": True}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post("/v1/payments/provider/webhook")).status_code == 200
 
         # 5. Non-ASCII header value returns 403 without raising an unhandled exception
         response_non_ascii = await client.get(
@@ -99,3 +106,29 @@ def test_create_app_rejects_wildcard_cors_origin() -> None:
     )
     with pytest.raises(ValueError, match=r"CORS wildcard '\*' is forbidden"):
         create_app(settings)
+
+
+@pytest.mark.asyncio
+async def test_cors_wraps_gateway_rejection_for_allowed_origin() -> None:
+    from tirodhan.main import create_app
+
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url="postgresql+asyncpg://user:password@localhost/test",
+        gateway_secret=SecretStr("guard-secret-abc"),
+        cors_allowed_origins=["https://customer.qtkservice.com"],
+    )
+    app = create_app(settings)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Request with allowed Origin but missing X-Gateway-Secret receives 403 wrapped by CORS
+        response = await client.get(
+            "/v1/customer/me",
+            headers={"Origin": "https://customer.qtkservice.com"},
+        )
+        assert response.status_code == 403
+        assert response.json() == {"error": {"code": "DIRECT_ACCESS_FORBIDDEN"}}
+        assert response.headers["access-control-allow-origin"] == "https://customer.qtkservice.com"
+        assert response.headers["access-control-allow-credentials"] == "true"
+        assert response.headers["cache-control"] == "private, no-store"
