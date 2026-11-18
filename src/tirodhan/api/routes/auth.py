@@ -5,7 +5,7 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
@@ -92,12 +92,26 @@ class LoginTokenResponse(AccessTokenResponse):
 
 class RefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    refresh_token: SecretStr | None = None
+    refresh_token: SecretStr
+
+    @field_validator("refresh_token")
+    @classmethod
+    def _validate_refresh_token(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("refresh_token must not be empty or blank")
+        return value
 
 
 class LogoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    refresh_token: SecretStr | None = None
+    refresh_token: SecretStr
+
+    @field_validator("refresh_token")
+    @classmethod
+    def _validate_refresh_token(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("refresh_token must not be empty or blank")
+        return value
 
 
 def _login_settings(request: Request) -> tuple[int, int, int]:
@@ -178,23 +192,14 @@ async def post_otp_start(
         ) from error
 
 
-def _cookie_name(settings: Settings) -> str:
-    name = settings.auth_cookie_name
-    if not settings.auth_cookie_secure and name.startswith("__Host-"):
-        return name.removeprefix("__Host-")
-    return name
-
-
 @router.post("/otp/verify", response_model=LoginTokenResponse)
 async def post_otp_verify(
     body: OtpVerifyRequest,
     request: Request,
-    response: Response,
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     provider: Annotated[OtpProvider, Depends(get_otp_provider)],
     token_codec: Annotated[AccessTokenCodec, Depends(get_access_token_codec)],
 ) -> LoginTokenResponse:
-    settings = cast(Settings, request.app.state.settings)
     access_ttl, refresh_ttl, idempotency_ttl = _login_settings(request)
     if not token_codec.configured:
         raise HTTPException(
@@ -212,15 +217,6 @@ async def post_otp_verify(
             refresh_session_ttl_seconds=refresh_ttl,
             access_token_ttl_seconds=access_ttl,
             idempotency_expires_at=utc_now() + timedelta(seconds=idempotency_ttl),
-        )
-        response.set_cookie(
-            key=_cookie_name(settings),
-            value=result.refresh_token.get_secret_value(),
-            max_age=refresh_ttl,
-            secure=settings.auth_cookie_secure,
-            httponly=True,
-            samesite=settings.auth_cookie_samesite,
-            path="/",
         )
         return LoginTokenResponse(
             access_token=result.access_token.get_secret_value(),
@@ -262,31 +258,16 @@ async def post_otp_verify(
 
 @router.post("/refresh", response_model=AccessTokenResponse)
 async def post_refresh(
+    body: RefreshRequest,
     request: Request,
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
     token_codec: Annotated[AccessTokenCodec, Depends(get_access_token_codec)],
-    body: RefreshRequest | None = None,
 ) -> AccessTokenResponse:
-    settings = cast(Settings, request.app.state.settings)
     access_ttl = _access_token_ttl(request)
-    raw_refresh_credential: str | None = None
-    if (
-        body is not None
-        and body.refresh_token is not None
-        and body.refresh_token.get_secret_value().strip()
-    ):
-        raw_refresh_credential = body.refresh_token.get_secret_value().strip()
-    else:
-        raw_refresh_credential = request.cookies.get(_cookie_name(settings))
-
-    if not raw_refresh_credential:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed"
-        )
     try:
         result = await refresh_access_token(
             session_factory,
-            raw_refresh_credential=raw_refresh_credential,
+            raw_refresh_credential=body.refresh_token.get_secret_value(),
             token_codec=token_codec,
             access_token_ttl_seconds=access_ttl,
         )
@@ -308,34 +289,11 @@ async def post_refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def post_logout(
-    request: Request,
-    response: Response,
+    body: LogoutRequest,
     session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
-    body: LogoutRequest | None = None,
 ) -> Response:
-    settings = cast(Settings, request.app.state.settings)
-    raw_refresh_credential: str | None = None
-    if (
-        body is not None
-        and body.refresh_token is not None
-        and body.refresh_token.get_secret_value().strip()
-    ):
-        raw_refresh_credential = body.refresh_token.get_secret_value().strip()
-    else:
-        raw_refresh_credential = request.cookies.get(_cookie_name(settings))
-
-    if raw_refresh_credential:
-        await logout_refresh_session(
-            session_factory,
-            raw_refresh_credential=raw_refresh_credential,
-        )
-
-    response.delete_cookie(
-        key=_cookie_name(settings),
-        path="/",
-        secure=settings.auth_cookie_secure,
-        httponly=True,
-        samesite=settings.auth_cookie_samesite,
+    await logout_refresh_session(
+        session_factory,
+        raw_refresh_credential=body.refresh_token.get_secret_value(),
     )
-    response.status_code = status.HTTP_204_NO_CONTENT
-    return response
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

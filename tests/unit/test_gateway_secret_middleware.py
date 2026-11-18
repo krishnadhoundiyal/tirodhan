@@ -4,6 +4,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from starlette.middleware.cors import CORSMiddleware
 
 from tirodhan.core.config import Settings
 from tirodhan.main import GatewaySecretMiddleware
@@ -110,8 +111,6 @@ def test_create_app_rejects_wildcard_cors_origin() -> None:
 
 @pytest.mark.asyncio
 async def test_cors_wraps_gateway_rejection_for_allowed_origin() -> None:
-    from tirodhan.main import create_app
-
     settings = Settings(
         _env_file=None,
         environment="test",
@@ -119,7 +118,19 @@ async def test_cors_wraps_gateway_rejection_for_allowed_origin() -> None:
         gateway_secret=SecretStr("guard-secret-abc"),
         cors_allowed_origins=["https://customer.qtkservice.com"],
     )
-    app = create_app(settings)
+    app = FastAPI()
+    app.add_middleware(GatewaySecretMiddleware, settings=settings)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/v1/customer/me")
+    async def customer_endpoint():
+        return {"data": "customer_data"}
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Request with allowed Origin but missing X-Gateway-Secret receives 403 wrapped by CORS

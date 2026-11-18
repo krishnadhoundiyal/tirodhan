@@ -79,9 +79,10 @@ class GatewaySecretMiddleware:
         if scope["type"] == "http" and self.settings.gateway_secret is not None:
             method = scope.get("method", "")
             path = scope.get("path", "")
-            if (
-                method != "OPTIONS"
-                and path not in ("/health", "/ready", "/v1/payments/provider/webhook")
+            if method != "OPTIONS" and path not in (
+                "/health",
+                "/ready",
+                "/v1/payments/provider/webhook",
             ):
                 headers = dict(scope.get("headers", []))
                 header_bytes = headers.get(b"x-gateway-secret", b"")

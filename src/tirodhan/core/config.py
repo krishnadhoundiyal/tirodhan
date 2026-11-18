@@ -138,9 +138,6 @@ class Settings(BaseSettings):
 
     gateway_secret: SecretStr | None = None
     cors_allowed_origins: list[str] = []
-    auth_cookie_name: str = "__Host-tirodhan_refresh"
-    auth_cookie_secure: bool = True
-    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
     model_config = SettingsConfigDict(
         env_file=".env",
