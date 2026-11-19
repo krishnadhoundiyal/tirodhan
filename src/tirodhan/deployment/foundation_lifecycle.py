@@ -15,6 +15,7 @@ from tirodhan.deployment.apim_lifecycle import (
     APIM_APPLY_TIMEOUT_SECONDS,
     ApimPlanBlocked,
     gateway_id,
+    gateway_target,
     plan_gateway,
     verify_gateway,
 )
@@ -168,7 +169,8 @@ def apply(operation: str, plan: Path) -> None:
         apim_before = io.backend()
         if apim_before.fingerprint != checks.binding().get("state_fingerprint"):
             raise AdmissionDenied("APIM_BACKEND_CHANGED_BEFORE_APPLY")
-        if io.arm(gateway_id(io), APIM_API_VERSION) is not None:
+        pilot, _, _ = gateway_target(io.tf)
+        if io.arm(gateway_id(io, pilot=pilot), APIM_API_VERSION) is not None:
             raise AdmissionDenied("APIM_GATEWAY_APPEARED_BEFORE_APPLY")
     # Fail closed on stale authorization before entering compensation handling:
     # rejected admission must never be mistaken for a failed Terraform apply.
@@ -211,13 +213,12 @@ def apply(operation: str, plan: Path) -> None:
         if apim_before is not None:
             verify_gateway(io, apim_before)
         if operation == "runtime-apply" and checks.tf.get("apim_publisher_email") is not None:
-            name = f"{checks.tf['resource_group_name']}-apim"
-            resource_id = io.scope + f"/providers/Microsoft.ApiManagement/service/{name}"
+            pilot, address, _ = gateway_target(checks.tf)
+            resource_id = gateway_id(io, pilot=pilot)
             live = io.arm(resource_id, "2024-05-01")
             sku = (live or {}).get("sku", {})
             if (
-                io.backend().resources.get("azurerm_api_management.nonprod[0]", "").casefold()
-                != resource_id.casefold()
+                io.backend().resources.get(address, "").casefold() != resource_id.casefold()
                 or not live
                 or str(live.get("id", "")).casefold() != resource_id.casefold()
                 or sku.get("name") != "Consumption"

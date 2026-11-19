@@ -17,6 +17,7 @@ def main() -> None:
         "tenant_id",
         "location",
         "apim_publisher_email",
+        "apim_pilot_enabled",
         "resource_group_name",
         "suffix",
         "postgres_admin_object_id",
@@ -39,6 +40,8 @@ def main() -> None:
         raise RuntimeError(
             "Only approved nonsecret inputs are accepted; images/stage are release-owned"
         )
+    if type(values.get("apim_pilot_enabled", False)) is not bool:
+        raise RuntimeError("apim_pilot_enabled must be a JSON boolean")
     names = set(Path("../../../deploy/runtime-env.names").read_text().splitlines())
     runtime = values.get("runtime_env", {})
     if (

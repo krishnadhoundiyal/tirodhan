@@ -103,13 +103,17 @@ def validate_destroy_plan(
                 f"{address} ({resource_id})"
             )
 
-        if resource_type == "azurerm_api_management" and (
-            normalized_id
-            != f"{expected_scope}/providers/microsoft.apimanagement/service/"
-            f"{expected_resource_group.lower()}-apim"
-            or address != "azurerm_api_management.nonprod[0]"
-        ):
-            raise RuntimeError("Refusing destroy outside the approved NONPROD APIM instance")
+        if resource_type == "azurerm_api_management":
+            suffix = {
+                "azurerm_api_management.nonprod[0]": "-apim",
+                "azurerm_api_management.pilot[0]": "-apim-pilot",
+            }.get(address)
+            expected_gateway_base = (
+                f"{expected_scope}/providers/microsoft.apimanagement/service/"
+                f"{expected_resource_group.lower()}"
+            )
+            if suffix is None or normalized_id != expected_gateway_base + suffix:
+                raise RuntimeError("Refusing destroy outside the approved NONPROD APIM instance")
 
         delete_count += 1
 
