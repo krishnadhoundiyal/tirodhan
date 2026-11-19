@@ -24,6 +24,9 @@ if TYPE_CHECKING:
 
 ADDRESS = "azurerm_api_management.nonprod[0]"
 PILOT_ADDRESS = "azurerm_api_management.pilot[0]"
+SESSION_MODULE = "module.apim_web_session[0]."
+NATIVE_OPERATIONS = {"native-otp-start", "native-otp-verify", "native-refresh", "native-logout"}
+WEB_OPERATIONS = ("start", "verify", "refresh", "logout")
 API_VERSION = "2024-05-01"
 WORKFLOW_REF = "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-apim.yml@refs/heads/main"
 # AzureRM 5.8.0 allows three hours for APIM creation. Leave time for Terraform
@@ -111,6 +114,22 @@ def check_baseline(checks: Checks) -> bool:
     state = checks.backend()
     deployed_inputs(state)
     pilot, address, _ = gateway_target(checks.tf)
+    session = checks.tf.get("apim_web_session")
+    if session is not None:
+        original_id = gateway_id(checks.io)
+        original = checks.io.arm(original_id, API_VERSION) or {}
+        sku = original.get("sku", {})
+        return (
+            not pilot
+            and PILOT_ADDRESS not in state.resources
+            and not session_resource_addresses(session).intersection(state.resources)
+            and state.resources.get(ADDRESS, "").casefold() == original_id.casefold()
+            and str(original.get("id", "")).casefold() == original_id.casefold()
+            and sku.get("name") == "Consumption"
+            and sku.get("capacity") == 0
+            and original.get("properties", {}).get("provisioningState") == "Succeeded"
+            and not (original.get("identity") or {}).get("principalId")
+        )
     if pilot:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
@@ -194,10 +213,114 @@ def empty_container_command_refresh(row: dict[str, Any], state: BackendState) ->
     )
 
 
+def session_resource_addresses(session: dict[str, Any]) -> set[str]:
+    operations = session["business_operations"]
+    return {
+        SESSION_MODULE + suffix
+        for suffix in {
+            "azurerm_role_assignment.gateway_secret",
+            "azurerm_api_management_named_value.gateway_secret",
+            "azurerm_api_management_api.web",
+            "azurerm_api_management_api.backend",
+            "azurerm_api_management_api_policy.web",
+            "azurerm_api_management_api_policy.backend",
+            *(
+                f'azurerm_api_management_api_operation.web["{name}-{method}"]'
+                for name in WEB_OPERATIONS
+                for method in ("post", "options")
+            ),
+            *(
+                f"azurerm_api_management_api_operation.backend[{json.dumps(name)}]"
+                for name in NATIVE_OPERATIONS | operations.keys()
+            ),
+        }
+    }
+
+
+def validate_session_changes(
+    changes: list[dict[str, Any]],
+    outputs: dict[str, Any],
+    state: BackendState,
+    terraform: dict[str, Any],
+) -> None:
+    """Admit only the first reviewed configuration of the existing gateway."""
+    session = terraform["apim_web_session"]
+    expected_children = session_resource_addresses(session)
+    by_address = {row["address"]: row["change"] for row in changes}
+    group = terraform["resource_group_name"]
+    scope = f"/subscriptions/{terraform['subscription_id']}/resourceGroups/{group}"
+    name = gateway_name(terraform)
+    expected_id = f"{scope}/providers/Microsoft.ApiManagement/service/{name}"
+    if (
+        state.resources.get(ADDRESS, "").casefold() != expected_id.casefold()
+        or terraform.get("apim_pilot_enabled") is True
+        or PILOT_ADDRESS in state.resources
+        or expected_children.intersection(state.resources)
+        or len(by_address) != len(changes)
+        or set(by_address) != expected_children | {ADDRESS}
+        or any(row["actions"] != ["no-op"] for row in outputs.values())
+    ):
+        raise ApimPlanBlocked("APIM_SESSION_PLAN_SCOPE_MISMATCH")
+
+    gateway = by_address[ADDRESS]
+    before, after = gateway.get("before"), gateway.get("after")
+    unknown = gateway.get("after_unknown", {})
+    if (
+        gateway["actions"] != ["update"]
+        or not isinstance(before, dict)
+        or not isinstance(after, dict)
+        or before.get("id", "").casefold() != expected_id.casefold()
+        or before.get("identity") not in (None, [])
+        or [{"type": entry.get("type")} for entry in after.get("identity", [])]
+        != [{"type": "SystemAssigned"}]
+        or any(value for key, value in unknown.items() if key != "identity")
+        or {key: value for key, value in before.items() if key != "identity"}
+        != {key: value for key, value in after.items() if key != "identity"}
+    ):
+        raise ApimPlanBlocked("APIM_SESSION_GATEWAY_UPDATE_MISMATCH")
+
+    for address in expected_children:
+        change = by_address[address]
+        after = change.get("after")
+        if (
+            change["actions"] != ["create"]
+            or change.get("before") is not None
+            or not isinstance(after, dict)
+            or (
+                address != SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
+                and (
+                    after.get("api_management_name") != name
+                    or after.get("resource_group_name") != group
+                )
+            )
+        ):
+            raise ApimPlanBlocked("APIM_SESSION_CHILD_CREATE_MISMATCH")
+
+    vault_name = f"td-np-{terraform['suffix']}-kv"
+    secret = session["secret_name"]
+    assignment = by_address[SESSION_MODULE + "azurerm_role_assignment.gateway_secret"]
+    named_value = by_address[SESSION_MODULE + "azurerm_api_management_named_value.gateway_secret"]
+    policy = by_address[SESSION_MODULE + "azurerm_api_management_api_policy.web"]
+    vault_refs = named_value["after"].get("value_from_key_vault") or []
+    if (
+        assignment["after"].get("scope", "").casefold()
+        != f"{scope}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets/{secret}".casefold()
+        or assignment["after"].get("role_definition_name") != "Key Vault Secrets User"
+        or named_value["after"].get("secret") is not True
+        or named_value["after"].get("value") not in (None, "")
+        or len(vault_refs) != 1
+        or vault_refs[0].get("secret_id")
+        != f"https://{vault_name}.vault.azure.net/secrets/{secret}"
+        or vault_refs[0].get("identity_client_id") not in (None, "")
+        or policy["after"].get("xml_content") != session["web_policy_xml"]
+    ):
+        raise ApimPlanBlocked("APIM_SESSION_POLICY_OR_SECRET_BINDING_MISMATCH")
+
+
 def validate_apim_plan(
     plan: dict[str, Any], state: BackendState, terraform: dict[str, Any]
 ) -> None:
-    """Reject material drift and every planned action except the gateway create."""
+    """Reject material drift and limit changes to the selected APIM operation."""
     inputs = deployed_inputs(state)
     pilot, address, output_name = gateway_target(terraform)
     variables = {name: item["value"] for name, item in plan["variables"].items()}
@@ -225,12 +348,16 @@ def validate_apim_plan(
             "previous_address" in row or "deposed" in row or row["change"].get("importing")
             for row in managed
         )
-        or len(changes) != 1
     ):
+        raise ApimPlanBlocked("APIM_PLAN_NOT_ADDITIVE")
+    outputs = plan.get("output_changes", {})
+    if terraform.get("apim_web_session") is not None:
+        validate_session_changes(changes, outputs, state, terraform)
+        return
+    if len(changes) != 1:
         raise ApimPlanBlocked("APIM_PLAN_NOT_ADDITIVE")
     gateway = changes[0]
     change = gateway["change"]
-    outputs = plan.get("output_changes", {})
     expected = {
         "name": gateway_name(terraform, pilot=pilot),
         "resource_group_name": terraform["resource_group_name"],
@@ -428,7 +555,10 @@ def plan_gateway(path: Path) -> None:
         raise
     except (KeyError, TypeError, ValueError):
         raise ApimPlanBlocked("APIM_SAVED_PLAN_FORMAT_INVALID") from None
-    print("APIM_PLAN_VERIFIED: one Consumption gateway create")
+    if checks.tf.get("apim_web_session") is not None:
+        print("APIM_PLAN_VERIFIED: web session configuration of existing Consumption gateway")
+    else:
+        print("APIM_PLAN_VERIFIED: one Consumption gateway create")
 
 
 def verify_gateway(io: Observations, before: BackendState) -> None:

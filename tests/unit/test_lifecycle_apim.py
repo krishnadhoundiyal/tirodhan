@@ -91,6 +91,75 @@ def plan(baseline):
     }
 
 
+def test_existing_gateway_session_plan_is_scoped(baseline, plan):
+    baseline.resources[apim.ADDRESS] = GATEWAY
+    session = {
+        "secret_name": "gateway-secret",
+        "web_policy_xml": "<policies/>",
+        "business_operations": {"current-user": {"method": "GET", "path": "/auth/me"}},
+    }
+    terraform = TF | {"apim_web_session": session}
+    plan["variables"]["apim_web_session"] = {"value": session}
+    plan["output_changes"] = {}
+    gateway = plan["resource_changes"][0]["change"]
+    gateway["before"] = gateway["after"] | {"id": GATEWAY, "identity": []}
+    gateway["actions"] = ["update"]
+    gateway["after"] = gateway["before"] | {"identity": [{"type": "SystemAssigned"}]}
+    resource_values = {
+        "azurerm_role_assignment.gateway_secret": {
+            "scope": SCOPE
+            + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv/secrets/gateway-secret",
+            "role_definition_name": "Key Vault Secrets User",
+        },
+        "azurerm_api_management_named_value.gateway_secret": {
+            "secret": True,
+            "value_from_key_vault": [
+                {"secret_id": "https://td-np-test01-kv.vault.azure.net/secrets/gateway-secret"}
+            ],
+        },
+        "azurerm_api_management_api_policy.web": {"xml_content": session["web_policy_xml"]},
+    }
+    for address in sorted(apim.session_resource_addresses(session)):
+        plan["resource_changes"].append(
+            {
+                "address": address,
+                "mode": "managed",
+                "change": {
+                    "actions": ["create"],
+                    "before": None,
+                    "after": {
+                        "api_management_name": "tirodhan-np-test01-apim",
+                        "resource_group_name": TF["resource_group_name"],
+                    }
+                    | resource_values.get(address.removeprefix(apim.SESSION_MODULE), {}),
+                },
+            }
+        )
+    apim.validate_apim_plan(plan, baseline, terraform)
+
+    gateway["after"]["sku_name"] = "Developer_1"
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_GATEWAY_UPDATE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    gateway["after"]["sku_name"] = "Consumption_0"
+
+    assignment = next(
+        row["change"]["after"]
+        for row in plan["resource_changes"]
+        if row["address"] == apim.SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
+    )
+    secret_scope = assignment["scope"]
+    assignment["scope"] = secret_scope.split("/secrets/")[0]
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_POLICY_OR_SECRET_BINDING_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    assignment["scope"] = secret_scope
+
+    plan["resource_changes"].append(
+        {"address": apim.PILOT_ADDRESS, "mode": "managed", "change": {"actions": ["create"]}}
+    )
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "code"),
     [
