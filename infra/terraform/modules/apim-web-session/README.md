@@ -14,6 +14,12 @@ grant the selected secret scope. The current role for service creation is
 insufficient. Validate the teardown inventory and permission profile for any new
 module state before admitting the configuration release.
 
+The NONPROD root exposes the nullable `apim_web_session` input. When supplied at
+stage four with the pilot disabled, it enables a system-assigned identity on the
+original gateway and binds the module to the bootstrap-owned vault. Leave it
+unset until the configuration release can admit the reviewed input and preserve
+it across subsequent plans and teardown.
+
 Use the selected gateway's managed identity, the verified vault resource ID and URI, and
 the actual FastAPI HTTPS ingress hostname. An authorized NONPROD verifier
 confirms that the selected independent secret exists and is enabled. Supply
