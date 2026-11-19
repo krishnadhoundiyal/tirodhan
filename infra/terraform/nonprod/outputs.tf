@@ -13,4 +13,5 @@ output "storage_account_name" { value = azurerm_storage_account.application.name
 output "storage_account_id" { value = azurerm_storage_account.application.id }
 output "api_url" { value = var.deployment_stage >= 2 ? "https://${azurerm_container_app.api[0].ingress[0].fqdn}" : null }
 output "apim_gateway_url" { value = try(azurerm_api_management.nonprod[0].gateway_url, null) }
+output "apim_pilot_gateway_url" { value = try(azurerm_api_management.pilot[0].gateway_url, null) }
 output "migration_job_name" { value = var.deployment_stage >= 1 ? azurerm_container_app_job.migration[0].name : null }

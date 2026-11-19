@@ -19,6 +19,11 @@ variable "apim_publisher_email" {
     error_message = "Use an approved publisher email address without spaces."
   }
 }
+variable "apim_pilot_enabled" {
+  description = "Retain the original gateway and provision the reviewed NONPROD recovery pilot."
+  type        = bool
+  default     = false
+}
 variable "postgres_admin_object_id" { type = string }
 variable "postgres_admin_name" { type = string }
 variable "postgres_admin_type" {

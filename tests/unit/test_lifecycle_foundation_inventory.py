@@ -29,6 +29,12 @@ def test_reviewed_inventory_covers_all_nonworkload_terraform_resources() -> None
                             "var.apim_publisher_email != null ? 1 : 0}"
                         )
                         continue
+                    if address == "azurerm_api_management.pilot":
+                        assert block["count"].replace(" != None ", " != null ") == (
+                            "${var.deployment_stage >= 4 && "
+                            "var.apim_publisher_email != null && var.apim_pilot_enabled ? 1 : 0}"
+                        )
+                        continue
                     actual[address] = block
     assert set(actual) == set(manifest["resources"])
     queues = {"serviceability", "rider", "refund", "planning", "financial_webhook"}

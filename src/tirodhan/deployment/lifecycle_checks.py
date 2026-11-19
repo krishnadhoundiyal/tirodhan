@@ -474,9 +474,20 @@ class Checks:
             return False
         if self.tf.get("routing_availability_schedule") is not None:
             return False
+        if self.tf.get("apim_pilot_enabled") is True:
+            from tirodhan.deployment.apim_lifecycle import PILOT_ADDRESS, gateway_id
+
+            if self.tf.get("apim_publisher_email") is None:
+                return False
+            if self.auth.operation in {"runtime-plan", "runtime-apply"}:
+                existing = self.backend().resources.get(PILOT_ADDRESS, "")
+                if existing.casefold() != gateway_id(self.io, pilot=True).casefold():
+                    return False
         return self.tf.get("apim_publisher_email") is None or self.check_apim_preflight()
 
     def check_apim_preflight(self) -> bool:
+        from tirodhan.deployment.apim_lifecycle import gateway_name, gateway_target
+
         subscription = f"/subscriptions/{self.tf['subscription_id']}"
         if not self.check_providers() or not self.permits(
             self.io.scope,
@@ -489,7 +500,8 @@ class Checks:
         ):
             return False
         location = self.tf["location"]
-        name = f"{self.tf['resource_group_name']}-apim"
+        pilot, _, _ = gateway_target(self.tf)
+        name = gateway_name(self.tf, pilot=pilot)
         deleted = (
             f"{subscription}/providers/Microsoft.ApiManagement/"
             f"locations/{location}/deletedservices/{name}"
@@ -892,7 +904,11 @@ class Checks:
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
         if self.auth.operation in {"migration-apply", "runtime-apply"}:
+            from tirodhan.deployment.apim_lifecycle import PILOT_ADDRESS
             from tirodhan.deployment.migration_start import expected_job_id, operation_key
+
+            if any(row.get("address") == PILOT_ADDRESS for row in changes):
+                return False
 
             outputs = (current.document or {}).get("outputs", {})
             runtime = self.auth.operation == "runtime-apply"

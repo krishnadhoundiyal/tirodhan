@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from tirodhan.deployment.lifecycle_checks import Checks
 
 ADDRESS = "azurerm_api_management.nonprod[0]"
+PILOT_ADDRESS = "azurerm_api_management.pilot[0]"
 API_VERSION = "2024-05-01"
 WORKFLOW_REF = "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-apim.yml@refs/heads/main"
 # AzureRM 5.8.0 allows three hours for APIM creation. Leave time for Terraform
@@ -34,10 +35,21 @@ class ApimPlanBlocked(AdmissionDenied):
     """A locally generated APIM diagnostic safe for the workflow log."""
 
 
-def gateway_id(io: Observations) -> str:
+def gateway_name(terraform: dict[str, Any], *, pilot: bool = False) -> str:
+    suffix = "apim-pilot" if pilot else "apim"
+    return f"{terraform['resource_group_name']}-{suffix}"
+
+
+def gateway_id(io: Observations, *, pilot: bool = False) -> str:
     return (
-        f"{io.scope}/providers/Microsoft.ApiManagement/service/{io.tf['resource_group_name']}-apim"
+        f"{io.scope}/providers/Microsoft.ApiManagement/service/{gateway_name(io.tf, pilot=pilot)}"
     )
+
+
+def gateway_target(terraform: dict[str, Any]) -> tuple[bool, str, str]:
+    if terraform.get("apim_pilot_enabled") is True:
+        return True, PILOT_ADDRESS, "apim_pilot_gateway_url"
+    return False, ADDRESS, "apim_gateway_url"
 
 
 def deployed_inputs(state: BackendState) -> dict[str, Any]:
@@ -98,8 +110,20 @@ def check_baseline(checks: Checks) -> bool:
         return False
     state = checks.backend()
     deployed_inputs(state)
+    pilot, address, _ = gateway_target(checks.tf)
+    if pilot:
+        original_id = gateway_id(checks.io)
+        original = checks.io.arm(original_id, API_VERSION) or {}
+        if (
+            state.resources.get(ADDRESS, "").casefold() != original_id.casefold()
+            or str(original.get("id", "")).casefold() != original_id.casefold()
+            or original.get("sku", {}).get("name") != "Consumption"
+            or original.get("properties", {}).get("provisioningState") != "Stopped"
+        ):
+            return False
     return (
-        ADDRESS not in state.resources and checks.io.arm(gateway_id(checks.io), API_VERSION) is None
+        address not in state.resources
+        and checks.io.arm(gateway_id(checks.io, pilot=pilot), API_VERSION) is None
     )
 
 
@@ -175,6 +199,7 @@ def validate_apim_plan(
 ) -> None:
     """Reject material drift and every planned action except the gateway create."""
     inputs = deployed_inputs(state)
+    pilot, address, output_name = gateway_target(terraform)
     variables = {name: item["value"] for name, item in plan["variables"].items()}
     if variables.get("deployment_stage") == "4":
         variables["deployment_stage"] = 4
@@ -207,23 +232,29 @@ def validate_apim_plan(
     change = gateway["change"]
     outputs = plan.get("output_changes", {})
     expected = {
-        "name": terraform["resource_group_name"] + "-apim",
+        "name": gateway_name(terraform, pilot=pilot),
         "resource_group_name": terraform["resource_group_name"],
         "location": terraform["location"],
         "publisher_email": terraform["apim_publisher_email"],
         "sku_name": "Consumption_0",
     }
     if (
-        ADDRESS in state.resources
-        or gateway["address"] != ADDRESS
+        (pilot and ADDRESS not in state.resources)
+        or address in state.resources
+        or gateway["address"] != address
         or gateway["type"] != "azurerm_api_management"
         or change["actions"] != ["create"]
         or change["before"] is not None
         or any(change["after"].get(key) != value for key, value in expected.items())
+        or (
+            pilot
+            and [identity.get("type") for identity in (change["after"].get("identity") or [])]
+            != ["SystemAssigned"]
+        )
     ):
         raise ApimPlanBlocked("APIM_PLAN_GATEWAY_MISMATCH")
-    if outputs.get("apim_gateway_url", {}).get("actions") != ["create"] or any(
-        row["actions"] != ["no-op"] for name, row in outputs.items() if name != "apim_gateway_url"
+    if outputs.get(output_name, {}).get("actions") != ["create"] or any(
+        row["actions"] != ["no-op"] for name, row in outputs.items() if name != output_name
     ):
         raise ApimPlanBlocked("APIM_PLAN_OUTPUT_MISMATCH")
 
@@ -308,10 +339,15 @@ def plan_gateway(path: Path) -> None:
     checks, io, grant = admitted_with_grant("apim-plan")
     before = checks.backend()
     values = deployed_inputs(before)
+    pilot, _, _ = gateway_target(checks.tf)
     arguments = [
         f"-var={key}={json.dumps(value) if isinstance(value, list) else value}"
         for key, value in values.items()
     ]
+    # The recovery pilot uses the locked deployment baseline. Refreshing failed
+    # workloads could otherwise plan repairs the owner excluded from this release.
+    if pilot:
+        arguments.append("-refresh=false")
     revalidate_database(grant)
     try:
         subprocess.run(
@@ -360,13 +396,14 @@ def plan_gateway(path: Path) -> None:
 
 def verify_gateway(io: Observations, before: BackendState) -> None:
     after = io.backend()
-    expected_id = gateway_id(io)
+    pilot, address, output_name = gateway_target(io.tf)
+    expected_id = gateway_id(io, pilot=pilot)
     live = io.arm(expected_id, API_VERSION) or {}
     sku = live.get("sku", {})
     before_outputs = dict((before.document or {}).get("outputs", {}))
     after_outputs = dict((after.document or {}).get("outputs", {}))
-    gateway_url = after_outputs.pop("apim_gateway_url", {}).get("value")
-    before_outputs.pop("apim_gateway_url", None)
+    gateway_url = after_outputs.pop(output_name, {}).get("value")
+    before_outputs.pop(output_name, None)
     before_state, after_state = before.document or {}, after.document or {}
     if (
         after.kind != "INITIALIZED"
@@ -375,7 +412,7 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
         or {key: value.casefold() for key, value in after.resources.items()}
         != {
             key: value.casefold()
-            for key, value in (before.resources | {ADDRESS: expected_id}).items()
+            for key, value in (before.resources | {address: expected_id}).items()
         }
         or before_outputs != after_outputs
         or not gateway_url
@@ -383,6 +420,13 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
         or str(live.get("id", "")).casefold() != expected_id.casefold()
         or sku.get("name") != "Consumption"
         or sku.get("capacity") != 0
+        or (
+            pilot
+            and (
+                (live.get("identity") or {}).get("type") != "SystemAssigned"
+                or not (live.get("identity") or {}).get("principalId")
+            )
+        )
         or live.get("properties", {}).get("provisioningState") != "Succeeded"
     ):
         raise AdmissionDenied("APIM_POSTCONDITIONS_FAILED")

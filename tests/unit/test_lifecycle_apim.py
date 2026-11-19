@@ -215,7 +215,7 @@ def test_terraform_diagnostics_are_classified_without_exposing_payload(
 ):
     from tirodhan.deployment import foundation_reconcile, prerequisites
 
-    checks = SimpleNamespace(backend=lambda: baseline)
+    checks = SimpleNamespace(backend=lambda: baseline, tf=TF)
     monkeypatch.setattr(foundation_reconcile, "admitted_with_grant", lambda _: (checks, None, None))
     monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
     monkeypatch.setattr(
@@ -440,6 +440,45 @@ def test_postcondition_requires_exact_gateway_and_preserves_state(baseline, monk
     io.current.document["outputs"]["application_image"] = {"value": "changed"}
     with pytest.raises(AdmissionDenied, match="APIM_POSTCONDITIONS_FAILED"):
         apim.verify_gateway(io, baseline)
+
+
+def test_pilot_admission_requires_stopped_original_and_absent_pilot(baseline, monkeypatch):
+    io = MemoryObservations()
+    io.tf = TF | {"apim_pilot_enabled": True}
+    io.current = replace(baseline, resources=baseline.resources | {apim.ADDRESS: GATEWAY})
+    checks = Checks(auth("apim-plan"), CONFIG | {"terraform": io.tf}, {}, io)
+    original = {
+        "id": GATEWAY,
+        "sku": {"name": "Consumption"},
+        "properties": {"provisioningState": "Stopped"},
+    }
+    resources = {GATEWAY: original}
+    monkeypatch.setenv("GITHUB_WORKFLOW_REF", apim.WORKFLOW_REF)
+    monkeypatch.setattr(io, "arm", lambda identity, _: resources.get(identity))
+    assert checks.check_apim_baseline()
+    resources[GATEWAY + "-pilot"] = {"id": GATEWAY + "-pilot"}
+    assert not checks.check_apim_baseline()
+    resources.pop(GATEWAY + "-pilot")
+    original["properties"]["provisioningState"] = "Succeeded"
+    assert not checks.check_apim_baseline()
+
+
+def test_pilot_plan_allows_only_new_pilot_and_preserves_original(baseline, plan):
+    baseline = replace(baseline, resources=baseline.resources | {apim.ADDRESS: GATEWAY})
+    terraform = TF | {"apim_pilot_enabled": True}
+    plan["variables"]["apim_pilot_enabled"] = {"value": True}
+    plan["resource_changes"][0]["address"] = apim.PILOT_ADDRESS
+    plan["resource_changes"][0]["change"]["after"]["name"] += "-pilot"
+    plan["output_changes"] = {"apim_pilot_gateway_url": {"actions": ["create"]}}
+    with pytest.raises(AdmissionDenied, match="APIM_PLAN_GATEWAY_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    plan["resource_changes"][0]["change"]["after"]["identity"] = [{"type": "SystemAssigned"}]
+    apim.validate_apim_plan(plan, baseline, terraform)
+    plan["resource_changes"].append(
+        {"mode": "managed", "address": apim.ADDRESS, "change": {"actions": ["delete"]}}
+    )
+    with pytest.raises(AdmissionDenied, match="APIM_PLAN_NOT_ADDITIVE"):
+        apim.validate_apim_plan(plan, baseline, terraform)
 
 
 def test_gateway_workflow_and_signing_are_isolated():
