@@ -904,7 +904,11 @@ class Checks:
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
         if self.auth.operation in {"migration-apply", "runtime-apply"}:
+            from tirodhan.deployment.apim_lifecycle import PILOT_ADDRESS
             from tirodhan.deployment.migration_start import expected_job_id, operation_key
+
+            if any(row.get("address") == PILOT_ADDRESS for row in changes):
+                return False
 
             outputs = (current.document or {}).get("outputs", {})
             runtime = self.auth.operation == "runtime-apply"

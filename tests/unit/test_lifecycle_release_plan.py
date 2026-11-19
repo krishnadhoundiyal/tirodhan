@@ -327,3 +327,18 @@ def test_real_environment_stage_plan_is_admitted_without_apply(tmp_path):
     checks = Checks(authorization, io.config, {"plan": plan}, io)
     assert checks.check_saved_plan()
     assert state.read_bytes() == original
+
+
+@pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply"])
+def test_app_release_cannot_mutate_apim_pilot(monkeypatch, tmp_path, operation):
+    io, checks = plan_case(monkeypatch, tmp_path, operation)
+    assert checks.check_saved_plan()
+    io.runner.plan["resource_changes"] = [
+        {
+            "address": "azurerm_api_management.pilot[0]",
+            "mode": "managed",
+            "type": "azurerm_api_management",
+            "change": {"actions": ["delete"]},
+        }
+    ]
+    assert not checks.check_saved_plan()
