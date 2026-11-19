@@ -302,6 +302,31 @@ def drift_summary(drift: Any, state: BackendState) -> str:
     )
 
 
+_STATE_LOCK_CODES = {
+    "AuthorizationFailure": "STATE_LOCK_AUTHORIZATION",
+    "AuthorizationFailed": "STATE_LOCK_AUTHORIZATION",
+    "AuthorizationPermissionMismatch": "STATE_LOCK_PERMISSION",
+    "AuthenticationFailed": "STATE_LOCK_AUTHENTICATION",
+    "KeyBasedAuthenticationNotPermitted": "STATE_LOCK_KEY_AUTH_DISABLED",
+    "LeaseAlreadyPresent": "STATE_LOCK_LEASE_PRESENT",
+    "LeaseIsBreakingAndCannotBeAcquired": "STATE_LOCK_LEASE_BREAKING",
+    "LeaseIdMismatchWithBlobOperation": "STATE_LOCK_LEASE_MISMATCH",
+    "BlobNotFound": "STATE_LOCK_BLOB_MISSING",
+    "ContainerNotFound": "STATE_LOCK_CONTAINER_MISSING",
+    "BlobImmutableDueToPolicy": "STATE_LOCK_IMMUTABLE",
+    "AccountIsDisabled": "STATE_LOCK_ACCOUNT_DISABLED",
+    "SubscriptionIsDisabled": "STATE_LOCK_SUBSCRIPTION_DISABLED",
+    "ReadOnlyDisabledSubscription": "STATE_LOCK_SUBSCRIPTION_READ_ONLY",
+    "ServerBusy": "STATE_LOCK_SERVER_BUSY",
+    "OperationTimedOut": "STATE_LOCK_TIMEOUT",
+}
+_STATE_LOCK_HTTP_STATUS = re.compile(
+    r"\b(?:status(?: code)?|HTTP(?:/\d(?:\.\d)?)?)(?:\s*[:=]\s*|\s+)"
+    r"(401|403|404|409|412|429|500|502|503|504)\b",
+    re.IGNORECASE,
+)
+
+
 def terraform_plan_failure(output: str) -> str:
     """Return a fixed status label without forwarding provider diagnostics."""
     labels: set[str] = set()
@@ -319,6 +344,18 @@ def terraform_plan_failure(output: str) -> str:
         detail = diagnostic.get("detail")
         if summary == "Error acquiring the state lock":
             labels.add("STATE_LOCK")
+            if isinstance(detail, str):
+                for code, label in _STATE_LOCK_CODES.items():
+                    if re.search(rf"\b{code}\b", detail):
+                        labels.add(label)
+                labels.update(
+                    f"STATE_LOCK_HTTP_{status}"
+                    for status in _STATE_LOCK_HTTP_STATUS.findall(detail)
+                )
+                if re.search(
+                    r"\b(?:context deadline exceeded|i/o timeout|TLS handshake timeout)\b", detail
+                ):
+                    labels.add("STATE_LOCK_TIMEOUT")
         elif summary in ("Invalid value for input variable", "Invalid function argument"):
             labels.add("INVALID_INPUT")
         elif any(

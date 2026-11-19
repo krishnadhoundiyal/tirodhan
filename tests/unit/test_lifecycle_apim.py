@@ -259,6 +259,35 @@ def test_only_exact_gateway_may_change(baseline, plan, actions):
         apim.validate_apim_plan(plan, baseline, TF)
 
 
+@pytest.mark.parametrize(
+    ("detail", "labels"),
+    [
+        (
+            "unexpected status 403 with error: AuthorizationPermissionMismatch",
+            "HTTP_403,PERMISSION",
+        ),
+        ("unexpected status 409 with error: LeaseAlreadyPresent", "HTTP_409,LEASE_PRESENT"),
+        ("PUT failed: context deadline exceeded", "TIMEOUT"),
+        ("arbitrary response customer-private-code 599", ""),
+    ],
+)
+def test_state_lock_diagnostic_preserves_only_known_categories(detail, labels):
+    output = json.dumps(
+        {
+            "type": "diagnostic",
+            "diagnostic": {
+                "severity": "error",
+                "summary": "Error acquiring the state lock",
+                "detail": detail + "\nLock Info: private lease ID, path, and identity",
+            },
+        }
+    )
+    expected = "APIM_TERRAFORM_PLAN_FAILED:STATE_LOCK"
+    if labels:
+        expected += "".join(f",STATE_LOCK_{label}" for label in labels.split(","))
+    assert apim.terraform_plan_failure(output) == expected
+
+
 def test_exact_saved_plan_and_live_fingerprint_are_rechecked(baseline, plan, tmp_path):
     io = MemoryObservations()
     io.current = baseline
