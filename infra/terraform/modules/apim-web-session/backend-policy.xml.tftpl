@@ -1,0 +1,40 @@
+<policies>
+  <inbound>
+    <cors allow-credentials="false" terminate-unmatched-request="true">
+      <allowed-origins>
+%{ for origin in browser_origins ~}
+        <origin>${origin}</origin>
+%{ endfor ~}
+      </allowed-origins>
+      <allowed-methods>
+        <method>GET</method><method>POST</method><method>PUT</method>
+        <method>PATCH</method><method>DELETE</method>
+      </allowed-methods>
+      <allowed-headers>
+        <header>Authorization</header><header>Content-Type</header>
+        <header>Idempotency-Key</header>
+      </allowed-headers>
+    </cors>
+    <choose>
+      <when condition="@(context.Request.Headers.ContainsKey(&quot;Origin&quot;) &amp;&amp; context.Operation.Id.StartsWith(&quot;native-&quot;))">
+        <return-response>
+          <set-status code="403" reason="Web session adapter required"/>
+          <set-header name="Cache-Control" exists-action="override"><value>private, no-store</value></set-header>
+        </return-response>
+      </when>
+    </choose>
+    <set-header name="Cookie" exists-action="delete"/>
+    <set-header name="X-Gateway-Secret" exists-action="override"><value>{{gateway-secret}}</value></set-header>
+  </inbound>
+  <backend><forward-request timeout="30" follow-redirects="false"/></backend>
+  <outbound>
+    <set-header name="X-Gateway-Secret" exists-action="delete"/>
+    <set-header name="Set-Cookie" exists-action="delete"/>
+    <choose>
+      <when condition="@(context.Operation.Id.StartsWith(&quot;native-&quot;))">
+        <set-header name="Cache-Control" exists-action="override"><value>private, no-store</value></set-header>
+      </when>
+    </choose>
+  </outbound>
+  <on-error/>
+</policies>

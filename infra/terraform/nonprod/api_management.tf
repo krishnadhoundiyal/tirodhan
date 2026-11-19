@@ -18,4 +18,8 @@ resource "azurerm_api_management" "pilot" {
   publisher_email     = var.apim_publisher_email
   sku_name            = "Consumption_0"
   tags                = local.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
 }

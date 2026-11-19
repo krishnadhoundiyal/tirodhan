@@ -470,6 +470,9 @@ def test_pilot_plan_allows_only_new_pilot_and_preserves_original(baseline, plan)
     plan["resource_changes"][0]["address"] = apim.PILOT_ADDRESS
     plan["resource_changes"][0]["change"]["after"]["name"] += "-pilot"
     plan["output_changes"] = {"apim_pilot_gateway_url": {"actions": ["create"]}}
+    with pytest.raises(AdmissionDenied, match="APIM_PLAN_GATEWAY_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    plan["resource_changes"][0]["change"]["after"]["identity"] = [{"type": "SystemAssigned"}]
     apim.validate_apim_plan(plan, baseline, terraform)
     plan["resource_changes"].append(
         {"mode": "managed", "address": apim.ADDRESS, "change": {"actions": ["delete"]}}

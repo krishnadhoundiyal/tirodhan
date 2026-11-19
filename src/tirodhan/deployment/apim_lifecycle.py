@@ -246,6 +246,11 @@ def validate_apim_plan(
         or change["actions"] != ["create"]
         or change["before"] is not None
         or any(change["after"].get(key) != value for key, value in expected.items())
+        or (
+            pilot
+            and [identity.get("type") for identity in (change["after"].get("identity") or [])]
+            != ["SystemAssigned"]
+        )
     ):
         raise ApimPlanBlocked("APIM_PLAN_GATEWAY_MISMATCH")
     if outputs.get(output_name, {}).get("actions") != ["create"] or any(
@@ -415,6 +420,13 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
         or str(live.get("id", "")).casefold() != expected_id.casefold()
         or sku.get("name") != "Consumption"
         or sku.get("capacity") != 0
+        or (
+            pilot
+            and (
+                (live.get("identity") or {}).get("type") != "SystemAssigned"
+                or not (live.get("identity") or {}).get("principalId")
+            )
+        )
         or live.get("properties", {}).get("provisioningState") != "Succeeded"
     ):
         raise AdmissionDenied("APIM_POSTCONDITIONS_FAILED")
