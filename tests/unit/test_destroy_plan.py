@@ -78,6 +78,26 @@ def test_destroy_guard_accepts_case_insensitive_azure_scope() -> None:
     assert _validate(plan) == 1
 
 
+def test_destroy_guard_limits_apim_session_children_to_original_gateway() -> None:
+    plan = _plan("azurerm_api_management_api_operation")
+    row = plan["resource_changes"][0]
+    row["address"] = (
+        'module.apim_web_session[0].azurerm_api_management_api_operation.web["refresh-post"]'
+    )
+    original = (
+        f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}"
+        f"/providers/Microsoft.ApiManagement/service/{RESOURCE_GROUP}-apim"
+    )
+    before = row["change"]["before"]
+    suffix = "/apis/tirodhan-web-session;rev=1/operations/refresh-post"
+    before["id"] = original + suffix
+    assert _validate(plan) == 1
+
+    before["id"] = original + "-pilot" + suffix
+    with pytest.raises(RuntimeError, match="unapproved NONPROD APIM child"):
+        _validate(plan)
+
+
 def test_destroy_guard_rejects_resource_group_delete() -> None:
     with pytest.raises(RuntimeError, match="unapproved resource type"):
         _validate(_plan("azurerm_resource_group"))

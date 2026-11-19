@@ -582,6 +582,10 @@ def test_pilot_plan_allows_only_new_pilot_and_preserves_original(baseline, plan)
 def test_gateway_workflow_and_signing_are_isolated():
     workflow = yaml.safe_load(Path(".github/workflows/nonprod-apim.yml").read_text())
     assert set(workflow[True]) == {"workflow_dispatch"}
+    dispatch = workflow[True]["workflow_dispatch"]["inputs"]["operation"]
+    assert dispatch["options"] == ["create", "configure"]
+    assert dispatch["default"] == "create"
+    assert workflow["env"]["TIRODHAN_APIM_OPERATION"] == "${{ inputs.operation }}"
     assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}
     jobs = workflow["jobs"]
     assert set(jobs) == {"release-admission", "apim-plan", "apim-apply"}
@@ -600,3 +604,23 @@ def test_gateway_workflow_and_signing_are_isolated():
     assert set(expected_bindings("apim-release")) == {"terraform-setup", "apim-plan"}
     assert set(expected_bindings("apply", "apim-apply")) == {"terraform-setup", "apim-apply"}
     assert "apim-plan" not in expected_bindings("release")
+
+
+@pytest.mark.parametrize(
+    ("operation", "signed_configuration", "allowed"),
+    [
+        ("create", {}, True),
+        ("create", {"apim_pilot_enabled": True}, True),
+        ("configure", {"apim_web_session": {}}, True),
+        ("configure", {}, False),
+        ("create", {"apim_web_session": {}}, False),
+        ("configure", {"apim_web_session": {}, "apim_pilot_enabled": True}, False),
+        (None, {}, False),
+    ],
+)
+def test_apim_dispatch_must_match_signed_configuration(operation, signed_configuration, allowed):
+    if allowed:
+        apim.validate_dispatch(TF | signed_configuration, operation)
+    else:
+        with pytest.raises(AdmissionDenied, match="APIM_DISPATCH_CONFIGURATION_MISMATCH"):
+            apim.validate_dispatch(TF | signed_configuration, operation)

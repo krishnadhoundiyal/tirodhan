@@ -29,7 +29,7 @@ variable "apim_web_session" {
   type = object({
     secret_name       = string
     backend_hostname  = string
-    browser_origins   = set(string)
+    browser_origins   = list(string)
     web_policy_xml    = string
     web_policy_sha256 = string
     business_operations = map(object({

@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from tirodhan.deployment.check_destroy_plan import approved_apim_child_id
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_evidence import (
@@ -36,6 +37,19 @@ APIM_APPLY_TIMEOUT_SECONDS = 190 * 60
 
 class ApimPlanBlocked(AdmissionDenied):
     """A locally generated APIM diagnostic safe for the workflow log."""
+
+
+def validate_dispatch(terraform: dict[str, Any], operation: str | None) -> None:
+    session = terraform.get("apim_web_session")
+    if operation == "create" and session is None:
+        return
+    if (
+        operation == "configure"
+        and isinstance(session, dict)
+        and terraform.get("apim_pilot_enabled") is not True
+    ):
+        return
+    raise AdmissionDenied("APIM_DISPATCH_CONFIGURATION_MISMATCH")
 
 
 def gateway_name(terraform: dict[str, Any], *, pilot: bool = False) -> str:
@@ -129,6 +143,19 @@ def check_baseline(checks: Checks) -> bool:
             and sku.get("capacity") == 0
             and original.get("properties", {}).get("provisioningState") == "Succeeded"
             and not (original.get("identity") or {}).get("principalId")
+            and checks.permits(
+                original_id,
+                {
+                    "Microsoft.ApiManagement/service/apis/write",
+                    "Microsoft.ApiManagement/service/apis/operations/write",
+                    "Microsoft.ApiManagement/service/apis/policies/write",
+                    "Microsoft.ApiManagement/service/namedValues/write",
+                },
+            )
+            and checks.permits(
+                f"{checks.io.vault_id}/secrets/{session['secret_name']}",
+                {"Microsoft.Authorization/roleAssignments/write"},
+            )
         )
     if pilot:
         original_id = gateway_id(checks.io)
@@ -597,3 +624,47 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
         or live.get("properties", {}).get("provisioningState") != "Succeeded"
     ):
         raise AdmissionDenied("APIM_POSTCONDITIONS_FAILED")
+
+
+def verify_sessions(io: Observations, before: BackendState) -> None:
+    session = io.tf["apim_web_session"]
+    children = session_resource_addresses(session)
+    after = io.backend()
+    gateway = gateway_id(io)
+    live = io.arm(gateway, API_VERSION) or {}
+    identity = live.get("identity") or {}
+    before_state, after_state = before.document or {}, after.document or {}
+    if (
+        after.kind != "INITIALIZED"
+        or after_state.get("lineage") != before_state.get("lineage")
+        or after_state["serial"] <= before_state["serial"]
+        or before_state.get("outputs") != after_state.get("outputs")
+        or set(after.resources) != set(before.resources) | children
+        or any(after.resources.get(address) != value for address, value in before.resources.items())
+        or str(live.get("id", "")).casefold() != gateway.casefold()
+        or live.get("properties", {}).get("provisioningState") != "Succeeded"
+        or identity.get("type") != "SystemAssigned"
+        or not identity.get("principalId")
+    ):
+        raise AdmissionDenied("APIM_SESSION_POSTCONDITIONS_FAILED")
+
+    role_address = SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
+    role_id = after.resources[role_address]
+    role = io.arm(role_id, "2022-04-01") or {}
+    scope = f"{io.vault_id}/secrets/{session['secret_name']}"
+    assignment_prefix = f"{scope}/providers/Microsoft.Authorization/roleAssignments/"
+    if (
+        not role_id.casefold().startswith(assignment_prefix.casefold())
+        or role.get("properties", {}).get("principalId") != identity["principalId"]
+        or any(
+            not approved_apim_child_id(
+                address,
+                address.removeprefix(SESSION_MODULE).split(".", 1)[0],
+                after.resources[address].casefold(),
+                gateway.casefold(),
+            )
+            or not io.arm(after.resources[address], API_VERSION)
+            for address in children - {role_address}
+        )
+    ):
+        raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")

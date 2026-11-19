@@ -904,10 +904,18 @@ class Checks:
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
         if self.auth.operation in {"migration-apply", "runtime-apply"}:
-            from tirodhan.deployment.apim_lifecycle import PILOT_ADDRESS
+            from tirodhan.deployment.apim_lifecycle import ADDRESS, PILOT_ADDRESS, SESSION_MODULE
             from tirodhan.deployment.migration_start import expected_job_id, operation_key
 
-            if any(row.get("address") == PILOT_ADDRESS for row in changes):
+            session_configured = self.tf.get("apim_web_session") is not None or any(
+                address.startswith(SESSION_MODULE) for address in current.resources
+            )
+            if any(
+                row["address"] == PILOT_ADDRESS
+                or row["address"].startswith(SESSION_MODULE)
+                or (session_configured and row["address"] == ADDRESS)
+                for row in changes
+            ):
                 return False
 
             outputs = (current.document or {}).get("outputs", {})

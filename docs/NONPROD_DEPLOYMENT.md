@@ -76,6 +76,21 @@ The `apim_gateway_url` output identifies the gateway provisioned without
 application routes. Review the runtime plan against the existing resources and
 stop if changes extend beyond the approved release.
 
+For the initial web-session configuration of the existing gateway, retain the
+same manual **NONPROD API Management** workflow and choose `configure`. Use the
+usual `apim-release` signing flow with `apim_pilot_enabled=false` and the reviewed
+`apim_web_session` object in the signed NONPROD inputs. Keep the object in the
+authoritative inputs for subsequent releases. The planning job uploads the same
+`apim-plan` artifact. Apply still requires the separate `apim-apply` signature over
+that saved artifact and approval of the protected `nonprod` job.
+
+Before dispatch, verify the exact Key Vault secret and reviewed frontend policy,
+and enroll the API, operation, policy, and named-value write permissions on the
+original APIM. The release identity also needs permission to grant Key Vault
+Secrets User at the selected secret scope. Teardown needs the corresponding
+delete permissions. After an interrupted configuration apply, inspect the live
+identity, child resources and Terraform state before issuing another operation.
+
 Protected teardown verifies the exact active gateway is absent and reports any
 soft-deleted name reservation. Azure retains a soft-deleted gateway for up to 48
 hours. The preflight blocks a redeploy while the name is reserved. Immediate name

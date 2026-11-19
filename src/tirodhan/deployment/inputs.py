@@ -18,6 +18,7 @@ def main() -> None:
         "location",
         "apim_publisher_email",
         "apim_pilot_enabled",
+        "apim_web_session",
         "resource_group_name",
         "suffix",
         "postgres_admin_object_id",
@@ -42,6 +43,10 @@ def main() -> None:
         )
     if type(values.get("apim_pilot_enabled", False)) is not bool:
         raise RuntimeError("apim_pilot_enabled must be a JSON boolean")
+    if values.get("apim_web_session") is not None and not isinstance(
+        values["apim_web_session"], dict
+    ):
+        raise RuntimeError("apim_web_session must be a JSON object")
     names = set(Path("../../../deploy/runtime-env.names").read_text().splitlines())
     runtime = values.get("runtime_env", {})
     if (
