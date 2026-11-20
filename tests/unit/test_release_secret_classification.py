@@ -17,3 +17,7 @@ def test_runtime_secret_names_ignores_unrelated_key_vault_secrets() -> None:
     available = frozenset({"twofactor-api-key", "some-other-secret"})
 
     assert runtime_secret_names(available) == frozenset({"twofactor-api-key"})
+
+
+def test_gateway_invocation_secret_is_included_in_runtime_bindings() -> None:
+    assert runtime_secret_names(frozenset({"gateway-secret"})) == frozenset({"gateway-secret"})

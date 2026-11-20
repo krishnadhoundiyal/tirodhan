@@ -33,7 +33,10 @@ CUSTOMER_DATA_SECRET_NAMES = frozenset(
 )
 CUSTOMER_WEB_PUSH_SECRET_NAMES = frozenset({"customer-vapid-private-key-pem"})
 CUSTOMER_SECRET_NAMES = CUSTOMER_DATA_SECRET_NAMES | CUSTOMER_WEB_PUSH_SECRET_NAMES
-SECRET_NAMES = LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES
+GATEWAY_SECRET_NAMES = frozenset({"gateway-secret"})
+SECRET_NAMES = (
+    LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES | GATEWAY_SECRET_NAMES
+)
 
 # Application runtime can be enrolled independently of the existing migration
 # credentials and separately enrolled rider push. Keep this an exact complete batch.
@@ -52,10 +55,12 @@ def approved_secret_batch(names: set[str]) -> bool:
         CUSTOMER_DATA_SECRET_NAMES,
         CUSTOMER_WEB_PUSH_SECRET_NAMES,
         CUSTOMER_SECRET_NAMES,
+        GATEWAY_SECRET_NAMES,
         LEGACY_SECRET_NAMES | CUSTOMER_DATA_SECRET_NAMES,
         LEGACY_SECRET_NAMES | CUSTOMER_SECRET_NAMES,
         TWOFACTOR_SECRET_NAMES | CUSTOMER_DATA_SECRET_NAMES,
         TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES,
+        LEGACY_SECRET_NAMES | TWOFACTOR_SECRET_NAMES | CUSTOMER_SECRET_NAMES,
         SECRET_NAMES,
     )
 
@@ -64,7 +69,8 @@ def main() -> None:
     values = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     if not isinstance(values, dict) or not approved_secret_batch(set(values)):
         raise SystemExit(
-            "Supply a complete approved provider, customer-data, VAPID or combined secret batch"
+            "Supply a complete approved provider, customer-data, VAPID, gateway "
+            "or combined secret batch"
         )
     if any(not isinstance(value, str) or not value.strip() for value in values.values()):
         raise SystemExit("Every secret must be a nonempty string")

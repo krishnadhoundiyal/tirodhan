@@ -32,7 +32,8 @@ def test_core_batch_does_not_replace_rider_or_migration_admission_requirements()
     observations = MemoryObservations()
     checks = Checks(auth("runtime-plan"), observations.config, {}, observations)
     assert checks.required_secret_names() - MIGRATION_SECRET_NAMES == RUNTIME_NAMES | {
-        "fcm-credentials-json"
+        "fcm-credentials-json",
+        "gateway-secret",
     }
     assert seed_secrets.approved_secret_batch(RUNTIME_NAMES)
     assert MIGRATION_SECRET_NAMES == {"ghcr-pull-pat", "fluent-bit-sas"}

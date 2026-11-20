@@ -5,7 +5,7 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tirodhan.api.dependencies import (
@@ -91,11 +91,27 @@ class LoginTokenResponse(AccessTokenResponse):
 
 
 class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     refresh_token: SecretStr
+
+    @field_validator("refresh_token")
+    @classmethod
+    def _validate_refresh_token(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("refresh_token must not be empty or blank")
+        return value
 
 
 class LogoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     refresh_token: SecretStr
+
+    @field_validator("refresh_token")
+    @classmethod
+    def _validate_refresh_token(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("refresh_token must not be empty or blank")
+        return value
 
 
 def _login_settings(request: Request) -> tuple[int, int, int]:

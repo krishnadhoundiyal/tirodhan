@@ -21,6 +21,7 @@ def material():
     encoded = base64.b64encode(b"a" * 32).decode()
     independent = base64.b64encode(b"b" * 32).decode()
     return {
+        "gateway-secret": "synthetic-gateway-token-" + "x" * 32,
         "auth-jwt-private-key-pem": key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.PKCS8,
@@ -111,6 +112,24 @@ def test_twofactor_runtime_passes_without_any_kaleyra_credentials(material, monk
     assert "google-maps-api-key" in reads
     assert "kaleyra-api-key" not in reads
     assert capsys.readouterr().out == ""
+
+
+def test_gateway_secret_is_required_before_runtime_admission(material, monkeypatch):
+    checks, reads = runtime_checks(
+        {name: value for name, value in material.items() if name != "gateway-secret"}, monkeypatch
+    )
+    assert not checks.check_secrets()
+    assert reads == []
+
+
+@pytest.mark.parametrize("secret", ["", "weak", " " * 40, "x" * 32 + "\n"])
+def test_invalid_gateway_material_cannot_pass_runtime_admission(material, monkeypatch, secret):
+    checks, _ = runtime_checks(material | {"gateway-secret": secret}, monkeypatch)
+    if not secret.strip():
+        assert not checks.check_secrets()
+    else:
+        with pytest.raises(ValueError, match="TIRODHAN_GATEWAY_SECRET"):
+            checks.check_secrets()
 
 
 def test_rider_fcm_is_mandatory_even_when_customer_push_is_disabled(material, monkeypatch):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -8,7 +9,9 @@ import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tirodhan.api.router import api_router
 from tirodhan.core.config import Settings, get_settings
@@ -67,6 +70,33 @@ from tirodhan.modules.serviceability.runtime import (
 logger = logging.getLogger(__name__)
 
 
+class GatewaySecretMiddleware:
+    def __init__(self, app: ASGIApp, settings: Settings) -> None:
+        self.app = app
+        self.expected_secret = settings.api_gateway_secret()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and self.expected_secret is not None:
+            path = scope.get("path", "")
+            if path not in (
+                "/health",
+                "/ready",
+                "/v1/payments/provider/webhook",
+            ):
+                secrets = [
+                    value for name, value in scope.get("headers", []) if name == b"x-gateway-secret"
+                ]
+                if len(secrets) != 1 or not hmac.compare_digest(secrets[0], self.expected_secret):
+                    response = JSONResponse(
+                        status_code=403,
+                        content={"error": {"code": "DIRECT_ACCESS_FORBIDDEN"}},
+                        headers={"Cache-Control": "private, no-store"},
+                    )
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -88,6 +118,9 @@ def create_app(
     product_media: ProductMediaPort | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
+    # Validate before constructing any runtime: ASGI middleware is otherwise built lazily.
+    application_settings.api_gateway_secret()
+    application_settings.validate_api_cors_origins()
     if payment_provider is None:
         razorpay_configured(application_settings)
     configure_logging(
@@ -165,6 +198,26 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = application_settings
+
+    application.add_middleware(GatewaySecretMiddleware, settings=application_settings)
+
+    if application_settings.cors_allowed_origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=application_settings.cors_allowed_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "Idempotency-Key",
+                "X-Client-Request-Id",
+                "X-Client-Login-Id",
+            ],
+            max_age=86400,
+        )
 
     @application.exception_handler(RequestValidationError)
     async def private_validation_error(request: Request, error: RequestValidationError) -> Response:
