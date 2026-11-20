@@ -346,6 +346,37 @@ def test_command_refresh_does_not_authorize_workload_update(baseline, plan_with_
         apim.validate_apim_plan(plan, baseline, TF)
 
 
+@pytest.mark.parametrize(
+    ("cause", "expected"),
+    [
+        (
+            apim.ApimPlanBlocked("APIM_SECRET_GRANT_PERMISSIONS_MISSING"),
+            "APIM_PREREQUISITES_BLOCKED:apim_baseline:APIM_SECRET_GRANT_PERMISSIONS_MISSING",
+        ),
+        (ValueError("private resource details"), "APIM_PREREQUISITES_BLOCKED:apim_baseline"),
+        (
+            apim.ApimPlanBlocked("APIM_PRIVATE: sensitive runtime value"),
+            "APIM_PREREQUISITES_BLOCKED:apim_baseline",
+        ),
+    ],
+)
+def test_apim_cli_identifies_failed_prerequisite_without_printing_provider_data(
+    tmp_path, monkeypatch, cause, expected
+):
+    from tirodhan.deployment import foundation_reconcile
+
+    def blocked(_operation):
+        raise AdmissionDenied("PREREQUISITES_BLOCKED:apim_baseline") from cause
+
+    monkeypatch.setattr(foundation_reconcile, "admitted_with_grant", blocked)
+    monkeypatch.setattr(
+        sys, "argv", ["foundation_lifecycle", "apim-plan", "--plan", str(tmp_path / "apim.tfplan")]
+    )
+    with pytest.raises(SystemExit) as error:
+        foundation_lifecycle.main()
+    assert str(error.value) == f"LIFECYCLE_BLOCKED: {expected}"
+
+
 @pytest.mark.parametrize("field", ["summary", "detail"])
 @pytest.mark.parametrize("provider_code", ["AuthorizationFailed", "ForbiddenByRbac"])
 def test_terraform_diagnostics_are_classified_without_exposing_payload(

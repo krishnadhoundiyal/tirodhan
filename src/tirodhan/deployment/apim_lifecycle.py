@@ -41,6 +41,30 @@ class ApimPlanBlocked(AdmissionDenied):
     """A locally generated APIM diagnostic safe for the workflow log."""
 
 
+def apim_prerequisite_failure(exc: AdmissionDenied) -> str | None:
+    from tirodhan.deployment.prerequisites import CHECK_IDS
+
+    prefix, _, check = str(exc).partition(":")
+    if prefix != "PREREQUISITES_BLOCKED" or check not in CHECK_IDS:
+        return None
+    reason = str(exc.__cause__)
+    if (
+        isinstance(exc.__cause__, ApimPlanBlocked) and re.fullmatch(r"APIM_[A-Z0-9_:,]+", reason)
+    ) or reason in {
+        "APIM_REQUIRES_STAGE_FOUR",
+        "APIM_DEPLOYED_IMAGE_UNVERIFIED",
+        "APIM_DEPLOYED_WORKLOAD_UNVERIFIED",
+        "APIM_DEPLOYED_SECRET_REFERENCES_UNVERIFIED",
+        "APIM_DEPLOYED_MIGRATION_CONTEXT_UNVERIFIED",
+        "AuthorizationFailed",
+        "ForbiddenByRbac",
+        "PERMISSIONS_UNAVAILABLE",
+        "PERMISSIONS_PAGINATION_UNVERIFIED",
+    }:
+        return f"APIM_PREREQUISITES_BLOCKED:{check}:{reason}"
+    return f"APIM_PREREQUISITES_BLOCKED:{check}"
+
+
 def validate_dispatch(terraform: dict[str, Any], operation: str | None) -> None:
     session = terraform.get("apim_web_session")
     reconcile = terraform.get("apim_session_reconcile") is True
@@ -196,7 +220,7 @@ def check_baseline(checks: Checks) -> bool:
             )
         else:
             known_identity = not present and not identity.get("principalId")
-        return (
+        original_matches = (
             not pilot
             and PILOT_ADDRESS not in state.resources
             and known_identity
@@ -205,7 +229,12 @@ def check_baseline(checks: Checks) -> bool:
             and sku.get("name") == "Consumption"
             and sku.get("capacity") == 0
             and original.get("properties", {}).get("provisioningState") == "Succeeded"
-            and checks.permits(
+        )
+        if not original_matches:
+            raise ApimPlanBlocked("APIM_ORIGINAL_GATEWAY_BASELINE_MISMATCH")
+
+        for scope, actions, label in (
+            (
                 original_id,
                 {
                     "Microsoft.ApiManagement/service/apis/write",
@@ -213,12 +242,21 @@ def check_baseline(checks: Checks) -> bool:
                     "Microsoft.ApiManagement/service/apis/policies/write",
                     "Microsoft.ApiManagement/service/namedValues/write",
                 },
-            )
-            and checks.permits(
+                "GATEWAY",
+            ),
+            (
                 f"{checks.io.vault_id}/secrets/{session['secret_name']}",
                 {"Microsoft.Authorization/roleAssignments/write"},
-            )
-        )
+                "SECRET_GRANT",
+            ),
+        ):
+            try:
+                permitted = checks.permits(scope, actions)
+            except AdmissionDenied as exc:
+                raise ApimPlanBlocked(f"APIM_{label}_PERMISSIONS_UNVERIFIED") from exc
+            if not permitted:
+                raise ApimPlanBlocked(f"APIM_{label}_PERMISSIONS_MISSING")
+        return True
     if pilot:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
