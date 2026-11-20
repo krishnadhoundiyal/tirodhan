@@ -383,11 +383,28 @@ def test_seed_authorization_cannot_admit_unknown_partial_or_ambiguous_batch(cont
         sign(context)
 
 
-def test_workflow_seed_is_limited_to_its_actual_ghcr_entrypoint(context):
+def test_workflow_seed_is_limited_to_its_two_workflow_targets(context):
     operator_request(context, "seed-workflow")
     context[3]["secret_names"] = ["twofactor-api-key"]
     with pytest.raises(AdmissionDenied, match="ISSUANCE_SECRET_BATCH_NOT_SUPPORTED"):
         sign(context)
+
+
+def test_workflow_can_sign_a_single_gateway_secret(context):
+    operator_request(context, "seed-workflow")
+    _, policy, config, request = context
+    request["secret_names"] = ["gateway-secret"]
+    token, _ = sign(context)
+    grant = validate_authorization(
+        token,
+        operation="seed-secrets",
+        policy=policy,
+        config_hash=digest(config),
+        code_hash=CODE,
+        commit=COMMIT,
+        run_id=SESSION,
+    )
+    assert grant.claims["bindings"]["seed-secrets"]["secret_names"] == ["gateway-secret"]
 
 
 def test_database_bootstrap_signer_cannot_substitute_verifier_identity(context):
