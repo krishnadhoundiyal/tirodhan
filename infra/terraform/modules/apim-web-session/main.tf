@@ -27,6 +27,7 @@ locals {
 }
 
 resource "azurerm_role_assignment" "gateway_secret" {
+  name                 = uuidv5("url", "${lower(var.vault_resource_id)}/secrets/${lower(var.secret_name)}/${lower(var.gateway_principal_id)}")
   scope                = "${var.vault_resource_id}/secrets/${var.secret_name}"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = var.gateway_principal_id
@@ -35,7 +36,7 @@ resource "azurerm_role_assignment" "gateway_secret" {
   lifecycle {
     precondition {
       condition = (
-        var.gateway_name == "${var.resource_group_name}-apim-pilot" &&
+        contains(["${var.resource_group_name}-apim", "${var.resource_group_name}-apim-pilot"], var.gateway_name) &&
         can(regex("^/subscriptions/[0-9a-f-]+/resourcegroups/${var.resource_group_name}/providers/microsoft\\.keyvault/vaults/[a-z0-9-]+$", lower(var.vault_resource_id))) &&
         trimsuffix(var.vault_uri, "/") == "https://${basename(lower(var.vault_resource_id))}.vault.azure.net"
       )

@@ -1,20 +1,27 @@
 # NONPROD APIM web session configuration
 
-This module describes the configuration for the existing Consumption pilot in
-the NONPROD resource group. The pilot service supplies its system-assigned
+This module describes the configuration for an existing Consumption gateway in
+the NONPROD resource group. The selected service supplies its system-assigned
 principal ID. The module manages its API child resources and one Key Vault
 role assignment. Key Vault and FastAPI retain their existing owners.
 
-The protected APIM creation workflow permits only the service create. Register
-this module in a reviewed configuration release before applying it. That release
-needs a saved plan with the exact pilot, vault scope, API child addresses and
+Select `configure` in the protected NONPROD API Management workflow to configure
+the original gateway. The release needs a saved plan with the exact gateway,
+vault scope, API child addresses and
 operations, and existing owner approval. Its deployment principal needs the
 specific APIM API, operation, policy and named-value actions plus permission to
 grant the selected secret scope. The current role for service creation is
 insufficient. Validate the teardown inventory and permission profile for any new
 module state before admitting the configuration release.
 
-Use the pilot's managed identity, the verified vault resource ID and URI, and
+The NONPROD root exposes the nullable `apim_web_session` input. When supplied at
+stage four with the pilot disabled, it enables a system-assigned identity on the
+original gateway and binds the module to the bootstrap-owned vault. Leave it
+unset until the policy, Key Vault secret and scoped release permissions have been
+verified. Keep the reviewed input in the signed NONPROD configuration for
+subsequent releases and teardown.
+
+Use the selected gateway's managed identity, the verified vault resource ID and URI, and
 the actual FastAPI HTTPS ingress hostname. An authorized NONPROD verifier
 confirms that the selected independent secret exists and is enabled. Supply
 only its name. The APIM named value is always called `gateway-secret`. FastAPI's

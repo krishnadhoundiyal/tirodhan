@@ -24,6 +24,38 @@ variable "apim_pilot_enabled" {
   type        = bool
   default     = false
 }
+variable "apim_session_reconcile" {
+  description = "Explicit signed authorization to complete an interrupted APIM web session configuration."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.apim_session_reconcile || var.apim_web_session != null
+    error_message = "An APIM session reconciliation requires the reviewed session configuration."
+  }
+}
+variable "apim_web_session" {
+  description = "Reviewed configuration for the existing NONPROD APIM gateway. Supplied only by its configuration release."
+  type = object({
+    secret_name       = string
+    backend_hostname  = string
+    browser_origins   = list(string)
+    web_policy_xml    = string
+    web_policy_sha256 = string
+    business_operations = map(object({
+      method = string
+      path   = string
+    }))
+  })
+  default = null
+
+  validation {
+    condition = var.apim_web_session == null || (
+      var.deployment_stage == 4 && var.apim_publisher_email != null && !var.apim_pilot_enabled
+    )
+    error_message = "Web sessions require the original stage-four gateway with the recovery pilot disabled."
+  }
+}
 variable "postgres_admin_object_id" { type = string }
 variable "postgres_admin_name" { type = string }
 variable "postgres_admin_type" {

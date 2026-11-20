@@ -51,6 +51,24 @@ run "reject_native_route_on_business_surface" {
   expect_failures = [var.business_operations]
 }
 
+run "configure_original_nonprod_gateway" {
+  command = plan
+
+  variables {
+    gateway_name = "tirodhan-np-test01-apim"
+  }
+
+  assert {
+    condition = (
+      azurerm_api_management_api.web.api_management_name == var.gateway_name &&
+      azurerm_api_management_api.backend.api_management_name == var.gateway_name &&
+      azurerm_api_management_named_value.gateway_secret.api_management_name == var.gateway_name &&
+      azurerm_role_assignment.gateway_secret.principal_id == var.gateway_principal_id
+    )
+    error_message = "Session configuration must use the original gateway and its own managed identity."
+  }
+}
+
 run "reject_unreviewed_xml" {
   command = plan
   variables {

@@ -1,15 +1,15 @@
 variable "resource_group_name" {
-  description = "Resource group of the existing NONPROD APIM pilot."
+  description = "Resource group of the existing NONPROD APIM gateway."
   type        = string
 }
 
 variable "gateway_name" {
-  description = "The existing Consumption pilot service name."
+  description = "The existing NONPROD Consumption gateway service name."
   type        = string
 }
 
 variable "gateway_principal_id" {
-  description = "Object ID of the pilot's system-assigned managed identity."
+  description = "Object ID of the gateway's system-assigned managed identity."
   type        = string
 }
 
