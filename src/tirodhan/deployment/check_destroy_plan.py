@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Iterable
 from typing import Any
@@ -28,6 +29,40 @@ ALLOWED_DESTROY_TYPES = frozenset(
         "azurerm_user_assigned_identity",
     }
 )
+APIM_CHILD_TYPES = {
+    "azurerm_api_management_api",
+    "azurerm_api_management_api_operation",
+    "azurerm_api_management_api_policy",
+    "azurerm_api_management_named_value",
+}
+
+
+def approved_apim_child_id(
+    address: str, resource_type: str, resource_id: str, gateway: str
+) -> bool:
+    return resource_id in apim_child_state_ids(address, resource_type, gateway)
+
+
+def apim_child_state_ids(address: str, resource_type: str, gateway: str) -> tuple[str, ...]:
+    match = re.fullmatch(
+        rf"module\.apim_web_session\[0\]\.{resource_type}\.(web|backend|gateway_secret)"
+        r'(?:\["([a-z][a-z0-9-]{0,70})"\])?',
+        address,
+    )
+    if not match:
+        return ()
+    component, operation = match.groups()
+    if resource_type == "azurerm_api_management_named_value":
+        if component == "gateway_secret" and operation is None:
+            return (gateway + "/namedvalues/gateway-secret",)
+        return ()
+    api = {"web": "tirodhan-web-session", "backend": "tirodhan-backend-v1"}.get(component)
+    if api is None or (operation is not None) != (resource_type.endswith("_operation")):
+        return ()
+    api_id = gateway + "/apis/" + api
+    suffix = f"/operations/{operation}" if operation is not None else ""
+    # AzureRM 5.8.0 stores API policy state at the owning API resource ID.
+    return (api_id + suffix, api_id + ";rev=1" + suffix)
 
 
 def _strings(value: Any) -> Iterable[str]:
@@ -80,7 +115,7 @@ def validate_destroy_plan(
             raise RuntimeError(
                 f"Refusing replacement/mixed destroy action for {address}: {actions}"
             )
-        if resource_type not in ALLOWED_DESTROY_TYPES:
+        if resource_type not in ALLOWED_DESTROY_TYPES | APIM_CHILD_TYPES:
             raise RuntimeError(
                 f"Refusing destroy of unapproved resource type {resource_type!r}: {address}"
             )
@@ -103,13 +138,21 @@ def validate_destroy_plan(
                 f"{address} ({resource_id})"
             )
 
-        if resource_type == "azurerm_api_management" and (
-            normalized_id
-            != f"{expected_scope}/providers/microsoft.apimanagement/service/"
-            f"{expected_resource_group.lower()}-apim"
-            or address != "azurerm_api_management.nonprod[0]"
+        expected_gateway_base = (
+            f"{expected_scope}/providers/microsoft.apimanagement/service/"
+            f"{expected_resource_group.lower()}"
+        )
+        if resource_type == "azurerm_api_management":
+            suffix = {
+                "azurerm_api_management.nonprod[0]": "-apim",
+                "azurerm_api_management.pilot[0]": "-apim-pilot",
+            }.get(address)
+            if suffix is None or normalized_id != expected_gateway_base + suffix:
+                raise RuntimeError("Refusing destroy outside the approved NONPROD APIM instance")
+        elif resource_type in APIM_CHILD_TYPES and not approved_apim_child_id(
+            address, resource_type, normalized_id, expected_gateway_base + "-apim"
         ):
-            raise RuntimeError("Refusing destroy outside the approved NONPROD APIM instance")
+            raise RuntimeError("Refusing destroy of an unapproved NONPROD APIM child")
 
         delete_count += 1
 

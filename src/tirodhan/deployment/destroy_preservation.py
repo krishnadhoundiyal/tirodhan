@@ -47,7 +47,12 @@ def retention_required(io: Observations) -> bool:
 def verify_gateway_removed(io: Observations) -> None:
     if io.tf.get("apim_publisher_email") is None:
         return
-    name = f"{io.tf['resource_group_name']}-apim"
+    _verify_gateway_name_removed(io, f"{io.tf['resource_group_name']}-apim")
+    if io.tf.get("apim_pilot_enabled") is True:
+        _verify_gateway_name_removed(io, f"{io.tf['resource_group_name']}-apim-pilot")
+
+
+def _verify_gateway_name_removed(io: Observations, name: str) -> None:
     gateway = io.scope + f"/providers/Microsoft.ApiManagement/service/{name}"
     if io.arm(gateway, "2024-05-01") is not None:
         raise AdmissionDenied("NONPROD_APIM_STILL_ACTIVE")

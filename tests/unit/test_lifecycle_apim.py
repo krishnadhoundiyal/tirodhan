@@ -91,6 +91,144 @@ def plan(baseline):
     }
 
 
+@pytest.fixture
+def session_plan(baseline, plan):
+    baseline.resources[apim.ADDRESS] = GATEWAY
+    session = {
+        "secret_name": "gateway-secret",
+        "web_policy_xml": "<policies/>",
+        "business_operations": {"current-user": {"method": "GET", "path": "/auth/me"}},
+    }
+    terraform = TF | {"apim_web_session": session}
+    plan["variables"]["apim_web_session"] = {"value": session}
+    plan["output_changes"] = {}
+    gateway = plan["resource_changes"][0]["change"]
+    gateway["before"] = gateway["after"] | {"id": GATEWAY, "identity": []}
+    gateway["actions"] = ["update"]
+    gateway["after"] = gateway["before"] | {"identity": [{"type": "SystemAssigned"}]}
+    resource_values = {
+        "azurerm_role_assignment.gateway_secret": {
+            "scope": SCOPE
+            + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv/secrets/gateway-secret",
+            "role_definition_name": "Key Vault Secrets User",
+        },
+        "azurerm_api_management_named_value.gateway_secret": {
+            "secret": True,
+            "value_from_key_vault": [
+                {"secret_id": "https://td-np-test01-kv.vault.azure.net/secrets/gateway-secret"}
+            ],
+        },
+        "azurerm_api_management_api_policy.web": {"xml_content": session["web_policy_xml"]},
+    }
+    for address in sorted(apim.session_resource_addresses(session)):
+        plan["resource_changes"].append(
+            {
+                "address": address,
+                "mode": "managed",
+                "change": {
+                    "actions": ["create"],
+                    "before": None,
+                    "after": {
+                        "api_management_name": "tirodhan-np-test01-apim",
+                        "resource_group_name": TF["resource_group_name"],
+                    }
+                    | resource_values.get(address.removeprefix(apim.SESSION_MODULE), {}),
+                },
+            }
+        )
+    return plan, terraform
+
+
+def test_existing_gateway_session_plan_is_scoped(baseline, session_plan):
+    plan, terraform = session_plan
+    gateway = plan["resource_changes"][0]["change"]
+    apim.validate_apim_plan(plan, baseline, terraform)
+
+    gateway["after"]["sku_name"] = "Developer_1"
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_GATEWAY_UPDATE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    gateway["after"]["sku_name"] = "Consumption_0"
+
+    assignment = next(
+        row["change"]["after"]
+        for row in plan["resource_changes"]
+        if row["address"] == apim.SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
+    )
+    secret_scope = assignment["scope"]
+    assignment["scope"] = secret_scope.split("/secrets/")[0]
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_POLICY_OR_SECRET_BINDING_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    assignment["scope"] = secret_scope
+
+    plan["resource_changes"].append(
+        {"address": apim.PILOT_ADDRESS, "mode": "managed", "change": {"actions": ["create"]}}
+    )
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
+def test_reconcile_creates_only_missing_children_and_preserves_the_identity(baseline, session_plan):
+    plan, terraform = session_plan
+    principal = "11111111-1111-1111-1111-111111111111"
+    gateway = plan["resource_changes"][0]["change"]
+    gateway["after"]["identity"][0]["principal_id"] = principal
+    gateway["before"] = deepcopy(gateway["after"])
+    gateway["actions"] = ["no-op"]
+    baseline.document["resources"].append(
+        {
+            "mode": "managed",
+            "type": "azurerm_api_management",
+            "name": "nonprod",
+            "instances": [{"index_key": 0, "attributes": gateway["before"]}],
+        }
+    )
+    assignment = next(
+        row["change"] for row in plan["resource_changes"] if row["address"] == apim.SESSION_ROLE
+    )
+    assignment["after"]["principal_id"] = principal
+    api_address = apim.SESSION_MODULE + "azurerm_api_management_api.web"
+    existing_api = next(
+        row["change"] for row in plan["resource_changes"] if row["address"] == api_address
+    )
+    existing_api["after"]["id"] = GATEWAY + "/apis/tirodhan-web-session;rev=1"
+    existing_api["before"] = deepcopy(existing_api["after"])
+    existing_api["actions"] = ["no-op"]
+    baseline.resources[api_address] = existing_api["after"]["id"]
+
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    plan["variables"]["apim_session_reconcile"] = {"value": True}
+    terraform = terraform | {"apim_session_reconcile": True}
+    apim.validate_apim_plan(plan, baseline, terraform)
+
+    existing_api["actions"] = ["delete", "create"]
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
+@pytest.mark.parametrize(
+    ("component", "api_name"),
+    [("web", "tirodhan-web-session"), ("backend", "tirodhan-backend-v1")],
+)
+def test_recovery_reads_policy_endpoint_and_rejects_unrecorded_write(baseline, component, api_name):
+    address = apim.SESSION_MODULE + f"azurerm_api_management_api_policy.{component}"
+    state_id = f"{GATEWAY}/apis/{api_name}".casefold()
+    policy_id = state_id + "/policies/policy"
+    live = {policy_id: {"id": policy_id}}
+    io = SimpleNamespace(
+        tf=TF | {"apim_web_session": {"secret_name": "gateway-secret"}},
+        scope=SCOPE,
+        vault_id=SCOPE + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv",
+        arm=lambda resource_id, version: live.get(resource_id),
+    )
+    principal = "11111111-1111-1111-1111-111111111111"
+    assert not apim.recovery_children_match(io, baseline, {address}, principal)
+    baseline.resources[address] = state_id
+    assert apim.recovery_children_match(io, baseline, {address}, principal)
+    del live[policy_id]
+    assert not apim.recovery_children_match(io, baseline, {address}, principal)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "code"),
     [
@@ -215,7 +353,7 @@ def test_terraform_diagnostics_are_classified_without_exposing_payload(
 ):
     from tirodhan.deployment import foundation_reconcile, prerequisites
 
-    checks = SimpleNamespace(backend=lambda: baseline)
+    checks = SimpleNamespace(backend=lambda: baseline, tf=TF)
     monkeypatch.setattr(foundation_reconcile, "admitted_with_grant", lambda _: (checks, None, None))
     monkeypatch.setattr(prerequisites, "revalidate_database", lambda _: None)
     monkeypatch.setattr(
@@ -257,6 +395,35 @@ def test_only_exact_gateway_may_change(baseline, plan, actions):
     )
     with pytest.raises(AdmissionDenied, match="APIM_PLAN_NOT_ADDITIVE"):
         apim.validate_apim_plan(plan, baseline, TF)
+
+
+@pytest.mark.parametrize(
+    ("detail", "labels"),
+    [
+        (
+            "unexpected status 403 with error: AuthorizationPermissionMismatch",
+            "HTTP_403,PERMISSION",
+        ),
+        ("unexpected status 409 with error: LeaseAlreadyPresent", "HTTP_409,LEASE_PRESENT"),
+        ("PUT failed: context deadline exceeded", "TIMEOUT"),
+        ("arbitrary response customer-private-code 599", ""),
+    ],
+)
+def test_state_lock_diagnostic_preserves_only_known_categories(detail, labels):
+    output = json.dumps(
+        {
+            "type": "diagnostic",
+            "diagnostic": {
+                "severity": "error",
+                "summary": "Error acquiring the state lock",
+                "detail": detail + "\nLock Info: private lease ID, path, and identity",
+            },
+        }
+    )
+    expected = "APIM_TERRAFORM_PLAN_FAILED:STATE_LOCK"
+    if labels:
+        expected += "".join(f",STATE_LOCK_{label}" for label in labels.split(","))
+    assert apim.terraform_plan_failure(output) == expected
 
 
 def test_exact_saved_plan_and_live_fingerprint_are_rechecked(baseline, plan, tmp_path):
@@ -442,9 +609,52 @@ def test_postcondition_requires_exact_gateway_and_preserves_state(baseline, monk
         apim.verify_gateway(io, baseline)
 
 
+def test_pilot_admission_requires_stopped_original_and_absent_pilot(baseline, monkeypatch):
+    io = MemoryObservations()
+    io.tf = TF | {"apim_pilot_enabled": True}
+    io.current = replace(baseline, resources=baseline.resources | {apim.ADDRESS: GATEWAY})
+    checks = Checks(auth("apim-plan"), CONFIG | {"terraform": io.tf}, {}, io)
+    original = {
+        "id": GATEWAY,
+        "sku": {"name": "Consumption"},
+        "properties": {"provisioningState": "Stopped"},
+    }
+    resources = {GATEWAY: original}
+    monkeypatch.setenv("GITHUB_WORKFLOW_REF", apim.WORKFLOW_REF)
+    monkeypatch.setattr(io, "arm", lambda identity, _: resources.get(identity))
+    assert checks.check_apim_baseline()
+    resources[GATEWAY + "-pilot"] = {"id": GATEWAY + "-pilot"}
+    assert not checks.check_apim_baseline()
+    resources.pop(GATEWAY + "-pilot")
+    original["properties"]["provisioningState"] = "Succeeded"
+    assert not checks.check_apim_baseline()
+
+
+def test_pilot_plan_allows_only_new_pilot_and_preserves_original(baseline, plan):
+    baseline = replace(baseline, resources=baseline.resources | {apim.ADDRESS: GATEWAY})
+    terraform = TF | {"apim_pilot_enabled": True}
+    plan["variables"]["apim_pilot_enabled"] = {"value": True}
+    plan["resource_changes"][0]["address"] = apim.PILOT_ADDRESS
+    plan["resource_changes"][0]["change"]["after"]["name"] += "-pilot"
+    plan["output_changes"] = {"apim_pilot_gateway_url": {"actions": ["create"]}}
+    with pytest.raises(AdmissionDenied, match="APIM_PLAN_GATEWAY_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    plan["resource_changes"][0]["change"]["after"]["identity"] = [{"type": "SystemAssigned"}]
+    apim.validate_apim_plan(plan, baseline, terraform)
+    plan["resource_changes"].append(
+        {"mode": "managed", "address": apim.ADDRESS, "change": {"actions": ["delete"]}}
+    )
+    with pytest.raises(AdmissionDenied, match="APIM_PLAN_NOT_ADDITIVE"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
 def test_gateway_workflow_and_signing_are_isolated():
     workflow = yaml.safe_load(Path(".github/workflows/nonprod-apim.yml").read_text())
     assert set(workflow[True]) == {"workflow_dispatch"}
+    dispatch = workflow[True]["workflow_dispatch"]["inputs"]["operation"]
+    assert dispatch["options"] == ["create", "configure", "reconcile"]
+    assert dispatch["default"] == "create"
+    assert workflow["env"]["TIRODHAN_APIM_OPERATION"] == "${{ inputs.operation }}"
     assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}
     jobs = workflow["jobs"]
     assert set(jobs) == {"release-admission", "apim-plan", "apim-apply"}
@@ -463,3 +673,26 @@ def test_gateway_workflow_and_signing_are_isolated():
     assert set(expected_bindings("apim-release")) == {"terraform-setup", "apim-plan"}
     assert set(expected_bindings("apply", "apim-apply")) == {"terraform-setup", "apim-apply"}
     assert "apim-plan" not in expected_bindings("release")
+
+
+@pytest.mark.parametrize(
+    ("operation", "signed_configuration", "allowed"),
+    [
+        ("create", {}, True),
+        ("create", {"apim_pilot_enabled": True}, True),
+        ("configure", {"apim_web_session": {}}, True),
+        ("configure", {}, False),
+        ("create", {"apim_web_session": {}}, False),
+        ("configure", {"apim_web_session": {}, "apim_pilot_enabled": True}, False),
+        ("reconcile", {"apim_web_session": {}, "apim_session_reconcile": True}, True),
+        ("reconcile", {"apim_web_session": {}}, False),
+        ("configure", {"apim_web_session": {}, "apim_session_reconcile": True}, False),
+        (None, {}, False),
+    ],
+)
+def test_apim_dispatch_must_match_signed_configuration(operation, signed_configuration, allowed):
+    if allowed:
+        apim.validate_dispatch(TF | signed_configuration, operation)
+    else:
+        with pytest.raises(AdmissionDenied, match="APIM_DISPATCH_CONFIGURATION_MISMATCH"):
+            apim.validate_dispatch(TF | signed_configuration, operation)

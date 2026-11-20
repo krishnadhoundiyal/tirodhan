@@ -125,6 +125,8 @@ def contract_digest(root: Path = ROOT) -> str:
             *root.glob("infra/terraform/nonprod/*.tf"),
             *root.glob("infra/terraform/nonprod/*.tf.json"),
             *root.glob("infra/terraform/nonprod/*.hcl"),
+            *root.glob("infra/terraform/modules/apim-web-session/*.tf"),
+            *root.glob("infra/terraform/modules/apim-web-session/*.tftpl"),
         }
     )
     return digest(
@@ -135,7 +137,7 @@ def contract_digest(root: Path = ROOT) -> str:
             for p in paths
             if p.is_file()
             and not p.name.endswith(".tfvars.json")
-            and p.suffix in {".py", ".json", ".yml", ".tf", ".hcl", ".sh"}
+            and p.suffix in {".py", ".json", ".yml", ".tf", ".tftpl", ".hcl", ".sh"}
         }
     )
 
@@ -310,16 +312,21 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             text=True,
             timeout=10,
         ).stdout.strip()
+        config = configuration()
         authorization = validate_authorization(
             os.environ.get("TIRODHAN_NONPROD_RELEASE_AUTHORIZATION", ""),
             operation=requested,
             policy=policy,
-            config_hash=digest(configuration()),
+            config_hash=digest(config),
             code_hash=contract_digest(),
             commit=commit,
             run_id=os.environ.get("TIRODHAN_OPERATOR_RUN_ID")
             or os.environ.get("GITHUB_RUN_ID", ""),
         )
+        if requested in {"apim-plan", "apim-apply"} and os.environ.get("GITHUB_ACTIONS") == "true":
+            from tirodhan.deployment.apim_lifecycle import validate_dispatch
+
+            validate_dispatch(config["terraform"], os.environ.get("TIRODHAN_APIM_OPERATION"))
         validate_scheduled_context(authorization)
         return authorization
     except AdmissionDenied:

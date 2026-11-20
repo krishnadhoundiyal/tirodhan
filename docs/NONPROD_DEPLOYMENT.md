@@ -62,9 +62,43 @@ process allows 190 minutes for Terraform, including the AzureRM provider's
 three-hour create timeout and time to persist state and release the lease.
 The GitHub apply job allows 240 minutes, including setup and verification.
 
+If Azure reports the original Consumption gateway as `Stopped`, the existing
+APIM workflow also supports an explicitly signed `apim_pilot_enabled=true` input.
+It creates only `<resource-group>-apim-pilot` and its separate
+`apim_pilot_gateway_url` output. Admission verifies the original is still tracked
+and stopped and the pilot is absent. Planning uses the locked state without
+refreshing application workloads. The plan and apply gates require a single
+pilot create and preserve the existing resource IDs and outputs. Keep the input
+enabled while the pilot is managed. Verify the default hostname resolves and
+responds over HTTPS before using it for policy setup.
+
 The `apim_gateway_url` output identifies the gateway provisioned without
 application routes. Review the runtime plan against the existing resources and
 stop if changes extend beyond the approved release.
+
+For the initial web-session configuration of the existing gateway, retain the
+same manual **NONPROD API Management** workflow and choose `configure`. Use the
+usual `apim-release` signing flow with `apim_pilot_enabled=false` and the reviewed
+`apim_web_session` object in the signed NONPROD inputs. Keep the object in the
+authoritative inputs for subsequent releases. The planning job uploads the same
+`apim-plan` artifact. Apply still requires the separate `apim-apply` signature over
+that saved artifact and approval of the protected `nonprod` job.
+
+Before dispatch, verify the exact Key Vault secret and reviewed frontend policy,
+and enroll the API, operation, policy, and named-value write permissions on the
+original APIM. The release identity also needs permission to grant Key Vault
+Secrets User at the selected secret scope. Teardown needs the corresponding
+delete permissions.
+
+After an interrupted configuration apply with the system-assigned identity
+already recorded in Terraform state, retain the original reviewed session inputs,
+set `apim_session_reconcile=true`, and sign a new release session. Choose
+`reconcile` and obtain a new saved-plan signature and protected approval. The
+workflow compares the tracked identity and child IDs with Azure and permits only
+creation of the missing approved children. Its live check blocks if Azure has a
+resource whose write was never recorded in Terraform state or if a tracked
+resource is missing. Inspect and reconcile that discrepancy before retrying.
+Clear the reconciliation input after completion and retain the session inputs.
 
 Protected teardown verifies the exact active gateway is absent and reports any
 soft-deleted name reservation. Azure retains a soft-deleted gateway for up to 48
