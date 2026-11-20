@@ -108,6 +108,7 @@ variable "runtime_secret_names" {
     TIRODHAN_FCM_CREDENTIALS_JSON             = "fcm-credentials-json"
     TIRODHAN_AUTH_JWT_PRIVATE_KEY_PEM         = "auth-jwt-private-key-pem"
     TIRODHAN_AUTH_JWT_PUBLIC_KEY_PEM          = "auth-jwt-public-key-pem"
+    TIRODHAN_GATEWAY_SECRET                   = "gateway-secret"
     TIRODHAN_PHONE_ENCRYPTION_KEYS            = "phone-encryption-keys"
     TIRODHAN_PHONE_LOOKUP_HMAC_KEY            = "phone-lookup-hmac-key"
     TIRODHAN_ADDRESS_ENCRYPTION_KEYS          = "address-encryption-keys"

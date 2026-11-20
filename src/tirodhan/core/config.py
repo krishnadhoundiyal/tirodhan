@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -145,6 +147,52 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    def api_gateway_secret(self) -> bytes | None:
+        """Validate API invocation configuration without imposing it on local workers."""
+        if self.gateway_secret is None:
+            if self.environment in ("nonprod", "prod"):
+                raise ValueError("TIRODHAN_GATEWAY_SECRET is required for the deployed API")
+            return None
+        value = self.gateway_secret.get_secret_value()
+        if (
+            not value
+            or any(not 33 <= ord(character) <= 126 for character in value)
+            or (self.environment in ("nonprod", "prod") and len(value) < 32)
+        ):
+            raise ValueError(
+                "TIRODHAN_GATEWAY_SECRET must be a nonblank printable ASCII token; "
+                "deployed APIs require at least 32 random characters"
+            )
+        return value.encode("ascii")
+
+    def validate_api_cors_origins(self) -> None:
+        if "*" in self.cors_allowed_origins:
+            raise ValueError("CORS wildcard '*' is forbidden when credentials are enabled")
+        for value in self.cors_allowed_origins:
+            try:
+                origin = urlsplit(value)
+                valid = (
+                    value.isascii()
+                    and not any(character.isspace() for character in value)
+                    and origin.scheme == "https"
+                    and origin.hostname is not None
+                    and origin.username is None
+                    and origin.password is None
+                    and not origin.path
+                    and not origin.query
+                    and not origin.fragment
+                    and value == f"https://{origin.netloc}"
+                    and (origin.port is None or origin.port > 0)
+                    and all(
+                        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+                        for label in origin.hostname.split(".")
+                    )
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ValueError("CORS entries must be explicit HTTPS origins with DNS hostnames")
 
     @field_validator("database_url")
     @classmethod

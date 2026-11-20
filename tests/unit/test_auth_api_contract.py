@@ -10,6 +10,7 @@ from pydantic import SecretStr, ValidationError
 
 from tirodhan.api.dependencies import (
     get_access_token_codec,
+    get_otp_provider,
     get_session_factory,
 )
 from tirodhan.api.routes.auth import (
@@ -19,7 +20,8 @@ from tirodhan.api.routes.auth import (
     router,
 )
 from tirodhan.core.config import Settings
-from tirodhan.modules.identity.service import AccessCredentials
+from tirodhan.main import create_app
+from tirodhan.modules.identity.service import AccessCredentials, LoginCredentials
 
 
 def test_refresh_request_validation() -> None:
@@ -149,3 +151,78 @@ async def test_auth_routes_strictly_enforce_json_contract(monkeypatch: pytest.Mo
             mock_session_factory,
             raw_refresh_credential="valid.token",
         )
+
+
+@pytest.mark.asyncio
+async def test_gateway_forwarded_auth_remains_json_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "synthetic-gateway-token-" + "x" * 32
+    app = create_app(
+        Settings(
+            _env_file=None,
+            environment="nonprod",
+            gateway_secret=secret,
+            auth_access_token_ttl_seconds=900,
+            auth_refresh_session_ttl_seconds=2592000,
+            command_idempotency_ttl_seconds=86400,
+        )
+    )
+    factory, codec, provider = AsyncMock(), AsyncMock(), AsyncMock()
+    codec.configured = True
+    app.dependency_overrides[get_session_factory] = lambda: factory
+    app.dependency_overrides[get_access_token_codec] = lambda: codec
+    app.dependency_overrides[get_otp_provider] = lambda: provider
+    credentials = LoginCredentials(
+        user_id=uuid4(),
+        refresh_session_id=uuid4(),
+        access_token=SecretStr("synthetic.access"),
+        refresh_token=SecretStr("synthetic.refresh"),
+        expires_in=900,
+    )
+    login = AsyncMock(return_value=credentials)
+    refresh = AsyncMock(
+        return_value=AccessCredentials(
+            user_id=credentials.user_id,
+            refresh_session_id=credentials.refresh_session_id,
+            access_token=credentials.access_token,
+            expires_in=900,
+        )
+    )
+    logout = AsyncMock()
+    monkeypatch.setattr("tirodhan.api.routes.auth.verify_otp_and_login", login)
+    monkeypatch.setattr("tirodhan.api.routes.auth.refresh_access_token", refresh)
+    monkeypatch.setattr("tirodhan.api.routes.auth.logout_refresh_session", logout)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as client:
+        headers = {"X-Gateway-Secret": secret, "Cookie": "__Host-customer_refresh=other-session"}
+        response = await client.post(
+            "/v1/auth/otp/verify",
+            headers=headers,
+            json={
+                "client_login_id": str(uuid4()),
+                "challenge_reference": str(uuid4()),
+                "code": "123456",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["refresh_token"] == "synthetic.refresh"
+        assert "set-cookie" not in response.headers
+        for path in ("/v1/auth/refresh", "/v1/auth/logout"):
+            response = await client.post(path, headers=headers, json={})
+            assert response.status_code == 422  # A browser cookie cannot replace the JSON contract.
+            assert "set-cookie" not in response.headers
+        refresh.assert_not_called()
+        logout.assert_not_called()
+        response = await client.post(
+            "/v1/auth/refresh", headers=headers, json={"refresh_token": "synthetic.refresh"}
+        )
+        assert response.status_code == 200
+        assert "refresh_token" not in response.json()
+        assert "set-cookie" not in response.headers
+        assert refresh.call_args.kwargs["raw_refresh_credential"] == "synthetic.refresh"
+        for _ in range(2):
+            response = await client.post(
+                "/v1/auth/logout", headers=headers, json={"refresh_token": "synthetic.refresh"}
+            )
+            assert response.status_code == 204
+            assert "set-cookie" not in response.headers
+        assert logout.await_count == 2
+        assert logout.call_args.kwargs["raw_refresh_credential"] == "synthetic.refresh"

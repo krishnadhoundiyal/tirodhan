@@ -58,6 +58,7 @@ def test_keyvault_refs_and_feature_settings_are_allowlisted() -> None:
     }
     assert all(names[key] == value for key, value in refs.items())
     assert names["TIRODHAN_TWOFACTOR_API_KEY"] == "twofactor-api-key"
+    assert names["TIRODHAN_GATEWAY_SECRET"] == "gateway-secret"
     assert set(refs.values()) == seed_secrets.CUSTOMER_SECRET_NAMES
     available = (ROOT / "deploy/runtime-env.names").read_text().splitlines()
     assert "TIRODHAN_CUSTOMER_DATA_ACTIVE_KEY_ID" in available
@@ -65,6 +66,8 @@ def test_keyvault_refs_and_feature_settings_are_allowlisted() -> None:
     assert "TIRODHAN_CUSTOMER_WEB_PUSH_ENABLED" in available
     assert "TIRODHAN_CUSTOMER_CURSOR_SIGNING_KEY" not in available
     assert "TIRODHAN_TWOFACTOR_API_KEY" not in available
+    assert "TIRODHAN_GATEWAY_SECRET" not in available
+    assert "TIRODHAN_CORS_ALLOWED_ORIGINS" in available
     assert {
         "TIRODHAN_OTP_PROVIDER",
         "TIRODHAN_TWOFACTOR_HTTP_TIMEOUT_SECONDS",
@@ -79,7 +82,9 @@ def test_approved_credential_batches_are_complete() -> None:
     current = seed_secrets.TWOFACTOR_SECRET_NAMES
     assert "kaleyra-api-key" not in current
     assert "twofactor-api-key" in current
-    assert seed_secrets.SECRET_NAMES == legacy | current | customer
+    assert (
+        seed_secrets.SECRET_NAMES == legacy | current | customer | seed_secrets.GATEWAY_SECRET_NAMES
+    )
     for batch in (
         legacy,
         seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
@@ -91,6 +96,7 @@ def test_approved_credential_batches_are_complete() -> None:
         current | seed_secrets.CUSTOMER_DATA_SECRET_NAMES,
         current | customer,
         {"twofactor-api-key"},
+        {"gateway-secret"},
     ):
         assert seed_secrets.approved_secret_batch(set(batch))
     assert not seed_secrets.approved_secret_batch({"customer-data-hmac-key"})

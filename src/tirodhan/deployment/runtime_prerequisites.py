@@ -85,6 +85,8 @@ def validate_runtime_material(runtime: dict[str, Any], material: dict[str, str])
     from tirodhan.modules.payments.razorpay import razorpay_configured
 
     settings = proposed_settings(runtime, material)
+    settings.model_copy(update={"environment": "nonprod"}).api_gateway_secret()
+    settings.validate_api_cors_origins()
     validate_otp_settings(settings)
     if settings.google_maps_api_key is None or settings.google_maps_http_timeout_seconds is None:
         raise ValueError("Google Geocoding configuration is incomplete")

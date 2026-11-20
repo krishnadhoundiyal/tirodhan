@@ -73,21 +73,20 @@ logger = logging.getLogger(__name__)
 class GatewaySecretMiddleware:
     def __init__(self, app: ASGIApp, settings: Settings) -> None:
         self.app = app
-        self.settings = settings
+        self.expected_secret = settings.api_gateway_secret()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and self.settings.gateway_secret is not None:
-            method = scope.get("method", "")
+        if scope["type"] == "http" and self.expected_secret is not None:
             path = scope.get("path", "")
-            if method != "OPTIONS" and path not in (
+            if path not in (
                 "/health",
                 "/ready",
                 "/v1/payments/provider/webhook",
             ):
-                headers = dict(scope.get("headers", []))
-                header_bytes = headers.get(b"x-gateway-secret", b"")
-                expected_bytes = self.settings.gateway_secret.get_secret_value().encode("utf-8")
-                if not header_bytes or not hmac.compare_digest(header_bytes, expected_bytes):
+                secrets = [
+                    value for name, value in scope.get("headers", []) if name == b"x-gateway-secret"
+                ]
+                if len(secrets) != 1 or not hmac.compare_digest(secrets[0], self.expected_secret):
                     response = JSONResponse(
                         status_code=403,
                         content={"error": {"code": "DIRECT_ACCESS_FORBIDDEN"}},
@@ -119,6 +118,9 @@ def create_app(
     product_media: ProductMediaPort | None = None,
 ) -> FastAPI:
     application_settings = settings or get_settings()
+    # Validate before constructing any runtime: ASGI middleware is otherwise built lazily.
+    application_settings.api_gateway_secret()
+    application_settings.validate_api_cors_origins()
     if payment_provider is None:
         razorpay_configured(application_settings)
     configure_logging(
@@ -200,8 +202,6 @@ def create_app(
     application.add_middleware(GatewaySecretMiddleware, settings=application_settings)
 
     if application_settings.cors_allowed_origins:
-        if "*" in application_settings.cors_allowed_origins:
-            raise ValueError("CORS wildcard '*' is forbidden when credentials are enabled")
         application.add_middleware(
             CORSMiddleware,
             allow_origins=application_settings.cors_allowed_origins,
@@ -215,8 +215,6 @@ def create_app(
                 "Idempotency-Key",
                 "X-Client-Request-Id",
                 "X-Client-Login-Id",
-                "X-Auth-Mode",
-                "X-Gateway-Secret",
             ],
             max_age=86400,
         )

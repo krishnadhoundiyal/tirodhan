@@ -701,6 +701,7 @@ class Checks:
             else:
                 raise AdmissionDenied("OTP_PROVIDER_NOT_SELECTED")
             required |= {
+                "gateway-secret",
                 "google-maps-api-key",
                 "razorpay-key-secret",
                 "razorpay-webhook-secret",
