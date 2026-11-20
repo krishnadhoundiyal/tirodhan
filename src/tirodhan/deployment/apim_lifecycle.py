@@ -150,6 +150,7 @@ def recovery_children_match(
     for address in sorted(children):
         tracked_id = state.resources.get(address, "").casefold()
         resource_type = address.removeprefix(SESSION_MODULE).split(".", 1)[0]
+        allowed_ids: tuple[str, ...]
         if address == SESSION_ROLE:
             allowed_ids = (
                 f"{secret_scope}/providers/microsoft.authorization/roleassignments/{role_name}",
