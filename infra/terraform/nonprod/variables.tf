@@ -24,6 +24,16 @@ variable "apim_pilot_enabled" {
   type        = bool
   default     = false
 }
+variable "apim_session_reconcile" {
+  description = "Explicit signed authorization to complete an interrupted APIM web session configuration."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.apim_session_reconcile || var.apim_web_session != null
+    error_message = "An APIM session reconciliation requires the reviewed session configuration."
+  }
+}
 variable "apim_web_session" {
   description = "Reviewed configuration for the existing NONPROD APIM gateway. Supplied only by its configuration release."
   type = object({

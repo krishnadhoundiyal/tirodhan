@@ -8,8 +8,9 @@ import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid5
 
-from tirodhan.deployment.check_destroy_plan import approved_apim_child_id
+from tirodhan.deployment.check_destroy_plan import apim_child_state_ids, approved_apim_child_id
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_evidence import (
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 ADDRESS = "azurerm_api_management.nonprod[0]"
 PILOT_ADDRESS = "azurerm_api_management.pilot[0]"
 SESSION_MODULE = "module.apim_web_session[0]."
+SESSION_ROLE = SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
 NATIVE_OPERATIONS = {"native-otp-start", "native-otp-verify", "native-refresh", "native-logout"}
 WEB_OPERATIONS = ("start", "verify", "refresh", "logout")
 API_VERSION = "2024-05-01"
@@ -41,10 +43,11 @@ class ApimPlanBlocked(AdmissionDenied):
 
 def validate_dispatch(terraform: dict[str, Any], operation: str | None) -> None:
     session = terraform.get("apim_web_session")
-    if operation == "create" and session is None:
+    reconcile = terraform.get("apim_session_reconcile") is True
+    if operation == "create" and session is None and not reconcile:
         return
     if (
-        operation == "configure"
+        operation == ("reconcile" if reconcile else "configure")
         and isinstance(session, dict)
         and terraform.get("apim_pilot_enabled") is not True
     ):
@@ -120,6 +123,51 @@ def deployed_inputs(state: BackendState) -> dict[str, Any]:
     return values
 
 
+def tracked_gateway_principal(state: BackendState) -> str | None:
+    identities = [
+        identity.get("principal_id")
+        for resource in (state.document or {}).get("resources", [])
+        if resource.get("mode") == "managed"
+        and not resource.get("module")
+        and resource.get("type") == "azurerm_api_management"
+        and resource.get("name") == "nonprod"
+        for instance in resource["instances"]
+        if instance.get("index_key") == 0
+        for identity in instance["attributes"].get("identity") or []
+        if identity.get("type") == "SystemAssigned"
+    ]
+    if len(identities) == 1 and isinstance(identities[0], str) and identities[0]:
+        return identities[0]
+    return None
+
+
+def recovery_children_match(
+    io: Observations, state: BackendState, children: set[str], principal: str
+) -> bool:
+    gateway = gateway_id(io).casefold()
+    secret_scope = f"{io.vault_id}/secrets/{io.tf['apim_web_session']['secret_name']}".casefold()
+    role_name = uuid5(NAMESPACE_URL, f"{secret_scope}/{principal.casefold()}")
+    for address in sorted(children):
+        tracked_id = state.resources.get(address, "").casefold()
+        resource_type = address.removeprefix(SESSION_MODULE).split(".", 1)[0]
+        if address == SESSION_ROLE:
+            allowed_ids = (
+                f"{secret_scope}/providers/microsoft.authorization/roleassignments/{role_name}",
+            )
+            version = "2022-04-01"
+        else:
+            allowed_ids = apim_child_state_ids(address, resource_type, gateway)
+            version = API_VERSION
+        if not allowed_ids or (tracked_id and tracked_id not in allowed_ids):
+            return False
+        for resource_id in (tracked_id,) if tracked_id else allowed_ids:
+            if resource_type == "azurerm_api_management_api_policy":
+                resource_id += "/policies/policy"
+            if (io.arm(resource_id, version) is not None) != bool(tracked_id):
+                return False
+    return True
+
+
 def check_baseline(checks: Checks) -> bool:
     if os.environ.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF or not checks.tf.get(
         "apim_publisher_email"
@@ -133,16 +181,29 @@ def check_baseline(checks: Checks) -> bool:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
         sku = original.get("sku", {})
+        identity = original.get("identity") or {}
+        expected_children = session_resource_addresses(session)
+        present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
+        if checks.tf.get("apim_session_reconcile") is True:
+            principal = tracked_gateway_principal(state)
+            known_identity = bool(
+                principal
+                and identity.get("type") == "SystemAssigned"
+                and identity.get("principalId", "").casefold() == principal.casefold()
+                and present < expected_children
+                and recovery_children_match(checks.io, state, expected_children, principal)
+            )
+        else:
+            known_identity = not present and not identity.get("principalId")
         return (
             not pilot
             and PILOT_ADDRESS not in state.resources
-            and not session_resource_addresses(session).intersection(state.resources)
+            and known_identity
             and state.resources.get(ADDRESS, "").casefold() == original_id.casefold()
             and str(original.get("id", "")).casefold() == original_id.casefold()
             and sku.get("name") == "Consumption"
             and sku.get("capacity") == 0
             and original.get("properties", {}).get("provisioningState") == "Succeeded"
-            and not (original.get("identity") or {}).get("principalId")
             and checks.permits(
                 original_id,
                 {
@@ -265,15 +326,19 @@ def session_resource_addresses(session: dict[str, Any]) -> set[str]:
 
 
 def validate_session_changes(
-    changes: list[dict[str, Any]],
+    managed: list[dict[str, Any]],
     outputs: dict[str, Any],
     state: BackendState,
     terraform: dict[str, Any],
 ) -> None:
-    """Admit only the first reviewed configuration of the existing gateway."""
+    """Admit an initial configuration or the missing children of its signed retry."""
     session = terraform["apim_web_session"]
     expected_children = session_resource_addresses(session)
-    by_address = {row["address"]: row["change"] for row in changes}
+    reconcile = terraform.get("apim_session_reconcile") is True
+    present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
+    by_address = {row["address"]: row["change"] for row in managed}
+    changed = {address for address, change in by_address.items() if change["actions"] != ["no-op"]}
+    expected_changes = expected_children - present if reconcile else expected_children | {ADDRESS}
     group = terraform["resource_group_name"]
     scope = f"/subscriptions/{terraform['subscription_id']}/resourceGroups/{group}"
     name = gateway_name(terraform)
@@ -282,9 +347,10 @@ def validate_session_changes(
         state.resources.get(ADDRESS, "").casefold() != expected_id.casefold()
         or terraform.get("apim_pilot_enabled") is True
         or PILOT_ADDRESS in state.resources
-        or expected_children.intersection(state.resources)
-        or len(by_address) != len(changes)
-        or set(by_address) != expected_children | {ADDRESS}
+        or (not present < expected_children if reconcile else bool(present))
+        or len(by_address) != len(managed)
+        or not (expected_children | {ADDRESS}).issubset(by_address)
+        or changed != expected_changes
         or any(row["actions"] != ["no-op"] for row in outputs.values())
     ):
         raise ApimPlanBlocked("APIM_SESSION_PLAN_SCOPE_MISMATCH")
@@ -293,11 +359,9 @@ def validate_session_changes(
     before, after = gateway.get("before"), gateway.get("after")
     unknown = gateway.get("after_unknown", {})
     if (
-        gateway["actions"] != ["update"]
-        or not isinstance(before, dict)
+        not isinstance(before, dict)
         or not isinstance(after, dict)
         or before.get("id", "").casefold() != expected_id.casefold()
-        or before.get("identity") not in (None, [])
         or [{"type": entry.get("type")} for entry in after.get("identity", [])]
         != [{"type": "SystemAssigned"}]
         or any(value for key, value in unknown.items() if key != "identity")
@@ -305,27 +369,37 @@ def validate_session_changes(
         != {key: value for key, value in after.items() if key != "identity"}
     ):
         raise ApimPlanBlocked("APIM_SESSION_GATEWAY_UPDATE_MISMATCH")
+    principal = tracked_gateway_principal(state)
+    if reconcile:
+        if (
+            not principal
+            or after["identity"][0].get("principal_id") != principal
+            or before != after
+        ):
+            raise ApimPlanBlocked("APIM_SESSION_GATEWAY_UPDATE_MISMATCH")
+    elif before.get("identity") not in (None, []) or gateway["actions"] != ["update"]:
+        raise ApimPlanBlocked("APIM_SESSION_GATEWAY_UPDATE_MISMATCH")
 
     for address in expected_children:
         change = by_address[address]
         after = change.get("after")
-        if (
-            change["actions"] != ["create"]
-            or change.get("before") is not None
-            or not isinstance(after, dict)
-            or (
-                address != SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
-                and (
-                    after.get("api_management_name") != name
-                    or after.get("resource_group_name") != group
-                )
+        if not isinstance(after, dict) or (
+            address != SESSION_ROLE
+            and (
+                after.get("api_management_name") != name
+                or after.get("resource_group_name") != group
             )
         ):
+            raise ApimPlanBlocked("APIM_SESSION_CHILD_CREATE_MISMATCH")
+        if address in present:
+            if change.get("before") != after or after.get("id") != state.resources[address]:
+                raise ApimPlanBlocked("APIM_SESSION_CHILD_IDENTITY_MISMATCH")
+        elif change["actions"] != ["create"] or change.get("before") is not None:
             raise ApimPlanBlocked("APIM_SESSION_CHILD_CREATE_MISMATCH")
 
     vault_name = f"td-np-{terraform['suffix']}-kv"
     secret = session["secret_name"]
-    assignment = by_address[SESSION_MODULE + "azurerm_role_assignment.gateway_secret"]
+    assignment = by_address[SESSION_ROLE]
     named_value = by_address[SESSION_MODULE + "azurerm_api_management_named_value.gateway_secret"]
     policy = by_address[SESSION_MODULE + "azurerm_api_management_api_policy.web"]
     vault_refs = named_value["after"].get("value_from_key_vault") or []
@@ -333,6 +407,7 @@ def validate_session_changes(
         assignment["after"].get("scope", "").casefold()
         != f"{scope}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets/{secret}".casefold()
         or assignment["after"].get("role_definition_name") != "Key Vault Secrets User"
+        or (reconcile and assignment["after"].get("principal_id") != principal)
         or named_value["after"].get("secret") is not True
         or named_value["after"].get("value") not in (None, "")
         or len(vault_refs) != 1
@@ -379,7 +454,7 @@ def validate_apim_plan(
         raise ApimPlanBlocked("APIM_PLAN_NOT_ADDITIVE")
     outputs = plan.get("output_changes", {})
     if terraform.get("apim_web_session") is not None:
-        validate_session_changes(changes, outputs, state, terraform)
+        validate_session_changes(managed, outputs, state, terraform)
         return
     if len(changes) != 1:
         raise ApimPlanBlocked("APIM_PLAN_NOT_ADDITIVE")
@@ -656,15 +731,16 @@ def verify_sessions(io: Observations, before: BackendState) -> None:
     if (
         not role_id.casefold().startswith(assignment_prefix.casefold())
         or role.get("properties", {}).get("principalId") != identity["principalId"]
-        or any(
-            not approved_apim_child_id(
-                address,
-                address.removeprefix(SESSION_MODULE).split(".", 1)[0],
-                after.resources[address].casefold(),
-                gateway.casefold(),
-            )
-            or not io.arm(after.resources[address], API_VERSION)
-            for address in children - {role_address}
-        )
     ):
         raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")
+    for address in sorted(children - {role_address}):
+        resource_type = address.removeprefix(SESSION_MODULE).split(".", 1)[0]
+        resource_id = after.resources[address]
+        if not approved_apim_child_id(
+            address, resource_type, resource_id.casefold(), gateway.casefold()
+        ):
+            raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")
+        if resource_type == "azurerm_api_management_api_policy":
+            resource_id += "/policies/policy"
+        if not io.arm(resource_id, API_VERSION):
+            raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")

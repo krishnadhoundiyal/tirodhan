@@ -98,6 +98,25 @@ def test_destroy_guard_limits_apim_session_children_to_original_gateway() -> Non
         _validate(plan)
 
 
+@pytest.mark.parametrize(
+    ("component", "api_name"),
+    [("web", "tirodhan-web-session"), ("backend", "tirodhan-backend-v1")],
+)
+def test_destroy_guard_accepts_azure_rm_policy_state_id(component: str, api_name: str) -> None:
+    plan = _plan("azurerm_api_management_api_policy")
+    row = plan["resource_changes"][0]
+    row["address"] = f"module.apim_web_session[0].azurerm_api_management_api_policy.{component}"
+    prefix = (
+        f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}"
+        f"/providers/Microsoft.ApiManagement/service/{RESOURCE_GROUP}-apim/apis/"
+    )
+    row["change"]["before"]["id"] = prefix + api_name
+    assert _validate(plan) == 1
+    row["change"]["before"]["id"] = prefix + "other-api"
+    with pytest.raises(RuntimeError, match="unapproved NONPROD APIM child"):
+        _validate(plan)
+
+
 def test_destroy_guard_rejects_resource_group_delete() -> None:
     with pytest.raises(RuntimeError, match="unapproved resource type"):
         _validate(_plan("azurerm_resource_group"))

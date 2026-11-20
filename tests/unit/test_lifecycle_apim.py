@@ -91,7 +91,8 @@ def plan(baseline):
     }
 
 
-def test_existing_gateway_session_plan_is_scoped(baseline, plan):
+@pytest.fixture
+def session_plan(baseline, plan):
     baseline.resources[apim.ADDRESS] = GATEWAY
     session = {
         "secret_name": "gateway-secret",
@@ -135,6 +136,12 @@ def test_existing_gateway_session_plan_is_scoped(baseline, plan):
                 },
             }
         )
+    return plan, terraform
+
+
+def test_existing_gateway_session_plan_is_scoped(baseline, session_plan):
+    plan, terraform = session_plan
+    gateway = plan["resource_changes"][0]["change"]
     apim.validate_apim_plan(plan, baseline, terraform)
 
     gateway["after"]["sku_name"] = "Developer_1"
@@ -158,6 +165,68 @@ def test_existing_gateway_session_plan_is_scoped(baseline, plan):
     )
     with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
         apim.validate_apim_plan(plan, baseline, terraform)
+
+
+def test_reconcile_creates_only_missing_children_and_preserves_the_identity(baseline, session_plan):
+    plan, terraform = session_plan
+    principal = "11111111-1111-1111-1111-111111111111"
+    gateway = plan["resource_changes"][0]["change"]
+    gateway["after"]["identity"][0]["principal_id"] = principal
+    gateway["before"] = deepcopy(gateway["after"])
+    gateway["actions"] = ["no-op"]
+    baseline.document["resources"].append(
+        {
+            "mode": "managed",
+            "type": "azurerm_api_management",
+            "name": "nonprod",
+            "instances": [{"index_key": 0, "attributes": gateway["before"]}],
+        }
+    )
+    assignment = next(
+        row["change"] for row in plan["resource_changes"] if row["address"] == apim.SESSION_ROLE
+    )
+    assignment["after"]["principal_id"] = principal
+    api_address = apim.SESSION_MODULE + "azurerm_api_management_api.web"
+    existing_api = next(
+        row["change"] for row in plan["resource_changes"] if row["address"] == api_address
+    )
+    existing_api["after"]["id"] = GATEWAY + "/apis/tirodhan-web-session;rev=1"
+    existing_api["before"] = deepcopy(existing_api["after"])
+    existing_api["actions"] = ["no-op"]
+    baseline.resources[api_address] = existing_api["after"]["id"]
+
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+    plan["variables"]["apim_session_reconcile"] = {"value": True}
+    terraform = terraform | {"apim_session_reconcile": True}
+    apim.validate_apim_plan(plan, baseline, terraform)
+
+    existing_api["actions"] = ["delete", "create"]
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_PLAN_SCOPE_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
+@pytest.mark.parametrize(
+    ("component", "api_name"),
+    [("web", "tirodhan-web-session"), ("backend", "tirodhan-backend-v1")],
+)
+def test_recovery_reads_policy_endpoint_and_rejects_unrecorded_write(baseline, component, api_name):
+    address = apim.SESSION_MODULE + f"azurerm_api_management_api_policy.{component}"
+    state_id = f"{GATEWAY}/apis/{api_name}".casefold()
+    policy_id = state_id + "/policies/policy"
+    live = {policy_id: {"id": policy_id}}
+    io = SimpleNamespace(
+        tf=TF | {"apim_web_session": {"secret_name": "gateway-secret"}},
+        scope=SCOPE,
+        vault_id=SCOPE + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv",
+        arm=lambda resource_id, version: live.get(resource_id),
+    )
+    principal = "11111111-1111-1111-1111-111111111111"
+    assert not apim.recovery_children_match(io, baseline, {address}, principal)
+    baseline.resources[address] = state_id
+    assert apim.recovery_children_match(io, baseline, {address}, principal)
+    del live[policy_id]
+    assert not apim.recovery_children_match(io, baseline, {address}, principal)
 
 
 @pytest.mark.parametrize(
@@ -583,7 +652,7 @@ def test_gateway_workflow_and_signing_are_isolated():
     workflow = yaml.safe_load(Path(".github/workflows/nonprod-apim.yml").read_text())
     assert set(workflow[True]) == {"workflow_dispatch"}
     dispatch = workflow[True]["workflow_dispatch"]["inputs"]["operation"]
-    assert dispatch["options"] == ["create", "configure"]
+    assert dispatch["options"] == ["create", "configure", "reconcile"]
     assert dispatch["default"] == "create"
     assert workflow["env"]["TIRODHAN_APIM_OPERATION"] == "${{ inputs.operation }}"
     assert workflow["concurrency"] == {"group": "nonprod-release", "cancel-in-progress": False}
@@ -615,6 +684,9 @@ def test_gateway_workflow_and_signing_are_isolated():
         ("configure", {}, False),
         ("create", {"apim_web_session": {}}, False),
         ("configure", {"apim_web_session": {}, "apim_pilot_enabled": True}, False),
+        ("reconcile", {"apim_web_session": {}, "apim_session_reconcile": True}, True),
+        ("reconcile", {"apim_web_session": {}}, False),
+        ("configure", {"apim_web_session": {}, "apim_session_reconcile": True}, False),
         (None, {}, False),
     ],
 )

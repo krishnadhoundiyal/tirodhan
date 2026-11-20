@@ -3,13 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Create a gateway or configure web sessions on the existing gateway
+        description: Create, configure, or reconcile the NONPROD gateway
         type: choice
         required: true
         default: create
         options:
           - create
           - configure
+          - reconcile
       authorization_id:
         description: Explicit signed APIM release session ID
         required: true

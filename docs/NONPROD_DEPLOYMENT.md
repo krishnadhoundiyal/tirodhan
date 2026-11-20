@@ -88,8 +88,17 @@ Before dispatch, verify the exact Key Vault secret and reviewed frontend policy,
 and enroll the API, operation, policy, and named-value write permissions on the
 original APIM. The release identity also needs permission to grant Key Vault
 Secrets User at the selected secret scope. Teardown needs the corresponding
-delete permissions. After an interrupted configuration apply, inspect the live
-identity, child resources and Terraform state before issuing another operation.
+delete permissions.
+
+After an interrupted configuration apply with the system-assigned identity
+already recorded in Terraform state, retain the original reviewed session inputs,
+set `apim_session_reconcile=true`, and sign a new release session. Choose
+`reconcile` and obtain a new saved-plan signature and protected approval. The
+workflow compares the tracked identity and child IDs with Azure and permits only
+creation of the missing approved children. Its live check blocks if Azure has a
+resource whose write was never recorded in Terraform state or if a tracked
+resource is missing. Inspect and reconcile that discrepancy before retrying.
+Clear the reconciliation input after completion and retain the session inputs.
 
 Protected teardown verifies the exact active gateway is absent and reports any
 soft-deleted name reservation. Azure retains a soft-deleted gateway for up to 48

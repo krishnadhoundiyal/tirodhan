@@ -27,6 +27,7 @@ locals {
 }
 
 resource "azurerm_role_assignment" "gateway_secret" {
+  name                 = uuidv5("url", "${lower(var.vault_resource_id)}/secrets/${lower(var.secret_name)}/${lower(var.gateway_principal_id)}")
   scope                = "${var.vault_resource_id}/secrets/${var.secret_name}"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = var.gateway_principal_id

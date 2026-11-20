@@ -18,6 +18,7 @@ def main() -> None:
         "location",
         "apim_publisher_email",
         "apim_pilot_enabled",
+        "apim_session_reconcile",
         "apim_web_session",
         "resource_group_name",
         "suffix",
@@ -43,6 +44,8 @@ def main() -> None:
         )
     if type(values.get("apim_pilot_enabled", False)) is not bool:
         raise RuntimeError("apim_pilot_enabled must be a JSON boolean")
+    if type(values.get("apim_session_reconcile", False)) is not bool:
+        raise RuntimeError("apim_session_reconcile must be a JSON boolean")
     if values.get("apim_web_session") is not None and not isinstance(
         values["apim_web_session"], dict
     ):

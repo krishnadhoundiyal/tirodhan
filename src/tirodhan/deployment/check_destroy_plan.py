@@ -40,28 +40,29 @@ APIM_CHILD_TYPES = {
 def approved_apim_child_id(
     address: str, resource_type: str, resource_id: str, gateway: str
 ) -> bool:
+    return resource_id in apim_child_state_ids(address, resource_type, gateway)
+
+
+def apim_child_state_ids(address: str, resource_type: str, gateway: str) -> tuple[str, ...]:
     match = re.fullmatch(
         rf"module\.apim_web_session\[0\]\.{resource_type}\.(web|backend|gateway_secret)"
         r'(?:\["([a-z][a-z0-9-]{0,70})"\])?',
         address,
     )
     if not match:
-        return False
+        return ()
     component, operation = match.groups()
     if resource_type == "azurerm_api_management_named_value":
-        return (
-            component == "gateway_secret"
-            and operation is None
-            and resource_id == gateway + "/namedvalues/gateway-secret"
-        )
+        if component == "gateway_secret" and operation is None:
+            return (gateway + "/namedvalues/gateway-secret",)
+        return ()
     api = {"web": "tirodhan-web-session", "backend": "tirodhan-backend-v1"}.get(component)
     if api is None or (operation is not None) != (resource_type.endswith("_operation")):
-        return False
+        return ()
     api_id = gateway + "/apis/" + api
     suffix = f"/operations/{operation}" if operation is not None else ""
-    if resource_type == "azurerm_api_management_api_policy":
-        suffix = "/policies/policy"
-    return resource_id in {api_id + suffix, api_id + ";rev=1" + suffix}
+    # AzureRM 5.8.0 stores API policy state at the owning API resource ID.
+    return (api_id + suffix, api_id + ";rev=1" + suffix)
 
 
 def _strings(value: Any) -> Iterable[str]:
