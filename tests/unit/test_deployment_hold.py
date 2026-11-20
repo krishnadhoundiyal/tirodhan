@@ -21,6 +21,7 @@ import yaml
         "bootstrap_database",
         "seed_secrets",
         "seed_ghcr_pull_pat",
+        "seed_gateway_secret",
         "rotate_log_sas",
     ],
 )

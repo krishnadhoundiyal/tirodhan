@@ -327,6 +327,17 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             from tirodhan.deployment.apim_lifecycle import validate_dispatch
 
             validate_dispatch(config["terraform"], os.environ.get("TIRODHAN_APIM_OPERATION"))
+        if requested == "seed-secrets" and os.environ.get("GITHUB_ACTIONS") == "true":
+            selected = os.environ.get("TIRODHAN_NONPROD_SEED_TARGET")
+            binding = authorization.claims.get("bindings", {}).get(requested, {})
+            workflow = "krishnadhoundiyal/tirodhan/.github/workflows/seed-ghcr-pull-pat.yml"
+            if (
+                os.environ.get("GITHUB_WORKFLOW_REF") != f"{workflow}@refs/heads/main"
+                or selected not in {"ghcr-pull-pat", "gateway-secret"}
+                or binding.get("secret_names") != [selected]
+                or binding.get("execution_environment") != "nonprod"
+            ):
+                raise AdmissionDenied("SEED_WORKFLOW_TARGET_MISMATCH")
         validate_scheduled_context(authorization)
         return authorization
     except AdmissionDenied:

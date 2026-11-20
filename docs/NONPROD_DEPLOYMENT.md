@@ -223,6 +223,16 @@ The FCM certificate has its own exact single-secret seed batch; it never require
 the existing GHCR PAT or other application credentials. Secret enrollment retains signed
 admission, complete prerequisites and the deployment hold.
 
+For the first browser-session release, use the manual **Seed NONPROD Key Vault
+credential** workflow with `secret_name=gateway-secret`. Capture `seed-workflow`
+authorization with `--secret-name gateway-secret` on reviewed main, sign the
+request locally, and approve the protected `nonprod` job. The workflow identity
+generates the value in memory, writes it after vault metadata confirms the name
+is absent, and verifies enabled metadata after creation. An existing
+usable secret is preserved on replay. A disabled or expired secret requires
+operator review. Serialize operator writes with the protected `nonprod-release`
+workflow and inspect metadata before retrying an uncertain outcome.
+
 The default pooled API/workers and planning/outbox jobs also require their explicit startup
 pool, batch, timeout, renewal and planning settings. Missing values block runtime admission;
 no synthetic runtime defaults are supplied. The core secret batch is not proof of full

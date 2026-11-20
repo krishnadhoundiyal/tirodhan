@@ -484,7 +484,7 @@ def validated_request(
             or any(not isinstance(name, str) for name in names)
             or names != sorted(set(names))
             or not (approved_secret_batch(set(names)) or names == ["ghcr-pull-pat"])
-            or (kind == "seed-workflow" and names != ["ghcr-pull-pat"])
+            or (kind == "seed-workflow" and names not in (["ghcr-pull-pat"], ["gateway-secret"]))
         ):
             raise AdmissionDenied("ISSUANCE_SECRET_BATCH_NOT_SUPPORTED")
         bindings["seed-secrets"]["secret_names"] = names
