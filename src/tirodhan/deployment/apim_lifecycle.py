@@ -281,8 +281,8 @@ def check_baseline(checks: Checks) -> bool:
     )
 
 
-def empty_container_command_refresh(row: dict[str, Any], state: BackendState) -> bool:
-    """Recognize AzureRM 5.8.0's serialization of omitted command lists."""
+def expected_provider_refresh(row: dict[str, Any], state: BackendState) -> bool:
+    """Recognize AzureRM 5.8.0's serialization of specific omitted lists."""
     address = row.get("address")
     if (
         not isinstance(address, str)
@@ -295,15 +295,7 @@ def empty_container_command_refresh(row: dict[str, Any], state: BackendState) ->
         return False
 
     block = address.split("[", 1)[0]
-    if (
-        block
-        not in (
-            "azurerm_container_app.api",
-            "azurerm_container_app.worker",
-            "azurerm_container_app_job.scheduled",
-        )
-        or row.get("type") != block.split(".", 1)[0]
-    ):
+    if row.get("type") != block.split(".", 1)[0]:
         return False
 
     change = row.get("change")
@@ -320,6 +312,20 @@ def empty_container_command_refresh(row: dict[str, Any], state: BackendState) ->
         not isinstance(before, dict)
         or not isinstance(after, dict)
         or before.get("id") != state.resources[address]
+    ):
+        return False
+
+    if address == ADDRESS:
+        return (
+            before.get("sku_name") == "Consumption_0"
+            and "zones" in before
+            and before["zones"] is None
+            and (before | {"zones": []}) == after
+        )
+    if block not in (
+        "azurerm_container_app.api",
+        "azurerm_container_app.worker",
+        "azurerm_container_app_job.scheduled",
     ):
         return False
 
@@ -483,8 +489,7 @@ def validate_apim_plan(
         raise ApimPlanBlocked("APIM_PLAN_INCOMPLETE")
     drift = plan.get("resource_drift", [])
     if not isinstance(drift, list) or any(
-        not isinstance(row, dict) or not empty_container_command_refresh(row, state)
-        for row in drift
+        not isinstance(row, dict) or not expected_provider_refresh(row, state) for row in drift
     ):
         raise ApimPlanBlocked("APIM_PLAN_RESOURCE_DRIFT")
     if populated_key_paths(plan):
