@@ -7,6 +7,7 @@ import hcl2
 import pytest
 from lifecycle_fakes import MemoryObservations, auth, state
 
+from tirodhan.deployment.apim_lifecycle import ADDRESS, gateway_id
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.foundation_inventory import required_addresses
 from tirodhan.deployment.lifecycle_checks import Checks
@@ -193,6 +194,58 @@ def test_apim_preflight_classifies_deleted_service_errors_through_arm(monkeypatc
     else:
         with pytest.raises(ObservationError, match="^AuthorizationFailed$"):
             checks.check_apim_preflight()
+
+
+@pytest.mark.parametrize("operation", ["apim-plan", "apim-apply"])
+@pytest.mark.parametrize("reconcile", [False, True])
+def test_existing_apim_configuration_does_not_check_creation_tombstone(
+    monkeypatch, operation, reconcile
+):
+    io = MemoryObservations()
+    io.config["terraform"].update(
+        apim_publisher_email="publisher@example.invalid",
+        apim_web_session={"secret_name": "gateway-secret"},
+        apim_session_reconcile=reconcile,
+    )
+    checks = Checks(auth(operation), io.config, {}, io)
+    monkeypatch.setattr(checks, "check_providers", lambda: True)
+    monkeypatch.setattr(checks, "permits", lambda scope, actions: scope == io.scope)
+    monkeypatch.setattr(io, "arm", lambda *_: pytest.fail("creation tombstone was queried"))
+
+    assert checks.check_apim_preflight()
+    monkeypatch.setattr(checks, "permits", lambda *_: False)
+    assert not checks.check_apim_preflight()
+
+
+@pytest.mark.parametrize("operation", ["migration-plan", "runtime-apply"])
+@pytest.mark.parametrize(
+    ("tracked", "provisioning", "expected"),
+    [(True, "Succeeded", True), (True, "Stopped", False), (False, "Succeeded", False)],
+)
+def test_workload_release_uses_live_original_gateway_for_configured_sessions(
+    monkeypatch, operation, tracked, provisioning, expected
+):
+    io = MemoryObservations()
+    io.config["terraform"].update(
+        apim_publisher_email="publisher@example.invalid",
+        apim_web_session={"secret_name": "gateway-secret"},
+    )
+    original = gateway_id(io)
+    io.current = state({ADDRESS: original} if tracked else {})
+    checks = Checks(auth(operation), io.config, {}, io)
+    monkeypatch.setattr(checks, "check_providers", lambda: True)
+    monkeypatch.setattr(checks, "permits", lambda *_: True)
+
+    def read(resource_id, _version):
+        assert resource_id == original
+        return {
+            "id": original,
+            "sku": {"name": "Consumption", "capacity": 0},
+            "properties": {"provisioningState": provisioning},
+        }
+
+    monkeypatch.setattr(io, "arm", read)
+    assert checks.check_apim_preflight() is expected
 
 
 def test_deleted_service_error_does_not_hide_active_gateway_read_failure(monkeypatch):

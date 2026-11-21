@@ -96,6 +96,18 @@ def gateway_target(terraform: dict[str, Any]) -> tuple[bool, str, str]:
     return False, ADDRESS, "apim_gateway_url"
 
 
+def active_consumption_gateway(resource: dict[str, Any] | None, expected_id: str) -> bool:
+    if resource is None:
+        return False
+    sku = resource.get("sku", {})
+    return (
+        str(resource.get("id", "")).casefold() == expected_id.casefold()
+        and sku.get("name") == "Consumption"
+        and sku.get("capacity") == 0
+        and resource.get("properties", {}).get("provisioningState") == "Succeeded"
+    )
+
+
 def deployed_inputs(state: BackendState) -> dict[str, Any]:
     document = state.document or {}
     outputs = document.get("outputs", {})
@@ -205,7 +217,6 @@ def check_baseline(checks: Checks) -> bool:
     if session is not None:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
-        sku = original.get("sku", {})
         identity = original.get("identity") or {}
         expected_children = session_resource_addresses(session)
         present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
@@ -225,10 +236,7 @@ def check_baseline(checks: Checks) -> bool:
             and PILOT_ADDRESS not in state.resources
             and known_identity
             and state.resources.get(ADDRESS, "").casefold() == original_id.casefold()
-            and str(original.get("id", "")).casefold() == original_id.casefold()
-            and sku.get("name") == "Consumption"
-            and sku.get("capacity") == 0
-            and original.get("properties", {}).get("provisioningState") == "Succeeded"
+            and active_consumption_gateway(original, original_id)
         )
         if not original_matches:
             raise ApimPlanBlocked("APIM_ORIGINAL_GATEWAY_BASELINE_MISMATCH")
