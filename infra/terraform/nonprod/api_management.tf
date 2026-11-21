@@ -16,13 +16,23 @@ resource "azurerm_api_management" "nonprod" {
   }
 }
 
+data "azurerm_api_management" "web_session_gateway" {
+  count = var.apim_web_session == null ? 0 : 1
+
+  name                = azurerm_api_management.nonprod[0].name
+  resource_group_name = data.azurerm_resource_group.nonprod.name
+
+  # AzureRM can report a null principal while planning an in-place identity enablement.
+  depends_on = [azurerm_api_management.nonprod]
+}
+
 module "apim_web_session" {
   source = "../modules/apim-web-session"
   count  = var.apim_web_session == null ? 0 : 1
 
   resource_group_name  = data.azurerm_resource_group.nonprod.name
   gateway_name         = azurerm_api_management.nonprod[0].name
-  gateway_principal_id = azurerm_api_management.nonprod[0].identity[0].principal_id
+  gateway_principal_id = data.azurerm_api_management.web_session_gateway[0].identity[0].principal_id
   vault_resource_id    = data.azurerm_key_vault.runtime.id
   vault_uri            = data.azurerm_key_vault.runtime.vault_uri
   secret_name          = var.apim_web_session.secret_name

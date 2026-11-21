@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "sources": {
-    "api_management.tf": "a5466d864eca22355df36dbcc3e786b8c9070bea51113d7cdcbabc852db77a56",
+    "api_management.tf": "c285e77aefe37e437e0ea68668cf3330ed6a2a47338a99140da11ff55187b015",
     "backend.tf": "88ea13915879a17ebbe199d591fd565024f344112dc3d2a11e52f84567704cbd",
     "container_apps.tf": "4ffc50d4e2c4fc73a28fbc27e2b6205a3ada42ae970ea479ad5f479b120ae120",
     "container_apps_environment.tf": "32c69d5086f808b4e511ae2789a6223b613d74eb9210aa7b59f7f13033900a5d",
