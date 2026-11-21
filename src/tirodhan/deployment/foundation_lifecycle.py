@@ -14,6 +14,7 @@ from tirodhan.deployment.apim_lifecycle import API_VERSION as APIM_API_VERSION
 from tirodhan.deployment.apim_lifecycle import (
     APIM_APPLY_TIMEOUT_SECONDS,
     ApimPlanBlocked,
+    apim_prerequisite_failure,
     gateway_id,
     gateway_target,
     plan_gateway,
@@ -382,7 +383,13 @@ def main() -> None:
             apply(args.operation, args.plan)
     except ApimPlanBlocked as exc:
         raise SystemExit(f"LIFECYCLE_BLOCKED: {exc}") from None
-    except (AdmissionDenied, ValueError, OSError, KeyError, TypeError):
+    except AdmissionDenied as exc:
+        if args.operation in {"apim-plan", "apim-apply"}:
+            detail = apim_prerequisite_failure(exc)
+            if detail:
+                raise SystemExit(f"LIFECYCLE_BLOCKED: {detail}") from None
+        raise SystemExit("LIFECYCLE_BLOCKED: deployment or cleanup is not verified") from None
+    except (ValueError, OSError, KeyError, TypeError):
         raise SystemExit("LIFECYCLE_BLOCKED: deployment or cleanup is not verified") from None
 
 
