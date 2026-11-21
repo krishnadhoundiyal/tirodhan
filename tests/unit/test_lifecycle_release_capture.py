@@ -9,7 +9,46 @@ import pytest
 from test_lifecycle_release_setup import CODE, COMMIT, SESSION, SOURCE, review_evidence
 
 from tirodhan.deployment.deployment_admission import AdmissionDenied
-from tirodhan.deployment.release_capture import capture_plan_artifact, collect_review
+from tirodhan.deployment.release_capture import (
+    apim_plan_summary,
+    capture_plan_artifact,
+    collect_review,
+)
+
+
+def test_apim_plan_summary_uses_actions_and_reviewed_inputs_without_raw_plan_data():
+    address = "azurerm_api_management.nonprod[0]"
+    plan = {
+        "resource_changes": [
+            {
+                "mode": "managed",
+                "address": address,
+                "change": {"actions": ["update"], "after": {"policy": "private-plan-data"}},
+            },
+            {"mode": "managed", "address": "unrelated", "change": {"actions": ["no-op"]}},
+        ],
+        "output_changes": {"gateway_url": {"actions": ["no-op"], "after": "private-output"}},
+    }
+    web_session = {
+        "web_policy_sha256": "a" * 64,
+        "browser_origins": ["https://customer.example.invalid"],
+        "backend_hostname": "api.example.invalid",
+        "secret_name": "gateway-secret",
+        "business_operations": {"auth-me": {"method": "GET", "path": "/auth/me"}},
+    }
+    summary = apim_plan_summary(
+        plan,
+        {
+            "resource_group_name": "tirodhan-np-test01",
+            "apim_web_session": web_session | {"web_policy_xml": "private-policy-body"},
+        },
+    )
+    assert summary == {
+        "gateway": "tirodhan-np-test01-apim",
+        "managed_changes": [{"address": address, "actions": ["update"]}],
+        "output_changes": {},
+        "web_session": {key.removeprefix("web_"): value for key, value in web_session.items()},
+    }
 
 
 @pytest.mark.parametrize("kind", ["enrollment", "recovery"])
@@ -104,11 +143,16 @@ class ReviewGithub:
         if path == "commits/main":
             return {"sha": COMMIT}
         if path.startswith("pulls/") and "/reviews" in path:
-            return [self.evidence["review"]]
+            review = self.evidence["review"]
+            return [review] if review else []
         if path.startswith("pulls/"):
             return self.evidence["pull"]
         if path.startswith("git/commits/"):
             return {"tree": {"sha": self.evidence["target_tree"]}}
+        if path.startswith("issues/"):
+            return []
+        if "/check-runs" in path:
+            return {"check_runs": self.evidence.get("check_runs", [])}
         return {"total_count": 2, "workflow_runs": self.evidence["workflow_runs"]}
 
     def threads(self, number):
@@ -120,6 +164,38 @@ def test_collector_requires_real_records_for_both_workflows_and_review():
     evidence = collect_review(github, 123, COMMIT, CODE)
     assert evidence["review"]["id"] == 123
     assert any(f"head_sha={SOURCE}" in path for path in github.reads)
+
+
+@pytest.mark.parametrize("conclusion", [None, "neutral", "failure"])
+def test_collector_waives_missing_review_for_exact_pr_only(conclusion):
+    from tirodhan.deployment.coderabbit_evidence import APP_ID
+
+    github = ReviewGithub()
+    github.evidence["review"] = None
+    if conclusion:
+        github.evidence["check_runs"] = [
+            {
+                "id": 1,
+                "app": {"id": APP_ID},
+                "name": "CodeRabbit",
+                "head_sha": SOURCE,
+                "status": "completed",
+                "conclusion": conclusion,
+            }
+        ]
+    waiver = {"pull_request": 123, "configuration_hash": CODE, "reason": "Owner authorized"}
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
+        collect_review(github, 123, COMMIT, CODE, waiver=waiver | {"pull_request": 124})
+    if conclusion == "failure":
+        with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
+            collect_review(github, 123, COMMIT, CODE, waiver=waiver)
+        return
+    evidence = collect_review(github, 123, COMMIT, CODE, waiver=waiver)
+    assert evidence["coderabbit_waiver"] == waiver
+    assert evidence["review"] is None
+    github.evidence["unresolved_threads"] = [{"isResolved": False}]
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED"):
+        collect_review(github, 123, COMMIT, CODE, waiver=waiver)
 
 
 @pytest.mark.parametrize(

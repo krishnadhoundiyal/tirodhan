@@ -186,6 +186,23 @@ class Authorization:
     claims: dict[str, Any]
 
 
+def apim_review_waiver(
+    policy: dict[str, Any], config_hash: str, operations: list[str]
+) -> dict[str, Any] | None:
+    waiver = policy.get("apim_review_waiver")
+    if (
+        isinstance(waiver, dict)
+        and type(waiver.get("pull_request")) is int
+        and waiver["pull_request"] > 0
+        and waiver.get("configuration_hash") == config_hash
+        and isinstance(waiver.get("reason"), str)
+        and waiver["reason"]
+        and set(operations) in ({"terraform-setup", "apim-plan"}, {"terraform-setup", "apim-apply"})
+    ):
+        return waiver
+    return None
+
+
 def validate_authorization(
     token: str,
     *,
@@ -232,7 +249,14 @@ def validate_authorization(
             or set(claims["bindings"]) != set(claims["operations"])
             or claims.get("validation", {}).get("ci_commit") != commit
             or claims.get("validation", {}).get("contract_hash") != code_hash
-            or not claims.get("validation", {}).get("coderabbit_review")
+            or not (
+                claims.get("validation", {}).get("coderabbit_review")
+                or (
+                    isinstance(claims.get("validation", {}).get("coderabbit_waiver"), dict)
+                    and claims["validation"]["coderabbit_waiver"]
+                    == apim_review_waiver(policy, config_hash, claims["operations"])
+                )
+            )
             or claims.get("authorization_class") != purpose
             or any(operation_class(op) != purpose for op in claims["operations"])
         ):

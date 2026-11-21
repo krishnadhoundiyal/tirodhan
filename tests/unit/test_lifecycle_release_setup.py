@@ -716,6 +716,65 @@ def test_apim_planning_signature_cannot_authorize_apply_or_application_release(c
             validate_authorization(token, operation=operation, **evidence)
 
 
+def test_apim_waiver_requires_policy_match_and_preserves_ci(context):
+    operator_request(context, "apim-release")
+    _, policy, config, request = context
+    waiver = {
+        "pull_request": 123,
+        "configuration_hash": digest(config),
+        "reason": "Owner authorized",
+    }
+    request["evidence"].update(review=None, coderabbit_waiver=waiver)
+    kwargs = {"code_hash": CODE, "commit": COMMIT}
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
+        setup.validated_request(request, policy, config, **kwargs)
+    policy["apim_review_waiver"] = waiver | {"configuration_hash": "0" * 64}
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
+        setup.validated_request(request, policy, config, **kwargs)
+    policy["apim_review_waiver"] = waiver
+    run = request["evidence"]["workflow_runs"][0]
+    run["conclusion"] = "failure"
+    with pytest.raises(AdmissionDenied, match="CI_EVIDENCE_INVALID"):
+        setup.validated_request(request, policy, config, **kwargs)
+    run["conclusion"] = "success"
+    token, _ = sign(context)
+    execution = kwargs | {"config_hash": digest(config), "run_id": SESSION}
+    granted = validate_authorization(token, operation="apim-plan", policy=policy, **execution)
+    assert granted.claims["validation"]["coderabbit_waiver"] == waiver
+    assert "coderabbit_review" not in granted.claims["validation"]
+    with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+        validate_authorization(
+            token, operation="apim-plan", policy=policy | {"apim_review_waiver": None}, **execution
+        )
+    with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+        validate_authorization(token, operation="apim-apply", policy=policy, **execution)
+    operator_request(context, "release")
+    request["evidence"].update(review=None, coderabbit_waiver=waiver)
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
+        setup.validated_request(request, policy, config, **kwargs)
+
+
+def test_apim_apply_waiver_requires_exact_saved_plan(context, tmp_path):
+    plan = apply_request(context, tmp_path, "apim-apply")
+    _, policy, config, request = context
+    waiver = {
+        "pull_request": 123,
+        "configuration_hash": digest(config),
+        "reason": "Owner authorized",
+    }
+    policy["apim_review_waiver"] = waiver
+    request["evidence"].update(review=None, coderabbit_waiver=waiver)
+    kwargs = {"code_hash": CODE, "commit": COMMIT}
+    with pytest.raises(AdmissionDenied, match="REVIEWED_SAVED_PLAN_REQUIRED"):
+        setup.validated_request(request, policy, config, **kwargs)
+    bindings, evidence = setup.validated_request(request, policy, config, plan=plan, **kwargs)
+    assert evidence["coderabbit_waiver"] == waiver
+    assert bindings["apim-apply"]["plan_sha256"] == request["plan_review"]["plan_sha256"]
+    request["evidence"]["review"] = review_evidence()["review"] | {"state": "CHANGES_REQUESTED"}
+    with pytest.raises(AdmissionDenied, match="CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED"):
+        setup.validated_request(request, policy, config, plan=plan, **kwargs)
+
+
 @pytest.mark.parametrize("changed", ["plan", "lineage", "serial", "etag", "unreviewed", "missing"])
 def test_changed_plan_or_state_is_not_authorized(context, tmp_path, changed):
     plan = apply_request(context, tmp_path)

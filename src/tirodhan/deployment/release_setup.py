@@ -28,6 +28,7 @@ from tirodhan.deployment.deployment_admission import (
     AUDIENCES,
     ROOT,
     AdmissionDenied,
+    apim_review_waiver,
     contract_digest,
     database_verifier_enrollment_target,
     digest,
@@ -249,7 +250,9 @@ def policy_proposal(
     return proposal
 
 
-def validate_evidence(evidence: dict[str, Any], commit: str) -> dict[str, Any]:
+def validate_evidence(
+    evidence: dict[str, Any], commit: str, *, waiver: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Validate collected records, not caller supplied PASS/status assertions."""
     pull = evidence["pull"]
     source = pull["head"]["sha"]
@@ -282,14 +285,24 @@ def validate_evidence(evidence: dict[str, Any], commit: str) -> dict[str, Any]:
     review = evidence["review"]
     if evidence.get("unresolved_threads") != []:
         raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
+    review_proof: dict[str, Any]
     if review is None:
         from tirodhan.deployment.coderabbit_evidence import comment_review_url
 
         comment = evidence.get("review_comment")
         check = evidence.get("review_check_run")
-        if not isinstance(comment, dict) or not isinstance(check, dict):
+        if isinstance(comment, dict) and isinstance(check, dict):
+            review_proof = {
+                "coderabbit_review": comment_review_url(comment, check, source, pull["number"])
+            }
+        elif (
+            waiver is not None
+            and evidence.get("coderabbit_waiver") == waiver
+            and waiver.get("pull_request") == pull["number"]
+        ):
+            review_proof = {"coderabbit_waiver": waiver}
+        else:
             raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
-        review_url = comment_review_url(comment, check, source, pull["number"])
     elif not isinstance(review, dict) or (
         review.get("commit_id") != source
         or review.get("user", {}).get("login") != "coderabbitai[bot]"
@@ -297,15 +310,16 @@ def validate_evidence(evidence: dict[str, Any], commit: str) -> dict[str, Any]:
         or review.get("state") not in {"COMMENTED", "APPROVED"}
         or not review.get("submitted_at")
         or type(review.get("id")) is not int
-        or evidence.get("unresolved_threads") != []
     ):
         raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
     else:
-        review_url = f"https://github.com/{REPOSITORY}/pull/{pull['number']}#pullrequestreview-{review['id']}"
+        review_proof = {
+            "coderabbit_review": f"https://github.com/{REPOSITORY}/pull/{pull['number']}#pullrequestreview-{review['id']}"
+        }
     return {
         "ci_commit": commit,
         "contract_hash": evidence["contract_hash"],
-        "coderabbit_review": review_url,
+        **review_proof,
         "ci_run_ids": [r["id"] for r in runs],
         "reviewed_source_commit": source,
         "reviewed_tree": evidence["source_tree"],
@@ -530,7 +544,8 @@ def validated_request(
         if plan is None:
             raise AdmissionDenied("REVIEWED_SAVED_PLAN_REQUIRED")
         bindings[request["apply_operation"]].update(state_binding(request, plan))
-    validation = validate_evidence(request["evidence"], commit)
+    waiver = apim_review_waiver(policy, digest(config), sorted(bindings))
+    validation = validate_evidence(request["evidence"], commit, waiver=waiver)
     validation["request_sha256"] = digest(request)
     return bindings, validation
 
@@ -751,7 +766,7 @@ def main() -> None:
             config = configuration()
             commit = Runner().run("git", "-C", str(ROOT), "rev-parse", "HEAD")
             # Check everything, including the hold, before prompting to unlock the key.
-            validated_request(
+            bindings, validation = validated_request(
                 request,
                 policy,
                 config,
@@ -786,14 +801,8 @@ def main() -> None:
                         "contract_hash": contract_digest(),
                         "release_session": request["release_session"],
                         "operations": request["operations"],
-                        "operation_bindings": validated_request(
-                            request,
-                            policy,
-                            config,
-                            code_hash=contract_digest(),
-                            commit=commit,
-                            plan=args.plan,
-                        )[0],
+                        "operation_bindings": bindings,
+                        "review_evidence": validation,
                         "expires_at": request["expires_at"],
                     },
                     indent=2,

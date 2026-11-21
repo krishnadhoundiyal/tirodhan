@@ -19,6 +19,7 @@ from tirodhan.deployment.database_verification_request import Github
 from tirodhan.deployment.deployment_admission import (
     ROOT,
     AdmissionDenied,
+    apim_review_waiver,
     configuration,
     contract_digest,
     database_verifier_enrollment_target,
@@ -119,7 +120,12 @@ class ReadOnlyGithub(Github):
 
 
 def collect_review(
-    github: ReadOnlyGithub, number: int, commit: str, code_hash: str
+    github: ReadOnlyGithub,
+    number: int,
+    commit: str,
+    code_hash: str,
+    *,
+    waiver: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pull = github.get(f"pulls/{number}")
     source = pull["head"]["sha"]
@@ -169,19 +175,26 @@ def collect_review(
             and row.get("name") == "CodeRabbit"
             and row.get("head_sha") == source
         ]
-        if not summaries or not app_checks:
-            raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
-        observed_check = max(app_checks, key=lambda row: row["id"])
-        check = {
-            **{
-                key: observed_check.get(key)
-                for key in ("id", "head_sha", "name", "status", "conclusion", "completed_at")
-            },
-            "app": {key: observed_check.get("app", {}).get(key) for key in ("id", "slug")},
-        }
-        comment = projected_comment(
-            max(summaries, key=lambda row: row["id"]), check, source, number
+        observed_check = max(app_checks, key=lambda row: row["id"], default=None)
+        skipped = (
+            observed_check is None
+            or observed_check.get("status") == "completed"
+            and observed_check.get("conclusion") in {"neutral", "skipped"}
         )
+        waive_missing = waiver is not None and waiver["pull_request"] == number and skipped
+        if summaries and observed_check is not None and not waive_missing:
+            check = {
+                **{
+                    key: observed_check.get(key)
+                    for key in ("id", "head_sha", "name", "status", "conclusion", "completed_at")
+                },
+                "app": {key: observed_check.get("app", {}).get(key) for key in ("id", "slug")},
+            }
+            comment = projected_comment(
+                max(summaries, key=lambda row: row["id"]), check, source, number
+            )
+        elif not waive_missing:
+            raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
     evidence = {
         "repository": REPOSITORY,
         "target_commit": commit,
@@ -194,8 +207,11 @@ def collect_review(
         "unresolved_threads": github.threads(number),
     }
     if not candidates:
-        evidence.update(review_comment=comment, review_check_run=check)
-    validate_evidence(evidence, commit)
+        if comment is None:
+            evidence["coderabbit_waiver"] = waiver
+        else:
+            evidence.update(review_comment=comment, review_check_run=check)
+    validate_evidence(evidence, commit, waiver=waiver)
     return evidence
 
 
@@ -254,6 +270,36 @@ def capture_plan_artifact(
     }
 
 
+def apim_plan_summary(plan: dict[str, Any], terraform: dict[str, Any]) -> dict[str, Any]:
+    """Project reviewed APIM changes without printing policy XML or Terraform state."""
+    from tirodhan.deployment.apim_lifecycle import gateway_name, gateway_target
+
+    pilot, _, _ = gateway_target(terraform)
+    session = terraform.get("apim_web_session")
+    summary = {
+        "gateway": gateway_name(terraform, pilot=pilot),
+        "managed_changes": [
+            {"address": row["address"], "actions": row["change"]["actions"]}
+            for row in plan["resource_changes"]
+            if row["mode"] == "managed" and row["change"]["actions"] != ["no-op"]
+        ],
+        "output_changes": {
+            name: row["actions"]
+            for name, row in plan.get("output_changes", {}).items()
+            if row["actions"] != ["no-op"]
+        },
+    }
+    if session is not None:
+        summary["web_session"] = {
+            "policy_sha256": session["web_policy_sha256"],
+            "browser_origins": session["browser_origins"],
+            "backend_hostname": session["backend_hostname"],
+            "secret_name": session["secret_name"],
+            "business_operations": session["business_operations"],
+        }
+    return summary
+
+
 def prepare(
     kind: str,
     *,
@@ -269,6 +315,7 @@ def prepare(
     database_key_id: str | None = None,
     resume_request: dict[str, Any] | None = None,
     secret_names: list[str] | None = None,
+    print_apim_plan: bool = False,
 ) -> dict[str, Any]:
     operator_only()
     if resume_request is not None and kind != "recovery":
@@ -280,10 +327,14 @@ def prepare(
     if github.get("commits/main")["sha"] != commit:
         raise AdmissionDenied("CHECKOUT_IS_NOT_CURRENT_MAIN")
     code_hash = contract_digest()
-    evidence = collect_review(github, review_pr, commit, code_hash)
+    bindings = expected_bindings(kind, apply_operation)
+    waiver = None
+    if kind == "apim-release" or (kind == "apply" and apply_operation == "apim-apply"):
+        policy = json.loads((ROOT / "deploy/nonprod-release-policy.json").read_text())
+        waiver = apim_review_waiver(policy, digest(config), sorted(bindings))
+    evidence = collect_review(github, review_pr, commit, code_hash, waiver=waiver)
     if runner.run("git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}") != evidence["target_tree"]:
         raise AdmissionDenied("LOCAL_REVIEWED_TREE_MISMATCH")
-    bindings = expected_bindings(kind, apply_operation)
     secret, destination, identity, environment = DESTINATIONS[kind]
     client = config[
         "database_verification_client_id"
@@ -501,6 +552,8 @@ def prepare(
             from tirodhan.deployment.apim_lifecycle import validate_apim_plan
 
             validate_apim_plan(shown, state, config["terraform"])
+            if print_apim_plan:
+                print(json.dumps(apim_plan_summary(shown, config["terraform"]), indent=2))
         request["state"] = {"kind": state.kind, "etag": state.etag, "document": state.document}
         request["plan_review"] = {
             "plan_sha256": hashlib.sha256(plan.read_bytes()).hexdigest(),
@@ -595,12 +648,16 @@ def main() -> None:
             if args.resume_request
             else None,
             secret_names=sorted(args.secret_name) if args.secret_name else None,
+            print_apim_plan=args.kind == "apply" and sys.stdin.isatty(),
         )
         if args.kind == "apply":
             if not sys.stdin.isatty():
                 raise AdmissionDenied("INTERACTIVE_PLAN_REVIEW_REQUIRED")
             print(json.dumps(request["plan_review"], indent=2))
-            print("Review this exact saved plan using terraform show before confirming.")
+            if args.apply_operation == "apim-apply":
+                print("Review the APIM changes and saved plan digest above before confirming.")
+            else:
+                print("Review this exact saved plan using terraform show before confirming.")
             expected = "REVIEW " + request["plan_review"]["plan_sha256"]
             if input("Type REVIEW followed by the displayed plan SHA-256: ") != expected:
                 raise AdmissionDenied("EXACT_PLAN_REVIEW_NOT_CONFIRMED")
