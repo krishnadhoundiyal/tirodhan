@@ -8,6 +8,12 @@ variable "gateway_name" {
   type        = string
 }
 
+variable "gateway_resource_id" {
+  description = "ARM resource ID of the gateway that owns the browser policy fragments."
+  type        = string
+  default     = null
+}
+
 variable "gateway_principal_id" {
   description = "Object ID of the gateway's system-assigned managed identity."
   type        = string
@@ -70,6 +76,28 @@ variable "web_policy_sha256" {
   validation {
     condition     = can(regex("^[a-f0-9]{64}$", var.web_policy_sha256))
     error_message = "Supply the lower-case SHA-256 of the reviewed XML."
+  }
+}
+
+variable "web_policy_fragments" {
+  description = "Reviewed browser policy fragment contents and SHA-256 digests."
+  type = map(object({
+    value  = string
+    sha256 = string
+  }))
+  default = {}
+
+  validation {
+    condition = length(var.web_policy_fragments) == 0 || (
+      toset(keys(var.web_policy_fragments)) == toset([
+        "tirodhan-web-session-inbound",
+        "tirodhan-web-session-outbound",
+        ]) && alltrue([
+        for fragment in values(var.web_policy_fragments) :
+        sha256(fragment.value) == fragment.sha256
+      ])
+    )
+    error_message = "Supply both browser session policy fragments with their reviewed SHA-256 digests."
   }
 }
 

@@ -34,7 +34,11 @@ APIM_CHILD_TYPES = {
     "azurerm_api_management_api_operation",
     "azurerm_api_management_api_policy",
     "azurerm_api_management_named_value",
+    "azurerm_api_management_policy_fragment",
 }
+APIM_WEB_POLICY_FRAGMENT_NAMES = frozenset(
+    {"tirodhan-web-session-inbound", "tirodhan-web-session-outbound"}
+)
 
 
 def approved_apim_child_id(
@@ -52,6 +56,10 @@ def apim_child_state_ids(address: str, resource_type: str, gateway: str) -> tupl
     if not match:
         return ()
     component, operation = match.groups()
+    if resource_type == "azurerm_api_management_policy_fragment":
+        if component == "web" and operation in APIM_WEB_POLICY_FRAGMENT_NAMES:
+            return (f"{gateway}/policyfragments/{operation}",)
+        return ()
     if resource_type == "azurerm_api_management_named_value":
         if component == "gateway_secret" and operation is None:
             return (gateway + "/namedvalues/gateway-secret",)

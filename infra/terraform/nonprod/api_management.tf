@@ -32,6 +32,7 @@ module "apim_web_session" {
 
   resource_group_name  = data.azurerm_resource_group.nonprod.name
   gateway_name         = azurerm_api_management.nonprod[0].name
+  gateway_resource_id  = azurerm_api_management.nonprod[0].id
   gateway_principal_id = data.azurerm_api_management.web_session_gateway[0].identity[0].principal_id
   vault_resource_id    = data.azurerm_key_vault.runtime.id
   vault_uri            = data.azurerm_key_vault.runtime.vault_uri
@@ -40,6 +41,7 @@ module "apim_web_session" {
   browser_origins      = var.apim_web_session.browser_origins
   web_policy_xml       = var.apim_web_session.web_policy_xml
   web_policy_sha256    = var.apim_web_session.web_policy_sha256
+  web_policy_fragments = var.apim_web_policy_fragments
   business_operations  = var.apim_web_session.business_operations
 }
 

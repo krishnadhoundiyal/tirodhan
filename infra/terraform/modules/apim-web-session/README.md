@@ -38,6 +38,15 @@ backend refresh lifetime. The module verifies the digest and a subset of policy
 structure. The approved frontend renderer and live APIM acceptance establish the
 remaining behavior.
 
+For the split Consumption policy, supply the API policy with its
+`tirodhan-web-session-inbound` and `tirodhan-web-session-outbound` includes
+as `web_policy_xml`. Supply the two portal-validated raw fragment documents
+and their SHA-256 digests as `value` and `sha256` under those same keys in
+`apim_web_policy_fragments`. The release checks the document sizes and
+fragment references, then creates the fragments before the API policy.
+The deployment principal also needs the policy-fragment write action on the
+original gateway.
+
 The session API registers these paths for POST and OPTIONS:
 
 - `/web/session/otp/start`
@@ -57,7 +66,9 @@ Both policies overwrite the invocation header on the upstream hop.
 The configuration plan's resource IDs and stable operation keys define the
 replay boundary. Apply once under the signed, locked release. After a partial or
 uncertain apply, inspect exact Azure IDs and state before generating a fresh
-saved plan. The backend owns OTP command idempotency, refresh and logout.
+saved plan. Select `reconcile` with `apim_session_reconcile = true` to create
+the reviewed children missing from both state and the original gateway.
+The backend owns OTP command idempotency, refresh and logout.
 
 Before browser activation, verify APIM's effective diagnostics and policy
 behavior, the FastAPI gateway guard and native regression, both isolated cookie

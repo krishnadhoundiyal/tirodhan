@@ -98,6 +98,30 @@ def test_destroy_guard_limits_apim_session_children_to_original_gateway() -> Non
         _validate(plan)
 
 
+def test_destroy_guard_limits_fragment_deletes_to_reviewed_names_and_gateway() -> None:
+    kind = "azurerm_api_management_policy_fragment"
+    name = "tirodhan-web-session-inbound"
+    plan = _plan(kind)
+    row = plan["resource_changes"][0]
+    row["address"] = f'module.apim_web_session[0].{kind}.web["{name}"]'
+    gateway = (
+        f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}"
+        f"/providers/Microsoft.ApiManagement/service/{RESOURCE_GROUP}-apim"
+    )
+    before = row["change"]["before"]
+    before["id"] = f"{gateway}/policyFragments/{name}"
+    assert _validate(plan) == 1
+
+    before["id"] = f"{gateway}-pilot/policyFragments/{name}"
+    with pytest.raises(RuntimeError, match="unapproved NONPROD APIM child"):
+        _validate(plan)
+
+    row["address"] = f'module.apim_web_session[0].{kind}.web["other-policy"]'
+    before["id"] = f"{gateway}/policyFragments/other-policy"
+    with pytest.raises(RuntimeError, match="unapproved NONPROD APIM child"):
+        _validate(plan)
+
+
 @pytest.mark.parametrize(
     ("component", "api_name"),
     [("web", "tirodhan-web-session"), ("backend", "tirodhan-backend-v1")],

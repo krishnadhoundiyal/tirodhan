@@ -290,13 +290,18 @@ def apim_plan_summary(plan: dict[str, Any], terraform: dict[str, Any]) -> dict[s
         },
     }
     if session is not None:
-        summary["web_session"] = {
+        web_session: dict[str, Any] = {
             "policy_sha256": session["web_policy_sha256"],
             "browser_origins": session["browser_origins"],
             "backend_hostname": session["backend_hostname"],
             "secret_name": session["secret_name"],
             "business_operations": session["business_operations"],
         }
+        if fragments := terraform.get("apim_web_policy_fragments"):
+            web_session["fragment_sha256"] = {
+                name: fragment["sha256"] for name, fragment in sorted(fragments.items())
+            }
+        summary["web_session"] = web_session
     return summary
 
 

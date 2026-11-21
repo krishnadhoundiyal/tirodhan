@@ -56,6 +56,19 @@ variable "apim_web_session" {
     error_message = "Web sessions require the original stage-four gateway with the recovery pilot disabled."
   }
 }
+variable "apim_web_policy_fragments" {
+  description = "Reviewed raw XML fragments for the NONPROD browser session policy."
+  type = map(object({
+    value  = string
+    sha256 = string
+  }))
+  default = {}
+
+  validation {
+    condition     = length(var.apim_web_policy_fragments) == 0 || var.apim_web_session != null
+    error_message = "APIM browser policy fragments require the reviewed web session configuration."
+  }
+}
 variable "postgres_admin_object_id" { type = string }
 variable "postgres_admin_name" { type = string }
 variable "postgres_admin_type" {
