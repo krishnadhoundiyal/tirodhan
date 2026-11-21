@@ -167,6 +167,36 @@ def test_existing_gateway_session_plan_is_scoped(baseline, session_plan):
         apim.validate_apim_plan(plan, baseline, terraform)
 
 
+@pytest.mark.parametrize(
+    "difference",
+    [{}, {"zones": ["1"]}, {"identity": [{"type": "SystemAssigned"}]}, {"tags": {"extra": "tag"}}],
+)
+def test_existing_consumption_gateway_empty_zone_refresh(baseline, session_plan, difference):
+    plan, terraform = session_plan
+    gateway = plan["resource_changes"][0]["change"]
+    gateway["before"]["zones"] = []
+    gateway["after"]["zones"] = []
+    plan["resource_drift"] = [
+        {
+            "address": apim.ADDRESS,
+            "type": "azurerm_api_management",
+            "mode": "managed",
+            "provider_name": "registry.terraform.io/hashicorp/azurerm",
+            "change": {
+                "actions": ["update"],
+                "before": gateway["before"] | {"zones": None},
+                "after": gateway["before"] | difference,
+                "after_unknown": {},
+            },
+        }
+    ]
+    if difference:
+        with pytest.raises(AdmissionDenied, match="APIM_PLAN_RESOURCE_DRIFT"):
+            apim.validate_apim_plan(plan, baseline, terraform)
+    else:
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
 def test_reconcile_creates_only_missing_children_and_preserves_the_identity(baseline, session_plan):
     plan, terraform = session_plan
     principal = "11111111-1111-1111-1111-111111111111"
