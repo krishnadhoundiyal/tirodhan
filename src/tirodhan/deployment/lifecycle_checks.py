@@ -486,7 +486,16 @@ class Checks:
         return self.tf.get("apim_publisher_email") is None or self.check_apim_preflight()
 
     def check_apim_preflight(self) -> bool:
-        from tirodhan.deployment.apim_lifecycle import gateway_name, gateway_target
+        from tirodhan.deployment.apim_lifecycle import (
+            ADDRESS,
+            active_consumption_gateway,
+            gateway_id,
+            gateway_name,
+            gateway_target,
+        )
+        from tirodhan.deployment.apim_lifecycle import (
+            API_VERSION as APIM_VERSION,
+        )
 
         subscription = f"/subscriptions/{self.tf['subscription_id']}"
         if not self.check_providers() or not self.permits(
@@ -499,6 +508,16 @@ class Checks:
             },
         ):
             return False
+        if self.tf.get("apim_web_session") is not None:
+            if self.auth.operation in {"apim-plan", "apim-apply"}:
+                # The APIM baseline verifies the gateway's state ownership and scoped access.
+                return True
+            if self.auth.operation.startswith(("migration-", "runtime-")):
+                original_id = gateway_id(self.io)
+                tracked = self.backend().resources.get(ADDRESS, "")
+                return tracked.casefold() == original_id.casefold() and active_consumption_gateway(
+                    self.io.arm(original_id, APIM_VERSION), original_id
+                )
         location = self.tf["location"]
         pilot, _, _ = gateway_target(self.tf)
         name = gateway_name(self.tf, pilot=pilot)
