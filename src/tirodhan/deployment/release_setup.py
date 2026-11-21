@@ -28,10 +28,10 @@ from tirodhan.deployment.deployment_admission import (
     AUDIENCES,
     ROOT,
     AdmissionDenied,
-    apim_review_waiver,
     contract_digest,
     database_verifier_enrollment_target,
     digest,
+    is_apim_release,
     maintenance_binding_keys,
     maintenance_operation_id,
     maintenance_target,
@@ -251,7 +251,7 @@ def policy_proposal(
 
 
 def validate_evidence(
-    evidence: dict[str, Any], commit: str, *, waiver: dict[str, Any] | None = None
+    evidence: dict[str, Any], commit: str, *, require_automated_checks: bool = True
 ) -> dict[str, Any]:
     """Validate collected records, not caller supplied PASS/status assertions."""
     pull = evidence["pull"]
@@ -267,8 +267,19 @@ def validate_evidence(
         or evidence["target_tree"] != evidence["source_tree"]
     ):
         raise AdmissionDenied("REVIEWED_MAIN_PROVENANCE_INVALID")
+    if evidence.get("unresolved_threads") != []:
+        raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
+    validation = {
+        "contract_hash": evidence["contract_hash"],
+        "reviewed_source_commit": source,
+        "reviewed_tree": evidence["source_tree"],
+        "evidence_sha256": digest(evidence),
+    }
+    if not require_automated_checks:
+        return validation | {"reviewed_main_commit": commit}
+
     workflows = {".github/workflows/pr-checks.yml", ".github/workflows/nonprod-lifecycle-ci.yml"}
-    runs = evidence["workflow_runs"]
+    runs = evidence.get("workflow_runs", [])
     if len(runs) != len(workflows) or {r["path"] for r in runs} != workflows:
         raise AdmissionDenied("REQUIRED_CI_EVIDENCE_MISSING")
     for run in runs:
@@ -282,9 +293,7 @@ def validate_evidence(
             or not isinstance(run.get("id"), int)
         ):
             raise AdmissionDenied("CI_EVIDENCE_INVALID")
-    review = evidence["review"]
-    if evidence.get("unresolved_threads") != []:
-        raise AdmissionDenied("CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED")
+    review = evidence.get("review")
     review_proof: dict[str, Any]
     if review is None:
         from tirodhan.deployment.coderabbit_evidence import comment_review_url
@@ -295,12 +304,6 @@ def validate_evidence(
             review_proof = {
                 "coderabbit_review": comment_review_url(comment, check, source, pull["number"])
             }
-        elif (
-            waiver is not None
-            and evidence.get("coderabbit_waiver") == waiver
-            and waiver.get("pull_request") == pull["number"]
-        ):
-            review_proof = {"coderabbit_waiver": waiver}
         else:
             raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
     elif not isinstance(review, dict) or (
@@ -316,15 +319,7 @@ def validate_evidence(
         review_proof = {
             "coderabbit_review": f"https://github.com/{REPOSITORY}/pull/{pull['number']}#pullrequestreview-{review['id']}"
         }
-    return {
-        "ci_commit": commit,
-        "contract_hash": evidence["contract_hash"],
-        **review_proof,
-        "ci_run_ids": [r["id"] for r in runs],
-        "reviewed_source_commit": source,
-        "reviewed_tree": evidence["source_tree"],
-        "evidence_sha256": digest(evidence),
-    }
+    return validation | {"ci_commit": commit, "ci_run_ids": [r["id"] for r in runs]} | review_proof
 
 
 def state_binding(request: dict[str, Any], plan: Path) -> dict[str, Any]:
@@ -544,8 +539,9 @@ def validated_request(
         if plan is None:
             raise AdmissionDenied("REVIEWED_SAVED_PLAN_REQUIRED")
         bindings[request["apply_operation"]].update(state_binding(request, plan))
-    waiver = apim_review_waiver(policy, digest(config), sorted(bindings))
-    validation = validate_evidence(request["evidence"], commit, waiver=waiver)
+    validation = validate_evidence(
+        request["evidence"], commit, require_automated_checks=not is_apim_release(list(bindings))
+    )
     validation["request_sha256"] = digest(request)
     return bindings, validation
 

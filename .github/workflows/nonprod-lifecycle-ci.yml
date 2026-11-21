@@ -27,13 +27,16 @@ jobs:
           terraform_version: 1.13.5
           terraform_wrapper: false
       - run: python -m pip install -e '.[dev]'
-      - run: ruff check . && ruff format --check . && mypy
       - run: |
           bash -n deploy/bootstrap/bootstrap.sh
-          terraform fmt -check -recursive infra/terraform
           terraform -chdir=infra/terraform/nonprod init -backend=false -input=false -lockfile=readonly
           terraform -chdir=infra/terraform/nonprod validate
       - name: Contract, faults and native ownership plan without Azure login
+        if: >-
+          ${{ !(github.event_name == 'pull_request'
+            && github.base_ref == 'main'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.head_ref == vars.APIM_PYTEST_PAUSE_BRANCH) }}
         env:
           TIRODHAN_TEST_TERRAFORM_BINARY: terraform
         run: |

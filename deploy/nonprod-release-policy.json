@@ -17,10 +17,5 @@
       "identity_kind": "database"
     }
   },
-  "maximum_evidence_age_seconds": 300,
-  "apim_review_waiver": {
-    "pull_request": 138,
-    "configuration_hash": "dacc65770e61354d28ebb118c52fa5b1c3521dba8a10f0a51d33778e82072599",
-    "reason": "Owner authorized the NONPROD APIM release without CodeRabbit review after PR #136 was rate-limited."
-  }
+  "maximum_evidence_age_seconds": 300
 }
