@@ -19,6 +19,7 @@ def main() -> None:
         "apim_publisher_email",
         "apim_pilot_enabled",
         "apim_session_reconcile",
+        "apim_web_policy_fragments",
         "apim_web_session",
         "resource_group_name",
         "suffix",

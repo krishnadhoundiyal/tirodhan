@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -10,7 +11,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from tirodhan.deployment.check_destroy_plan import apim_child_state_ids, approved_apim_child_id
+from tirodhan.deployment.check_destroy_plan import (
+    APIM_WEB_POLICY_FRAGMENT_NAMES,
+    apim_child_state_ids,
+    approved_apim_child_id,
+)
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_evidence import (
@@ -28,9 +33,11 @@ ADDRESS = "azurerm_api_management.nonprod[0]"
 PILOT_ADDRESS = "azurerm_api_management.pilot[0]"
 SESSION_MODULE = "module.apim_web_session[0]."
 SESSION_ROLE = SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
+SESSION_FRAGMENT = SESSION_MODULE + "azurerm_api_management_policy_fragment.web"
 NATIVE_OPERATIONS = {"native-otp-start", "native-otp-verify", "native-refresh", "native-logout"}
 WEB_OPERATIONS = ("start", "verify", "refresh", "logout")
 API_VERSION = "2024-05-01"
+CONSUMPTION_POLICY_BYTES = 16 * 1024
 WORKFLOW_REF = "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-apim.yml@refs/heads/main"
 # AzureRM 5.8.0 allows three hours for APIM creation. Leave time for Terraform
 # to persist state and release the backend lease before the runner stops it.
@@ -218,7 +225,8 @@ def check_baseline(checks: Checks) -> bool:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
         identity = original.get("identity") or {}
-        expected_children = session_resource_addresses(session)
+        fragments = verified_web_policy_fragments(checks.tf, session)
+        expected_children = session_resource_addresses(session, fragments)
         present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
         if checks.tf.get("apim_session_reconcile") is True:
             principal = tracked_gateway_principal(state)
@@ -241,17 +249,16 @@ def check_baseline(checks: Checks) -> bool:
         if not original_matches:
             raise ApimPlanBlocked("APIM_ORIGINAL_GATEWAY_BASELINE_MISMATCH")
 
+        gateway_actions = {
+            "Microsoft.ApiManagement/service/apis/write",
+            "Microsoft.ApiManagement/service/apis/operations/write",
+            "Microsoft.ApiManagement/service/apis/policies/write",
+            "Microsoft.ApiManagement/service/namedValues/write",
+        }
+        if fragments:
+            gateway_actions.add("Microsoft.ApiManagement/service/policyFragments/write")
         for scope, actions, label in (
-            (
-                original_id,
-                {
-                    "Microsoft.ApiManagement/service/apis/write",
-                    "Microsoft.ApiManagement/service/apis/operations/write",
-                    "Microsoft.ApiManagement/service/apis/policies/write",
-                    "Microsoft.ApiManagement/service/namedValues/write",
-                },
-                "GATEWAY",
-            ),
+            (original_id, gateway_actions, "GATEWAY"),
             (
                 f"{checks.io.vault_id}/secrets/{session['secret_name']}",
                 {"Microsoft.Authorization/roleAssignments/write"},
@@ -354,7 +361,45 @@ def expected_provider_refresh(row: dict[str, Any], state: BackendState) -> bool:
     )
 
 
-def session_resource_addresses(session: dict[str, Any]) -> set[str]:
+def verified_web_policy_fragments(
+    terraform: dict[str, Any], session: dict[str, Any]
+) -> dict[str, dict[str, str]]:
+    fragments = terraform.get("apim_web_policy_fragments", {})
+    if fragments == {}:
+        return {}
+    if not isinstance(fragments, dict) or set(fragments) != APIM_WEB_POLICY_FRAGMENT_NAMES:
+        raise ApimPlanBlocked("APIM_SESSION_FRAGMENT_CONFIGURATION_MISMATCH")
+
+    policy = session["web_policy_xml"]
+    includes = r'<include-fragment\s+fragment-id="([^"]+)"\s*/>'
+    if (
+        len(policy.encode("utf-8")) > CONSUMPTION_POLICY_BYTES
+        or sorted(re.findall(includes, policy)) != sorted(fragments)
+        or len(re.findall(r"<include-fragment\b", policy)) != len(fragments)
+    ):
+        raise ApimPlanBlocked("APIM_SESSION_FRAGMENT_REFERENCE_MISMATCH")
+    for section in ("inbound", "outbound"):
+        name = f"tirodhan-web-session-{section}"
+        section_body = re.search(rf"<{section}>(.*?)</{section}>", policy, re.DOTALL)
+        if section_body is None or re.findall(includes, section_body[1]) != [name]:
+            raise ApimPlanBlocked("APIM_SESSION_FRAGMENT_REFERENCE_MISMATCH")
+        fragment = fragments[name]
+        value = fragment.get("value") if isinstance(fragment, dict) else None
+        if (
+            not isinstance(value, str)
+            or not value.strip().startswith("<fragment>")
+            or not value.strip().endswith("</fragment>")
+            or re.search(r"<(?:include-fragment|base|inbound|outbound|backend|on-error)\b", value)
+            or len(value.encode("utf-8")) > CONSUMPTION_POLICY_BYTES
+            or hashlib.sha256(value.encode("utf-8")).hexdigest() != fragment.get("sha256")
+        ):
+            raise ApimPlanBlocked("APIM_SESSION_FRAGMENT_CONTENT_MISMATCH")
+    return fragments
+
+
+def session_resource_addresses(
+    session: dict[str, Any], fragments: dict[str, dict[str, str]] | None = None
+) -> set[str]:
     operations = session["business_operations"]
     return {
         SESSION_MODULE + suffix
@@ -375,7 +420,7 @@ def session_resource_addresses(session: dict[str, Any]) -> set[str]:
                 for name in NATIVE_OPERATIONS | operations.keys()
             ),
         }
-    }
+    } | {f"{SESSION_FRAGMENT}[{json.dumps(name)}]" for name in fragments or {}}
 
 
 def validate_session_changes(
@@ -386,7 +431,9 @@ def validate_session_changes(
 ) -> None:
     """Admit an initial configuration or the missing children of its signed retry."""
     session = terraform["apim_web_session"]
-    expected_children = session_resource_addresses(session)
+    fragments = verified_web_policy_fragments(terraform, session)
+    fragment_addresses = {f"{SESSION_FRAGMENT}[{json.dumps(name)}]": name for name in fragments}
+    expected_children = session_resource_addresses(session, fragments)
     reconcile = terraform.get("apim_session_reconcile") is True
     present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
     by_address = {row["address"]: row["change"] for row in managed}
@@ -436,12 +483,18 @@ def validate_session_changes(
     for address in expected_children:
         change = by_address[address]
         after = change.get("after")
-        if not isinstance(after, dict) or (
-            address != SESSION_ROLE
-            and (
-                after.get("api_management_name") != name
-                or after.get("resource_group_name") != group
-            )
+        if not isinstance(after, dict):
+            raise ApimPlanBlocked("APIM_SESSION_CHILD_CREATE_MISMATCH")
+        if fragment_name := fragment_addresses.get(address):
+            if (
+                str(after.get("api_management_id", "")).casefold() != expected_id.casefold()
+                or after.get("name") != fragment_name
+                or after.get("format") != "rawxml"
+                or after.get("value") != fragments[fragment_name]["value"]
+            ):
+                raise ApimPlanBlocked("APIM_SESSION_FRAGMENT_PLAN_MISMATCH")
+        elif address != SESSION_ROLE and (
+            after.get("api_management_name") != name or after.get("resource_group_name") != group
         ):
             raise ApimPlanBlocked("APIM_SESSION_CHILD_CREATE_MISMATCH")
         if address in present:
@@ -755,7 +808,7 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
 
 def verify_sessions(io: Observations, before: BackendState) -> None:
     session = io.tf["apim_web_session"]
-    children = session_resource_addresses(session)
+    children = session_resource_addresses(session, verified_web_policy_fragments(io.tf, session))
     after = io.backend()
     gateway = gateway_id(io)
     live = io.arm(gateway, API_VERSION) or {}

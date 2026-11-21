@@ -237,6 +237,54 @@ def test_reconcile_creates_only_missing_children_and_preserves_the_identity(base
 
 
 @pytest.mark.parametrize(
+    ("key", "value"),
+    [("api_management_id", GATEWAY + "-pilot"), ("format", "xml"), ("value", "other XML")],
+)
+def test_session_plan_binds_fragments_to_the_reviewed_gateway_and_content(
+    baseline, session_plan, key, value
+):
+    plan, terraform = session_plan
+    session = terraform["apim_web_session"]
+    fragments = {}
+    sections = []
+    for section in ("inbound", "outbound"):
+        name = f"tirodhan-web-session-{section}"
+        xml = f'<fragment><set-variable name="{section}" value="true" /></fragment>'
+        fragments[name] = {"value": xml, "sha256": hashlib.sha256(xml.encode()).hexdigest()}
+        sections.append(f'<{section}><include-fragment fragment-id="{name}" /></{section}>')
+        plan["resource_changes"].append(
+            {
+                "address": f'{apim.SESSION_FRAGMENT}["{name}"]',
+                "mode": "managed",
+                "change": {
+                    "actions": ["create"],
+                    "before": None,
+                    "after": {
+                        "api_management_id": GATEWAY,
+                        "name": name,
+                        "format": "rawxml",
+                        "value": xml,
+                    },
+                },
+            }
+        )
+    session["web_policy_xml"] = f"<policies>{''.join(sections)}</policies>"
+    policy = next(
+        row["change"]["after"]
+        for row in plan["resource_changes"]
+        if row["address"] == apim.SESSION_MODULE + "azurerm_api_management_api_policy.web"
+    )
+    policy["xml_content"] = session["web_policy_xml"]
+    terraform["apim_web_policy_fragments"] = fragments
+    plan["variables"]["apim_web_policy_fragments"] = {"value": fragments}
+    apim.validate_apim_plan(plan, baseline, terraform)
+
+    plan["resource_changes"][-1]["change"]["after"][key] = value
+    with pytest.raises(AdmissionDenied, match="APIM_SESSION_FRAGMENT_PLAN_MISMATCH"):
+        apim.validate_apim_plan(plan, baseline, terraform)
+
+
+@pytest.mark.parametrize(
     ("component", "api_name"),
     [("web", "tirodhan-web-session"), ("backend", "tirodhan-backend-v1")],
 )

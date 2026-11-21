@@ -70,6 +70,14 @@ resource "azurerm_api_management_api" "web" {
   subscription_required = false
 }
 
+resource "azurerm_api_management_policy_fragment" "web" {
+  for_each          = var.web_policy_fragments
+  name              = each.key
+  api_management_id = var.gateway_resource_id
+  format            = "rawxml"
+  value             = each.value.value
+}
+
 resource "azurerm_api_management_api_policy" "web" {
   api_name            = azurerm_api_management_api.web.name
   api_management_name = var.gateway_name
@@ -87,7 +95,10 @@ resource "azurerm_api_management_api_policy" "web" {
     }
   }
 
-  depends_on = [azurerm_api_management_named_value.gateway_secret]
+  depends_on = [
+    azurerm_api_management_named_value.gateway_secret,
+    azurerm_api_management_policy_fragment.web,
+  ]
 }
 
 resource "azurerm_api_management_api_operation" "web" {

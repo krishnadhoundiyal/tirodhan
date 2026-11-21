@@ -76,3 +76,33 @@ run "reject_unreviewed_xml" {
   }
   expect_failures = [azurerm_api_management_api_policy.web]
 }
+
+run "attach_reviewed_fragments_to_the_original_gateway" {
+  command = plan
+
+  variables {
+    gateway_name        = "tirodhan-np-test01-apim"
+    gateway_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/tirodhan-np-test01/providers/Microsoft.ApiManagement/service/tirodhan-np-test01-apim"
+    web_policy_xml      = "<policies><inbound><include-fragment fragment-id=\"tirodhan-web-session-inbound\" /><set-header name=\"X-Gateway-Secret\" exists-action=\"override\"><value>{{gateway-secret}}</value></set-header></inbound><backend/><outbound><include-fragment fragment-id=\"tirodhan-web-session-outbound\" /></outbound><on-error/></policies>"
+    web_policy_sha256   = sha256("<policies><inbound><include-fragment fragment-id=\"tirodhan-web-session-inbound\" /><set-header name=\"X-Gateway-Secret\" exists-action=\"override\"><value>{{gateway-secret}}</value></set-header></inbound><backend/><outbound><include-fragment fragment-id=\"tirodhan-web-session-outbound\" /></outbound><on-error/></policies>")
+    web_policy_fragments = {
+      tirodhan-web-session-inbound = {
+        value  = "<fragment><set-variable name=\"started\" value=\"true\" /></fragment>"
+        sha256 = sha256("<fragment><set-variable name=\"started\" value=\"true\" /></fragment>")
+      }
+      tirodhan-web-session-outbound = {
+        value  = "<fragment><set-header name=\"X-Example\" exists-action=\"delete\" /></fragment>"
+        sha256 = sha256("<fragment><set-header name=\"X-Example\" exists-action=\"delete\" /></fragment>")
+      }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for name, fragment in azurerm_api_management_policy_fragment.web :
+      fragment.name == name && fragment.api_management_id == var.gateway_resource_id &&
+      fragment.format == "rawxml" && fragment.value == var.web_policy_fragments[name].value
+    ])
+    error_message = "Both fragments must use the reviewed raw XML on the original gateway."
+  }
+}
