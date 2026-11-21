@@ -166,36 +166,24 @@ def test_collector_requires_real_records_for_both_workflows_and_review():
     assert any(f"head_sha={SOURCE}" in path for path in github.reads)
 
 
-@pytest.mark.parametrize("conclusion", [None, "neutral", "failure"])
-def test_collector_waives_missing_review_for_exact_pr_only(conclusion):
-    from tirodhan.deployment.coderabbit_evidence import APP_ID
-
+def test_apim_collector_skips_automated_checks_and_preserves_thread_check():
     github = ReviewGithub()
     github.evidence["review"] = None
-    if conclusion:
-        github.evidence["check_runs"] = [
-            {
-                "id": 1,
-                "app": {"id": APP_ID},
-                "name": "CodeRabbit",
-                "head_sha": SOURCE,
-                "status": "completed",
-                "conclusion": conclusion,
-            }
-        ]
-    waiver = {"pull_request": 123, "configuration_hash": CODE, "reason": "Owner authorized"}
-    with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
-        collect_review(github, 123, COMMIT, CODE, waiver=waiver | {"pull_request": 124})
-    if conclusion == "failure":
-        with pytest.raises(AdmissionDenied, match="CODERABBIT_REVIEW_MISSING"):
-            collect_review(github, 123, COMMIT, CODE, waiver=waiver)
-        return
-    evidence = collect_review(github, 123, COMMIT, CODE, waiver=waiver)
-    assert evidence["coderabbit_waiver"] == waiver
-    assert evidence["review"] is None
+    github.evidence["workflow_runs"] = []
+    evidence = collect_review(github, 123, COMMIT, CODE, require_automated_checks=False)
+    assert evidence["target_commit"] == COMMIT
+    assert "review" not in evidence
+    assert "workflow_runs" not in evidence
+    assert not any(
+        path.startswith("actions/runs") or "/reviews" in path or "check-runs" in path
+        for path in github.reads
+    )
+
+    with pytest.raises(AdmissionDenied, match="REQUIRED_CI_EVIDENCE_MISSING"):
+        collect_review(github, 123, COMMIT, CODE)
     github.evidence["unresolved_threads"] = [{"isResolved": False}]
     with pytest.raises(AdmissionDenied, match="CODERABBIT_EVIDENCE_INVALID_OR_UNRESOLVED"):
-        collect_review(github, 123, COMMIT, CODE, waiver=waiver)
+        collect_review(github, 123, COMMIT, CODE, require_automated_checks=False)
 
 
 @pytest.mark.parametrize(

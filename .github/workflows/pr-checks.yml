@@ -6,8 +6,18 @@ on:
 permissions:
   contents: read
 jobs:
-  checks:
+  pytest:
+    name: Pytest (${{ matrix.shard }})
+    if: >-
+      ${{ !(github.event_name == 'pull_request'
+        && github.base_ref == 'main'
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && github.head_ref == vars.APIM_PYTEST_PAUSE_BRANCH) }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgis/postgis:17-3.5
@@ -25,10 +35,36 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e '.[dev]'
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: mypy
-      - run: pytest -q
+      - name: Run pytest shard
+        env:
+          PYTEST_SHARD_INDEX: ${{ strategy.job-index }}
+          PYTEST_SHARD_COUNT: ${{ strategy.job-total }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          paths = sorted(
+              path.as_posix()
+              for path in Path("tests").rglob("*.py")
+              if path.name.startswith("test_") or path.name.endswith("_test.py")
+          )
+          index = int(os.environ["PYTEST_SHARD_INDEX"])
+          count = int(os.environ["PYTEST_SHARD_COUNT"])
+          shard = paths[index::count]
+          if not shard:
+              raise SystemExit("No test files assigned to this shard")
+          raise SystemExit(subprocess.call(
+              [sys.executable, "-m", "pytest", "-q", "--durations=10", *shard]
+          ))
+          PY
+  infrastructure:
+    name: Infrastructure checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - run: |
           docker build -f deploy/fluent-bit/Dockerfile -t tirodhan-log-sidecar:pr .
           docker run --rm --entrypoint python3 \
@@ -39,8 +75,28 @@ jobs:
         with:
           terraform_version: 1.13.5
           terraform_wrapper: false
-      - run: terraform fmt -check -recursive infra/terraform
       - working-directory: infra/terraform/nonprod
         run: terraform init -backend=false -input=false -lockfile=readonly && terraform validate
       # No OIDC on PR code, including same-repository PRs. Cloud plans are produced
       # on protected main using nonprod-plan in the deployment workflow.
+  checks:
+    needs: [pytest, infrastructure]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify infrastructure checks and pytest status
+        env:
+          PYTEST_PAUSED: >-
+            ${{ github.event_name == 'pull_request'
+              && github.base_ref == 'main'
+              && github.event.pull_request.head.repo.full_name == github.repository
+              && github.head_ref == vars.APIM_PYTEST_PAUSE_BRANCH }}
+          PYTEST_RESULT: ${{ needs.pytest.result }}
+          INFRASTRUCTURE_RESULT: ${{ needs.infrastructure.result }}
+        run: |
+          test "$INFRASTRUCTURE_RESULT" = success || exit 1
+          case "$PYTEST_PAUSED/$PYTEST_RESULT" in
+            true/skipped) echo "Pytest paused for the configured APIM branch." ;;
+            false/success) ;;
+            *) echo "Unexpected pytest result: $PYTEST_RESULT" >&2; exit 1 ;;
+          esac

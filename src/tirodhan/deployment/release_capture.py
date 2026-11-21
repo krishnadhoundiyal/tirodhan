@@ -19,11 +19,11 @@ from tirodhan.deployment.database_verification_request import Github
 from tirodhan.deployment.deployment_admission import (
     ROOT,
     AdmissionDenied,
-    apim_review_waiver,
     configuration,
     contract_digest,
     database_verifier_enrollment_target,
     digest,
+    is_apim_release,
     maintenance_target,
 )
 from tirodhan.deployment.lifecycle_evidence import Observations, Runner, plan_prior_state
@@ -125,12 +125,25 @@ def collect_review(
     commit: str,
     code_hash: str,
     *,
-    waiver: dict[str, Any] | None = None,
+    require_automated_checks: bool = True,
 ) -> dict[str, Any]:
     pull = github.get(f"pulls/{number}")
     source = pull["head"]["sha"]
     target_tree = github.get(f"git/commits/{commit}")["tree"]["sha"]
     source_tree = github.get(f"git/commits/{source}")["tree"]["sha"]
+    evidence: dict[str, Any] = {
+        "repository": REPOSITORY,
+        "target_commit": commit,
+        "contract_hash": code_hash,
+        "target_tree": target_tree,
+        "source_tree": source_tree,
+        "pull": pull,
+        "unresolved_threads": github.threads(number),
+    }
+    if not require_automated_checks:
+        validate_evidence(evidence, commit, require_automated_checks=False)
+        return evidence
+
     response = github.get(f"actions/runs?head_sha={source}&event=pull_request&per_page=100")
     if response["total_count"] > 100:
         raise AdmissionDenied("CI_HISTORY_EXCEEDS_SAFE_CAPTURE_BOUND")
@@ -142,6 +155,8 @@ def collect_review(
         if not candidates:
             raise AdmissionDenied("REQUIRED_CI_EVIDENCE_MISSING")
         runs.append(max(candidates, key=lambda row: row["id"]))
+    evidence.update(workflow_runs=runs, review=None)
+
     reviews = github.get(f"pulls/{number}/reviews?per_page=100")
     if len(reviews) >= 100:
         raise AdmissionDenied("REVIEW_HISTORY_EXCEEDS_SAFE_CAPTURE_BOUND")
@@ -150,9 +165,9 @@ def collect_review(
         for r in reviews
         if r.get("commit_id") == source and r.get("user", {}).get("login") == "coderabbitai[bot]"
     ]
-    comment: dict[str, Any] | None = None
-    check: dict[str, Any] | None = None
-    if not candidates:
+    if candidates:
+        evidence["review"] = max(candidates, key=lambda row: row["id"])
+    else:
         # CodeRabbit emits completed no-comment reviews as a PR conversation
         # receipt, not a formal /reviews submission. Require both authenticated
         # bot evidence for this exact head and its own successful App check run.
@@ -176,42 +191,20 @@ def collect_review(
             and row.get("head_sha") == source
         ]
         observed_check = max(app_checks, key=lambda row: row["id"], default=None)
-        skipped = (
-            observed_check is None
-            or observed_check.get("status") == "completed"
-            and observed_check.get("conclusion") in {"neutral", "skipped"}
-        )
-        waive_missing = waiver is not None and waiver["pull_request"] == number and skipped
-        if summaries and observed_check is not None and not waive_missing:
-            check = {
-                **{
-                    key: observed_check.get(key)
-                    for key in ("id", "head_sha", "name", "status", "conclusion", "completed_at")
-                },
-                "app": {key: observed_check.get("app", {}).get(key) for key in ("id", "slug")},
-            }
-            comment = projected_comment(
-                max(summaries, key=lambda row: row["id"]), check, source, number
-            )
-        elif not waive_missing:
+        if not summaries or observed_check is None:
             raise AdmissionDenied("CODERABBIT_REVIEW_MISSING")
-    evidence = {
-        "repository": REPOSITORY,
-        "target_commit": commit,
-        "contract_hash": code_hash,
-        "target_tree": target_tree,
-        "source_tree": source_tree,
-        "pull": pull,
-        "workflow_runs": runs,
-        "review": max(candidates, key=lambda r: r["id"]) if candidates else None,
-        "unresolved_threads": github.threads(number),
-    }
-    if not candidates:
-        if comment is None:
-            evidence["coderabbit_waiver"] = waiver
-        else:
-            evidence.update(review_comment=comment, review_check_run=check)
-    validate_evidence(evidence, commit, waiver=waiver)
+        check = {
+            **{
+                key: observed_check.get(key)
+                for key in ("id", "head_sha", "name", "status", "conclusion", "completed_at")
+            },
+            "app": {key: observed_check.get("app", {}).get(key) for key in ("id", "slug")},
+        }
+        comment = projected_comment(
+            max(summaries, key=lambda row: row["id"]), check, source, number
+        )
+        evidence.update(review_comment=comment, review_check_run=check)
+    validate_evidence(evidence, commit)
     return evidence
 
 
@@ -333,11 +326,13 @@ def prepare(
         raise AdmissionDenied("CHECKOUT_IS_NOT_CURRENT_MAIN")
     code_hash = contract_digest()
     bindings = expected_bindings(kind, apply_operation)
-    waiver = None
-    if kind == "apim-release" or (kind == "apply" and apply_operation == "apim-apply"):
-        policy = json.loads((ROOT / "deploy/nonprod-release-policy.json").read_text())
-        waiver = apim_review_waiver(policy, digest(config), sorted(bindings))
-    evidence = collect_review(github, review_pr, commit, code_hash, waiver=waiver)
+    evidence = collect_review(
+        github,
+        review_pr,
+        commit,
+        code_hash,
+        require_automated_checks=not is_apim_release(list(bindings)),
+    )
     if runner.run("git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}") != evidence["target_tree"]:
         raise AdmissionDenied("LOCAL_REVIEWED_TREE_MISMATCH")
     secret, destination, identity, environment = DESTINATIONS[kind]

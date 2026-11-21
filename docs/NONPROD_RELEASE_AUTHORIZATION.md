@@ -25,10 +25,12 @@ and digest from the same untrusted source are insufficient. No new attestation a
 introduced. A compromised collector or unlocked signing workstation remains a material risk.
 
 Capture requires current main, clean committed source, a merged PR with an identical final
-Git tree, successful final-head repository and lifecycle CI, an actual CodeRabbit bot review
-and no unresolved threads. Merge/squash commits require full-tree equality with the reviewed
-head. Changed trees need another reviewed PR. Arbitrary PASS flags, review URLs and wildcard
-operations do not substitute for these records. Incomplete bounded histories block.
+Git tree, and resolved review threads. The dedicated NONPROD APIM plan and apply
+authorizations treat GitHub CI and CodeRabbit review as advisory. Other authorizations
+require successful final-head repository and lifecycle CI and an actual CodeRabbit bot
+review. Merge/squash commits require full-tree equality with the reviewed head. Changed
+trees need another reviewed PR. Arbitrary PASS flags, review URLs and wildcard operations
+do not substitute for these records. Incomplete bounded histories block.
 
 Metadata retains the existing 1 MiB response limit and one bounded GitHub collection budget.
 Artifact binaries use a separate 40 MiB streaming limit; a native plan entry remains limited

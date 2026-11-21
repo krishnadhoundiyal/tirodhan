@@ -36,6 +36,11 @@ This is repository-admin configuration, not Azure Terraform work.
 
 ## NONPROD API Management
 
+CodeRabbit reviews and GitHub CI results are advisory for the dedicated signed
+APIM plan and apply. Release capture requires the current merged source tree and
+resolved review threads. Apply requires the owner's separate signature for the
+exact saved plan and approval of the protected `nonprod` job.
+
 The stage-4 runtime plan can add the Terraform-managed Consumption gateway in the
 existing application resource group. For an already deployed stage-4 stack, the
 manually dispatched NONPROD API Management workflow can add just the gateway.
