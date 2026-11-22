@@ -7,9 +7,15 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from time import sleep
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import NAMESPACE_URL, uuid5
+
+import httpx
 
 from tirodhan.deployment.check_destroy_plan import (
     APIM_WEB_POLICY_FRAGMENT_NAMES,
@@ -19,6 +25,7 @@ from tirodhan.deployment.check_destroy_plan import (
 from tirodhan.deployment.check_state import populated_key_paths
 from tirodhan.deployment.deployment_admission import AdmissionDenied
 from tirodhan.deployment.lifecycle_evidence import (
+    ArmRead,
     BackendState,
     ObservationError,
     Observations,
@@ -46,6 +53,112 @@ APIM_APPLY_TIMEOUT_SECONDS = 190 * 60
 
 class ApimPlanBlocked(AdmissionDenied):
     """A locally generated APIM diagnostic safe for the workflow log."""
+
+
+_T = TypeVar("_T")
+_RETRYABLE_READS = {
+    "COMMAND_FAILED",
+    "OBSERVATION_UNAVAILABLE",
+    "InternalServerError",
+    "OperationTimedOut",
+    "ServiceUnavailable",
+    "TooManyRequests",
+}
+_READ_ERROR_CODES = _RETRYABLE_READS | {
+    "AuthorizationFailed",
+    "BACKEND_CONTAINER_NOT_PRIVATE",
+    "BACKEND_IDENTITY_OR_SECURITY_MISMATCH",
+    "ForbiddenByRbac",
+    "MALFORMED_ARM_RESOURCE",
+    "MALFORMED_OBSERVATION",
+    "ARM_REQUEST_REJECTED",
+    "STATE_METADATA_UNAVAILABLE",
+}
+_ARM_READ_ERRORS = {
+    401: "AuthorizationFailed",
+    403: "ForbiddenByRbac",
+    429: "TooManyRequests",
+    500: "InternalServerError",
+    502: "ServiceUnavailable",
+    503: "ServiceUnavailable",
+    504: "OperationTimedOut",
+}
+
+
+def _read_apim(label: str, read: Callable[[], _T], *, delays: tuple[int, ...] = (1, 2)) -> _T:
+    for delay in (*delays, 0):
+        try:
+            return read()
+        except ObservationError as exc:
+            reason = str(exc)
+            if delay and reason in _RETRYABLE_READS:
+                sleep(delay)
+                continue
+            code = reason.upper() if reason in _READ_ERROR_CODES else "UNCLASSIFIED"
+            raise ApimPlanBlocked(f"APIM_{label}_READ_FAILED:{code}") from exc
+    raise AssertionError("The final APIM read must return or raise")
+
+
+def _arm_get(client: httpx.Client, resource_id: str, version: str) -> dict[str, Any] | None:
+    if not re.fullmatch(r"/subscriptions/[0-9a-f-]+/[a-z0-9_./;=-]+", resource_id, re.I) or any(
+        part in (".", "..") for part in resource_id.split("/")
+    ):
+        raise ObservationError("ARM_REQUEST_REJECTED")
+    params = {"api-version": version}
+    if resource_id.casefold().endswith("/policies/policy"):
+        # Azure can serve the policy itself unless its export format is explicit.
+        params["format"] = "xml"
+    try:
+        response = client.get(resource_id, params=params, headers={"Accept": "application/json"})
+    except httpx.TransportError as exc:
+        raise ObservationError("OBSERVATION_UNAVAILABLE") from exc
+    if response.status_code not in (200, 404):
+        raise ObservationError(_ARM_READ_ERRORS.get(response.status_code, "ARM_REQUEST_REJECTED"))
+    try:
+        value = response.json()
+    except ValueError as exc:
+        raise ObservationError("MALFORMED_ARM_RESOURCE") from exc
+    if not isinstance(value, dict):
+        raise ObservationError("MALFORMED_ARM_RESOURCE")
+    if response.status_code == 200:
+        return value
+    error = value.get("error")
+    if isinstance(error, dict) and error.get("code") in {
+        "ResourceNotFound",
+        "ResourceGroupNotFound",
+    }:
+        return None
+    raise ObservationError("ARM_REQUEST_REJECTED")
+
+
+@contextmanager
+def _apim_arm_reader(io: Observations) -> Iterator[ArmRead]:
+    def token() -> str:
+        return io.runner.run(
+            "az",
+            "account",
+            "get-access-token",
+            "--resource",
+            "https://management.azure.com/",
+            "--query",
+            "accessToken",
+            "--output",
+            "tsv",
+        )
+
+    access_token = _read_apim("ARM_TOKEN", token)
+    with httpx.Client(
+        base_url="https://management.azure.com",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=15,
+        follow_redirects=False,
+    ) as client:
+        yield partial(_arm_get, client)
+
+
+def read_session_state(io: Observations, label: str) -> BackendState:
+    with _apim_arm_reader(io) as arm:
+        return _read_apim(label, partial(io.backend, arm=arm), delays=(1, 2, 4, 8))
 
 
 def apim_prerequisite_failure(exc: AdmissionDenied) -> str | None:
@@ -185,7 +298,7 @@ def tracked_gateway_principal(state: BackendState) -> str | None:
 
 
 def recovery_children_match(
-    io: Observations, state: BackendState, children: set[str], principal: str
+    io: Observations, state: BackendState, children: set[str], principal: str, arm: ArmRead
 ) -> bool:
     gateway = gateway_id(io).casefold()
     secret_scope = f"{io.vault_id}/secrets/{io.tf['apim_web_session']['secret_name']}".casefold()
@@ -207,7 +320,13 @@ def recovery_children_match(
         for resource_id in (tracked_id,) if tracked_id else allowed_ids:
             if resource_type == "azurerm_api_management_api_policy":
                 resource_id += "/policies/policy"
-            if (io.arm(resource_id, version) is not None) != bool(tracked_id):
+            child_type = resource_type.removeprefix("azurerm_api_management_").upper()
+            live = _read_apim(
+                f"BASELINE_CHILD_{child_type}",
+                partial(arm, resource_id, version),
+                delays=(1, 2, 4, 8),
+            )
+            if (live is not None) != bool(tracked_id):
                 return False
     return True
 
@@ -217,28 +336,31 @@ def check_baseline(checks: Checks) -> bool:
         "apim_publisher_email"
     ):
         return False
-    state = checks.backend()
-    deployed_inputs(state)
     pilot, address, _ = gateway_target(checks.tf)
     session = checks.tf.get("apim_web_session")
     if session is not None:
         original_id = gateway_id(checks.io)
-        original = checks.io.arm(original_id, API_VERSION) or {}
-        identity = original.get("identity") or {}
         fragments = verified_web_policy_fragments(checks.tf, session)
         expected_children = session_resource_addresses(session, fragments)
-        present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
-        if checks.tf.get("apim_session_reconcile") is True:
-            principal = tracked_gateway_principal(state)
-            known_identity = bool(
-                principal
-                and identity.get("type") == "SystemAssigned"
-                and identity.get("principalId", "").casefold() == principal.casefold()
-                and present < expected_children
-                and recovery_children_match(checks.io, state, expected_children, principal)
+        with _apim_arm_reader(checks.io) as arm:
+            state = _read_apim(
+                "BASELINE_STATE", partial(checks.backend, arm=arm), delays=(1, 2, 4, 8)
             )
-        else:
-            known_identity = not present and not identity.get("principalId")
+            deployed_inputs(state)
+            present = {address for address in state.resources if address.startswith(SESSION_MODULE)}
+            original = _read_apim("BASELINE_GATEWAY", partial(arm, original_id, API_VERSION)) or {}
+            identity = original.get("identity") or {}
+            if checks.tf.get("apim_session_reconcile") is True:
+                principal = tracked_gateway_principal(state)
+                known_identity = bool(
+                    principal
+                    and identity.get("type") == "SystemAssigned"
+                    and str(identity.get("principalId", "")).casefold() == principal.casefold()
+                    and present < expected_children
+                    and recovery_children_match(checks.io, state, expected_children, principal, arm)
+                )
+            else:
+                known_identity = not present and not identity.get("principalId")
         original_matches = (
             not pilot
             and PILOT_ADDRESS not in state.resources
@@ -272,6 +394,8 @@ def check_baseline(checks: Checks) -> bool:
             if not permitted:
                 raise ApimPlanBlocked(f"APIM_{label}_PERMISSIONS_MISSING")
         return True
+    state = _read_apim("BASELINE_STATE", checks.backend)
+    deployed_inputs(state)
     if pilot:
         original_id = gateway_id(checks.io)
         original = checks.io.arm(original_id, API_VERSION) or {}
@@ -737,7 +861,11 @@ def plan_gateway(path: Path) -> None:
     except OSError:
         raise ApimPlanBlocked("APIM_TERRAFORM_PLAN_UNAVAILABLE") from None
     try:
-        after = io.backend()
+        after = (
+            read_session_state(io, "POST_PLAN_STATE")
+            if checks.tf.get("apim_web_session") is not None
+            else io.backend()
+        )
     except ObservationError:
         raise ApimPlanBlocked("APIM_POST_PLAN_BACKEND_UNAVAILABLE") from None
     try:
@@ -807,11 +935,18 @@ def verify_gateway(io: Observations, before: BackendState) -> None:
 
 
 def verify_sessions(io: Observations, before: BackendState) -> None:
+    with _apim_arm_reader(io) as arm:
+        after = _read_apim("POSTCONDITION_STATE", partial(io.backend, arm=arm), delays=(1, 2, 4, 8))
+        _verify_session_resources(io, before, after, arm)
+
+
+def _verify_session_resources(
+    io: Observations, before: BackendState, after: BackendState, arm: ArmRead
+) -> None:
     session = io.tf["apim_web_session"]
     children = session_resource_addresses(session, verified_web_policy_fragments(io.tf, session))
-    after = io.backend()
     gateway = gateway_id(io)
-    live = io.arm(gateway, API_VERSION) or {}
+    live = _read_apim("POSTCONDITION_GATEWAY", partial(arm, gateway, API_VERSION)) or {}
     identity = live.get("identity") or {}
     before_state, after_state = before.document or {}, after.document or {}
     if (
@@ -830,13 +965,12 @@ def verify_sessions(io: Observations, before: BackendState) -> None:
 
     role_address = SESSION_MODULE + "azurerm_role_assignment.gateway_secret"
     role_id = after.resources[role_address]
-    role = io.arm(role_id, "2022-04-01") or {}
     scope = f"{io.vault_id}/secrets/{session['secret_name']}"
     assignment_prefix = f"{scope}/providers/Microsoft.Authorization/roleAssignments/"
-    if (
-        not role_id.casefold().startswith(assignment_prefix.casefold())
-        or role.get("properties", {}).get("principalId") != identity["principalId"]
-    ):
+    if not role_id.casefold().startswith(assignment_prefix.casefold()):
+        raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")
+    role = _read_apim("POSTCONDITION_ROLE", partial(arm, role_id, "2022-04-01")) or {}
+    if role.get("properties", {}).get("principalId") != identity["principalId"]:
         raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")
     for address in sorted(children - {role_address}):
         resource_type = address.removeprefix(SESSION_MODULE).split(".", 1)[0]
@@ -847,5 +981,7 @@ def verify_sessions(io: Observations, before: BackendState) -> None:
             raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")
         if resource_type == "azurerm_api_management_api_policy":
             resource_id += "/policies/policy"
-        if not io.arm(resource_id, API_VERSION):
+        if not _read_apim(
+            "POSTCONDITION_CHILD", partial(arm, resource_id, API_VERSION), delays=(1, 2, 4, 8)
+        ):
             raise AdmissionDenied("APIM_SESSION_CHILD_POSTCONDITIONS_FAILED")

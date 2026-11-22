@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import yaml
 from lifecycle_fakes import CONFIG, SCOPE, MemoryObservations, auth, state, write_plan
@@ -300,11 +301,86 @@ def test_recovery_reads_policy_endpoint_and_rejects_unrecorded_write(baseline, c
         arm=lambda resource_id, version: live.get(resource_id),
     )
     principal = "11111111-1111-1111-1111-111111111111"
-    assert not apim.recovery_children_match(io, baseline, {address}, principal)
+    assert not apim.recovery_children_match(io, baseline, {address}, principal, io.arm)
     baseline.resources[address] = state_id
-    assert apim.recovery_children_match(io, baseline, {address}, principal)
+    assert apim.recovery_children_match(io, baseline, {address}, principal, io.arm)
     del live[policy_id]
-    assert not apim.recovery_children_match(io, baseline, {address}, principal)
+    assert not apim.recovery_children_match(io, baseline, {address}, principal, io.arm)
+
+
+@pytest.mark.parametrize("failures", [2, 5])
+def test_recovery_retries_failed_child_reads_without_treating_failure_as_absence(
+    baseline, monkeypatch, failures
+):
+    address = apim.SESSION_MODULE + 'azurerm_api_management_api_operation.web["refresh-post"]'
+    delays = []
+    reads = []
+    monkeypatch.setattr(apim, "sleep", delays.append)
+
+    def arm(resource_id, version):
+        reads.append(resource_id)
+        if len(reads) <= failures:
+            raise ObservationError("COMMAND_FAILED")
+        return None
+
+    io = SimpleNamespace(
+        tf=TF | {"apim_web_session": {"secret_name": "gateway-secret"}},
+        scope=SCOPE,
+        vault_id=SCOPE + "/providers/Microsoft.KeyVault/vaults/td-np-test01-kv",
+        arm=arm,
+    )
+    principal = "11111111-1111-1111-1111-111111111111"
+    if failures == 2:
+        assert apim.recovery_children_match(io, baseline, {address}, principal, io.arm)
+        assert len(reads) == 4
+        assert delays == [1, 2]
+    else:
+        with pytest.raises(AdmissionDenied, match="APIM_BASELINE_CHILD_API_OPERATION_READ_FAILED"):
+            apim.recovery_children_match(io, baseline, {address}, principal, io.arm)
+        assert len(reads) == 5
+        assert delays == [1, 2, 4, 8]
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "failure"),
+    [
+        (404, "ResourceNotFound", None),
+        (404, "UnknownError", "ARM_REQUEST_REJECTED"),
+        (403, "ResourceNotFound", "ForbiddenByRbac"),
+        (429, "TooManyRequests", "TooManyRequests"),
+    ],
+)
+def test_apim_arm_read_distinguishes_absence_from_errors(status, code, failure):
+    def respond(request):
+        assert request.url.host == "management.azure.com"
+        assert request.url.path == GATEWAY
+        assert request.url.params["api-version"] == apim.API_VERSION
+        assert request.headers["accept"] == "application/json"
+        return httpx.Response(status, json={"error": {"code": code}})
+
+    with httpx.Client(
+        base_url="https://management.azure.com", transport=httpx.MockTransport(respond)
+    ) as client:
+        if failure is None:
+            assert apim._arm_get(client, GATEWAY, apim.API_VERSION) is None
+        else:
+            with pytest.raises(ObservationError, match=f"^{failure}$"):
+                apim._arm_get(client, GATEWAY, apim.API_VERSION)
+
+
+def test_apim_policy_read_requests_the_json_envelope():
+    resource_id = GATEWAY + "/apis/tirodhan-backend-v1/policies/policy"
+
+    def respond(request):
+        assert request.url.path == resource_id
+        assert request.url.params["format"] == "xml"
+        assert request.headers["accept"] == "application/json"
+        return httpx.Response(200, json={"id": resource_id})
+
+    with httpx.Client(
+        base_url="https://management.azure.com", transport=httpx.MockTransport(respond)
+    ) as client:
+        assert apim._arm_get(client, resource_id, apim.API_VERSION) == {"id": resource_id}
 
 
 @pytest.mark.parametrize(
