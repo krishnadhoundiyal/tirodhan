@@ -33,6 +33,7 @@ from tirodhan.deployment.deployment_admission import (
 )
 from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_evidence import (
+    ArmRead,
     BackendState,
     Observations,
     classify_state,
@@ -102,9 +103,9 @@ class Checks:
             raise AdmissionDenied("OPERATION_BINDING_MISSING")
         return value
 
-    def backend(self) -> BackendState:
+    def backend(self, *, arm: ArmRead | None = None) -> BackendState:
         if self.observed_state is None:
-            self.observed_state = self.io.backend()
+            self.observed_state = self.io.backend() if arm is None else self.io.backend(arm=arm)
         return self.observed_state
 
     def check_target(self) -> bool:

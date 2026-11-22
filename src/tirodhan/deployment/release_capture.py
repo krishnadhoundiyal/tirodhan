@@ -534,7 +534,15 @@ def prepare(
         if not claims.get("oid"):
             raise AdmissionDenied("STATE_CAPTURE_OBSERVER_UNVERIFIED")
         request["state_observer_principal_id"] = claims["oid"]
-        state = observation.backend()
+        if (
+            apply_operation == "apim-apply"
+            and config["terraform"].get("apim_web_session") is not None
+        ):
+            from tirodhan.deployment.apim_lifecycle import read_session_state
+
+            state = read_session_state(observation, "PLAN_REVIEW_STATE")
+        else:
+            state = observation.backend()
         if state.kind != "INITIALIZED" or state.document is None or not state.etag:
             raise AdmissionDenied("AUTHORITATIVE_INITIALIZED_STATE_REQUIRED")
         prior = plan_prior_state(plan)

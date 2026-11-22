@@ -18,6 +18,7 @@ from tirodhan.deployment.apim_lifecycle import (
     gateway_id,
     gateway_target,
     plan_gateway,
+    read_session_state,
     verify_gateway,
     verify_sessions,
 )
@@ -171,10 +172,13 @@ def apply(operation: str, plan: Path) -> None:
         baseline = record_baseline(checks, plan)
     apim_before = None
     if operation == "apim-apply":
-        apim_before = io.backend()
+        session = io.tf.get("apim_web_session")
+        apim_before = (
+            read_session_state(io, "PRE_APPLY_STATE") if session is not None else io.backend()
+        )
         if apim_before.fingerprint != checks.binding().get("state_fingerprint"):
             raise AdmissionDenied("APIM_BACKEND_CHANGED_BEFORE_APPLY")
-        if io.tf.get("apim_web_session") is not None:
+        if session is not None:
             if not check_apim_baseline(checks):
                 raise AdmissionDenied("APIM_SESSION_BASELINE_CHANGED_BEFORE_APPLY")
         else:

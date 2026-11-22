@@ -9,11 +9,14 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from tirodhan.deployment.deployment_admission import ROOT, AdmissionDenied, digest
+
+ArmRead = Callable[[str, str], dict[str, Any] | None]
 
 
 class ObservationError(AdmissionDenied):
@@ -283,8 +286,8 @@ class Observations:
             raise ObservationError("INVENTORY_UNAVAILABLE")
         return {row["id"] for row in rows}
 
-    def backend(self) -> BackendState:
-        account = self.arm(self.state_id, "2025-06-01")
+    def backend(self, *, arm: ArmRead | None = None) -> BackendState:
+        account = (arm or self.arm)(self.state_id, "2025-06-01")
         if account is None:
             return BackendState("BACKEND_ABSENT", None, None, {})
         properties = account.get("properties", {})
