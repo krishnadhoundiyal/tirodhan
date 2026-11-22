@@ -198,6 +198,54 @@ def test_existing_consumption_gateway_empty_zone_refresh(baseline, session_plan,
         apim.validate_apim_plan(plan, baseline, terraform)
 
 
+@pytest.mark.parametrize("kind", ["gateway", "operation", "named-value"])
+def test_apim_refresh_accepts_only_exact_empty_metadata(baseline, kind):
+    if kind == "gateway":
+        address = apim.ADDRESS
+        identity = {
+            "type": "SystemAssigned",
+            "principal_id": "principal",
+            "tenant_id": "tenant",
+            "identity_ids": None,
+        }
+        before = {"sku_name": "Consumption_0", "zones": [], "identity": [identity]}
+        after = before | {"identity": [identity | {"identity_ids": []}]}
+        changed = after | {"identity": [after["identity"][0] | {"principal_id": "different"}]}
+    elif kind == "operation":
+        address = (
+            apim.SESSION_MODULE + 'azurerm_api_management_api_operation.backend["private-route"]'
+        )
+        parameter = {"name": "id", "required": True, "values": None}
+        before = {"method": "GET", "template_parameter": [parameter]}
+        after = before | {"template_parameter": [parameter | {"values": []}]}
+        changed = after | {"template_parameter": [parameter | {"values": ["real-value"]}]}
+    else:
+        address = apim.SESSION_MODULE + "azurerm_api_management_named_value.gateway_secret"
+        before = {"secret": True, "tags": None, "value_from_key_vault": [{"secret_id": "expected"}]}
+        after = before | {"tags": []}
+        changed = after | {"value_from_key_vault": [{"secret_id": "different"}]}
+
+    baseline.resources[address] = GATEWAY
+    resource_type = address.removeprefix(apim.SESSION_MODULE).split(".", 1)[0]
+    row = {
+        "address": address,
+        "type": resource_type,
+        "mode": "managed",
+        "provider_name": "registry.terraform.io/hashicorp/azurerm",
+        "change": {
+            "actions": ["update"],
+            "before": before | {"id": GATEWAY},
+            "after": after | {"id": GATEWAY},
+            "after_unknown": {},
+        },
+    }
+    assert apim.expected_provider_refresh(row, baseline)
+    summary = apim.drift_summary([row], baseline)
+    assert "unlisted=0" in summary and "private-route" not in summary
+    row["change"]["after"] = changed | {"id": GATEWAY}
+    assert not apim.expected_provider_refresh(row, baseline)
+
+
 def test_reconcile_creates_only_missing_children_and_preserves_the_identity(baseline, session_plan):
     plan, terraform = session_plan
     principal = "11111111-1111-1111-1111-111111111111"

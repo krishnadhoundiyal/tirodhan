@@ -412,6 +412,50 @@ def check_baseline(checks: Checks) -> bool:
     )
 
 
+def empty_list_refresh(before: dict[str, Any], after: dict[str, Any], field: str) -> bool:
+    return field in before and before[field] is None and after.get(field) == []
+
+
+def expected_gateway_refresh(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    if before.get("sku_name") != "Consumption_0":
+        return False
+    expected = before.copy()
+    if empty_list_refresh(before, after, "zones"):
+        expected["zones"] = []
+    identity, refreshed = before.get("identity"), after.get("identity")
+    if (
+        isinstance(identity, list)
+        and isinstance(refreshed, list)
+        and len(identity) == len(refreshed) == 1
+        and isinstance(identity[0], dict)
+        and isinstance(refreshed[0], dict)
+        and identity[0].get("type") == "SystemAssigned"
+        and identity[0].get("principal_id")
+        and identity[0].get("tenant_id")
+        and empty_list_refresh(identity[0], refreshed[0], "identity_ids")
+    ):
+        expected["identity"] = [identity[0] | {"identity_ids": []}]
+    return expected != before and expected == after
+
+
+def expected_operation_refresh(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    parameters, refreshed = before.get("template_parameter"), after.get("template_parameter")
+    if (
+        not isinstance(parameters, list)
+        or not isinstance(refreshed, list)
+        or len(parameters) != len(refreshed)
+        or any(not isinstance(parameter, dict) for parameter in parameters + refreshed)
+    ):
+        return False
+    expected = before | {
+        "template_parameter": [
+            prior | {"values": []} if empty_list_refresh(prior, live, "values") else prior
+            for prior, live in zip(parameters, refreshed, strict=True)
+        ]
+    }
+    return expected != before and expected == after
+
+
 def expected_provider_refresh(row: dict[str, Any], state: BackendState) -> bool:
     """Recognize AzureRM 5.8.0's serialization of specific omitted lists."""
     address = row.get("address")
@@ -425,7 +469,7 @@ def expected_provider_refresh(row: dict[str, Any], state: BackendState) -> bool:
     ):
         return False
 
-    block = address.split("[", 1)[0]
+    block = address.removeprefix(SESSION_MODULE).split("[", 1)[0]
     if row.get("type") != block.split(".", 1)[0]:
         return False
 
@@ -447,11 +491,17 @@ def expected_provider_refresh(row: dict[str, Any], state: BackendState) -> bool:
         return False
 
     if address == ADDRESS:
+        return expected_gateway_refresh(before, after)
+    if (
+        address.startswith(SESSION_MODULE)
+        and block == "azurerm_api_management_api_operation.backend"
+    ):
+        return expected_operation_refresh(before, after)
+    if address == SESSION_MODULE + "azurerm_api_management_named_value.gateway_secret":
         return (
-            before.get("sku_name") == "Consumption_0"
-            and "zones" in before
-            and before["zones"] is None
-            and (before | {"zones": []}) == after
+            before.get("secret") is True
+            and empty_list_refresh(before, after, "tags")
+            and (before | {"tags": []}) == after
         )
     if block not in (
         "azurerm_container_app.api",
@@ -730,10 +780,12 @@ def drift_summary(drift: Any, state: BackendState) -> str:
             unmatched += 1
             continue
         # for_each keys are values. Never copy them into a public workflow log.
-        label = address.split("[", 1)[0]
+        label = address.removeprefix(SESSION_MODULE).split("[", 1)[0]
         if not re.fullmatch(r"azurerm_[a-z0-9_]+\.[a-zA-Z0-9_]+", label):
             unmatched += 1
             continue
+        if address.startswith(SESSION_MODULE):
+            label = SESSION_MODULE + label
         fields = blocks.setdefault(label, set())
         change = row.get("change")
         if isinstance(change, dict):
