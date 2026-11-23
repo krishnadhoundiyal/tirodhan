@@ -268,6 +268,8 @@ jobs:
       TIRODHAN_MIGRATION_EXECUTION: ${{ needs.runtime-plan.outputs.migration_execution }}
       TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_APPLY_AUTHORIZATION }}
     needs: runtime-plan
+    # Runtime-only planning succeeds with skipped migration ancestors.
+    if: ${{ !cancelled() && needs.runtime-plan.result == 'success' }}
     environment: nonprod
     runs-on: ubuntu-latest
     permissions:
