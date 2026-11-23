@@ -276,6 +276,7 @@ def test_workflow_transports_execution_only_from_successful_migration_step():
     )
     assert plan["outputs"]["migration_execution"] == plan["env"]["TIRODHAN_MIGRATION_EXECUTION"]
     assert runtime["needs"] == "runtime-plan"
+    assert runtime["if"] == "${{ !cancelled() && needs.runtime-plan.result == 'success' }}"
     assert (
         runtime["env"]["TIRODHAN_MIGRATION_EXECUTION"]
         == "${{ needs.runtime-plan.outputs.migration_execution }}"
