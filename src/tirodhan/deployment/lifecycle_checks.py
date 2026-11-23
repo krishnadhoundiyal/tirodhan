@@ -1048,6 +1048,8 @@ class Checks:
                     self.job(),
                     selected,
                 )
+                # The plan validator checked the typed stage output.
+                del expected_images["deployment_stage"]
             if not expected_images["migration_image"] or not expected_images["fluent_bit_image"]:
                 return False
             if any(
