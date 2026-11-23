@@ -62,3 +62,13 @@ Enablement permits signature validation; every operation still needs its signed 
 and complete mandatory prerequisites. No automatic apply or application activation is
 authorized. Use the [existing bootstrap/plan/apply cycle](../NONPROD_FOUNDATION_RELEASE.md)
 without changing identity boundaries, Terraform ownership, providers or security controls.
+
+## NONPROD runtime-only releases
+
+For an established stage-four deployment, a signed release may select an already-published
+private application image by digest. The independent verifier attests to the live Alembic
+version rows for that exact image and active consumer. Planning and apply require an exact
+match with the heads packaged in the image. The verifier may read only the Alembic version
+table for this purpose. The signed saved plan and owner approval still govern apply.
+Terraform may update existing runtime workloads while preserving the migration job and
+deployed sidecar. Use the staged release for schema changes, bootstrap or stage advancement.

@@ -76,6 +76,8 @@ def main() -> None:
             authorize()
         else:
             verify()
+    except AdmissionDenied as exc:
+        raise SystemExit(str(exc)) from None
     except Exception:
         raise SystemExit("DATABASE_VERIFICATION_BLOCKED: no readiness evidence issued") from None
 

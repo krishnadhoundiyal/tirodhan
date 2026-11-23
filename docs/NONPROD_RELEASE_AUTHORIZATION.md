@@ -123,8 +123,12 @@ Capture derives the exact SP object ID from its configured application through a
 Entra reads and checks the tenant. Client/application IDs and principal object IDs differ.
 Signing also checks V against configuration and its independently pinned evidence key.
 
-Choose a UUID session and explicit timezone-aware expiry; use the same session for its
-planning, reviewed applies and V authorization. Substitute approved actual values:
+Choose a UUID session and use it for planning, reviewed applies and V authorization.
+On Windows, `scripts/capture-nonprod-release.ps1` supplies an expiry eight hours after
+invocation for `release`, `runtime-release`, `apim-release`, `database`, and `apply`.
+Run the launcher from the clean, reviewed main checkout. Pass `--expires-at` with a
+timezone-aware timestamp to choose a specific deadline. When invoking the Python module
+directly, supply that timestamp explicitly. Substitute approved actual values:
 
 ```text
 python -m tirodhan.deployment.release_capture runtime-release --session <session-uuid> --expires-at <ISO-8601-with-timezone> --review-pr <final-merged-PR> --output <private-directory>/release-request.json
@@ -163,6 +167,22 @@ Migration apply authority cannot authorize runtime. Bindings include exact plan 
 state fingerprint, lineage, serial and ETag. The existing workflow independently enforces
 its actual release session and rechecks remote state/native plan and all prerequisites.
 Offline signing cannot prove remote state has not changed after capture; live fences remain.
+
+### Runtime-only deployment of a published image
+
+Use this path once NONPROD is at stage four and the image requires the existing schema.
+Use the application digest from its successful private GHCR publish. Pass the same
+`--runtime-image ghcr.io/krishnadhoundiyal/tirodhan-nonprod@sha256:<digest>` to the
+`runtime-release` capture and to the `apply` capture for `runtime-apply`. The database
+authorization uses the usual database capture for the same session.
+
+Dispatch `nonprod-deploy.yml` with `authorization_id` and that exact `runtime_image`.
+The run goes straight to runtime planning. It keeps the deployed sidecar and migration
+job. The independent SQL verifier needs schema USAGE and SELECT on
+`public.alembic_version` in the NONPROD `tirodhan` database. Have the authorized database
+owner grant these narrowly if absent. No runtime table access is needed. The verifier
+checks the live schema during both planning and apply. A schema mismatch requires the
+staged migration path.
 
 ## Explicit secret enrollment — separate approval required
 

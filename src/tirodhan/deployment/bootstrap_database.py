@@ -286,6 +286,7 @@ async def write_verified_evidence(
         timeout=30,
         command_timeout=30,
     )
+    schema_heads: list[str] | None = None
     try:
         async with connection.transaction(readonly=True):
             checks = {
@@ -323,6 +324,21 @@ async def write_verified_evidence(
                     )
                 ),
             }
+            if consumer_context and "runtime_image" in consumer_context:
+                from tirodhan.deployment.deployment_admission import AdmissionDenied
+
+                if (
+                    await connection.fetchval(
+                        "SELECT has_table_privilege(current_user, "
+                        "to_regclass('public.alembic_version'), 'SELECT')"
+                    )
+                    is not True
+                ):
+                    raise AdmissionDenied("DATABASE_VERIFIER_ALEMBIC_SELECT_REQUIRED")
+                rows = await connection.fetch(
+                    "SELECT version_num FROM public.alembic_version ORDER BY version_num LIMIT 65"
+                )
+                schema_heads = [row["version_num"] for row in rows]
     finally:
         await connection.close()
     if authorization.identity_kind == "database_verification":
@@ -346,6 +362,7 @@ async def write_verified_evidence(
             "checks": checks,
             "identity_kind": authorization.identity_kind,
             "consumer_context": consumer_context,
+            **({"schema_heads": schema_heads} if schema_heads is not None else {}),
         },
         private,
         algorithm="EdDSA",

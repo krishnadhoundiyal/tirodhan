@@ -35,6 +35,7 @@ from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_evidence import (
     ArmRead,
     BackendState,
+    ObservationError,
     Observations,
     classify_state,
     plan_prior_state,
@@ -46,11 +47,27 @@ from tirodhan.deployment.migration_evidence import (
     migration_template,
     successful_execution,
 )
-from tirodhan.deployment.nonprod_images import private_release_images
+from tirodhan.deployment.nonprod_images import private_release_images, runtime_only_image
 from tirodhan.deployment.prerequisites import CHECK_IDS
 
 # Approved sole NONPROD owner; immutable GitHub user ID, not a mutable login.
 NONPROD_OWNER_REVIEWER_ID = 46423210
+
+FOUNDATION_API_VERSIONS = {
+    "azurerm_container_app_environment": "2025-07-01",
+    "azurerm_postgresql_flexible_server": "2024-08-01",
+    "azurerm_postgresql_flexible_server_database": "2024-08-01",
+    "azurerm_postgresql_flexible_server_active_directory_administrator": "2024-08-01",
+    "azurerm_postgresql_flexible_server_configuration": "2024-08-01",
+    "azurerm_postgresql_flexible_server_firewall_rule": "2024-08-01",
+    "azurerm_role_assignment": "2022-04-01",
+    "azurerm_servicebus_namespace": "2024-01-01",
+    "azurerm_servicebus_queue": "2024-01-01",
+    "azurerm_storage_account": "2025-06-01",
+    "azurerm_storage_container": "2025-06-01",
+    "azurerm_storage_management_policy": "2025-06-01",
+    "azurerm_user_assigned_identity": "2023-01-31",
+}
 
 
 def nonprod_owner_approval(value: dict[str, Any]) -> bool:
@@ -547,57 +564,87 @@ class Checks:
     def check_foundation(self) -> bool:
         from tirodhan.deployment.foundation_inventory import required_addresses
 
-        resources = self.foundation_ids()
+        try:
+            resources = self.foundation_ids()
+        except AdmissionDenied:
+            print("FOUNDATION_STATE_UNVERIFIED", flush=True)
+            raise
         required = required_addresses(self.tf)
-        if not required.issubset(resources):
+        if missing := required - resources.keys():
+            for address in sorted(missing):
+                print(f"FOUNDATION_ADDRESS_MISSING {address}", flush=True)
             return False
+
+        live_resources = {}
         for address in sorted(required):
             resource_id = resources[address]
-            if address.startswith("azurerm_role_assignment."):
-                # Generic discovery can select the wrong API for scoped extension resources.
-                live = self.io.arm(resource_id, "2022-04-01")
-            else:
-                live = self.io.runner.json(
-                    "az", "resource", "show", "--ids", resource_id, "-o", "json"
-                )
+            version = FOUNDATION_API_VERSIONS.get(address.split(".", 1)[0])
+            if version is None:
+                print(f"FOUNDATION_API_VERSION_UNAVAILABLE {address}", flush=True)
+                return False
+            try:
+                live = self.io.arm(resource_id, version)
+            except ObservationError:
+                print(f"FOUNDATION_READ_FAILED {address}", flush=True)
+                raise
             if (
                 not isinstance(live, dict)
                 or str(live.get("id", "")).casefold() != resource_id.casefold()
             ):
+                print(f"FOUNDATION_RESOURCE_UNVERIFIED {address}", flush=True)
                 return False
-            status = live.get("properties", {}).get("provisioningState")
+            properties = live.get("properties", {})
+            if not isinstance(properties, dict):
+                print(f"FOUNDATION_RESOURCE_UNVERIFIED {address}", flush=True)
+                return False
+            status = properties.get("provisioningState")
             if status is not None and status != "Succeeded":
+                print(f"FOUNDATION_PROVISIONING_UNVERIFIED {address}", flush=True)
                 return False
-        types = {
-            "azurerm_postgresql_flexible_server": "2024-08-01",
-            "azurerm_user_assigned_identity": "2023-01-31",
-            "azurerm_storage_account": "2025-06-01",
-            "azurerm_servicebus_namespace": "2024-01-01",
-            "azurerm_container_app_environment": "2025-07-01",
-        }
-        for resource_type, version in types.items():
+            live_resources[resource_id.casefold()] = live
+        for resource_type in (
+            "azurerm_postgresql_flexible_server",
+            "azurerm_user_assigned_identity",
+            "azurerm_storage_account",
+            "azurerm_servicebus_namespace",
+            "azurerm_container_app_environment",
+        ):
             matches = [
                 value for key, value in resources.items() if key.startswith(resource_type + ".")
             ]
             if not matches:
+                print(f"FOUNDATION_TYPE_MISSING {resource_type}", flush=True)
                 return False
             for resource_id in matches:
-                live = self.io.arm(resource_id, version)
-                if live is None or str(live.get("id", "")).casefold() != resource_id.casefold():
+                live = live_resources.get(resource_id.casefold())
+                if live is None:
+                    try:
+                        live = self.io.arm(resource_id, FOUNDATION_API_VERSIONS[resource_type])
+                    except ObservationError:
+                        print(f"FOUNDATION_READ_FAILED {resource_type}", flush=True)
+                        raise
+                if (
+                    not isinstance(live, dict)
+                    or str(live.get("id", "")).casefold() != resource_id.casefold()
+                    or not isinstance(live.get("properties", {}), dict)
+                ):
+                    print(f"FOUNDATION_RESOURCE_UNVERIFIED {resource_type}", flush=True)
                     return False
                 props = live.get("properties", {})
                 if resource_type == "azurerm_user_assigned_identity":
-                    if not props.get("principalId") or not props.get("clientId"):
-                        return False
+                    ready = bool(props.get("principalId") and props.get("clientId"))
                 elif resource_type == "azurerm_postgresql_flexible_server":
-                    if props.get("state") != "Ready" or not props.get("fullyQualifiedDomainName"):
-                        return False
-                    if props.get("authConfig", {}).get("passwordAuth") != "Disabled":
-                        return False
+                    ready = (
+                        props.get("state") == "Ready"
+                        and bool(props.get("fullyQualifiedDomainName"))
+                        and props.get("authConfig", {}).get("passwordAuth") == "Disabled"
+                    )
                 elif resource_type == "azurerm_servicebus_namespace":
-                    if props.get("status") != "Active":
-                        return False
-                elif props.get("provisioningState") != "Succeeded":
+                    ready = props.get("status") == "Active"
+                else:
+                    ready = props.get("provisioningState") == "Succeeded"
+                if not ready:
+                    print(f"FOUNDATION_READINESS_UNVERIFIED {resource_type}", flush=True)
                     return False
         return True
 
@@ -663,7 +710,7 @@ class Checks:
                 "consumer_context"
             ) != consumer_context(self.auth):
                 return False
-        return (
+        valid = (
             facts.get("sub") == issuer["principal_id"]
             and facts.get("configuration_hash") == self.auth.configuration_hash
             and facts.get("contract_hash") == self.auth.contract_hash
@@ -676,6 +723,32 @@ class Checks:
             and set(facts["checks"]) == set(expected)
             and all(v is True for v in facts["checks"].values())
         )
+        if not valid:
+            return False
+        if image := runtime_only_image(self.auth):
+            observed = facts.get("schema_heads")
+            expected_heads = self.io.runner.json(
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--entrypoint",
+                "python",
+                image,
+                "-c",
+                "import json; from alembic.script import ScriptDirectory; "
+                "print(json.dumps(sorted(ScriptDirectory('/app/migrations').get_heads())))",
+            )
+            if (
+                not isinstance(observed, list)
+                or not 0 < len(observed) <= 64
+                or not all(isinstance(head, str) for head in observed)
+                or observed != expected_heads
+            ):
+                print("RUNTIME_SCHEMA_REVISION_MISMATCH", flush=True)
+                return False
+        return True
 
     def check_verification_request(self) -> bool:
         from tirodhan.deployment.database_verification_request import Github, validate_request
@@ -830,7 +903,12 @@ class Checks:
         return True
 
     def check_images(self) -> bool:
-        images = private_release_images(self.auth.commit)
+        selected = runtime_only_image(self.auth)
+        images = (
+            private_release_images(self.auth.commit, runtime_image=selected)
+            if selected
+            else private_release_images(self.auth.commit)
+        )
         for image in images:
             self.io.runner.run("docker", "manifest", "inspect", image)
         return bool(images)
@@ -857,6 +935,9 @@ class Checks:
         )
 
     def check_migration(self) -> bool:
+        if runtime_only_image(self.auth):
+            # The mandatory database check verifies the signed live schema against the image.
+            return True
         from tirodhan.deployment.migration_start import belongs_to_release, operation_key
 
         job = self.job()
@@ -941,6 +1022,7 @@ class Checks:
 
             outputs = (current.document or {}).get("outputs", {})
             runtime = self.auth.operation == "runtime-apply"
+            selected = runtime_only_image(self.auth)
             expected_images = {
                 "migration_operation_key": operation_key(
                     self.auth, expected_job_id(self.config), os.environ.get("APPLICATION_IMAGE", "")
@@ -954,6 +1036,18 @@ class Checks:
                 else outputs.get("fluent_bit_image", {}).get("value")
                 or os.environ.get("FLUENT_BIT_IMAGE"),
             }
+            if selected:
+                from tirodhan.deployment.release import (
+                    runtime_only_variables,
+                    validate_runtime_only_plan,
+                )
+
+                validate_runtime_only_plan(plan, selected)
+                expected_images = runtime_only_variables(
+                    {name: output["value"] for name, output in outputs.items()},
+                    self.job(),
+                    selected,
+                )
             if not expected_images["migration_image"] or not expected_images["fluent_bit_image"]:
                 return False
             if any(

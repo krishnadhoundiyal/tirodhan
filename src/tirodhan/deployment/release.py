@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -13,6 +14,8 @@ from uuid import uuid4
 
 from tirodhan.deployment.azure_controls import assert_no_list_keys
 from tirodhan.deployment.check_state import populated_key_paths
+from tirodhan.deployment.deployment_admission import AdmissionDenied
+from tirodhan.deployment.nonprod_images import runtime_only_image
 from tirodhan.deployment.seed_secrets import SECRET_NAMES
 
 
@@ -22,6 +25,65 @@ class ReleaseBlocked(RuntimeError):
 
 MIGRATION_SECRET_NAMES = frozenset({"ghcr-pull-pat", "fluent-bit-sas"})
 RUNTIME_SECRET_NAMES = SECRET_NAMES - MIGRATION_SECRET_NAMES
+RUNTIME_WORKLOADS = frozenset(
+    {
+        "azurerm_container_app.api[0]",
+        "azurerm_container_app.worker[0]",
+        "azurerm_container_app_job.scheduled[0]",
+    }
+)
+
+
+def runtime_only_variables(
+    state: dict[str, Any], migration_job: dict[str, Any], image: str
+) -> dict[str, Any]:
+    from tirodhan.deployment.migration_start import MARKER, belongs_to_release
+
+    containers = migration_job.get("properties", {}).get("template", {}).get("containers", [])
+    keys = [
+        item.get("value")
+        for container in containers
+        if container.get("name") == "application"
+        for item in container.get("env", [])
+        if item.get("name") == MARKER
+    ]
+    if (
+        state.get("deployment_stage") != 4
+        or not state.get("migration_image")
+        or not state.get("fluent_bit_image")
+        or len(keys) != 1
+        or not isinstance(keys[0], str)
+        or not re.fullmatch("[0-9a-f]{64}", keys[0])
+        or not belongs_to_release(migration_job, keys[0])
+    ):
+        raise AdmissionDenied("RUNTIME_ONLY_REQUIRES_ESTABLISHED_STAGE_FOUR")
+    return {
+        "deployment_stage": 4,
+        "application_image": image,
+        "migration_image": state["migration_image"],
+        "fluent_bit_image": state["fluent_bit_image"],
+        "migration_operation_key": keys[0],
+    }
+
+
+def validate_runtime_only_plan(plan: dict[str, Any], image: str) -> list[str]:
+    variables = plan.get("variables", {})
+    if variables.get("application_image", {}).get("value") != image or (
+        variables.get("deployment_stage", {}).get("value") != 4
+    ):
+        raise AdmissionDenied("RUNTIME_ONLY_PLAN_IMAGE_OR_STAGE_MISMATCH")
+    changed = []
+    for resource in plan.get("resource_changes", []):
+        if resource.get("mode", "managed") != "managed":
+            continue
+        actions = resource["change"]["actions"]
+        if actions == ["no-op"]:
+            continue
+        address = resource["address"]
+        if address not in RUNTIME_WORKLOADS or actions != ["update"]:
+            raise AdmissionDenied("RUNTIME_ONLY_PLAN_OUTSIDE_WORKLOADS")
+        changed.append(address)
+    return changed
 
 
 def output_values() -> dict[str, Any]:
@@ -69,6 +131,7 @@ def require_secrets(available: frozenset[str], required: frozenset[str]) -> None
 
 def plan(mode: str, path: str) -> None:
     from tirodhan.deployment.deployment_admission import configuration
+    from tirodhan.deployment.lifecycle_checks import Checks
     from tirodhan.deployment.migration_start import expected_job_id, operation_key
     from tirodhan.deployment.prerequisites import require_provisioning, revalidate_database
 
@@ -78,17 +141,24 @@ def plan(mode: str, path: str) -> None:
     available = enabled_secret_names(state)
     require_secrets(available, MIGRATION_SECRET_NAMES)
     image, sidecar = os.environ["APPLICATION_IMAGE"], os.environ["FLUENT_BIT_IMAGE"]
-    values = migration_variables(state, image, sidecar)
-    values["migration_operation_key"] = operation_key(
-        grant.authorization, expected_job_id(configuration()), image
-    )
-    if mode == "runtime":
+    selected = runtime_only_image(grant.authorization)
+    if selected:
+        values = runtime_only_variables(
+            state, Checks(grant.authorization, configuration(), {}).job(), selected
+        )
+    else:
+        values = migration_variables(state, image, sidecar)
+        values["migration_operation_key"] = operation_key(
+            grant.authorization, expected_job_id(configuration()), image
+        )
+    if mode == "runtime" and not selected:
         values.update(
             deployment_stage=4,
             application_image=image,
             fluent_bit_image=sidecar,
-            enabled_runtime_secret_names=json.dumps(sorted(runtime_secret_names(available))),
         )
+    if mode == "runtime":
+        values["enabled_runtime_secret_names"] = json.dumps(sorted(runtime_secret_names(available)))
     environment = os.environ | {
         f"TF_VAR_{key}": json.dumps(value) if value is None else str(value)
         for key, value in values.items()
@@ -112,6 +182,8 @@ def plan(mode: str, path: str) -> None:
     )
     if populated_key_paths(data):
         raise ReleaseBlocked("Deployment plan contains populated storage credential attributes")
+    if selected:
+        validate_runtime_only_plan(data, selected)
 
 
 def run_migration() -> None:

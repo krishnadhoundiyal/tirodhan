@@ -73,8 +73,8 @@ def test_every_foundation_binding_is_mandatory_before_database_bootstrap() -> No
 
 
 @pytest.mark.parametrize("assignment_exists", [True, False])
-def test_foundation_reads_scoped_role_assignments_through_authorization_api(
-    monkeypatch, assignment_exists: bool
+def test_foundation_reads_inventory_through_versioned_arm(
+    monkeypatch, capsys, assignment_exists: bool
 ) -> None:
     io = MemoryObservations()
     resources = {}
@@ -90,17 +90,13 @@ def test_foundation_reads_scoped_role_assignments_through_authorization_api(
             resource_id = io.scope + "/providers/Synthetic/" + address
         resources[address] = resource_id
     io.current = state(resources)
-    checked_roles = set()
-
-    def generic_read(*args):
-        assert args[:4] == ("az", "resource", "show", "--ids")
-        assert args[4] not in roles
-        return {"id": args[4]}
+    reads = {}
 
     def arm(resource_id, version):
+        assert resource_id not in reads
+        reads[resource_id] = version
         if resource_id in roles:
             assert version == "2022-04-01"
-            checked_roles.add(resource_id)
             return {"id": resource_id} if assignment_exists else None
         return {
             "id": resource_id,
@@ -115,11 +111,20 @@ def test_foundation_reads_scoped_role_assignments_through_authorization_api(
             },
         }
 
-    monkeypatch.setattr(io.runner, "json", generic_read)
     monkeypatch.setattr(io, "arm", arm)
     checks = Checks(auth("database-bootstrap", kind="database"), io.config, {}, io)
     assert checks.check_foundation() is assignment_exists
-    assert checked_roles == roles if assignment_exists else len(checked_roles) == 1
+    assert io.runner.commands == []
+    if assignment_exists:
+        assert set(reads) == set(resources.values())
+        assert reads[resources["azurerm_postgresql_flexible_server_database.application"]] == (
+            "2024-08-01"
+        )
+    else:
+        assert len(roles & reads.keys()) == 1
+        message = capsys.readouterr().out
+        assert "FOUNDATION_RESOURCE_UNVERIFIED azurerm_role_assignment." in message
+        assert "/providers/" not in message
 
 
 def test_inventory_refuses_unreviewed_terraform_drift(monkeypatch, tmp_path) -> None:

@@ -323,6 +323,9 @@ def test_verifier_checks_actual_consumer_before_any_azure_authentication(consume
         "missing-grant",
         "unknown-role",
         "old-observations",
+        "runtime-schema",
+        "different-schema",
+        "missing-schema-grant",
     ],
 )
 @pytest.mark.asyncio
@@ -330,6 +333,18 @@ async def test_verifier_uses_only_readonly_sql_and_requires_actual_facts(
     monkeypatch, tmp_path, consumer, invalid
 ):
     authorization, config, request = consumer
+    runtime_only = invalid in {"runtime-schema", "different-schema", "missing-schema-grant"}
+    if runtime_only:
+        image = "ghcr.io/krishnadhoundiyal/tirodhan-nonprod@sha256:" + "a" * 64
+        operation = "runtime-plan"
+        authorization = replace(
+            authorization,
+            operation=operation,
+            claims=authorization.claims | {"bindings": {operation: {"runtime_image": image}}},
+        )
+        monkeypatch.setenv("TIRODHAN_RUNTIME_ONLY_IMAGE", image)
+        monkeypatch.setenv("GITHUB_JOB", operation)
+        request = requests.consumer_context(authorization)
     v = verifier(authorization)
     target = {
         "host": "synthetic",
@@ -397,10 +412,22 @@ async def test_verifier_uses_only_readonly_sql_and_requires_actual_facts(
 
     postgres.fetchval.side_effect = scalar
     application.fetchval.side_effect = [True, invalid != "missing-grant", True, True, True]
+    if runtime_only:
+        application.fetchval.side_effect = [
+            True,
+            True,
+            True,
+            True,
+            True,
+            invalid != "missing-schema-grant",
+        ]
+        application.fetch.return_value = [
+            {"version_num": "old" if invalid == "different-schema" else "expected"}
+        ]
     connect = AsyncMock(side_effect=[postgres, application])
     monkeypatch.setattr(bootstrap_database.asyncpg, "connect", connect)
-    if invalid:
-        with pytest.raises(RuntimeError, match="postconditions|expired"):
+    if invalid and invalid not in {"runtime-schema", "different-schema"}:
+        with pytest.raises(RuntimeError, match="postconditions|expired|ALEMBIC_SELECT_REQUIRED"):
             await bootstrap_database.write_verified_evidence(
                 target, v, database_user=VROLE, consumer_context=request
             )
@@ -411,7 +438,14 @@ async def test_verifier_uses_only_readonly_sql_and_requires_actual_facts(
         )
         monkeypatch.setenv("TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE", emitted[0])
         monkeypatch.setattr(Checks, "database_target", lambda _: target)
-        assert Checks(authorization, config, {}).check_database()
+        observations = Mock()
+        observations.runner.json.return_value = ["expected"]
+        checks = Checks(authorization, config, {}, observations)
+        assert checks.check_database() is (invalid != "different-schema")
+        if runtime_only:
+            args = observations.runner.json.call_args.args
+            assert args[:5] == ("docker", "run", "--rm", "--network", "none")
+            assert image in args
         facts = jwt.decode(emitted[0], options={"verify_signature": False})
         for mutation in (
             {"consumer_context": request | {"operation": "migration-start"}},
@@ -423,7 +457,7 @@ async def test_verifier_uses_only_readonly_sql_and_requires_actual_facts(
                 facts | mutation, private, algorithm="EdDSA", headers={"kid": "test"}
             )
             monkeypatch.setenv("TIRODHAN_DATABASE_PREREQUISITE_EVIDENCE", token)
-            assert not Checks(authorization, config, {}).check_database()
+            assert not checks.check_database()
         assert "not-to-be-persisted" not in emitted[0]
     for connection in (postgres, application):
         connection.transaction.assert_called_once_with(readonly=True)

@@ -197,6 +197,7 @@ def is_apim_release(operations: list[str]) -> bool:
 def is_backend_runtime_release(operations: list[str]) -> bool:
     return tuple(sorted(operations)) in (
         RUNTIME_PLAN_OPERATIONS,
+        ("runtime-plan", "terraform-setup"),
         ("database-verify",),
         ("migration-apply", "migration-start", "terraform-setup"),
         ("runtime-apply", "terraform-setup"),
@@ -360,6 +361,10 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             run_id=os.environ.get("TIRODHAN_OPERATOR_RUN_ID")
             or os.environ.get("GITHUB_RUN_ID", ""),
         )
+        if requested in {"runtime-plan", "runtime-apply"}:
+            from tirodhan.deployment.nonprod_images import runtime_only_image
+
+            runtime_only_image(authorization)
         if requested in {"apim-plan", "apim-apply"} and os.environ.get("GITHUB_ACTIONS") == "true":
             from tirodhan.deployment.apim_lifecycle import validate_dispatch
 
