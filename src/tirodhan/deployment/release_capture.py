@@ -24,6 +24,7 @@ from tirodhan.deployment.deployment_admission import (
     database_verifier_enrollment_target,
     digest,
     is_apim_release,
+    is_backend_runtime_release,
     maintenance_target,
 )
 from tirodhan.deployment.lifecycle_evidence import Observations, Runner, plan_prior_state
@@ -126,6 +127,7 @@ def collect_review(
     code_hash: str,
     *,
     require_automated_checks: bool = True,
+    require_coderabbit_review: bool = True,
 ) -> dict[str, Any]:
     pull = github.get(f"pulls/{number}")
     source = pull["head"]["sha"]
@@ -155,8 +157,12 @@ def collect_review(
         if not candidates:
             raise AdmissionDenied("REQUIRED_CI_EVIDENCE_MISSING")
         runs.append(max(candidates, key=lambda row: row["id"]))
-    evidence.update(workflow_runs=runs, review=None)
+    evidence["workflow_runs"] = runs
+    if not require_coderabbit_review:
+        validate_evidence(evidence, commit, require_coderabbit_review=False)
+        return evidence
 
+    evidence["review"] = None
     reviews = github.get(f"pulls/{number}/reviews?per_page=100")
     if len(reviews) >= 100:
         raise AdmissionDenied("REVIEW_HISTORY_EXCEEDS_SAFE_CAPTURE_BOUND")
@@ -332,6 +338,7 @@ def prepare(
         commit,
         code_hash,
         require_automated_checks=not is_apim_release(list(bindings)),
+        require_coderabbit_review=not is_backend_runtime_release(list(bindings)),
     )
     if runner.run("git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}") != evidence["target_tree"]:
         raise AdmissionDenied("LOCAL_REVIEWED_TREE_MISMATCH")

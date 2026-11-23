@@ -186,6 +186,18 @@ def test_apim_collector_skips_automated_checks_and_preserves_thread_check():
         collect_review(github, 123, COMMIT, CODE, require_automated_checks=False)
 
 
+def test_backend_runtime_collector_uses_final_ci_without_requesting_a_bot_review():
+    github = ReviewGithub()
+    github.evidence["review"] = None
+    evidence = collect_review(github, 123, COMMIT, CODE, require_coderabbit_review=False)
+    assert len(evidence["workflow_runs"]) == 2
+    assert not any("/reviews" in path or "check-runs" in path for path in github.reads)
+
+    github.evidence["workflow_runs"][0]["conclusion"] = "failure"
+    with pytest.raises(AdmissionDenied, match="CI_EVIDENCE_INVALID"):
+        collect_review(github, 123, COMMIT, CODE, require_coderabbit_review=False)
+
+
 @pytest.mark.parametrize(
     "failure",
     ["missing-ci", "failed-ci", "wrong-head", "wrong-repository", "unmerged", "unresolved"],
@@ -288,7 +300,8 @@ def test_foreign_changed_or_unverified_plan_artifacts_fail(tmp_path, failure):
         capture_plan_artifact(github, 11, plan, "migration-apply", commit=COMMIT, session=SESSION)
 
 
-def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatch):
+@pytest.mark.parametrize("kind", ["release", "runtime-release"])
+def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatch, kind):
     import time
 
     from lifecycle_fakes import CONFIG, OID
@@ -315,18 +328,21 @@ def test_preparation_uses_actual_principal_metadata_and_configuration(monkeypatc
             return {"id": OID, "appId": config["deployment_client_id"]}
 
     monkeypatch.setattr(release_capture, "contract_digest", lambda: CODE)
+    github = ReviewGithub()
+    if kind == "runtime-release":
+        github.evidence["review"] = None
     request = release_capture.prepare(
-        "release",
+        kind,
         session=SESSION,
         expires_at=int(time.time()) + 600,
         review_pr=123,
-        github=ReviewGithub(),
+        github=github,
         runner=Runner(),
         config=config,
     )
     assert request["principal_id"] == OID
     assert request["configuration_hash"] == digest(config)
-    assert request["operations"] == sorted(release_capture.expected_bindings("release"))
+    assert request["operations"] == sorted(release_capture.expected_bindings(kind))
 
 
 def test_preparation_blocks_runner_before_any_external_read(monkeypatch):
