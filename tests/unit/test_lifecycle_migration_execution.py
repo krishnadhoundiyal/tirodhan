@@ -265,7 +265,11 @@ def test_workflow_transports_execution_only_from_successful_migration_step():
     step = next(item for item in apply["steps"] if item.get("id") == "migration")
     assert step["run"] == "python -m tirodhan.deployment.release migrate"
     assert not step.get("continue-on-error") and "if" not in step
-    assert plan["needs"] == "migration-apply"
+    assert set(plan["needs"]) == {"release-admission", "migration-apply"}
+    assert " ".join(plan["if"].split()) == (
+        "${{ !cancelled() && needs.release-admission.result == 'success' && "
+        "(inputs.runtime_image || needs.migration-apply.result == 'success') }}"
+    )
     assert (
         plan["env"]["TIRODHAN_MIGRATION_EXECUTION"]
         == "${{ needs.migration-apply.outputs.migration_execution }}"
