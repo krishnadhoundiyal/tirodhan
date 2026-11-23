@@ -18,6 +18,7 @@ from tirodhan.deployment.deployment_admission import (
     digest,
     require_release_authorization,
 )
+from tirodhan.deployment.nonprod_images import is_runtime_image, runtime_only_image
 
 REPOSITORY = "krishnadhoundiyal/tirodhan"
 DEPLOY_WORKFLOW = ".github/workflows/nonprod-deploy.yml"
@@ -108,6 +109,8 @@ def consumer_context(authorization: Authorization) -> dict[str, str]:
         "principal_id": authorization.principal_id,
         "authorization_id": str(authorization.claims["jti"]),
     }
+    if image := runtime_only_image(authorization):
+        value["runtime_image"] = image
     return value | {"request_id": digest(value)}
 
 
@@ -131,6 +134,13 @@ def validate_request(
         "authorization_id",
         "request_id",
     }
+    if isinstance(request, dict) and "runtime_image" in request:
+        fields.add("runtime_image")
+        if request.get("operation") not in {
+            "runtime-plan",
+            "runtime-apply",
+        } or not is_runtime_image(request["runtime_image"]):
+            raise AdmissionDenied("DATABASE_VERIFICATION_RUNTIME_IMAGE_INVALID")
     if (
         not isinstance(request, dict)
         or set(request) != fields

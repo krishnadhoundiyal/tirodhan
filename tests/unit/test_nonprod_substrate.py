@@ -293,10 +293,13 @@ def test_sas_rotation_is_user_delegation_write_only_with_overlap(
 def test_workflows_enforce_trust_and_migration_gate() -> None:
     deploy = yaml.safe_load((ROOT / ".github/workflows/nonprod-deploy.yml").read_text())
     jobs = deploy["jobs"]
-    assert jobs["build"]["if"] == "github.ref == 'refs/heads/main'"
+    assert jobs["build"]["if"] == "github.ref == 'refs/heads/main' && !inputs.runtime_image"
+    assert jobs["release-admission"]["env"]["TIRODHAN_NONPROD_OPERATION"] == (
+        "${{ inputs.runtime_image && 'runtime-plan' || 'migration-plan' }}"
+    )
     assert jobs["migration-apply"]["environment"] == "nonprod"
-    assert jobs["runtime-plan"]["needs"] == "migration-apply"
     assert jobs["runtime-apply"]["needs"] == "runtime-plan"
+    assert jobs["runtime-apply"]["environment"] == "nonprod"
     pr = yaml.safe_load((ROOT / ".github/workflows/pr-checks.yml").read_text())
     assert "id-token" not in pr["permissions"]
     for path in (ROOT / ".github").rglob("*.yml"):

@@ -98,12 +98,12 @@ variable "deployment_stage" {
   }
 }
 variable "application_image" {
-  description = "Private GHCR application image tagged with the full commit SHA."
+  description = "Private GHCR application image pinned by digest or full commit SHA tag."
   type        = string
   default     = null
   validation {
-    condition     = var.application_image == null ? true : can(regex("^ghcr.io/[a-z0-9_/-]+:[a-f0-9]{40}$", var.application_image))
-    error_message = "Use a GHCR image tagged with a full lowercase Git SHA."
+    condition     = var.application_image == null ? true : can(regex("^ghcr.io/[a-z0-9_/-]+(:[a-f0-9]{40}|@sha256:[a-f0-9]{64})$", var.application_image))
+    error_message = "Use a GHCR image pinned by SHA-256 digest or full lowercase Git SHA tag."
   }
 }
 variable "migration_image" {

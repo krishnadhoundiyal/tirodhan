@@ -8,6 +8,10 @@ on:
         description: Explicit signed release session ID
         required: true
         type: string
+      runtime_image:
+        description: Published private application image by digest for a runtime-only release
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -22,6 +26,7 @@ env:
   TIRODHAN_OPERATOR_RUN_ID: ${{ inputs.authorization_id }}
   TIRODHAN_NONPROD_RELEASE_AUTHORIZATION: ${{ secrets.NONPROD_RELEASE_AUTHORIZATION }}
   GH_TOKEN: ${{ github.token }}
+  TIRODHAN_RUNTIME_ONLY_IMAGE: ${{ inputs.runtime_image }}
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -36,7 +41,7 @@ env:
 jobs:
   release-admission:
     env:
-      TIRODHAN_NONPROD_OPERATION: migration-plan
+      TIRODHAN_NONPROD_OPERATION: ${{ inputs.runtime_image && 'runtime-plan' || 'migration-plan' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +56,7 @@ jobs:
           python -m tirodhan.deployment.deployment_admission
   build:
     needs: release-admission
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !inputs.runtime_image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -226,7 +231,10 @@ jobs:
     env:
       TIRODHAN_EXECUTION_ENVIRONMENT: nonprod-plan
       TIRODHAN_MIGRATION_EXECUTION: ${{ needs.migration-apply.outputs.migration_execution }}
-    needs: migration-apply
+    needs: [release-admission, migration-apply]
+    if: >-
+      ${{ !cancelled() && needs.release-admission.result == 'success' &&
+          (inputs.runtime_image || needs.migration-apply.result == 'success') }}
     environment:
       name: nonprod-plan
       deployment: false

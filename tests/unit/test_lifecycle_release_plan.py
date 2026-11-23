@@ -13,12 +13,54 @@ from lifecycle_fakes import CONFIG, SCOPE, MemoryObservations, auth, state, writ
 from tirodhan.deployment import deployment_admission, prerequisites, release
 from tirodhan.deployment.foundation_inventory import BOOTSTRAP_FIREWALL_ADDRESS
 from tirodhan.deployment.lifecycle_checks import Checks
-from tirodhan.deployment.migration_start import expected_job_id, operation_key
+from tirodhan.deployment.migration_start import MARKER, expected_job_id, operation_key
 
 APP = "ghcr.io/krishnadhoundiyal/tirodhan:" + "a" * 40
 SIDECAR = "ghcr.io/krishnadhoundiyal/tirodhan-log-sidecar:" + "a" * 40
 OLD_APP = APP.replace("a" * 40, "b" * 40)
 OLD_SIDECAR = SIDECAR.replace("a" * 40, "b" * 40)
+PUBLISHED_APP = "ghcr.io/krishnadhoundiyal/tirodhan-nonprod@sha256:" + "a" * 64
+
+
+@pytest.mark.parametrize(
+    ("address", "actions", "allowed"),
+    [
+        ("azurerm_container_app.api[0]", ["update"], True),
+        ("azurerm_container_app.api[0]", ["create"], False),
+        ("azurerm_container_app_job.migration[0]", ["update"], False),
+        ("azurerm_postgresql_flexible_server.database", ["update"], False),
+    ],
+)
+def test_runtime_only_plan_preserves_stage_and_migration_job(address, actions, allowed):
+    key = "a" * 64
+    job = {
+        "properties": {
+            "template": {
+                "containers": [{"name": "application", "env": [{"name": MARKER, "value": key}]}]
+            }
+        }
+    }
+    values = release.runtime_only_variables(
+        {"deployment_stage": 4, "migration_image": OLD_APP, "fluent_bit_image": OLD_SIDECAR},
+        job,
+        PUBLISHED_APP,
+    )
+    assert values == {
+        "deployment_stage": 4,
+        "migration_image": OLD_APP,
+        "migration_operation_key": key,
+        "application_image": PUBLISHED_APP,
+        "fluent_bit_image": OLD_SIDECAR,
+    }
+    plan = {
+        "variables": {name: {"value": value} for name, value in values.items()},
+        "resource_changes": [{"address": address, "change": {"actions": actions}}],
+    }
+    if allowed:
+        assert release.validate_runtime_only_plan(plan, PUBLISHED_APP) == [address]
+    else:
+        with pytest.raises(deployment_admission.AdmissionDenied, match="OUTSIDE_WORKLOADS"):
+            release.validate_runtime_only_plan(plan, PUBLISHED_APP)
 
 
 @pytest.mark.parametrize("mode", ["migration", "runtime"])

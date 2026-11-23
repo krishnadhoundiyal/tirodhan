@@ -736,6 +736,32 @@ def test_backend_runtime_planning_requires_exact_main_and_successful_ci(context)
             validate_authorization(token, operation=operation, **execution)
 
 
+def test_runtime_only_signature_binds_the_digest_and_cannot_plan_a_migration(context, monkeypatch):
+    from tirodhan.deployment.nonprod_images import runtime_only_image
+
+    operator_request(context, "runtime-release")
+    _, policy, config, request = context
+    image = "ghcr.io/krishnadhoundiyal/tirodhan-nonprod@sha256:" + "a" * 64
+    request.update(runtime_image=image, operations=["runtime-plan", "terraform-setup"])
+    request["evidence"].pop("review")
+    token, _ = sign(context)
+    execution = {
+        "policy": policy,
+        "config_hash": digest(config),
+        "code_hash": CODE,
+        "commit": COMMIT,
+        "run_id": SESSION,
+    }
+    authorization = validate_authorization(token, operation="runtime-plan", **execution)
+    monkeypatch.setenv("TIRODHAN_RUNTIME_ONLY_IMAGE", image)
+    assert runtime_only_image(authorization) == image
+    monkeypatch.setenv("TIRODHAN_RUNTIME_ONLY_IMAGE", image[:-1] + "b")
+    with pytest.raises(AdmissionDenied, match="RUNTIME_IMAGE_AUTHORIZATION_MISMATCH"):
+        runtime_only_image(authorization)
+    with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+        validate_authorization(token, operation="migration-plan", **execution)
+
+
 def test_apim_planning_signature_cannot_authorize_apply_or_application_release(context):
     operator_request(context, "apim-release")
     token, _ = sign(context)

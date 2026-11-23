@@ -4,14 +4,41 @@ from __future__ import annotations
 
 import os
 import re
+from typing import TypeGuard
 
 import httpx
+
+from tirodhan.deployment.deployment_admission import AdmissionDenied, Authorization
 
 PACKAGE_REPOSITORIES = {
     "APPLICATION_IMAGE": "krishnadhoundiyal/tirodhan-nonprod",
     "FLUENT_BIT_IMAGE": "krishnadhoundiyal/tirodhan-nonprod-log-sidecar",
 }
 REGISTRY = "https://ghcr.io"
+
+
+def is_runtime_image(value: object) -> TypeGuard[str]:
+    repository = PACKAGE_REPOSITORIES["APPLICATION_IMAGE"]
+    return (
+        isinstance(value, str)
+        and re.fullmatch(rf"ghcr\.io/{re.escape(repository)}@sha256:[a-f0-9]{{64}}", value)
+        is not None
+    )
+
+
+def runtime_only_image(authorization: Authorization) -> str | None:
+    selected = os.environ.get("TIRODHAN_RUNTIME_ONLY_IMAGE") or None
+    binding = authorization.claims.get("bindings", {}).get(authorization.operation, {})
+    signed = binding.get("runtime_image")
+    if signed is None and selected is None:
+        return None
+    if (
+        authorization.operation not in {"runtime-plan", "runtime-apply"}
+        or not is_runtime_image(signed)
+        or selected != signed
+    ):
+        raise AdmissionDenied("RUNTIME_IMAGE_AUTHORIZATION_MISMATCH")
+    return signed
 
 
 def image_refs(commit: str) -> tuple[str, ...]:
@@ -55,8 +82,12 @@ def anonymous_access_denied(client: httpx.Client, repository: str) -> bool:
         return False
 
 
-def private_release_images(commit: str) -> tuple[str, ...]:
+def private_release_images(commit: str, *, runtime_image: str | None = None) -> tuple[str, ...]:
     refs = image_refs(commit)
+    if runtime_image is not None:
+        if not is_runtime_image(runtime_image):
+            return ()
+        refs = (runtime_image,)
     if not refs:
         return ()
     with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as client:

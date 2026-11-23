@@ -320,8 +320,16 @@ def prepare(
     resume_request: dict[str, Any] | None = None,
     secret_names: list[str] | None = None,
     print_apim_plan: bool = False,
+    runtime_image: str | None = None,
 ) -> dict[str, Any]:
     operator_only()
+    if runtime_image is not None:
+        from tirodhan.deployment.nonprod_images import is_runtime_image
+
+        if not is_runtime_image(runtime_image) or (
+            kind != "runtime-release" and (kind, apply_operation) != ("apply", "runtime-apply")
+        ):
+            raise AdmissionDenied("RUNTIME_IMAGE_NOT_APPLICABLE")
     if resume_request is not None and kind != "recovery":
         raise AdmissionDenied("RESUME_REQUEST_REQUIRES_RECOVERY_PURPOSE")
     # Authorize only the clean checked-out main commit with exact reviewed tree provenance.
@@ -331,7 +339,7 @@ def prepare(
     if github.get("commits/main")["sha"] != commit:
         raise AdmissionDenied("CHECKOUT_IS_NOT_CURRENT_MAIN")
     code_hash = contract_digest()
-    bindings = expected_bindings(kind, apply_operation)
+    bindings = expected_bindings(kind, apply_operation, runtime_only=runtime_image is not None)
     evidence = collect_review(
         github,
         review_pr,
@@ -525,6 +533,8 @@ def prepare(
         request["recovery_principal"] = recovery_principal
     if secret_names is not None:
         request["secret_names"] = secret_names
+    if runtime_image is not None:
+        request["runtime_image"] = runtime_image
     if kind == "apply":
         if plan is None or artifact_id is None:
             raise AdmissionDenied("REVIEWED_GITHUB_PLAN_ARTIFACT_REQUIRED")
@@ -563,6 +573,12 @@ def prepare(
             for name, value in config["terraform"].items()
         ):
             raise AdmissionDenied("PLAN_CONFIGURATION_OR_SECRET_HYGIENE_INVALID")
+        if runtime_image is not None:
+            from tirodhan.deployment.release import validate_runtime_only_plan
+
+            for resource in validate_runtime_only_plan(shown, runtime_image):
+                print(f"Runtime update: {resource}", file=sys.stderr)
+            print(f"Runtime image: {runtime_image}", file=sys.stderr)
         if apply_operation == "apim-apply":
             from tirodhan.deployment.apim_lifecycle import validate_apim_plan
 
@@ -626,6 +642,7 @@ def main() -> None:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--artifact-id", type=int)
     parser.add_argument("--database-key-id")
+    parser.add_argument("--runtime-image", help="Exact private application image digest")
     parser.add_argument(
         "--secret-name", action="append", help="Exact approved seed batch names only; never values"
     )
@@ -664,6 +681,7 @@ def main() -> None:
             else None,
             secret_names=sorted(args.secret_name) if args.secret_name else None,
             print_apim_plan=args.kind == "apply" and sys.stdin.isatty(),
+            runtime_image=args.runtime_image,
         )
         if args.kind == "apply":
             if not sys.stdin.isatty():

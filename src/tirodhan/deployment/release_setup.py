@@ -117,7 +117,9 @@ RECOVERY_BOUND_OPERATIONS = frozenset(
 )
 
 
-def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str, Any]:
+def expected_bindings(
+    kind: str, apply_operation: str | None = None, *, runtime_only: bool = False
+) -> dict[str, Any]:
     # These enumerate existing admitted operations; none changes its authority class
     # or makes a DEPLOYMENT operation issuable while the release policy is held.
     if kind == "bootstrap":
@@ -178,6 +180,7 @@ def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str
         return {
             operation: {"execution_environment": "nonprod-plan"}
             for operation in RUNTIME_PLAN_OPERATIONS
+            if not runtime_only or operation != "migration-plan"
         }
     if kind == "apim-release":
         return {
@@ -392,7 +395,9 @@ def validated_request(
     fresh_capture: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     kind = request["kind"]
-    profiles = expected_bindings(kind, request.get("apply_operation"))
+    profiles = expected_bindings(
+        kind, request.get("apply_operation"), runtime_only=request.get("runtime_image") is not None
+    )
     for operation in profiles:
         require_operation_policy(policy, operation)
     secret, destination, identity, environment = DESTINATIONS[kind]
@@ -452,9 +457,24 @@ def validated_request(
             or row.get("identity_kind") != identity
         ):
             raise AdmissionDenied("SQL_VERIFIER_KEY_NOT_ENROLLED")
-    bindings = expected_bindings(kind, request.get("apply_operation"))
+    bindings = profiles
     if request.get("operations") != sorted(bindings):
         raise AdmissionDenied("ISSUANCE_OPERATIONS_INCONSISTENT")
+    if (runtime_image := request.get("runtime_image")) is not None:
+        from tirodhan.deployment.nonprod_images import is_runtime_image
+
+        runtime_operation = "runtime-plan" if kind == "runtime-release" else "runtime-apply"
+        if (
+            not is_runtime_image(runtime_image)
+            or runtime_operation not in bindings
+            or kind
+            not in {
+                "runtime-release",
+                "apply",
+            }
+        ):
+            raise AdmissionDenied("RUNTIME_IMAGE_NOT_APPLICABLE")
+        bindings[runtime_operation]["runtime_image"] = runtime_image
     if kind == "enroll-database-verifier":
         target = database_verifier_enrollment_target(config)
         if request.get("verifier_principal") != target:
