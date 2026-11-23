@@ -36,6 +36,12 @@ def test_reviewed_inventory_covers_all_nonworkload_terraform_resources() -> None
                             "var.apim_publisher_email != null && var.apim_pilot_enabled ? 1 : 0}"
                         )
                         continue
+                    if address in {
+                        "azurerm_role_assignment.web_pull",
+                        "azurerm_user_assigned_identity.web_pull",
+                    }:
+                        assert block["count"] == "${length(local.web_images) == 0 ? 0 : 1}"
+                        continue
                     actual[address] = block
     assert set(actual) == set(manifest["resources"])
     queues = {"serviceability", "rider", "refund", "planning", "financial_webhook"}

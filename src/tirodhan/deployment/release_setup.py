@@ -32,13 +32,13 @@ from tirodhan.deployment.deployment_admission import (
     contract_digest,
     database_verifier_enrollment_target,
     digest,
-    is_apim_release,
     is_backend_runtime_release,
     maintenance_binding_keys,
     maintenance_operation_id,
     maintenance_target,
     operation_class,
     require_operation_policy,
+    uses_reviewed_main_only,
     validate_authorization,
 )
 from tirodhan.deployment.lifecycle_evidence import BackendState, plan_prior_state, state_resources
@@ -64,6 +64,7 @@ DESTINATIONS = {
         "nonprod-plan",
     ),
     "apim-release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
+    "web-release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
     "apply": ("NONPROD_APPLY_AUTHORIZATION", "nonprod", "deployment", "nonprod"),
     "database": (
         "NONPROD_DATABASE_VERIFY_AUTHORIZATION",
@@ -103,7 +104,13 @@ DESTINATIONS = {
     "log-scheduled": ("NONPROD_LOG_SAS_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
 }
 PLAN_OPERATIONS = ["terraform-setup", "foundation-plan", "migration-plan", "runtime-plan"]
-APPLY_OPERATIONS = ("foundation-apply", "migration-apply", "runtime-apply", "apim-apply")
+APPLY_OPERATIONS = (
+    "foundation-apply",
+    "migration-apply",
+    "runtime-apply",
+    "apim-apply",
+    "web-apply",
+)
 DATABASE_ADMIN_PURPOSES = {"database-bootstrap", "enroll-database-verifier"}
 CONSUMER_OPERATIONS = [
     "migration-plan",
@@ -186,6 +193,11 @@ def expected_bindings(
         return {
             operation: {"execution_environment": "nonprod-plan"}
             for operation in ("terraform-setup", "apim-plan")
+        }
+    if kind == "web-release":
+        return {
+            operation: {"execution_environment": "nonprod-plan"}
+            for operation in ("terraform-setup", "web-plan")
         }
     if kind == "database":
         return {
@@ -588,7 +600,7 @@ def validated_request(
     validation = validate_evidence(
         request["evidence"],
         commit,
-        require_automated_checks=not is_apim_release(list(bindings)),
+        require_automated_checks=not uses_reviewed_main_only(list(bindings)),
         require_coderabbit_review=not is_backend_runtime_release(list(bindings)),
     )
     validation["request_sha256"] = digest(request)

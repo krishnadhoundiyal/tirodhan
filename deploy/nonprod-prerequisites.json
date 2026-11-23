@@ -458,6 +458,29 @@
       "terraform_context",
       "vault"
     ],
+    "web-plan": [
+      "backend",
+      "execution_authority",
+      "identity",
+      "ownership",
+      "permissions",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
+    "web-apply": [
+      "backend",
+      "execution_authority",
+      "identity",
+      "ownership",
+      "permissions",
+      "saved_plan",
+      "state",
+      "target",
+      "terraform_context",
+      "vault"
+    ],
     "apim-plan": [
       "apim_baseline",
       "backend",
