@@ -27,6 +27,10 @@ PUBLISHED_APP = "ghcr.io/krishnadhoundiyal/tirodhan-nonprod@sha256:" + "a" * 64
     [
         ("azurerm_container_app.api[0]", ["update"], True),
         ("azurerm_container_app.api[0]", ["create"], False),
+        ('azurerm_container_app.worker["financial_webhook"]', ["update"], True),
+        ('azurerm_container_app_job.scheduled["fleet_timeout"]', ["update"], True),
+        ('azurerm_container_app_job.scheduled["outbox"]', ["delete", "create"], False),
+        ('module.other.azurerm_container_app.worker["planning"]', ["update"], False),
         ("azurerm_container_app_job.migration[0]", ["update"], False),
         ("azurerm_postgresql_flexible_server.database", ["update"], False),
     ],
@@ -54,8 +58,10 @@ def test_runtime_only_plan_preserves_stage_and_migration_job(address, actions, a
     }
     plan = {
         "variables": {name: {"value": value} for name, value in values.items()},
+        "planned_values": {"outputs": {"deployment_stage": {"value": 4}}},
         "resource_changes": [{"address": address, "change": {"actions": actions}}],
     }
+    plan["variables"]["deployment_stage"]["value"] = "4"
     if allowed:
         assert release.validate_runtime_only_plan(plan, PUBLISHED_APP) == [address]
     else:
@@ -176,6 +182,46 @@ def plan_case(monkeypatch, tmp_path, operation, *, current_stage=4):
         state_fingerprint=io.current.fingerprint,
     )
     return io, Checks(authorization, io.config, {"plan": path}, io)
+
+
+def test_runtime_only_apply_checks_typed_stage_and_preserves_migration_and_sidecar(
+    monkeypatch, tmp_path
+):
+    io, checks = plan_case(monkeypatch, tmp_path, "runtime-apply")
+    io.current.document["outputs"]["migration_image"] = {"value": OLD_APP}
+    path = checks.parameters["plan"]
+    write_plan(path, io.current)
+    key = "c" * 64
+    binding = checks.binding()
+    binding.update(
+        runtime_image=PUBLISHED_APP,
+        plan_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        state_fingerprint=io.current.fingerprint,
+    )
+    monkeypatch.setenv("TIRODHAN_RUNTIME_ONLY_IMAGE", PUBLISHED_APP)
+    monkeypatch.setattr(
+        checks,
+        "job",
+        lambda: {
+            "properties": {
+                "template": {
+                    "containers": [{"name": "application", "env": [{"name": MARKER, "value": key}]}]
+                }
+            }
+        },
+    )
+    io.runner.plan["planned_values"] = {"outputs": {"deployment_stage": {"value": 4}}}
+    for name, value in {
+        "deployment_stage": "4",
+        "application_image": PUBLISHED_APP,
+        "migration_image": OLD_APP,
+        "migration_operation_key": key,
+        "fluent_bit_image": OLD_SIDECAR,
+    }.items():
+        io.runner.plan["variables"][name] = {"value": value}
+    assert checks.check_saved_plan()
+    io.runner.plan["variables"]["fluent_bit_image"]["value"] = SIDECAR
+    assert not checks.check_saved_plan()
 
 
 @pytest.mark.parametrize("kind", ["azurerm_container_app", "azurerm_container_app_job"])
@@ -333,7 +379,7 @@ def test_real_environment_stage_plan_is_admitted_without_apply(tmp_path):
     environment = {
         key: value
         for key, value in os.environ.items()
-        if key.casefold() != "tf_var_deployment_stage"
+        if key.casefold() not in {"tf_var_deployment_stage", "tf_var_application_image"}
     }
     environment["TF_VAR_deployment_stage"] = "0"
 
@@ -368,6 +414,20 @@ def test_real_environment_stage_plan_is_admitted_without_apply(tmp_path):
     )
     checks = Checks(authorization, io.config, {"plan": plan}, io)
     assert checks.check_saved_plan()
+
+    del fixture["resource"]
+    fixture["variable"]["application_image"] = {"type": "string"}
+    fixture["output"]["application_image"] = {"value": "${var.application_image}"}
+    (tmp_path / "main.tf.json").write_text(json.dumps(fixture))
+    environment["TF_VAR_deployment_stage"] = "4"
+    environment["TF_VAR_application_image"] = PUBLISHED_APP
+    run("plan", "-refresh=false", "-input=false", "-out=runtime.tfplan")
+    runtime_plan = json.loads(run("show", "-json", "runtime.tfplan"))
+    assert runtime_plan["variables"]["deployment_stage"]["value"] == "4"
+    assert release.validate_runtime_only_plan(runtime_plan, PUBLISHED_APP) == []
+    runtime_plan["planned_values"]["outputs"]["deployment_stage"]["value"] = 3
+    with pytest.raises(deployment_admission.AdmissionDenied, match="STAGE_MISMATCH"):
+        release.validate_runtime_only_plan(runtime_plan, PUBLISHED_APP)
     assert state.read_bytes() == original
 
 

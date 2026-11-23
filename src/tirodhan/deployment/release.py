@@ -25,12 +25,9 @@ class ReleaseBlocked(RuntimeError):
 
 MIGRATION_SECRET_NAMES = frozenset({"ghcr-pull-pat", "fluent-bit-sas"})
 RUNTIME_SECRET_NAMES = SECRET_NAMES - MIGRATION_SECRET_NAMES
-RUNTIME_WORKLOADS = frozenset(
-    {
-        "azurerm_container_app.api[0]",
-        "azurerm_container_app.worker[0]",
-        "azurerm_container_app_job.scheduled[0]",
-    }
+RUNTIME_WORKLOAD_ADDRESS = re.compile(
+    r"azurerm_container_app\.api\[0\]|"
+    r'(?:azurerm_container_app\.worker|azurerm_container_app_job\.scheduled)\["[a-z0-9_-]+"\]'
 )
 
 
@@ -68,10 +65,13 @@ def runtime_only_variables(
 
 def validate_runtime_only_plan(plan: dict[str, Any], image: str) -> list[str]:
     variables = plan.get("variables", {})
-    if variables.get("application_image", {}).get("value") != image or (
-        variables.get("deployment_stage", {}).get("value") != 4
-    ):
-        raise AdmissionDenied("RUNTIME_ONLY_PLAN_IMAGE_OR_STAGE_MISMATCH")
+    if variables.get("application_image", {}).get("value") != image:
+        raise AdmissionDenied("RUNTIME_ONLY_PLAN_IMAGE_MISMATCH")
+    # Terraform 1.13.5 saves the environment value as a string, then converts it
+    # to a number for the stage output used by the graph.
+    stage = plan.get("planned_values", {}).get("outputs", {}).get("deployment_stage", {})
+    if stage.get("value") != 4:
+        raise AdmissionDenied("RUNTIME_ONLY_PLAN_STAGE_MISMATCH")
     changed = []
     for resource in plan.get("resource_changes", []):
         if resource.get("mode", "managed") != "managed":
@@ -80,7 +80,7 @@ def validate_runtime_only_plan(plan: dict[str, Any], image: str) -> list[str]:
         if actions == ["no-op"]:
             continue
         address = resource["address"]
-        if address not in RUNTIME_WORKLOADS or actions != ["update"]:
+        if not RUNTIME_WORKLOAD_ADDRESS.fullmatch(address) or actions != ["update"]:
             raise AdmissionDenied("RUNTIME_ONLY_PLAN_OUTSIDE_WORKLOADS")
         changed.append(address)
     return changed
