@@ -27,11 +27,13 @@ from tirodhan.deployment.database_evidence import verification_key_is_independen
 from tirodhan.deployment.deployment_admission import (
     AUDIENCES,
     ROOT,
+    RUNTIME_PLAN_OPERATIONS,
     AdmissionDenied,
     contract_digest,
     database_verifier_enrollment_target,
     digest,
     is_apim_release,
+    is_backend_runtime_release,
     maintenance_binding_keys,
     maintenance_operation_id,
     maintenance_target,
@@ -55,6 +57,12 @@ from tirodhan.deployment.release_custody import (
 REPOSITORY = "krishnadhoundiyal/tirodhan"
 DESTINATIONS = {
     "release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
+    "runtime-release": (
+        "NONPROD_RELEASE_AUTHORIZATION",
+        "repository",
+        "deployment",
+        "nonprod-plan",
+    ),
     "apim-release": ("NONPROD_RELEASE_AUTHORIZATION", "repository", "deployment", "nonprod-plan"),
     "apply": ("NONPROD_APPLY_AUTHORIZATION", "nonprod", "deployment", "nonprod"),
     "database": (
@@ -166,6 +174,11 @@ def expected_bindings(kind: str, apply_operation: str | None = None) -> dict[str
         return {
             operation: {"execution_environment": "nonprod-plan"} for operation in PLAN_OPERATIONS
         }
+    if kind == "runtime-release":
+        return {
+            operation: {"execution_environment": "nonprod-plan"}
+            for operation in RUNTIME_PLAN_OPERATIONS
+        }
     if kind == "apim-release":
         return {
             operation: {"execution_environment": "nonprod-plan"}
@@ -251,7 +264,11 @@ def policy_proposal(
 
 
 def validate_evidence(
-    evidence: dict[str, Any], commit: str, *, require_automated_checks: bool = True
+    evidence: dict[str, Any],
+    commit: str,
+    *,
+    require_automated_checks: bool = True,
+    require_coderabbit_review: bool = True,
 ) -> dict[str, Any]:
     """Validate collected records, not caller supplied PASS/status assertions."""
     pull = evidence["pull"]
@@ -283,6 +300,7 @@ def validate_evidence(
     if len(runs) != len(workflows) or {r["path"] for r in runs} != workflows:
         raise AdmissionDenied("REQUIRED_CI_EVIDENCE_MISSING")
     for run in runs:
+        run_id = run.get("id")
         if (
             run.get("head_sha") != source
             or run.get("status") != "completed"
@@ -290,9 +308,17 @@ def validate_evidence(
             or run.get("event") != "pull_request"
             or run.get("repository", {}).get("full_name") != REPOSITORY
             or run.get("head_repository", {}).get("full_name") != REPOSITORY
-            or not isinstance(run.get("id"), int)
+            or type(run_id) is not int
+            or run_id <= 0
         ):
             raise AdmissionDenied("CI_EVIDENCE_INVALID")
+    run_ids = [run["id"] for run in runs]
+    if len(set(run_ids)) != len(runs):
+        raise AdmissionDenied("CI_EVIDENCE_INVALID")
+    validation.update(ci_commit=commit, ci_run_ids=run_ids)
+    if not require_coderabbit_review:
+        return validation | {"reviewed_main_commit": commit}
+
     review = evidence.get("review")
     review_proof: dict[str, Any]
     if review is None:
@@ -319,7 +345,7 @@ def validate_evidence(
         review_proof = {
             "coderabbit_review": f"https://github.com/{REPOSITORY}/pull/{pull['number']}#pullrequestreview-{review['id']}"
         }
-    return validation | {"ci_commit": commit, "ci_run_ids": [r["id"] for r in runs]} | review_proof
+    return validation | review_proof
 
 
 def state_binding(request: dict[str, Any], plan: Path) -> dict[str, Any]:
@@ -540,7 +566,10 @@ def validated_request(
             raise AdmissionDenied("REVIEWED_SAVED_PLAN_REQUIRED")
         bindings[request["apply_operation"]].update(state_binding(request, plan))
     validation = validate_evidence(
-        request["evidence"], commit, require_automated_checks=not is_apim_release(list(bindings))
+        request["evidence"],
+        commit,
+        require_automated_checks=not is_apim_release(list(bindings)),
+        require_coderabbit_review=not is_backend_runtime_release(list(bindings)),
     )
     validation["request_sha256"] = digest(request)
     return bindings, validation

@@ -15,6 +15,7 @@ import jwt
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_VERSION = "nonprod-lifecycle-v1"
+RUNTIME_PLAN_OPERATIONS = ("migration-plan", "runtime-plan", "terraform-setup")
 MAINTENANCE_CLASSES = {"enroll-recovery": "ENROLLMENT", "recover-vault": "RECOVERY"}
 AUDIENCES = {
     "DEPLOYMENT": "tirodhan-nonprod-provisioning",
@@ -193,6 +194,36 @@ def is_apim_release(operations: list[str]) -> bool:
     )
 
 
+def is_backend_runtime_release(operations: list[str]) -> bool:
+    return tuple(sorted(operations)) in (
+        RUNTIME_PLAN_OPERATIONS,
+        ("database-verify",),
+        ("migration-apply", "migration-start", "terraform-setup"),
+        ("runtime-apply", "terraform-setup"),
+    )
+
+
+def _release_review_satisfied(
+    operations: list[str], validation: dict[str, Any], commit: str
+) -> bool:
+    reviewed_main = validation.get("reviewed_main_commit") == commit
+    if is_apim_release(operations) and reviewed_main:
+        return True
+    if validation.get("ci_commit") != commit:
+        return False
+    if validation.get("coderabbit_review"):
+        return True
+    run_ids = validation.get("ci_run_ids")
+    return (
+        is_backend_runtime_release(operations)
+        and reviewed_main
+        and isinstance(run_ids, list)
+        and len(run_ids) == 2
+        and all(type(run_id) is int and run_id > 0 for run_id in run_ids)
+        and run_ids[0] != run_ids[1]
+    )
+
+
 def validate_authorization(
     token: str,
     *,
@@ -238,16 +269,7 @@ def validate_authorization(
             or not isinstance(claims["bindings"].get(operation), dict)
             or set(claims["bindings"]) != set(claims["operations"])
             or claims.get("validation", {}).get("contract_hash") != code_hash
-            or not (
-                (
-                    is_apim_release(claims["operations"])
-                    and claims.get("validation", {}).get("reviewed_main_commit") == commit
-                )
-                or (
-                    claims.get("validation", {}).get("ci_commit") == commit
-                    and claims.get("validation", {}).get("coderabbit_review")
-                )
-            )
+            or not _release_review_satisfied(claims["operations"], claims["validation"], commit)
             or claims.get("authorization_class") != purpose
             or any(operation_class(op) != purpose for op in claims["operations"])
         ):

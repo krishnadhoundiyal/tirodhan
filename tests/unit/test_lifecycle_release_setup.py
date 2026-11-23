@@ -497,6 +497,7 @@ def test_two_independent_encrypted_keys_with_readback_and_idempotent_setup(conte
 def test_real_signature_and_exact_destination_without_secret_output(context, kind, capsys):
     directory, policy, config, request = context
     if kind == "database":
+        request["evidence"].pop("review")
         request.pop("recovery_principal", None)
         request.update(
             kind=kind,
@@ -682,9 +683,11 @@ def apply_request(context, tmp_path, operation="runtime-apply"):
     return plan
 
 
-@pytest.mark.parametrize("operation", ["runtime-apply", "apim-apply"])
+@pytest.mark.parametrize("operation", ["migration-apply", "runtime-apply", "apim-apply"])
 def test_apply_binds_exact_saved_plan_and_authoritative_state(context, tmp_path, operation):
     plan = apply_request(context, tmp_path, operation)
+    if operation != "apim-apply":
+        context[3]["evidence"].pop("review")
     token, _ = sign(context, plan=plan)
     claims = jwt.decode(token, options={"verify_signature": False})
     binding = claims["bindings"][operation]
@@ -694,7 +697,43 @@ def test_apply_binds_exact_saved_plan_and_authoritative_state(context, tmp_path,
     assert binding["state_fingerprint"] == context[3]["plan_review"]["state_fingerprint"]
     assert binding["plan_sha256"] == context[3]["plan_review"]["plan_sha256"]
     assert binding["execution_environment"] == "nonprod"
-    assert set(claims["operations"]) == {"terraform-setup", operation}
+    expected_operations = {"terraform-setup", operation}
+    if operation == "migration-apply":
+        expected_operations.add("migration-start")
+    assert set(claims["operations"]) == expected_operations
+    if operation != "apim-apply":
+        assert claims["validation"]["ci_commit"] == COMMIT
+        assert "coderabbit_review" not in claims["validation"]
+
+
+def test_backend_runtime_planning_requires_exact_main_and_successful_ci(context):
+    operator_request(context, "runtime-release")
+    _, policy, config, request = context
+    request["evidence"].pop("review")
+    run = request["evidence"]["workflow_runs"][0]
+    run["head_sha"] = COMMIT
+    with pytest.raises(AdmissionDenied, match="CI_EVIDENCE_INVALID"):
+        setup.validated_request(request, policy, config, code_hash=CODE, commit=COMMIT)
+    run["head_sha"] = SOURCE
+    token, _ = sign(context)
+    execution = {
+        "policy": policy,
+        "config_hash": digest(config),
+        "code_hash": CODE,
+        "commit": COMMIT,
+        "run_id": SESSION,
+    }
+    granted = validate_authorization(token, operation="migration-plan", **execution)
+    assert set(granted.claims["operations"]) == {
+        "terraform-setup",
+        "migration-plan",
+        "runtime-plan",
+    }
+    assert granted.claims["validation"]["ci_run_ids"] == [1, 2]
+    assert "coderabbit_review" not in granted.claims["validation"]
+    for operation in ("foundation-plan", "migration-apply", "runtime-apply"):
+        with pytest.raises(AdmissionDenied, match="RELEASE_AUTHORIZATION_INVALID"):
+            validate_authorization(token, operation=operation, **execution)
 
 
 def test_apim_planning_signature_cannot_authorize_apply_or_application_release(context):

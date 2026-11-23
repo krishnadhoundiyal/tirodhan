@@ -26,9 +26,11 @@ introduced. A compromised collector or unlocked signing workstation remains a ma
 
 Capture requires current main, clean committed source, a merged PR with an identical final
 Git tree, and resolved review threads. The dedicated NONPROD APIM plan and apply
-authorizations treat GitHub CI and CodeRabbit review as advisory. Other authorizations
-require successful final-head repository and lifecycle CI and an actual CodeRabbit bot
-review. Merge/squash commits require full-tree equality with the reviewed head. Changed
+authorizations treat GitHub CI and CodeRabbit review as advisory. The `runtime-release`
+planning profile, database verification, and the exact `migration-apply` and `runtime-apply`
+profiles require successful final-head repository and lifecycle CI and treat CodeRabbit
+review as advisory. Other authorizations also require an actual CodeRabbit bot review.
+Merge/squash commits require full-tree equality with the reviewed head. Changed
 trees need another reviewed PR. Arbitrary PASS flags, review URLs and wildcard operations
 do not substitute for these records. Incomplete bounded histories block.
 
@@ -125,7 +127,7 @@ Choose a UUID session and explicit timezone-aware expiry; use the same session f
 planning, reviewed applies and V authorization. Substitute approved actual values:
 
 ```text
-python -m tirodhan.deployment.release_capture release --session <session-uuid> --expires-at <ISO-8601-with-timezone> --review-pr <final-merged-PR> --output <private-directory>/release-request.json
+python -m tirodhan.deployment.release_capture runtime-release --session <session-uuid> --expires-at <ISO-8601-with-timezone> --review-pr <final-merged-PR> --output <private-directory>/release-request.json
 python -m tirodhan.deployment.release_capture database --session <same-session> --expires-at <ISO-8601-with-timezone> --review-pr <final-merged-PR> --database-key-id <pinned-V-key-id> --output <private-directory>/database-request.json
 python -m tirodhan.deployment.release_setup issue --request <private-directory>/release-request.json --reviewed-request-sha256 <trusted-capture-digest> --private-key <custody>/release.encrypted.pem --output <private-directory>/release.jwt
 ```
@@ -135,7 +137,8 @@ unsigned bundle. It contains no JWT or signing key. Apply bundles include privat
 state and must remain protected. Signing displays the nonsecret context, requires exact digest
 confirmation, then prompts for the custody passphrase. It computes all claims and bindings,
 verifies every operation through the existing validator, and writes the credential privately.
-Only hashes/IDs enter the journal. Use `database-request.json` for V's authorization.
+Only hashes/IDs enter the journal. Use `database-request.json` for V's authorization. Use
+the `release` planning profile when the run requires `foundation-plan`.
 
 Apply authority is issued later, after the protected workflow produces its saved plan.
 Download the exact artifact through authenticated GitHub tooling into private storage and
