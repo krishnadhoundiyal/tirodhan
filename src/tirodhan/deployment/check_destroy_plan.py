@@ -13,7 +13,9 @@ ALLOWED_DESTROY_TYPES = frozenset(
     {
         "azurerm_api_management",
         "azurerm_container_app",
+        "azurerm_container_app_custom_domain",
         "azurerm_container_app_environment",
+        "azurerm_container_app_environment_managed_certificate",
         "azurerm_container_app_job",
         "azurerm_postgresql_flexible_server",
         "azurerm_postgresql_flexible_server_active_directory_administrator",
@@ -86,6 +88,16 @@ def _strings(value: Any) -> Iterable[str]:
 
 def _expected_scope(subscription_id: str, resource_group: str) -> str:
     return f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}".lower()
+
+
+def _web_domain_ids(resource_group: str, scope: str, app: str) -> tuple[str, str, str]:
+    app_id = f"{scope}/providers/Microsoft.App/containerApps/{resource_group}-{app}-web"
+    hostname = f"{app}-nonprod.qtkservice.com"
+    cert_id = (
+        f"{scope}/providers/Microsoft.App/managedEnvironments/{resource_group}-aca"
+        f"/managedCertificates/{resource_group}-{app}-web-tls"
+    )
+    return app_id, hostname, cert_id
 
 
 def validate_destroy_plan(
@@ -161,6 +173,23 @@ def validate_destroy_plan(
             address, resource_type, normalized_id, expected_gateway_base + "-apim"
         ):
             raise RuntimeError("Refusing destroy of an unapproved NONPROD APIM child")
+        elif resource_type in {
+            "azurerm_container_app_custom_domain",
+            "azurerm_container_app_environment_managed_certificate",
+        }:
+            approved = {}
+            for app in ("customer", "manager"):
+                app_id, hostname, certificate = _web_domain_ids(
+                    expected_resource_group, expected_scope, app
+                )
+                approved[f'azurerm_container_app_custom_domain.web["{app}"]'] = (
+                    f"{app_id}/customDomainName/{hostname}".casefold()
+                )
+                approved[f'azurerm_container_app_environment_managed_certificate.web["{app}"]'] = (
+                    certificate.casefold()
+                )
+            if approved.get(address) != normalized_id:
+                raise RuntimeError("Refusing destroy of an unapproved NONPROD web TLS resource")
 
         delete_count += 1
 
