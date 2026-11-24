@@ -1,5 +1,9 @@
 locals {
   web_images = var.deployment_stage >= 4 && var.nonprod_web_images != null ? tomap(var.nonprod_web_images) : tomap({})
+  web_hostnames = {
+    for app in keys(local.web_images) : app => "${app}-nonprod.qtkservice.com"
+    if var.nonprod_web_custom_domains
+  }
 }
 
 resource "azurerm_user_assigned_identity" "web_pull" {
@@ -107,4 +111,34 @@ resource "azurerm_container_app" "web" {
   }
 
   depends_on = [azurerm_role_assignment.web_pull]
+}
+
+resource "azurerm_container_app_custom_domain" "web" {
+  for_each         = local.web_hostnames
+  name             = each.value
+  container_app_id = azurerm_container_app.web[each.key].id
+
+  # AzureRM exposes managed certificate bindings as computed values.
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
+}
+
+resource "azurerm_container_app_environment_managed_certificate" "web" {
+  for_each                     = azurerm_container_app_custom_domain.web
+  name                         = "${local.prefix}-${each.key}-web-tls"
+  container_app_environment_id = azurerm_container_app_environment.nonprod.id
+  subject_name                 = each.value.name
+  domain_control_validation    = "CNAME"
+  tags                         = local.tags
+
+  # Azure rejects deletion of a certificate that is still bound to a hostname.
+  provisioner "local-exec" {
+    when    = destroy
+    command = "python -m tirodhan.deployment.web_lifecycle detach-certificate"
+    environment = {
+      WEB_DESTROY_CERTIFICATE_ID = self.id
+      WEB_DESTROY_HOSTNAME       = self.subject_name
+    }
+  }
 }

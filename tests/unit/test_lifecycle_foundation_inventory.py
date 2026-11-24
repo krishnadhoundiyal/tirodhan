@@ -42,6 +42,12 @@ def test_reviewed_inventory_covers_all_nonworkload_terraform_resources() -> None
                     }:
                         assert block["count"] == "${length(local.web_images) == 0 ? 0 : 1}"
                         continue
+                    if address == "azurerm_container_app_custom_domain.web":
+                        assert block["for_each"] == "${local.web_hostnames}"
+                        continue
+                    if address == "azurerm_container_app_environment_managed_certificate.web":
+                        assert block["for_each"] == "${azurerm_container_app_custom_domain.web}"
+                        continue
                     actual[address] = block
     assert set(actual) == set(manifest["resources"])
     queues = {"serviceability", "rider", "refund", "planning", "financial_webhook"}

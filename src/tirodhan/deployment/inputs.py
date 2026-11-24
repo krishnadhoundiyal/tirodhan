@@ -30,6 +30,7 @@ def main() -> None:
         "postgres_bootstrap_ipv4",
         "ghcr_username",
         "nonprod_web_images",
+        "nonprod_web_custom_domains",
         "runtime_env",
         "blob_soft_delete_days",
         "media_cool_after_days",
@@ -48,6 +49,8 @@ def main() -> None:
         raise RuntimeError("apim_pilot_enabled must be a JSON boolean")
     if type(values.get("apim_session_reconcile", False)) is not bool:
         raise RuntimeError("apim_session_reconcile must be a JSON boolean")
+    if type(values.get("nonprod_web_custom_domains", False)) is not bool:
+        raise RuntimeError("nonprod_web_custom_domains must be a JSON boolean")
     if values.get("apim_web_session") is not None and not isinstance(
         values["apim_web_session"], dict
     ):

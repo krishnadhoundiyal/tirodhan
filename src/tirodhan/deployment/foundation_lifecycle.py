@@ -195,11 +195,15 @@ def apply(operation: str, plan: Path) -> None:
     # rejected admission must never be mistaken for a failed Terraform apply.
     revalidate_database(grant)
     apply_timeout = APIM_APPLY_TIMEOUT_SECONDS if apim_before is not None else 1800
+    if operation == "web-apply" and io.tf.get("nonprod_web_custom_domains"):
+        apply_timeout = 3600
     try:
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=apply_timeout)
         if operation == "web-apply":
-            from tirodhan.deployment.web_lifecycle import verify_web_apps
+            from tirodhan.deployment.web_lifecycle import bind_web_certificates, verify_web_apps
 
+            if io.tf.get("nonprod_web_custom_domains"):
+                bind_web_certificates(io)
             verify_web_apps(io)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")

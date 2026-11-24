@@ -148,6 +148,12 @@ variable "nonprod_web_images" {
     error_message = "Use Customer and Operations image digests from the approved private GHCR packages."
   }
 }
+
+variable "nonprod_web_custom_domains" {
+  type        = bool
+  default     = false
+  description = "Configure the two NONPROD web hostnames after their public DNS records resolve."
+}
 variable "runtime_env" {
   description = "Explicit nonsecret TIRODHAN runtime values. Optional until the consuming feature is configured."
   type        = map(string)
