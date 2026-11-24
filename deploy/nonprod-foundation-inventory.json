@@ -17,8 +17,9 @@
     "resource_group.tf": "049a57dbe50d8c36826a9d917aad06dd4c42f20606ad215a1cbc41c92496991d",
     "service_bus.tf": "39a98f93bcf9ca7099f73e19355328d1f9b336cc44ee0099d37295a08d609c4a",
     "storage.tf": "4823e4ea033815f0a2de76275ad70d5e0c8b1f25bf283db8846cd0054dc36a45",
-    "variables.tf": "b7d0ac2848290f6191f47b7fa9b21a578dcd63ae8e89bc1e795345c067a2e638",
-    "versions.tf": "9170ce69e8f34ec24a8b6d7d8e1e24c74550cf318de66838b4abeb265416bda3"
+    "variables.tf": "5b59290232b0cdcc2824dbad16349a080821d73a715ee9538c44bae41c5dce80",
+    "versions.tf": "9170ce69e8f34ec24a8b6d7d8e1e24c74550cf318de66838b4abeb265416bda3",
+    "web_container_apps.tf": "0a9744135d1778cdadc760f11f1803e721549bec6e5daac226b0a849072b1ac5"
   },
   "resources": {
     "azurerm_container_app_environment.nonprod": {

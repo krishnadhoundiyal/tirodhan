@@ -23,9 +23,9 @@ from tirodhan.deployment.deployment_admission import (
     contract_digest,
     database_verifier_enrollment_target,
     digest,
-    is_apim_release,
     is_backend_runtime_release,
     maintenance_target,
+    uses_reviewed_main_only,
 )
 from tirodhan.deployment.lifecycle_evidence import Observations, Runner, plan_prior_state
 from tirodhan.deployment.release_custody import (
@@ -228,7 +228,7 @@ def capture_plan_artifact(
     artifact = github.get(f"actions/artifacts/{artifact_id}")
     run_id = artifact["workflow_run"]["id"]
     run = github.get(f"actions/runs/{run_id}")
-    workflow_name = mode if mode in {"foundation", "apim"} else "deploy"
+    workflow_name = mode if mode in {"foundation", "apim", "web"} else "deploy"
     workflow = f".github/workflows/nonprod-{workflow_name}.yml"
     if (
         artifact.get("expired") is not False
@@ -345,7 +345,7 @@ def prepare(
         review_pr,
         commit,
         code_hash,
-        require_automated_checks=not is_apim_release(list(bindings)),
+        require_automated_checks=not uses_reviewed_main_only(list(bindings)),
         require_coderabbit_review=not is_backend_runtime_release(list(bindings)),
     )
     if runner.run("git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}") != evidence["target_tree"]:
@@ -579,6 +579,11 @@ def prepare(
             for resource in validate_runtime_only_plan(shown, runtime_image):
                 print(f"Runtime update: {resource}", file=sys.stderr)
             print(f"Runtime image: {runtime_image}", file=sys.stderr)
+        if apply_operation == "web-apply":
+            from tirodhan.deployment.web_lifecycle import validate_web_plan
+
+            for address, actions in validate_web_plan(shown, state, config["terraform"]).items():
+                print(f"Web {actions[0]}: {address}", file=sys.stderr)
         if apply_operation == "apim-apply":
             from tirodhan.deployment.apim_lifecycle import validate_apim_plan
 

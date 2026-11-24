@@ -187,10 +187,12 @@ class Authorization:
     claims: dict[str, Any]
 
 
-def is_apim_release(operations: list[str]) -> bool:
+def uses_reviewed_main_only(operations: list[str]) -> bool:
     return len(operations) == 2 and set(operations) in (
         {"terraform-setup", "apim-plan"},
         {"terraform-setup", "apim-apply"},
+        {"terraform-setup", "web-plan"},
+        {"terraform-setup", "web-apply"},
     )
 
 
@@ -208,7 +210,7 @@ def _release_review_satisfied(
     operations: list[str], validation: dict[str, Any], commit: str
 ) -> bool:
     reviewed_main = validation.get("reviewed_main_commit") == commit
-    if is_apim_release(operations) and reviewed_main:
+    if uses_reviewed_main_only(operations) and reviewed_main:
         return True
     if validation.get("ci_commit") != commit:
         return False
@@ -369,6 +371,11 @@ def require_release_authorization(operation: str | None = None) -> Authorization
             from tirodhan.deployment.apim_lifecycle import validate_dispatch
 
             validate_dispatch(config["terraform"], os.environ.get("TIRODHAN_APIM_OPERATION"))
+        if requested in {"web-plan", "web-apply"} and os.environ.get("GITHUB_ACTIONS") == "true":
+            if os.environ.get("GITHUB_WORKFLOW_REF") != (
+                "krishnadhoundiyal/tirodhan/.github/workflows/nonprod-web.yml@refs/heads/main"
+            ):
+                raise AdmissionDenied("WEB_RELEASE_WORKFLOW_MISMATCH")
         if requested == "seed-secrets" and os.environ.get("GITHUB_ACTIONS") == "true":
             selected = os.environ.get("TIRODHAN_NONPROD_SEED_TARGET")
             binding = authorization.claims.get("bindings", {}).get(requested, {})

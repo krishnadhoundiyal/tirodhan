@@ -133,6 +133,21 @@ variable "fluent_bit_image" {
   }
 }
 variable "ghcr_username" { type = string }
+variable "nonprod_web_images" {
+  description = "Approved private Customer and Manager web image digests."
+  type = object({
+    customer = string
+    manager  = string
+  })
+  default = null
+  validation {
+    condition = var.nonprod_web_images == null ? true : (
+      can(regex("^ghcr\\.io/krishnadhoundiyal/tirodhan-customer-web@sha256:[a-f0-9]{64}$", var.nonprod_web_images.customer)) &&
+      can(regex("^ghcr\\.io/krishnadhoundiyal/tirodhan-operations-web@sha256:[a-f0-9]{64}$", var.nonprod_web_images.manager))
+    )
+    error_message = "Use Customer and Operations image digests from the approved private GHCR packages."
+  }
+}
 variable "runtime_env" {
   description = "Explicit nonsecret TIRODHAN runtime values. Optional until the consuming feature is configured."
   type        = map(string)

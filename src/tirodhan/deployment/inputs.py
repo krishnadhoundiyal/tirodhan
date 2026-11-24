@@ -29,6 +29,7 @@ def main() -> None:
         "postgres_version",
         "postgres_bootstrap_ipv4",
         "ghcr_username",
+        "nonprod_web_images",
         "runtime_env",
         "blob_soft_delete_days",
         "media_cool_after_days",

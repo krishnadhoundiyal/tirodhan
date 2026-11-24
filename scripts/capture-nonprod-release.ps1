@@ -1,6 +1,6 @@
 # Run from the clean, reviewed main checkout on the operator workstation.
 $captureArguments = $args
-$releaseProfiles = @('release', 'runtime-release', 'apim-release', 'database', 'apply')
+$releaseProfiles = @('release', 'runtime-release', 'apim-release', 'web-release', 'database', 'apply')
 if (
     $captureArguments.Count -gt 0 -and
     $captureArguments[0] -in $releaseProfiles -and

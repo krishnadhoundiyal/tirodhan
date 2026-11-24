@@ -164,7 +164,13 @@ def read_baseline(io: Observations, run_id: str, plan_hash: str) -> dict[str, An
 
 
 def apply(operation: str, plan: Path) -> None:
-    if operation not in {"foundation-apply", "migration-apply", "runtime-apply", "apim-apply"}:
+    if operation not in {
+        "foundation-apply",
+        "migration-apply",
+        "runtime-apply",
+        "apim-apply",
+        "web-apply",
+    }:
         raise AdmissionDenied("UNKNOWN_DEPLOYMENT_APPLY_OPERATION")
     checks, io, grant = admitted_with_grant(operation, plan=plan)
     baseline: dict[str, Any] | None = None
@@ -191,6 +197,10 @@ def apply(operation: str, plan: Path) -> None:
     apply_timeout = APIM_APPLY_TIMEOUT_SECONDS if apim_before is not None else 1800
     try:
         io.runner.run("terraform", "apply", "-input=false", str(plan), timeout=apply_timeout)
+        if operation == "web-apply":
+            from tirodhan.deployment.web_lifecycle import verify_web_apps
+
+            verify_web_apps(io)
         if operation == "foundation-apply" and not checks.check_foundation():
             raise AdmissionDenied("FOUNDATION_POSTCONDITIONS_FAILED")
         if baseline and (removed_rule := baseline.get("removed_bootstrap_firewall_id")):

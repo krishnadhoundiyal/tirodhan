@@ -387,6 +387,8 @@ class Checks:
         if self.auth.operation.startswith(("migration-", "runtime-")):
             if type(stage) is not int or stage not in range(5):
                 return False
+        if self.auth.operation in {"web-plan", "web-apply"} and stage != 4:
+            return False
         return True
 
     def check_providers(self) -> bool:
@@ -999,12 +1001,19 @@ class Checks:
 
             validate_apim_plan(plan, current, self.tf)
             return True
+        from tirodhan.deployment.web_lifecycle import WEB_ADDRESSES, validate_web_plan
+
+        if self.auth.operation == "web-apply":
+            validate_web_plan(plan, current, self.tf)
+            return True
         changes = [
             r
             for r in plan.get("resource_changes", [])
             if r.get("mode", "managed") == "managed"
             and r.get("change", {}).get("actions") not in ([], ["no-op"])
         ]
+        if any(row.get("address") in WEB_ADDRESSES for row in changes):
+            return False
         if self.auth.operation in {"migration-apply", "runtime-apply"}:
             from tirodhan.deployment.apim_lifecycle import ADDRESS, PILOT_ADDRESS, SESSION_MODULE
             from tirodhan.deployment.migration_start import expected_job_id, operation_key
