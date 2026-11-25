@@ -122,8 +122,9 @@ foreach ($app in @('customer','manager')) {
         $package = if ($app -eq 'customer') { 'customer' } else { 'operations' }
         $container = $origin.Data.properties.template.containers | Where-Object name -eq 'web'
         if ($image -notmatch "^ghcr\.io/krishnadhoundiyal/tirodhan-$package-web@sha256:[a-f0-9]{64}$" -or
-            $container.image -ne $image -or $origin.Data.properties.provisioningState -ne 'Succeeded') {
-            throw "The verified candidate digest must be live on the $app origin before adding its APIM route"
+            $container.image -ne $image -or $origin.Data.properties.provisioningState -ne 'Succeeded' -or
+            $origin.Data.properties.runningStatus -ne 'Running') {
+            throw "The $app app must be running the verified candidate digest before APIM routing"
         }
     }
     $api = "$gateway/apis/tirodhan-$app-web"
