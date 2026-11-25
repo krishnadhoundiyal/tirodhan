@@ -1,0 +1,11 @@
+name = "tirodhan-nonprod-web"
+main = "worker.mjs"
+compatibility_date = "2026-11-25"
+workers_dev = false
+preview_urls = false
+
+# Attach these after the APIM web routes and the protected ACA revisions are verified.
+routes = [
+  { pattern = "customer-nonprod.qtkservice.com/*", zone_name = "qtkservice.com" },
+  { pattern = "manager-nonprod.qtkservice.com/*", zone_name = "qtkservice.com" },
+]

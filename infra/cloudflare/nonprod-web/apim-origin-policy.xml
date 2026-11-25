@@ -1,0 +1,28 @@
+<policies>
+  <inbound>
+    <check-header name="X-Tirodhan-Web-Edge" failed-check-httpcode="403" failed-check-error-message="Forbidden" ignore-case="false">
+      <value>{{tirodhan-web-edge-key}}</value>
+    </check-header>
+    <set-header name="X-Tirodhan-Web-Edge" exists-action="delete" />
+    <set-header name="X-Tirodhan-Web-Origin" exists-action="delete" />
+    <set-header name="Authorization" exists-action="delete" />
+    <set-header name="Cookie" exists-action="delete" />
+    <base />
+    <set-header name="X-Tirodhan-Web-Origin" exists-action="override">
+      <value>{{tirodhan-web-origin-key}}</value>
+    </set-header>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+    <set-header name="Set-Cookie" exists-action="delete" />
+    <set-header name="Cache-Control" exists-action="override">
+      <value>no-store</value>
+    </set-header>
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
